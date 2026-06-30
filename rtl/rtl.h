@@ -1,0 +1,29 @@
+// Mini-pascal runtime library (header-only).
+//
+// Emitted C++ references the names in namespace `pas`. The compiler's
+// intrinsic-type and builtin-procedure descriptor tables (see builtins.h)
+// bind each Pascal name to its rtl counterpart here. Behavior lives here;
+// the descriptor tables hold the Pascal-to-rtl name binding.
+//
+// Naming convention:
+//   t_<name>  - a Pascal-visible TYPE
+//   p_<name>  - a Pascal-visible procedure, function, or value
+// Anything else in this namespace is implementation detail and not reachable
+// from Pascal source.
+#pragma once
+
+#include <cstdint>
+#include <iostream>
+
+namespace pas {
+
+using t_integer = int32_t;
+using t_longint = int64_t;
+using t_boolean = bool;
+using t_char    = char;
+
+template<typename T> inline void p_inc(T& x, t_integer n = 1) { x += static_cast<T>(n); }
+template<typename T> inline void p_dec(T& x, t_integer n = 1) { x -= static_cast<T>(n); }
+template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
+
+} // namespace pas

@@ -7,6 +7,7 @@
 #include "cst.h"
 #include "frame.h"
 #include "evaluator.h"
+#include "builtins.h"
 
 Parser::Parser() {
 }
@@ -180,6 +181,7 @@ std::string Parser::consume() {
 	return text;
 }
 void Parser::start() {
+	push_scope(make_root_frame());
 	input_char = fgetc(input_file);
 	consume();
 }
@@ -225,10 +227,7 @@ std::string Parser::parse_identifier() {
 }
 
 /** Walk the scope stack top-down looking up a value-position name (variable,
- *  constant, procedure, function, builtin). Abort with a clear message if not
- *  found. Phase 0: scopes stack is usually empty, so this aborts on first use;
- *  the call sites are structurally correct ahead of Phase 2's root frame +
- *  builtins. */
+ *  constant, procedure, function, builtin). Raise if not found. */
 Node* Parser::resolve_value(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (Node* hit = (*it)->lookup_value(name)) {
