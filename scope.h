@@ -42,18 +42,24 @@ struct UnitType: public Type {
 	Scope* implementation_children;
 };
 
+struct ScopeValueEntry {
+	Node* value;
+	Type* ty;
+	ScopeValueEntry(Node* value, Type* ty);
+};
+
 class Scope /*: public Type*/ {
 private:
 	std::map<std::string, Type*> type_items;
-	std::map<std::string, Type*> value_items;
+	std::map<std::string, ScopeValueEntry> value_items;
 public:
-	Scope* parent;
+	Scope* parent; // NOT invasive from Parser
 public:
-    // TODO: kind of scope (unit, record, class, ...)
+    // TODO: kind of scope (unit, record, class, ...); maybe also bool auto_unwrap; for "uses" and "with" blocks
 
     Scope(Scope* parent);
-    Type* lookup_type(std::string name) const;
-    Node* lookup_value(std::string name) const;
+    Type* lookup_type(std::string name) const; /* TODO: or maybe a lookup with flags whether type and/or value is okay */
+    Node* lookup_value(std::string name) const; /* result: usually a StorageSlot */
     bool register_type(std::string name, Type* ty);
-    bool register_variable(std::string name, StorageSlot* v);
+    bool register_variable(std::string name, Node* v, Type* ty); // FIXME: StorageSlot would already have ty
 };

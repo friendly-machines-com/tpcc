@@ -13,6 +13,11 @@ BoundedCardinalType::BoundedCardinalType(uint64_t lower_bound, uint64_t higher_b
 	assert(higher_bound >= lower_bound);
 }
 
+ScopeValueEntry::ScopeValueEntry(Node* value, Type* ty) {
+	this->value = value;
+	this->ty = ty;
+}
+
 Scope::Scope(Scope* parent) {
 	this->parent = parent;
 }
@@ -29,10 +34,19 @@ Type* Scope::lookup_type(std::string name) const {
 		return nullptr;
 	}
 }
-Type* Scope::lookup_value(std::string name) const {
+Node* Scope::lookup_value(std::string name) const {
 	auto iter = value_items.find(name);
 	if (iter != value_items.end()) {
-		auto result = *iter;
+		auto value_entry = *iter;
+		auto result = value_entry.value;
+/*
+		if (value_entry.auto_deref) {
+			// TODO: I am not sure the cmplexity of this feature is worth it.
+			// The idea is when you do "uses foo", then all of foo's stuff is now accessible WITHOUT qualification, but also WITH qualification.  TODO: check what happens if you have a member "foo" in the unit "foo".  Also, for "with foo", I think all of foo's stuff is now accessible WITHOUT qualification, but NOT with qualification.  In any case, this feature here would be for the "accessible WITHOUT qualification" case, where you register only the qualification and it auto-derefs.
+			auto ty = value_entry.ty;
+			abort();
+		}
+*/
 		assert(result);
 		return result;
 	} else if (parent) {
@@ -58,17 +72,16 @@ bool Scope::register_type(std::string name, Type* ty) {
 }
 
 /** returns whether it was registered anew, with value V of type T */
-bool Scope::register_variable(std::string name, StorageSlot* v) {
+bool Scope::register_variable(std::string name, Node* v, Type* ty) {
 	auto iter = value_items.find(name);
 	if (iter != value_items.end()) {
 		abort(); // duplicate type name
 		return false;
 	} else {
 		if (parent && parent->lookup_value(name)) {
-			fprintf(stderr, "warning: Name '%s' shadows another type of the same name\n", name.c_str());
+			fprintf(stderr, "warning: Name '%s' shadows another type of the same name in a super\n", name.c_str());
 		}
-		// FIXME: also store ty
-		value_items[name] = v;
+		value_items[name] = ScopeValueEntry(v, ty);
 		return true;
 	}
 }

@@ -16,7 +16,6 @@ public:
 };
 
 class Scope;
-class ValueScope;
 
 class Parser {
 private:
@@ -30,8 +29,7 @@ private:
 	void parse_keyword(std::string s);
 	bool maybe_parse_keyword(std::string s);
 	std::vector<ParserInputFile> input_files; // TODO: stack
-	Scope* scope;
-	ValueScope* value_scope;
+	std::vector<Scope*> scopes; // TODO: stack
 protected:
 	std::string input_token;
 	Node* parse_block_body();
@@ -90,8 +88,6 @@ protected:
 	void parse_period();
 	void push_scope(Scope* scope);
 	void pop_scope();
-	void push_value_scope(ValueScope* scope);
-	void pop_value_scope();
 	Node* maybe_parse_proc_attributes();
 	Node* parse_procedure_prototype();
 	Node* parse_procedure();
@@ -104,7 +100,7 @@ protected:
 	Node* raise_parse_error(std::string message);
 
 public:
-	Parser(Scope* scope, ValueScope* value_scope);
+	Parser();
 	void push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number);
 	void pop_input_file();
 	void start();

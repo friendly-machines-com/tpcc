@@ -8,9 +8,7 @@
 #include "scope.h"
 #include "evaluator.h"
 
-Parser::Parser(Scope* scope, ValueScope* value_scope) {
-	this->scope = scope;
-	this->value_scope = value_scope;
+Parser::Parser() {
 }
 void Parser::pop_input_file() {
 	input_files.pop_back();
@@ -44,14 +42,11 @@ void Parser::push_input_file(FILE* input_file, std::string input_file_name, int 
 }
 
 void Parser::push_scope(Scope* scope) {
-	assert(scope->parent == nullptr || scope->parent == this->scope);
-	scope->parent = this->scope;
-	this->scope = scope;
+	this->scopes.push_back(scope);
 }
 
 void Parser::pop_scope() {
-	assert(this->scope);
-	this->scope = this->scope->parent;
+	this->scopes.pop_back();
 }
 
 Node* Parser::raise_parse_error(std::string message) {
@@ -206,12 +201,12 @@ Node* Parser::parse_value() {
 		auto fn = id;
 		auto args = parse_expression();
 		if (maybe_parse_opening_paren()) { // function call
-			auto call = new ProcCall(args);
+			auto call = new ProcCall(fn, args);
 			std::optional<uint64_t> value = evaluate(scope, call);
 			if (value) {
 				return new Constant(*value);
 			} else {
-				return new ProcCall(args);
+				return call;
 			}
 		} else {
 			return id;
@@ -235,7 +230,7 @@ bool Parser::maybe_parse_period() {
 		return false;
 	}
 }
-bool Parser::parse_period() {
+void Parser::parse_period() {
 	if (!maybe_parse_period()) {
 		raise_parse_error("missing period");
 	}
@@ -317,7 +312,7 @@ bool Parser::maybe_parse_greater_equal() {
 }
 
 Node* Parser::parse_power() {
-	// FIXME ** - +
+	// FIXME **
 	if (maybe_parse_keyword("not")) {
 		return new Not(parse_value());
 	} else if (maybe_parse_at()) {
@@ -407,7 +402,7 @@ Node* Parser::parse_expression() {
 }
 
 Type* Parser::parse_aggregate_type_body() {
-	push_scope(new Scope(this->scope));
+	push_scope(new Scope(nullptr));
 	std::string visibility = "published";
 	do {
 		if (maybe_parse_directive("published")) {
@@ -428,7 +423,7 @@ Type* Parser::parse_aggregate_type_body() {
 			auto member_name = parse_identifier();
 			parse_colon();
 			auto ty = parse_type_expression();
-			scope->register_variable(member_name, new StorageSlot(ty));
+			this->scopes.back()->register_variable(member_name, new StorageSlot(ty), ty);
 		}
 		if (input_token.size() && input_token != "end") {
 			if (!maybe_parse_semicolon()) {
@@ -571,14 +566,14 @@ Node* Parser::parse_block_body() {
 }
 Scope* Parser::parse_const_block() {
 	parse_keyword("const");
-	auto scope = new Scope(this->scope);
+	auto scope = new Scope(nullptr);
 	push_scope(scope);
 	do {
 		auto name = parse_identifier();
 		// FIXME: handle actual compile-time consts which have no colon (and are no variables).
 		parse_colon();
 		auto ty = parse_type_expression();
-		scope->register_variable(name, new StorageSlot(ty));
+		this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
 		if (!maybe_parse_comma()) {
 			break;
 		}
@@ -597,7 +592,7 @@ Scope* Parser::maybe_parse_const_block() {
 DELPHI_AUTO_END: will automatically stop at some aggregate control directives (like "public" etc).
  */
 Scope* Parser::parse_type_block(bool delphi_auto_end) {
-	auto scope = new Scope(this->scope);
+	auto scope = new Scope(nullptr);
 	parse_keyword("type");
 	push_scope(scope);
 	// FIXME: here, it's allowed to have the special cases: "type PX = ^TX; TX = record" and "type TFoo = class x: TFoo"
@@ -605,7 +600,7 @@ Scope* Parser::parse_type_block(bool delphi_auto_end) {
 		auto name = parse_identifier();
 		parse_equals();
 		auto ty = parse_type_expression();
-		scope->register_type(name, ty);
+		this->scopes.back()->register_type(name, ty);
 		if (!maybe_parse_comma())
 			break;
 	} while (true);
@@ -621,13 +616,13 @@ Scope* Parser::maybe_parse_type_block(bool delphi_auto_end) {
 }
 Scope* Parser::parse_var_block() {
 	parse_keyword("var");
-	auto scope = new Scope(this->scope);
+	auto scope = new Scope(nullptr);
 	push_scope(scope);
 	do {
 		auto name = parse_identifier();
 		parse_colon();
 		auto ty = parse_type_expression();
-		scope->register_variable(name, new StorageSlot(ty));
+		this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
 		if (!maybe_parse_comma()) {
 			break;
 		}
@@ -783,7 +778,7 @@ Node* Parser::parse_proc_formal_parameters() {
 		parse_colon();
 		auto ty = parse_type_expression();
 		auto storage = new StorageSlot(ty);
-		scope->register_variable(id, storage);
+		this->scopes.back()->register_variable(id, storage, ty);
 		if (!maybe_parse_semicolon()) {
 			break;
 		}
