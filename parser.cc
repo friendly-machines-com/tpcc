@@ -103,7 +103,7 @@ void Parser::pop_scope() {
 	std::string r = sst.str();
 	fprintf(stderr, "%s\n", r.c_str());
 	fflush(stderr);
-	abort();
+	exit(1);
 }
 
 [[noreturn]] Node* Parser::raise_parse_error(std::string message) {
