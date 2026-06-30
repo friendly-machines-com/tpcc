@@ -947,6 +947,18 @@ Node* Parser::parse_constructor() {
 	parse_block();
 }
 
+Node* Parser::parse_destructor_prototype() {
+	parse_keyword("destructor");
+	auto id = parse_identifier();
+    auto formal_parameters = parse_proc_formal_parameters();
+	maybe_parse_proc_attributes();
+}
+
+Node* Parser::parse_destructor() {
+	parse_destructor_prototype();
+	parse_block();
+}
+
 Node* Parser::parse_unit() {
 	parse_keyword("unit");
 	parse_keyword("interface");

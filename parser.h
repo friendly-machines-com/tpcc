@@ -99,6 +99,8 @@ protected:
 	Node* parse_function();
 	Node* parse_constructor_prototype();
 	Node* parse_constructor();
+	Node* parse_destructor_prototype();
+	Node* parse_destructor();
 	Node* parse_proc_formal_parameters();
 
 	[[noreturn]] Node* raise_parse_error(std::string message);
