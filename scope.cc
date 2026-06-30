@@ -1,10 +1,32 @@
 #include <cstdint>
 #include <cassert>
-#include "type_scope.h"
+#include <cstdio>
+#include "scope.h"
 
-FixedArrayType::FixedArrayType(Node* bounds, Type* item_type) {
+FixedArrayType::FixedArrayType(Type* bounds, Type* item_type) {
 	this->bounds = bounds;
 	this->item_type = item_type;
+}
+
+FixedSetType::FixedSetType(Type* item_type) {
+	this->item_type = item_type;
+}
+
+PointerType::PointerType(Type* item_type) {
+	this->item_type = item_type;
+}
+
+RecordType::RecordType(Scope* children) {
+	this->children = children;
+}
+
+ClassType::ClassType(Scope* children) {
+	this->children = children;
+}
+
+UnitType::UnitType(Scope* interface_children, Scope* implementation_children) {
+	this->interface_children = interface_children;
+	this->implementation_children = implementation_children;
 }
 
 BoundedCardinalType::BoundedCardinalType(uint64_t lower_bound, uint64_t higher_bound) {
@@ -12,6 +34,8 @@ BoundedCardinalType::BoundedCardinalType(uint64_t lower_bound, uint64_t higher_b
     this->higher_bound = higher_bound;
 	assert(higher_bound >= lower_bound);
 }
+
+ScopeValueEntry::ScopeValueEntry() : value(nullptr), ty(nullptr) {}
 
 ScopeValueEntry::ScopeValueEntry(Node* value, Type* ty) {
 	this->value = value;
@@ -25,7 +49,7 @@ Scope::Scope(Scope* parent) {
 Type* Scope::lookup_type(std::string name) const {
 	auto iter = type_items.find(name);
 	if (iter != type_items.end()) {
-		auto result = *iter;
+		auto result = iter->second;
 		assert(result);
 		return result;
 	} else if (parent) {
@@ -37,16 +61,7 @@ Type* Scope::lookup_type(std::string name) const {
 Node* Scope::lookup_value(std::string name) const {
 	auto iter = value_items.find(name);
 	if (iter != value_items.end()) {
-		auto value_entry = *iter;
-		auto result = value_entry.value;
-/*
-		if (value_entry.auto_deref) {
-			// TODO: I am not sure the cmplexity of this feature is worth it.
-			// The idea is when you do "uses foo", then all of foo's stuff is now accessible WITHOUT qualification, but also WITH qualification.  TODO: check what happens if you have a member "foo" in the unit "foo".  Also, for "with foo", I think all of foo's stuff is now accessible WITHOUT qualification, but NOT with qualification.  In any case, this feature here would be for the "accessible WITHOUT qualification" case, where you register only the qualification and it auto-derefs.
-			auto ty = value_entry.ty;
-			abort();
-		}
-*/
+		auto result = iter->second.value;
 		assert(result);
 		return result;
 	} else if (parent) {

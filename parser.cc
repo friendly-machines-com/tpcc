@@ -11,9 +11,18 @@
 Parser::Parser() {
 }
 void Parser::pop_input_file() {
+	assert(!input_files.empty());
+	fclose(input_files.back().input_file);
 	input_files.pop_back();
-	auto p = input_files.back();
+	if (input_files.empty()) {
+		input_file = nullptr;
+		input_file_name = "";
+		input_file_line_number = 0;
+		return;
+	}
+	auto& p = input_files.back();
 	input_file = p.input_file;
+	input_file_name = p.input_file_name;
 	input_file_line_number = p.input_file_line_number;
 }
 int Parser::consume_lowlevel() {
@@ -21,10 +30,14 @@ int Parser::consume_lowlevel() {
 	if (result == '\n') {
 		++this->input_file_line_number;
 	}
+	if (!input_file) {
+		input_char = EOF;
+		return result;
+	}
 	input_char = fgetc(input_file);
 	if (input_char == EOF) {
-		if (input_files.size()) {
-			pop_input_file();
+		pop_input_file();
+		if (input_file) {
 			consume_lowlevel();
 		}
 	}
@@ -46,18 +59,28 @@ void Parser::push_scope(Scope* scope) {
 }
 
 void Parser::pop_scope() {
+	if (this->scopes.empty()) {
+		fprintf(stderr, "internal compiler error: pop_scope on empty scope stack\n");
+		abort();
+	}
 	this->scopes.pop_back();
 }
 
-Node* Parser::raise_parse_error(std::string message) {
+[[noreturn]] static void emit_parse_error(const std::string& file, int line, const std::string& message) {
 	std::stringstream sst;
-	sst << input_file_name << '(' << this->input_file_line_number << ')' << ':' << ' ';
-	sst << message << std::endl;
+	sst << file << '(' << line << ')' << ':' << ' ' << message << std::endl;
 	std::string r = sst.str();
 	fprintf(stderr, "%s\n", r.c_str());
 	fflush(stderr);
 	abort();
-	return nullptr;
+}
+
+[[noreturn]] Node* Parser::raise_parse_error(std::string message) {
+	emit_parse_error(input_file_name, input_file_line_number, message);
+}
+
+[[noreturn]] Type* Parser::raise_type_parse_error(std::string message) {
+	emit_parse_error(input_file_name, input_file_line_number, message);
 }
 
 std::string Parser::consume() {
@@ -67,12 +90,16 @@ std::string Parser::consume() {
 	while (input_char == ' ' || input_char == '\n' || input_char == '\r') {
 		consume_lowlevel();
 	}
+	if (input_char == EOF) {
+		input_token = "";
+		return "";
+	}
 	if ((input_char >= 'a' && input_char <= 'z') | (input_char >= 'A' && input_char <= 'Z') || input_char == '_') {
 		while ((input_char >= 'a' && input_char <= 'z') || (input_char >= 'A' && input_char <= 'Z') || input_char == '_') {
 			sst << (char) tolower(input_char);
 			consume_lowlevel();
 		}
-	} else if ((input_char >= '0' && input_char <= '9') | input_char == '.' || input_char == '_') {
+	} else if ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
 		while ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
 			sst << (char) input_char;
 			consume_lowlevel();
@@ -157,12 +184,7 @@ void Parser::start() {
 	consume();
 }
 bool Parser::peek_keyword(std::string s) {
-	if (input_token == s) { // FIXME case insensitive
-		consume();
-		return true;
-	} else {
-		return false;
-	}
+	return input_token == s; // FIXME case insensitive
 }
 void Parser::parse_keyword(std::string s) {
 	if (peek_keyword(s)) {
@@ -179,6 +201,14 @@ bool Parser::maybe_parse_keyword(std::string s) {
 		return false;
 	}
 }
+bool Parser::maybe_parse_directive(std::string directive) {
+	// A Pascal directive (private/public/protected/published/etc.) matches
+	// like a keyword for our purposes. Distinguished from a true keyword in
+	// that directives are only reserved within specific contexts (aggregate
+	// type bodies, procedure attribute lists); outside those contexts they
+	// remain usable as identifiers. The lexical match itself is identical.
+	return maybe_parse_keyword(directive);
+}
 Node* Parser::maybe_parse_statement() {
 	if (input_token == "end") {
 		return nullptr;
@@ -188,7 +218,36 @@ Node* Parser::maybe_parse_statement() {
 }
 
 std::string Parser::parse_identifier() {
-	consume(); // FIXME!!! detect and reject keywords
+	// FIXME!!! detect and reject keywords
+	auto result = input_token;
+	consume();
+	return result;
+}
+
+/** Walk the scope stack top-down looking up a value-position name (variable,
+ *  constant, procedure, function, builtin). Abort with a clear message if not
+ *  found. Phase 0: scopes stack is usually empty, so this aborts on first use;
+ *  the call sites are structurally correct ahead of Phase 2's root frame +
+ *  builtins. */
+Node* Parser::resolve_value(std::string name) {
+	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+		if (Node* hit = (*it)->lookup_value(name)) {
+			return hit;
+		}
+	}
+	raise_parse_error("unresolved value identifier: " + name);
+	return nullptr;
+}
+
+/** Same as resolve_value but for type-position names. */
+Type* Parser::resolve_type(std::string name) {
+	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+		if (Type* hit = (*it)->lookup_type(name)) {
+			return hit;
+		}
+	}
+	raise_parse_error("unresolved type identifier: " + name);
+	return nullptr;
 }
 
 Node* Parser::parse_value() {
@@ -197,19 +256,15 @@ Node* Parser::parse_value() {
 		parse_closing_paren();
 		return result;
 	} else {
-		auto id = parse_identifier(); // FIXME: or numeral or bool as well; FIXME: resolve identifier
-		auto fn = id;
-		auto args = parse_expression();
-		if (maybe_parse_opening_paren()) { // function call
-			auto call = new ProcCall(fn, args);
-			std::optional<uint64_t> value = evaluate(scope, call);
-			if (value) {
-				return new Constant(*value);
-			} else {
-				return call;
-			}
+		// FIXME: numerals and bool literals also belong here
+		auto id = parse_identifier();
+		Node* fn = resolve_value(id);
+		if (maybe_parse_opening_paren()) { // function/procedure call
+			auto args = parse_expression();
+			parse_closing_paren();
+			return new ProcCall(fn, args);
 		} else {
-			return id;
+			return fn;
 		}
 	}
 }
@@ -338,11 +393,11 @@ Node* Parser::parse_product() {
 		} else if (maybe_parse_keyword("mod")) {
 			result = new Mod(result, parse_power());
 		} else if (maybe_parse_keyword("and")) {
-			result = new Mod(result, parse_power());
+			result = new And(result, parse_power());
 		} else if (maybe_parse_keyword("shl")) {
-			result = new Mod(result, parse_power());
+			result = new ShiftLeft(result, parse_power());
 		} else if (maybe_parse_keyword("shr")) {
-			result = new Mod(result, parse_power());
+			result = new ShiftRight(result, parse_power());
 		} else if (maybe_parse_keyword("as")) {
 			result = new Coerce(result, parse_power());
 		} else if (maybe_parse_less_less()) {
@@ -434,36 +489,37 @@ Type* Parser::parse_aggregate_type_body() {
 		}
 	} while (true);
 	pop_scope();
+	return raise_type_parse_error("parse_aggregate_type_body: wrapping the popped scope into a Type is not implemented yet");
 }
 
 Type* Parser::parse_class_type() {
 	parse_keyword("class");
 	if (maybe_parse_opening_paren()) {
-		// FIXME
+		return raise_type_parse_error("class inheritance (class(Parent)) not implemented yet");
 	}
-	//push_scope();
 	parse_aggregate_type_body();
-	//pop_scope();
 	parse_keyword("end");
+	return raise_type_parse_error("parse_class_type: ClassType construction not implemented yet");
 }
 
 Type* Parser::parse_record_type() {
 	parse_keyword("record");
 	if (maybe_parse_opening_paren()) {
-		// FIXME
+		return raise_type_parse_error("record with parenthesized header not implemented yet");
 	}
 	parse_aggregate_type_body();
 	parse_keyword("end");
+	return raise_type_parse_error("parse_record_type: RecordType construction not implemented yet");
 }
 
 Type* Parser::parse_object_type() {
 	parse_keyword("object");
 	if (maybe_parse_opening_paren()) {
-		// FIXME
+		return raise_type_parse_error("object with parenthesized header not implemented yet");
 	}
-	// FIXME
 	parse_aggregate_type_body();
 	parse_keyword("end");
+	return raise_type_parse_error("parse_object_type: ObjectType construction not implemented yet");
 }
 
 Type* Parser::parse_array_type() {
@@ -484,6 +540,7 @@ Type* Parser::parse_enum_type() {
 		}
 	} while (true);
 	parse_closing_paren();
+	return raise_type_parse_error("parse_enum_type: EnumType construction not implemented yet");
 }
 
 Type* Parser::parse_type_expression() {
@@ -496,6 +553,7 @@ Type* Parser::parse_type_expression() {
 		parse_opening_bracket();
 		parse_expression();
 		parse_closing_bracket();
+		return raise_type_parse_error("sized-string type (string[N]) not implemented yet");
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
@@ -509,10 +567,9 @@ Type* Parser::parse_type_expression() {
 	} else if (peek_keyword("class")) {
 		return parse_class_type();
 	} else {
-		// FIXME: do constant folding and then BoundedCardinalType; 2..5 as type => BoundedCardinalType
-		// FIXME: probably need a similar thing for string[7]
-		auto id = parse_identifier(); // FIXME: resolve.
-		return id;
+		// FIXME: constant folding for ranges (2..5 -> BoundedCardinalType)
+		auto id = parse_identifier();
+		return resolve_type(id);
 	}
 }
 
@@ -557,12 +614,17 @@ Node* Parser::parse_statement() {
 	}
 }
 Node* Parser::parse_block_body() {
+	Block* block = new Block();
 	while (input_token.size()) {
-		maybe_parse_statement();
+		Node* stmt = maybe_parse_statement();
+		if (stmt) {
+			block->add(stmt);
+		}
 		if (!maybe_parse_semicolon()) {
 			break;
 		}
 	}
+	return block;
 }
 Scope* Parser::parse_const_block() {
 	parse_keyword("const");
@@ -754,13 +816,17 @@ void Parser::parse_equals() {
 }
 
 Node* Parser::parse_block() {
-	maybe_parse_type_block(false);
-	maybe_parse_const_block();
-	maybe_parse_var_block();
+	auto type_scope = maybe_parse_type_block(false);
+	auto const_scope = maybe_parse_const_block();
+	auto var_scope = maybe_parse_var_block();
 	parse_keyword("begin");
-	parse_block_body();
+	auto body = parse_block_body();
 	parse_keyword("end");
-	pop_scope(); // Note: Was pushed by parse_type_block
+	// pop in reverse push order
+	if (var_scope) pop_scope();
+	if (const_scope) pop_scope();
+	if (type_scope) pop_scope();
+	return body;
 }
 
 Node* Parser::maybe_parse_proc_attributes() {
@@ -835,18 +901,15 @@ Node* Parser::parse_unit() {
 }
 
 Node* Parser::parse_program_or_unit() {
-	if (peek_keyword("program")) {
-		consume();
-		auto name = consume();
+	if (maybe_parse_keyword("program")) {
+		auto name = parse_identifier();
 		parse_semicolon();
-		parse_block();
 		auto result = parse_block();
-		parse_keyword("end");
 		parse_period();
 		return result;
-	} else if (peek_keyword("unit")) {
+	} else if (maybe_parse_keyword("unit")) {
 		return parse_unit();
 	} else {
-		raise_parse_error("unknown input token");
+		return raise_parse_error("unknown input token");
 	}
 }

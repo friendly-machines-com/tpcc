@@ -1,14 +1,22 @@
 
-CFLAGS = -g3
+CXXFLAGS = -g3 -std=c++17 -Wall
 
-%.o: %.c
-	$(CXX) $(CFLAGS) $<
+%.o: %.cc
+	$(CXX) $(CXXFLAGS) -c $<
 
-all: main.o parser.o cst.o
-	$(CXX) -o mp $^
+all: mp
 
+mp: main.o parser.o cst.o scope.o evaluator.o builtins.o
+	$(CXX) -o $@ $^
+
+main.o: main.cc parser.h
 parser.o: parser.cc parser.h cst.h scope.h evaluator.h
 cst.o: cst.cc cst.h
-scope.o: scope.h
-evaluator.o: evaluator.cc evaluator.h
+scope.o: scope.cc scope.h cst.h
+evaluator.o: evaluator.cc evaluator.h cst.h scope.h
 builtins.o: builtins.cc builtins.h cst.h
+
+clean:
+	rm -f *.o mp core
+
+.PHONY: all clean

@@ -6,6 +6,8 @@
 class Node;
 
 class Type {
+public:
+	virtual ~Type() = default;
 };
 
 class Scope;
@@ -14,37 +16,45 @@ class StorageSlot;
 struct BoundedCardinalType: public Type {
 	uint64_t lower_bound;
 	uint64_t higher_bound;
+	BoundedCardinalType(uint64_t lower_bound, uint64_t higher_bound);
 };
 
 struct FixedArrayType: public Type {
-	Node* bounds;
+	Type* bounds;
 	Type* item_type;
+	FixedArrayType(Type* bounds, Type* item_type);
 };
 
 struct FixedSetType: public Type {
 	Type* item_type;
+	FixedSetType(Type* item_type);
 };
 
 struct RecordType: public Type {
 	Scope* children;
+	RecordType(Scope* children);
 };
 
 struct ClassType: public Type {
 	Scope* children;
+	ClassType(Scope* children);
 };
 
 struct PointerType: public Type {
 	Type* item_type;
+	PointerType(Type* item_type);
 };
 
 struct UnitType: public Type {
 	Scope* interface_children;
 	Scope* implementation_children;
+	UnitType(Scope* interface_children, Scope* implementation_children);
 };
 
 struct ScopeValueEntry {
 	Node* value;
 	Type* ty;
+	ScopeValueEntry();
 	ScopeValueEntry(Node* value, Type* ty);
 };
 

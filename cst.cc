@@ -7,6 +7,10 @@ std::string Node::str() const {
 	return sst.str();
 }
 
+void Block::add(Node* stmt) {
+	statements.push_back(stmt);
+}
+
 Symbol::Symbol(std::string text) {
 	this->text = text;
 }

@@ -1,14 +1,15 @@
 #pragma once
+#include <cstdint>
+#include <optional>
+#include "cst.h"
 
-class Node;
 class Type;
 
 struct Builtin: public Node {
-    virtual std::
     virtual std::optional<uint64_t> evaluate(Node* args) {
         return {};
     }
-    virtual std::optional<uint64_t> evaluate(Type* args) {
+    virtual std::optional<uint64_t> evaluate_type(Type* args) {
         return {};
     }
 };
@@ -16,7 +17,7 @@ struct Builtin: public Node {
 struct Ord: public Builtin {
 };
 
-struct Inc: public Bulitin {
+struct Inc: public Builtin {
 };
 
 struct Dec: public Builtin {

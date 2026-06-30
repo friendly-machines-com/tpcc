@@ -43,6 +43,8 @@ protected:
 	void parse_semicolon();
 	Node* maybe_parse_statement();
 	std::string parse_identifier();
+	Node* resolve_value(std::string name);
+	Type* resolve_type(std::string name);
     bool maybe_parse_directive(std::string directive);
 	Node* parse_value();
 	Node* parse_comparison();
@@ -97,7 +99,8 @@ protected:
 	Node* parse_constructor();
 	Node* parse_proc_formal_parameters();
 
-	Node* raise_parse_error(std::string message);
+	[[noreturn]] Node* raise_parse_error(std::string message);
+	[[noreturn]] Type* raise_type_parse_error(std::string message);
 
 public:
 	Parser();

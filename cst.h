@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <cstdint>
 
 class Type;
@@ -7,6 +8,12 @@ class Type;
 class Node {
 public:
 	std::string str() const;
+};
+
+class Block: public Node {
+public:
+	std::vector<Node*> statements;
+	void add(Node* stmt);
 };
 
 class Symbol: public Node {
