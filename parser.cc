@@ -156,7 +156,14 @@ std::string Parser::consume() {
 			sst << (char) input_char;
 			consume_lowlevel();
 		}
-	} else if (input_char != EOF && strchr("=;,[]()@*+-/:^", input_char)) {
+	} else if (input_char == ':') {
+		sst << (char) input_char;
+		consume_lowlevel();
+		if (input_char == '=') {
+			sst << (char) input_char;
+			consume_lowlevel();
+		}
+	} else if (input_char != EOF && strchr("=;,[]()@*+-/^", input_char)) {
 		sst << (char) input_char;
 		consume_lowlevel();
 	} else if (input_char == '\'') {
@@ -242,10 +249,43 @@ bool Parser::maybe_parse_directive(std::string directive) {
 	return maybe_parse_keyword(directive);
 }
 Node* Parser::maybe_parse_statement() {
-	if (input_token == "end") {
+	if (peek_keyword("end")) {
 		return nullptr;
 	} else {
-		raise_parse_error("missing statement");
+		if (peek_keyword("return")) { // FIXME Exit
+			consume();
+			return new Return(parse_expression());
+		} else if (peek_keyword("if")) {
+			parse_keyword("if");
+			auto condition = parse_expression();
+			parse_keyword("then");
+			parse_statement();
+			parse_keyword("else");
+			parse_statement();
+		} else if (peek_keyword("while")) {
+			parse_keyword("while");
+			auto condition = parse_expression();
+			parse_keyword("do");
+			auto body = parse_statement();
+			// FIXME
+		} else if (peek_keyword("repeat")) {
+			parse_keyword("repeat");
+			auto body = parse_block_body();
+			parse_keyword("until");
+			auto condition = parse_expression();
+		} else if (peek_keyword("begin")) {
+			parse_keyword("begin");
+			auto body = parse_block_body();
+			parse_keyword("end");
+			return body;
+		} else {
+			auto id = parse_identifier(); // FIXME resolve
+			Node* storage = nullptr; // FIXME
+			parse_colon_equals();
+			auto value = parse_expression();
+			return new Assign(storage, value);
+		}
+		// FIXME: raise_parse_error("missing statement");
 	}
 }
 
@@ -615,42 +655,9 @@ Type* Parser::parse_type_expression() {
 Node* Parser::parse_statement() {
 	auto result = maybe_parse_statement();
 	if (result == nullptr) {
-		raise_parse_error("missing statement");
-	} else {
-		if (peek_keyword("return")) { // FIXME Exit
-			consume();
-			return new Return(parse_expression());
-		} else if (peek_keyword("if")) {
-			parse_keyword("if");
-			auto condition = parse_expression();
-			parse_keyword("then");
-			parse_statement();
-			parse_keyword("else");
-			parse_statement();
-		} else if (peek_keyword("while")) {
-			parse_keyword("while");
-			auto condition = parse_expression();
-			parse_keyword("do");
-			auto body = parse_statement();
-			// FIXME
-		} else if (peek_keyword("repeat")) {
-			parse_keyword("repeat");
-			auto body = parse_block_body();
-			parse_keyword("until");
-			auto condition = parse_expression();
-		} else if (peek_keyword("begin")) {
-			parse_keyword("begin");
-			auto body = parse_block_body();
-			parse_keyword("end");
-			return body;
-		} else {
-			auto id = parse_identifier(); // FIXME resolve
-			Node* storage = nullptr; // FIXME
-			parse_colon_equals();
-			auto value = parse_expression();
-			return new Assign(storage, value);
-		}
+		return raise_parse_error("missing statement");
 	}
+	return result;
 }
 Node* Parser::parse_block_body() {
 	Block* block = new Block();
