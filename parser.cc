@@ -3,11 +3,41 @@
 #include <cstring>
 #include <optional>
 #include <sstream>
+#include <set>
+#include <unordered_set>
 #include "parser.h"
 #include "cst.h"
 #include "frame.h"
 #include "evaluator.h"
 #include "builtins.h"
+
+static std::unordered_set<std::string> keywords = {
+	"program",
+	"unit",
+	"interface",
+	"implementation",
+	"record",
+	"object",
+	"class",
+	"inherited",
+	"interface",
+	"procedure",
+	"function",
+	"constructor",
+	"destructor",
+	"if",
+	"then",
+	"else",
+	"while",
+	"do",
+	"repeat",
+	"until",
+	"begin",
+	"end",
+	"var",
+	"type",
+	"const",
+};
 
 Parser::Parser() {
 }
@@ -219,11 +249,21 @@ Node* Parser::maybe_parse_statement() {
 	}
 }
 
-std::string Parser::parse_identifier() {
-	// FIXME!!! detect and reject keywords
+std::optional<std::string> Parser::maybe_parse_identifier() {
 	auto result = input_token;
+	if (keywords.find(result) != keywords.end()) {
+		return {};
+	}
 	consume();
 	return result;
+}
+
+std::string Parser::parse_identifier() {
+	auto result = maybe_parse_identifier();
+	if (!result) {
+		(void) raise_parse_error("expected identifier");
+	}
+	return *result;
 }
 
 /** Walk the scope stack top-down looking up a value-position name (variable,
@@ -680,13 +720,24 @@ Frame* Parser::parse_var_block() {
 	auto scope = new Frame(nullptr);
 	push_scope(scope);
 	do {
-		auto name = parse_identifier();
-		parse_colon();
-		auto ty = parse_type_expression();
-		this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
-		if (!maybe_parse_comma()) {
+		std::vector<std::string> names;
+		auto name_optional = maybe_parse_identifier();
+		if (!name_optional) {
 			break;
 		}
+		auto name = *name_optional;
+		names.push_back(name);
+		while (maybe_parse_comma()) {
+			auto name = parse_identifier();
+			names.push_back(name);
+		}
+		parse_colon();
+		auto ty = parse_type_expression();
+		for (auto iter : names) {
+			auto name = iter;
+			this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
+		}
+		parse_semicolon();
 	} while (true);
 	return scope;
 }

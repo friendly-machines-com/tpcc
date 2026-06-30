@@ -3,6 +3,7 @@
 #include <string>
 #include <stack>
 #include <vector>
+#include <optional>
 
 class Node;
 class Symbol;
@@ -42,6 +43,7 @@ protected:
 	Node* parse_block();
 	void parse_semicolon();
 	Node* maybe_parse_statement();
+	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
 	Node* resolve_value(std::string name);
 	Type* resolve_type(std::string name);
