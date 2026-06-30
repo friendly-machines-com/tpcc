@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <charconv>
 #include <optional>
 #include <sstream>
 #include <set>
@@ -306,6 +307,29 @@ std::string Parser::parse_identifier() {
 	return *result;
 }
 
+Node* Parser::maybe_parse_numeral() {
+	if (input_token.empty() || !isdigit((unsigned char)input_token[0])) {
+		return nullptr;
+	}
+	uint64_t value;
+	auto [ptr, ec] = std::from_chars(input_token.data(), input_token.data() + input_token.size(), value);
+	if (ec != std::errc() || ptr != input_token.data() + input_token.size()) {
+		return raise_parse_error("malformed numeral: " + input_token);
+	}
+	auto lit = new Constant(value);
+	consume();
+	return lit;
+}
+
+Node* Parser::parse_numeral() {
+	auto result = maybe_parse_numeral();
+	if (!result) {
+		return raise_parse_error("expected numeral");
+	} else {
+		return result;
+	}
+}
+
 /** Walk the scope stack top-down looking up a value-position name (variable,
  *  constant, procedure, function, builtin). Raise if not found. */
 Node* Parser::resolve_value(std::string name) {
@@ -335,15 +359,20 @@ Node* Parser::parse_value() {
 		parse_closing_paren();
 		return result;
 	} else {
-		// FIXME: numerals and bool literals also belong here
-		auto id = parse_identifier();
-		Node* fn = resolve_value(id);
-		if (maybe_parse_opening_paren()) { // function/procedure call
-			auto args = parse_expression();
-			parse_closing_paren();
-			return new ProcCall(fn, args);
+		auto result = maybe_parse_numeral();
+		if (result) {
+			return result;
 		} else {
-			return fn;
+			// FIXME: bool literals also belong here
+			auto id = parse_identifier();
+			Node* fn = resolve_value(id);
+			if (maybe_parse_opening_paren()) { // function/procedure call
+				auto args = parse_expression();
+				parse_closing_paren();
+				return new ProcCall(fn, args);
+			} else {
+				return fn;
+			}
 		}
 	}
 }

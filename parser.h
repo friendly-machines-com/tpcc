@@ -45,6 +45,8 @@ protected:
 	Node* maybe_parse_statement();
 	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
+	Node* maybe_parse_numeral();
+	Node* parse_numeral();
 	Node* resolve_value(std::string name);
 	Type* resolve_type(std::string name);
     bool maybe_parse_directive(std::string directive);
