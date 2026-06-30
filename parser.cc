@@ -5,7 +5,7 @@
 #include <sstream>
 #include "parser.h"
 #include "cst.h"
-#include "scope.h"
+#include "frame.h"
 #include "evaluator.h"
 
 Parser::Parser() {
@@ -54,7 +54,7 @@ void Parser::push_input_file(FILE* input_file, std::string input_file_name, int 
 	this->input_file_line_number = input_file_line_number;
 }
 
-void Parser::push_scope(Scope* scope) {
+void Parser::push_scope(Frame* scope) {
 	this->scopes.push_back(scope);
 }
 
@@ -457,7 +457,7 @@ Node* Parser::parse_expression() {
 }
 
 Type* Parser::parse_aggregate_type_body() {
-	push_scope(new Scope(nullptr));
+	push_scope(new Frame(nullptr));
 	std::string visibility = "published";
 	do {
 		if (maybe_parse_directive("published")) {
@@ -626,9 +626,9 @@ Node* Parser::parse_block_body() {
 	}
 	return block;
 }
-Scope* Parser::parse_const_block() {
+Frame* Parser::parse_const_block() {
 	parse_keyword("const");
-	auto scope = new Scope(nullptr);
+	auto scope = new Frame(nullptr);
 	push_scope(scope);
 	do {
 		auto name = parse_identifier();
@@ -642,7 +642,7 @@ Scope* Parser::parse_const_block() {
 	} while (true);
 	return scope;
 }
-Scope* Parser::maybe_parse_const_block() {
+Frame* Parser::maybe_parse_const_block() {
 	if (peek_keyword("const")) {
 		return parse_const_block();
 	} else {
@@ -653,8 +653,8 @@ Scope* Parser::maybe_parse_const_block() {
 
 DELPHI_AUTO_END: will automatically stop at some aggregate control directives (like "public" etc).
  */
-Scope* Parser::parse_type_block(bool delphi_auto_end) {
-	auto scope = new Scope(nullptr);
+Frame* Parser::parse_type_block(bool delphi_auto_end) {
+	auto scope = new Frame(nullptr);
 	parse_keyword("type");
 	push_scope(scope);
 	// FIXME: here, it's allowed to have the special cases: "type PX = ^TX; TX = record" and "type TFoo = class x: TFoo"
@@ -669,16 +669,16 @@ Scope* Parser::parse_type_block(bool delphi_auto_end) {
 	return scope;
 }
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually */
-Scope* Parser::maybe_parse_type_block(bool delphi_auto_end) {
+Frame* Parser::maybe_parse_type_block(bool delphi_auto_end) {
 	if (peek_keyword("type")) {
 		return parse_type_block(delphi_auto_end);
 	} else {
 		return nullptr;
 	}
 }
-Scope* Parser::parse_var_block() {
+Frame* Parser::parse_var_block() {
 	parse_keyword("var");
-	auto scope = new Scope(nullptr);
+	auto scope = new Frame(nullptr);
 	push_scope(scope);
 	do {
 		auto name = parse_identifier();
@@ -691,7 +691,7 @@ Scope* Parser::parse_var_block() {
 	} while (true);
 	return scope;
 }
-Scope* Parser::maybe_parse_var_block() {
+Frame* Parser::maybe_parse_var_block() {
 	if (peek_keyword("var")) {
 		return parse_var_block();
 	} else {

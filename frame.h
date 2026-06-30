@@ -10,7 +10,7 @@ public:
 	virtual ~Type() = default;
 };
 
-class Scope;
+class Frame;
 class StorageSlot;
 
 struct BoundedCardinalType: public Type {
@@ -31,13 +31,13 @@ struct FixedSetType: public Type {
 };
 
 struct RecordType: public Type {
-	Scope* children;
-	RecordType(Scope* children);
+	Frame* children;
+	RecordType(Frame* children);
 };
 
 struct ClassType: public Type {
-	Scope* children;
-	ClassType(Scope* children);
+	Frame* children;
+	ClassType(Frame* children);
 };
 
 struct PointerType: public Type {
@@ -46,28 +46,33 @@ struct PointerType: public Type {
 };
 
 struct UnitType: public Type {
-	Scope* interface_children;
-	Scope* implementation_children;
-	UnitType(Scope* interface_children, Scope* implementation_children);
+	Frame* interface_children;
+	Frame* implementation_children;
+	UnitType(Frame* interface_children, Frame* implementation_children);
 };
 
-struct ScopeValueEntry {
+struct FrameValueEntry {
 	Node* value;
 	Type* ty;
-	ScopeValueEntry();
-	ScopeValueEntry(Node* value, Type* ty);
+	FrameValueEntry();
+	FrameValueEntry(Node* value, Type* ty);
 };
 
-class Scope /*: public Type*/ {
+/** A Frame is the storage for one declaration block (the result of `var x,y,z:
+ *  Integer;` or the body of a record/class/object/unit). It owns name-to-entity
+ *  maps. A frame's optional `parent` pointer captures STRUCTURAL relationships
+ *  (nested class, subclass-to-superclass), not lexical lookup chains; those
+ *  live in the Parser's `scopes` stack of frames. */
+class Frame {
 private:
 	std::map<std::string, Type*> type_items;
-	std::map<std::string, ScopeValueEntry> value_items;
+	std::map<std::string, FrameValueEntry> value_items;
 public:
-	Scope* parent; // NOT invasive from Parser
+	Frame* parent; // NOT invasive from Parser
 public:
-    // TODO: kind of scope (unit, record, class, ...); maybe also bool auto_unwrap; for "uses" and "with" blocks
+    // TODO: kind of frame (unit, record, class, ...); maybe also bool auto_unwrap; for "uses" and "with" blocks
 
-    Scope(Scope* parent);
+    Frame(Frame* parent);
     Type* lookup_type(std::string name) const; /* TODO: or maybe a lookup with flags whether type and/or value is okay */
     Node* lookup_value(std::string name) const; /* result: usually a StorageSlot */
     bool register_type(std::string name, Type* ty);

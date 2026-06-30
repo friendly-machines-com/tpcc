@@ -3,6 +3,6 @@
 #include <optional>
 
 class Node;
-class Scope;
+class Frame;
 
-std::optional<uint64_t> evaluate(Scope* scope, Node* v);
+std::optional<uint64_t> evaluate(Frame* frame, Node* v);

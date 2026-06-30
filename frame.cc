@@ -1,7 +1,7 @@
 #include <cstdint>
 #include <cassert>
 #include <cstdio>
-#include "scope.h"
+#include "frame.h"
 
 FixedArrayType::FixedArrayType(Type* bounds, Type* item_type) {
 	this->bounds = bounds;
@@ -16,15 +16,15 @@ PointerType::PointerType(Type* item_type) {
 	this->item_type = item_type;
 }
 
-RecordType::RecordType(Scope* children) {
+RecordType::RecordType(Frame* children) {
 	this->children = children;
 }
 
-ClassType::ClassType(Scope* children) {
+ClassType::ClassType(Frame* children) {
 	this->children = children;
 }
 
-UnitType::UnitType(Scope* interface_children, Scope* implementation_children) {
+UnitType::UnitType(Frame* interface_children, Frame* implementation_children) {
 	this->interface_children = interface_children;
 	this->implementation_children = implementation_children;
 }
@@ -35,18 +35,18 @@ BoundedCardinalType::BoundedCardinalType(uint64_t lower_bound, uint64_t higher_b
 	assert(higher_bound >= lower_bound);
 }
 
-ScopeValueEntry::ScopeValueEntry() : value(nullptr), ty(nullptr) {}
+FrameValueEntry::FrameValueEntry() : value(nullptr), ty(nullptr) {}
 
-ScopeValueEntry::ScopeValueEntry(Node* value, Type* ty) {
+FrameValueEntry::FrameValueEntry(Node* value, Type* ty) {
 	this->value = value;
 	this->ty = ty;
 }
 
-Scope::Scope(Scope* parent) {
+Frame::Frame(Frame* parent) {
 	this->parent = parent;
 }
 
-Type* Scope::lookup_type(std::string name) const {
+Type* Frame::lookup_type(std::string name) const {
 	auto iter = type_items.find(name);
 	if (iter != type_items.end()) {
 		auto result = iter->second;
@@ -58,7 +58,7 @@ Type* Scope::lookup_type(std::string name) const {
 		return nullptr;
 	}
 }
-Node* Scope::lookup_value(std::string name) const {
+Node* Frame::lookup_value(std::string name) const {
 	auto iter = value_items.find(name);
 	if (iter != value_items.end()) {
 		auto result = iter->second.value;
@@ -72,7 +72,7 @@ Node* Scope::lookup_value(std::string name) const {
 }
 
 /** returns whether it was registered anew, with type TY */
-bool Scope::register_type(std::string name, Type* ty) {
+bool Frame::register_type(std::string name, Type* ty) {
 	auto iter = type_items.find(name);
 	if (iter != type_items.end()) {
 		abort(); // duplicate type name
@@ -87,7 +87,7 @@ bool Scope::register_type(std::string name, Type* ty) {
 }
 
 /** returns whether it was registered anew, with value V of type T */
-bool Scope::register_variable(std::string name, Node* v, Type* ty) {
+bool Frame::register_variable(std::string name, Node* v, Type* ty) {
 	auto iter = value_items.find(name);
 	if (iter != value_items.end()) {
 		abort(); // duplicate type name
@@ -96,7 +96,7 @@ bool Scope::register_variable(std::string name, Node* v, Type* ty) {
 		if (parent && parent->lookup_value(name)) {
 			fprintf(stderr, "warning: Name '%s' shadows another type of the same name in a super\n", name.c_str());
 		}
-		value_items[name] = ScopeValueEntry(v, ty);
+		value_items[name] = FrameValueEntry(v, ty);
 		return true;
 	}
 }

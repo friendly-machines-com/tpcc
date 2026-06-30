@@ -15,7 +15,7 @@ public:
 	int input_file_line_number;
 };
 
-class Scope;
+class Frame;
 
 class Parser {
 private:
@@ -29,16 +29,16 @@ private:
 	void parse_keyword(std::string s);
 	bool maybe_parse_keyword(std::string s);
 	std::vector<ParserInputFile> input_files; // TODO: stack
-	std::vector<Scope*> scopes; // TODO: stack
+	std::vector<Frame*> scopes; // TODO: stack
 protected:
 	std::string input_token;
 	Node* parse_block_body();
-	Scope* maybe_parse_const_block();
-	Scope* maybe_parse_type_block(bool delphi_auto_end);
-	Scope* maybe_parse_var_block();
-	Scope* parse_const_block();
-	Scope* parse_type_block(bool delphi_auto_end);
-	Scope* parse_var_block();
+	Frame* maybe_parse_const_block();
+	Frame* maybe_parse_type_block(bool delphi_auto_end);
+	Frame* maybe_parse_var_block();
+	Frame* parse_const_block();
+	Frame* parse_type_block(bool delphi_auto_end);
+	Frame* parse_var_block();
 	Node* parse_block();
 	void parse_semicolon();
 	Node* maybe_parse_statement();
@@ -88,7 +88,7 @@ protected:
 	bool maybe_parse_greater_equal();
 	bool maybe_parse_period();
 	void parse_period();
-	void push_scope(Scope* scope);
+	void push_scope(Frame* scope);
 	void pop_scope();
 	Node* maybe_parse_proc_attributes();
 	Node* parse_procedure_prototype();
