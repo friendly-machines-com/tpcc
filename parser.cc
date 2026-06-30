@@ -319,21 +319,28 @@ Node* Parser::maybe_parse_numeral() {
 	auto input_size = input_token.size();
 	uint64_t value;
 	int base = 10;
-	if (input_size == 0 || (!isdigit(input[0]) && input[0] != '$')) {
+	if (input_size > 0 && (isdigit(*input) || *input == '$' || *input == '.')) {
+		if (*input == '$') {
+			base = 16;
+			++input;
+			--input_size;
+		}
+		if (*input != '.') {
+			auto [ptr, ec] = std::from_chars(input, input + input_size, value, base);
+			if (ec != std::errc() || ptr != input + input_size) {
+				return raise_parse_error("malformed numeral: " + input_token);
+			}
+			// FIXME: continue for non-integer here.
+			auto lit = new Constant(value);
+			consume();
+			return lit;
+		} else {
+			// FIXME: continue for non-integer here.
+			return raise_parse_error("unimplemented real numeral: " + input_token);
+		}
+	} else {
 		return nullptr;
 	}
-	if (*input == '$') {
-		base = 16;
-		++input;
-		--input_size;
-	}
-	auto [ptr, ec] = std::from_chars(input, input + input_size, value, base);
-	if (ec != std::errc() || ptr != input + input_size) {
-		return raise_parse_error("malformed numeral: " + input_token);
-	}
-	auto lit = new Constant(value);
-	consume();
-	return lit;
 }
 
 Node* Parser::parse_numeral() {
