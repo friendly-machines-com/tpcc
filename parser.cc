@@ -315,12 +315,20 @@ std::string Parser::parse_identifier() {
 }
 
 Node* Parser::maybe_parse_numeral() {
-	if (input_token.empty() || !isdigit((unsigned char)input_token[0])) {
+	auto input = input_token.data();
+	auto input_size = input_token.size();
+	uint64_t value;
+	int base = 10;
+	if (input_size == 0 || (!isdigit(input[0]) && input[0] != '$')) {
 		return nullptr;
 	}
-	uint64_t value;
-	auto [ptr, ec] = std::from_chars(input_token.data(), input_token.data() + input_token.size(), value);
-	if (ec != std::errc() || ptr != input_token.data() + input_token.size()) {
+	if (*input == '$') {
+		base = 16;
+		++input;
+		--input_size;
+	}
+	auto [ptr, ec] = std::from_chars(input, input + input_size, value, base);
+	if (ec != std::errc() || ptr != input + input_size) {
 		return raise_parse_error("malformed numeral: " + input_token);
 	}
 	auto lit = new Constant(value);
