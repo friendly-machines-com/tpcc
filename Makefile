@@ -6,14 +6,15 @@ CXXFLAGS = -g3 -std=c++17 -Wall
 
 all: mp
 
-mp: main.o parser.o cst.o frame.o evaluator.o builtins.o
+mp: main.o parser.o cst.o frame.o types.o evaluator.o builtins.o
 	$(CXX) -o $@ $^
 
 main.o: main.cc parser.h
-parser.o: parser.cc parser.h cst.h frame.h evaluator.h
+parser.o: parser.cc parser.h cst.h frame.h types.h evaluator.h
 cst.o: cst.cc cst.h
-frame.o: frame.cc frame.h cst.h
-evaluator.o: evaluator.cc evaluator.h cst.h frame.h
+frame.o: frame.cc frame.h types.h cst.h
+types.o: types.cc types.h
+evaluator.o: evaluator.cc evaluator.h cst.h frame.h types.h
 builtins.o: builtins.cc builtins.h cst.h
 
 clean:
