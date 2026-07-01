@@ -1,7 +1,31 @@
+#include <cstdlib>
+#include <typeinfo>
 #include "emit.h"
 #include "cst.h"
 #include "types.h"
 #include "builtins.h"
+
+// NODE may be null; SITE names the caller for the error message.
+[[noreturn]] static void unhandled_node(const char* site, const Node* node) {
+	if (node) {
+		fprintf(stderr, "internal compiler error: %s does not handle node kind '%s'\n",
+		        site, typeid(*node).name());
+	} else {
+		fprintf(stderr, "internal compiler error: %s called with null node\n", site);
+	}
+	fflush(stderr);
+	exit(1);
+}
+[[noreturn]] static void unhandled_type(const char* site, const Type* ty) {
+	if (ty) {
+		fprintf(stderr, "internal compiler error: %s does not handle type kind '%s'\n",
+		        site, typeid(*ty).name());
+	} else {
+		fprintf(stderr, "internal compiler error: %s called with null type\n", site);
+	}
+	fflush(stderr);
+	exit(1);
+}
 
 std::string pascal_to_cxx_name(std::string pascal_name) {
 	// Identity for now. Future work:
@@ -63,7 +87,7 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(out, ";\n");
 		return;
 	}
-	fprintf(out, "\t/* unsupported statement */\n");
+	unhandled_node("emit_statement", stmt);
 }
 
 void Emitter::emit_with_prologue(std::string alias_cxx_name, Node* target) {
@@ -98,7 +122,7 @@ void Emitter::emit_expression(Node* expr) {
 		emit_expression(m->b);
 		return;
 	}
-	fprintf(out, "/* unsupported expression */");
+	unhandled_node("emit_expression", expr);
 }
 
 void Emitter::emit_type_ref(Type* ty) {
@@ -107,5 +131,5 @@ void Emitter::emit_type_ref(Type* ty) {
 		fprintf(out, "%.*s", (int)it->rtl_name.size(), it->rtl_name.data());
 		return;
 	}
-	fprintf(out, "/* unsupported type */");
+	unhandled_type("emit_type_ref", ty);
 }
