@@ -375,12 +375,21 @@ Node* Parser::resolve_lvalue(std::string name) {
 	return nullptr;
 }
 
-/** Same as resolve_value but for type-position names. */
-Type* Parser::resolve_type(std::string name) {
+/** Same as resolve_value but for type-position names.
+ *  If allow_forward is true and NAME isn't in scope, register a fresh
+ *  IncompleteType under NAME in current_type_block and return it. This is how
+ *  `^TFoo` before TFoo is declared gets a placeholder. If allow_forward is
+ *  false, an unresolved name is a hard error. */
+Type* Parser::resolve_type(std::string name, bool allow_forward) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (Type* hit = (*it)->lookup_type(name)) {
 			return hit;
 		}
+	}
+	if (allow_forward && current_type_block) {
+		auto inc = new IncompleteType(name);
+		current_type_block->register_type(name, inc);
+		return inc;
 	}
 	raise_parse_error("unresolved type identifier: " + name);
 	return nullptr;
@@ -396,6 +405,7 @@ Node* Parser::parse_value() {
 		if (result) {
 			return result;
 		} else {
+			// FIXME: bool literals also belong here
 			auto id = parse_identifier();
 			Node* fn = resolve_value(id);
 			if (maybe_parse_opening_paren()) { // function/procedure call
@@ -596,10 +606,12 @@ Node* Parser::parse_expression() {
 	return parse_comparison();
 }
 
-Type* Parser::parse_aggregate_type_body() {
-	push_scope(new Frame(nullptr));
+Frame* Parser::parse_aggregate_type_body() {
+	Frame* body = new Frame(nullptr);
+	push_scope(body);
 	std::string visibility = "published";
 	do {
+		if (peek_keyword("end")) break;
 		if (maybe_parse_directive("published")) {
 			visibility = "published";
 		} else if (maybe_parse_directive("public")) {
@@ -617,7 +629,7 @@ Type* Parser::parse_aggregate_type_body() {
 		} else {
 			auto member_name = parse_identifier();
 			parse_colon();
-			auto ty = parse_type_expression();
+			auto ty = parse_type_expression(false);
 			this->scopes.back()->register_variable(member_name, new StorageSlot(ty), ty);
 		}
 		if (input_token.size() && input_token != "end") {
@@ -629,7 +641,7 @@ Type* Parser::parse_aggregate_type_body() {
 		}
 	} while (true);
 	pop_scope();
-	return raise_type_parse_error("parse_aggregate_type_body: wrapping the popped scope into a Type is not implemented yet");
+	return body;
 }
 
 Type* Parser::parse_class_type() {
@@ -637,9 +649,9 @@ Type* Parser::parse_class_type() {
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("class inheritance (class(Parent)) not implemented yet");
 	}
-	parse_aggregate_type_body();
+	Frame* body = parse_aggregate_type_body();
 	parse_keyword("end");
-	return raise_type_parse_error("parse_class_type: ClassType construction not implemented yet");
+	return new ClassType(body);
 }
 
 Type* Parser::parse_record_type() {
@@ -647,9 +659,9 @@ Type* Parser::parse_record_type() {
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("record with parenthesized header not implemented yet");
 	}
-	parse_aggregate_type_body();
+	Frame* body = parse_aggregate_type_body();
 	parse_keyword("end");
-	return raise_type_parse_error("parse_record_type: RecordType construction not implemented yet");
+	return new RecordType(body);
 }
 
 Type* Parser::parse_object_type() {
@@ -657,18 +669,18 @@ Type* Parser::parse_object_type() {
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("object with parenthesized header not implemented yet");
 	}
-	parse_aggregate_type_body();
+	Frame* body = parse_aggregate_type_body();
 	parse_keyword("end");
-	return raise_type_parse_error("parse_object_type: ObjectType construction not implemented yet");
+	return new ObjectType(body);
 }
 
 Type* Parser::parse_array_type() {
 	parse_keyword("array");
 	parse_opening_bracket();
-	auto bounds_type = parse_type_expression();
+	auto bounds_type = parse_type_expression(false);
 	parse_closing_bracket();
 	parse_keyword("of");
-	auto item_type = parse_type_expression();
+	auto item_type = parse_type_expression(false);
 	return new FixedArrayType(bounds_type, item_type);
 }
 
@@ -683,11 +695,16 @@ Type* Parser::parse_enum_type() {
 	return raise_type_parse_error("parse_enum_type: EnumType construction not implemented yet");
 }
 
-Type* Parser::parse_type_expression() {
+/** allow_forward: if true, an unresolved identifier at this parse position is
+ *  auto-registered as an IncompleteType in the current type block rather than
+ *  raising. Only the pointer branch propagates true; compound-type sub-parses
+ *  (record/array/set/etc.) reset to false because their contents need real,
+ *  sized types. */
+Type* Parser::parse_type_expression(bool allow_forward) {
 	if (maybe_parse_opening_paren()) {
 		return parse_enum_type();
 	} else if (maybe_parse_circumflex()) {
-		return new PointerType(parse_type_expression());
+		return new PointerType(parse_type_expression(true));
 	} else if (peek_keyword("string")) {
 		parse_keyword("string");
 		parse_opening_bracket();
@@ -697,7 +714,7 @@ Type* Parser::parse_type_expression() {
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
-		return new FixedSetType(parse_type_expression());
+		return new FixedSetType(parse_type_expression(false));
 	} else if (peek_keyword("array")) {
 		return parse_array_type();
 	} else if (peek_keyword("object")) {
@@ -709,7 +726,7 @@ Type* Parser::parse_type_expression() {
 	} else {
 		// FIXME: constant folding for ranges (2..5 -> BoundedCardinalType)
 		auto id = parse_identifier();
-		return resolve_type(id);
+		return resolve_type(id, allow_forward);
 	}
 }
 
@@ -741,7 +758,7 @@ Frame* Parser::parse_const_block() {
 		auto name = parse_identifier();
 		// FIXME: handle actual compile-time consts which have no colon (and are no variables).
 		parse_colon();
-		auto ty = parse_type_expression();
+		auto ty = parse_type_expression(false);
 		this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
 		if (!maybe_parse_comma()) {
 			break;
@@ -760,19 +777,50 @@ Frame* Parser::maybe_parse_const_block() {
 
 DELPHI_AUTO_END: will automatically stop at some aggregate control directives (like "public" etc).
  */
+// Special cases this handles:
+//   type PX = ^TX; TX = record ... end;   (cross-decl forward via pointer)
+//   type TFoo = class x: TFoo end;        (self-recursive within one decl)
+// Each LHS is pre-registered as an IncompleteType so self-refs in its RHS
+// resolve. During RHS parsing, an unresolved identifier in pointer position
+// is auto-registered as an IncompleteType in this scope (see resolve_type).
+// After the RHS is parsed the LHS placeholder's `resolved` is filled and the
+// frame slot is rebound to the real Type*. At block end any remaining
+// unresolved IncompleteType in the scope is an error.
 Frame* Parser::parse_type_block(bool delphi_auto_end) {
 	auto scope = new Frame(nullptr);
 	parse_keyword("type");
 	push_scope(scope);
-	// FIXME: here, it's allowed to have the special cases: "type PX = ^TX; TX = record" and "type TFoo = class x: TFoo"
+	Frame* prev_type_block = current_type_block;
+	current_type_block = scope;
 	do {
-		auto name = parse_identifier();
+		auto name_optional = maybe_parse_identifier();
+		if (!name_optional) break;
+		auto name = *name_optional;
 		parse_equals();
-		auto ty = parse_type_expression();
-		this->scopes.back()->register_type(name, ty);
-		if (!maybe_parse_comma())
-			break;
+		Type* existing = scope->lookup_type(name);
+		IncompleteType* lhs_placeholder = nullptr;
+		if (existing) {
+			lhs_placeholder = dynamic_cast<IncompleteType*>(existing);
+			if (!lhs_placeholder) {
+				raise_type_parse_error("duplicate type name: " + name);
+			}
+		} else {
+			lhs_placeholder = new IncompleteType(name);
+			scope->register_type(name, lhs_placeholder);
+		}
+		Type* rhs = parse_type_expression(false);
+		lhs_placeholder->resolved = rhs;
+		scope->rebind_type(name, rhs);
+		parse_semicolon();
 	} while (true);
+	for (auto& kv : scope->types()) {
+		if (auto inc = dynamic_cast<IncompleteType*>(kv.second)) {
+			if (!inc->resolved) {
+				raise_parse_error("forward-referenced type not defined in this type block: " + kv.first);
+			}
+		}
+	}
+	current_type_block = prev_type_block;
 	return scope;
 }
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually */
@@ -800,7 +848,7 @@ Frame* Parser::parse_var_block() {
 			names.push_back(name);
 		}
 		parse_colon();
-		auto ty = parse_type_expression();
+		auto ty = parse_type_expression(false);
 		for (auto iter : names) {
 			auto name = iter;
 			this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
@@ -960,7 +1008,7 @@ Node* Parser::parse_proc_formal_parameters() {
 		auto id = parse_identifier();
 		// TODO: ",b,c,d"
 		parse_colon();
-		auto ty = parse_type_expression();
+		auto ty = parse_type_expression(false);
 		auto storage = new StorageSlot(ty);
 		this->scopes.back()->register_variable(id, storage, ty);
 		if (!maybe_parse_semicolon()) {
@@ -987,7 +1035,7 @@ Node* Parser::parse_function_prototype() {
 	auto id = parse_identifier();
 	auto formal_parameters = parse_proc_formal_parameters();
 	parse_colon();
-	auto result_type = parse_type_expression();
+	auto result_type = parse_type_expression(false);
 	maybe_parse_proc_attributes();
 }
 

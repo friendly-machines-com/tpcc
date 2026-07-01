@@ -31,5 +31,9 @@ public:
     Type* lookup_type(std::string name) const; /* TODO: or maybe a lookup with flags whether type and/or value is okay */
     Node* lookup_value(std::string name) const; /* result: usually a StorageSlot */
     bool register_type(std::string name, Type* ty);
+    /** Replace an existing type binding (used when patching a placeholder with
+     *  its real Type* at type-block-end). No-op-safe for a fresh name. */
+    void rebind_type(std::string name, Type* ty);
     bool register_variable(std::string name, Node* v, Type* ty); // FIXME: StorageSlot would already have ty
+    const std::map<std::string, Type*>& types() const { return type_items; }
 };

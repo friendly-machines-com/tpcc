@@ -1,6 +1,8 @@
 #include <cassert>
 #include "types.h"
 
+IncompleteType::IncompleteType(std::string name) : name(name), resolved(nullptr) {}
+
 FixedArrayType::FixedArrayType(Type* bounds, Type* item_type) {
 	this->bounds = bounds;
 	this->item_type = item_type;
@@ -19,6 +21,10 @@ RecordType::RecordType(Frame* children) {
 }
 
 ClassType::ClassType(Frame* children) {
+	this->children = children;
+}
+
+ObjectType::ObjectType(Frame* children) {
 	this->children = children;
 }
 

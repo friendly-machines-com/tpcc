@@ -1,11 +1,25 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 class Frame;
 
 class Type {
 public:
 	virtual ~Type() = default;
+};
+
+/** Placeholder for a type name that has been introduced but whose full
+ *  definition has not yet arrived. Sources: implicit forward reference in
+ *  pointer position (`^TFoo` before TFoo is declared), explicit class-forward
+ *  (`TFoo = class;`), and LHS pre-registration to permit self-recursive RHS.
+ *  Must be patched (resolved != nullptr) by the end of the containing type
+ *  block; any Type* consumer that needs semantic information should unwrap
+ *  through `resolved`. */
+struct IncompleteType: public Type {
+	std::string name;
+	Type* resolved;
+	IncompleteType(std::string name);
 };
 
 struct BoundedCardinalType: public Type {
@@ -33,6 +47,11 @@ struct RecordType: public Type {
 struct ClassType: public Type {
 	Frame* children;
 	ClassType(Frame* children);
+};
+
+struct ObjectType: public Type {
+	Frame* children;
+	ObjectType(Frame* children);
 };
 
 struct PointerType: public Type {

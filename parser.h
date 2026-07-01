@@ -31,6 +31,11 @@ private:
 	bool maybe_parse_keyword(std::string s);
 	std::vector<ParserInputFile> input_files; // TODO: stack
 	std::vector<Frame*> scopes; // TODO: stack
+	// The type-block scope currently being parsed, or nullptr. Used as the
+	// registration site for implicit forward references (`^TFoo` before TFoo
+	// is declared); those must land in the enclosing type block's scope, not
+	// in whatever inner scope (record/class body) happens to be on top.
+	Frame* current_type_block = nullptr;
 protected:
 	std::string input_token;
 	Node* parse_block_body();
@@ -49,7 +54,7 @@ protected:
 	Node* parse_numeral();
 	Node* resolve_lvalue(std::string name);
 	Node* resolve_value(std::string name);
-	Type* resolve_type(std::string name);
+	Type* resolve_type(std::string name, bool allow_forward);
     bool maybe_parse_directive(std::string directive);
 	Node* parse_value();
 	Node* parse_comparison();
@@ -61,10 +66,10 @@ protected:
 	Type* parse_record_type();
 	Type* parse_class_type();
 	Type* parse_enum_type();
-	Type* parse_type_expression();
+	Type* parse_type_expression(bool allow_forward);
 	Node* parse_expression();
 	Node* parse_statement();
-	Type* parse_aggregate_type_body();
+	Frame* parse_aggregate_type_body();
 	bool maybe_parse_semicolon();
 	bool maybe_parse_opening_paren();
 	void parse_opening_paren();
