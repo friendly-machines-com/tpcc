@@ -8,6 +8,7 @@
 class Node;
 class Symbol;
 class Type;
+class UnitRegistry;
 
 class ParserInputFile {
 public:
@@ -36,6 +37,7 @@ private:
 	// is declared); those must land in the enclosing type block's scope, not
 	// in whatever inner scope (record/class body) happens to be on top.
 	Frame* current_type_block = nullptr;
+	UnitRegistry* unit_registry;
 protected:
 	std::string input_token;
 	Node* parse_block_body();
@@ -115,7 +117,7 @@ protected:
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 
 public:
-	Parser();
+	Parser(UnitRegistry* unit_registry);
 	void push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number);
 	void pop_input_file();
 	void start();

@@ -11,6 +11,7 @@
 #include "frame.h"
 #include "evaluator.h"
 #include "builtins.h"
+#include "units.h"
 
 static std::unordered_set<std::string> keywords = {
 	"program",
@@ -40,7 +41,7 @@ static std::unordered_set<std::string> keywords = {
 	"const",
 };
 
-Parser::Parser() {
+Parser::Parser(UnitRegistry* unit_registry) : unit_registry(unit_registry) {
 }
 void Parser::pop_input_file() {
 	assert(!input_files.empty());
@@ -1082,8 +1083,17 @@ Node* Parser::parse_program_or_unit() {
 	if (maybe_parse_keyword("program")) {
 		auto name = parse_identifier();
 		parse_semicolon();
+		Frame* impl = new Frame(nullptr);
+		Unit* unit = unit_registry->register_new(name, nullptr, impl);
+		unit->phase = UnitPhase::InterfaceInProgress;
+		push_scope(impl);
+		if (peek_keyword("uses")) {
+			raise_parse_error("`uses` clauses are not yet supported");
+		}
 		auto result = parse_block();
 		parse_period();
+		pop_scope();
+		unit->phase = UnitPhase::Done;
 		return result;
 	} else if (maybe_parse_keyword("unit")) {
 		return parse_unit();
