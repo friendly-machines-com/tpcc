@@ -287,8 +287,8 @@ Node* Parser::maybe_parse_statement() {
 			parse_keyword("end");
 			return body;
 		} else {
-			auto id = parse_identifier(); // FIXME resolve
-			Node* storage = nullptr; // FIXME
+			auto id = parse_identifier();
+			Node* storage = resolve_lvalue(id);
 			parse_colon_equals();
 			auto value = parse_expression();
 			return new Assign(storage, value);
@@ -361,6 +361,17 @@ Node* Parser::resolve_value(std::string name) {
 		}
 	}
 	raise_parse_error("unresolved value identifier: " + name);
+	return nullptr;
+}
+
+/** value that can be assigned to */
+Node* Parser::resolve_lvalue(std::string name) {
+	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+		if (Node* hit = (*it)->lookup_value(name)) {
+			return hit;
+		}
+	}
+	raise_parse_error("unresolved lvalue identifier: " + name);
 	return nullptr;
 }
 
