@@ -86,9 +86,15 @@ public:
 
 class ProcCall: public Node {
 public:
+	// null for standalone calls; the receiver expression for calls whose
+	// callable carries a Self (methods, and later `procedure of object` runtime
+	// values).
+	Node* receiver;
+	// Any expression that yields a callable at compile time or at runtime.
+	// Compile-time: a Callable*. Runtime (future): a procedural value.
 	Node* callee;
 	std::vector<Node*> args;
-	ProcCall(Node* callee, std::vector<Node*> args);
+	ProcCall(Node* receiver, Node* callee, std::vector<Node*> args);
 };
 
 class Dereference: public UnaryOperation {
@@ -214,12 +220,12 @@ struct Parameter {
 	Node* default_value; // null if none
 };
 
-/** A user-defined procedure or function. `return_type` is unit_type() for
- *  procedures (Pascal-level `procedure`, no return value) and the declared
- *  result type for functions. `body` is null on a forward declaration until
- *  the matching definition attaches it. `body_frame` holds the parameter
- *  StorageSlots and any local declarations. */
-class Procedure: public Node {
+/** Shared base of standalone procedures/functions and methods. Holds
+ *  everything call resolution and emission needs regardless of which of the
+ *  two the callable is. `return_type` is unit_type() for procedures (Pascal
+ *  `procedure`, no meaningful return); `body` is null on a forward
+ *  declaration until the matching definition attaches it. */
+class Callable: public Node {
 public:
 	std::string pas_name;
 	std::string cxx_name;
@@ -228,6 +234,19 @@ public:
 	bool has_overload_directive;
 	Node* body;
 	Frame* body_frame;
+	Callable(std::string pas_name,
+	         std::string cxx_name,
+	         std::vector<Parameter> formals,
+	         Type* return_type,
+	         bool has_overload_directive);
+};
+
+/** Standalone procedure or function (Pascal `procedure`/`function` at
+ *  unit/program scope). Carries no extra state beyond Callable; its identity
+ *  is what distinguishes it from Method for type-checking against procedural
+ *  pointer types. */
+class Procedure: public Callable {
+public:
 	Procedure(std::string pas_name,
 	          std::string cxx_name,
 	          std::vector<Parameter> formals,
@@ -235,14 +254,32 @@ public:
 	          bool has_overload_directive);
 };
 
-/** A collection of overload-marked Procedures that share one Pascal name.
- *  Every member has has_overload_directive == true. Produced by Frame's
- *  registration logic (when a second overload-marked procedure lands under
- *  the same name) and by resolve_value when it aggregates matches from
- *  multiple scopes. */
+/** Method of a class/object/record. `owner_class` is the type it belongs to
+ *  (used at overload-ranking time for the Self position). `virtual_kind`
+ *  drives emission (`virtual`/`override`/etc. keywords in the C++ class). */
+class Method: public Callable {
+public:
+	enum class VirtualKind { None, Virtual, Override, Abstract, Dynamic };
+	Type* owner_class;
+	VirtualKind virtual_kind;
+	int vtable_slot;   // -1 = unassigned; populated at class-layout time
+	Method(std::string pas_name,
+	       std::string cxx_name,
+	       std::vector<Parameter> formals,
+	       Type* return_type,
+	       bool has_overload_directive,
+	       Type* owner_class,
+	       VirtualKind virtual_kind);
+};
+
+/** Overload set: multiple Callables (Procedures or Methods) sharing one Pascal
+ *  name, each with `has_overload_directive` set. Produced by Frame's
+ *  registration when a second overload-marked callable is registered under
+ *  the same name and by resolve_value when it aggregates matches across
+ *  scopes. */
 class OverloadSet: public Node {
 public:
 	std::string pas_name;
-	std::vector<Procedure*> members;
-	OverloadSet(std::string pas_name, std::vector<Procedure*> members);
+	std::vector<Callable*> members;
+	OverloadSet(std::string pas_name, std::vector<Callable*> members);
 };

@@ -119,12 +119,19 @@ protected:
 	 *  already registered. Search order for the file: directory of the current
 	 *  input file, then CWD. */
 	Unit* load_or_get_unit(std::string name);
-	/** Given a resolved callee (Procedure, OverloadSet, or Builtin) and parsed
-	 *  arguments, pick the concrete callee (running overload ranking if it's a
-	 *  set), materialize defaults, and insert Cast coercions where needed.
-	 *  Returns the finalized callee Node* (Procedure or Builtin) to place in
-	 *  ProcCall.callee. Errors on no-match, ambiguous overload, or bad args. */
-	Node* finalize_call(Node* fn, std::vector<Node*>& args, std::string name_for_error);
+	/** Result of call finalization: the concrete callee to place in
+	 *  ProcCall.callee, plus the receiver expression if the call carries one
+	 *  (method calls). receiver is null for standalone calls. */
+	struct FinalizedCall {
+		Node* receiver;
+		Node* callee;
+	};
+	/** Given a resolved target (Callable, OverloadSet, MemberAccess-wrapping
+	 *  either of those, or a Builtin) and parsed args, peel any MemberAccess
+	 *  to extract a receiver, run overload ranking if the target is a set,
+	 *  materialize defaults, and insert Cast coercions where needed. Errors
+	 *  on no-match, ambiguous overload, or bad args. */
+	FinalizedCall finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();

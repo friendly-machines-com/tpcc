@@ -73,16 +73,16 @@ bool Frame::register_variable(std::string name, Node* v, Type* ty) {
 	}
 }
 
-bool Frame::register_procedure(std::string name, Procedure* p) {
+bool Frame::register_callable(std::string name, Callable* c) {
 	auto iter = value_items.find(name);
 	if (iter == value_items.end()) {
-		value_items[name] = FrameValueEntry(p, p->return_type);
+		value_items[name] = FrameValueEntry(c, c->return_type);
 		return true;
 	}
 	Node* existing = iter->second.value;
-	if (auto ep = dynamic_cast<Procedure*>(existing)) {
-		if (ep->has_overload_directive && p->has_overload_directive) {
-			auto set = new OverloadSet(name, std::vector<Procedure*>{ep, p});
+	if (auto ec = dynamic_cast<Callable*>(existing)) {
+		if (ec->has_overload_directive && c->has_overload_directive) {
+			auto set = new OverloadSet(name, std::vector<Callable*>{ec, c});
 			iter->second.value = set;
 			iter->second.ty = nullptr;
 			return true;
@@ -90,11 +90,11 @@ bool Frame::register_procedure(std::string name, Procedure* p) {
 		return false;
 	}
 	if (auto os = dynamic_cast<OverloadSet*>(existing)) {
-		if (p->has_overload_directive) {
-			os->members.push_back(p);
+		if (c->has_overload_directive) {
+			os->members.push_back(c);
 			return true;
 		}
 		return false;
 	}
-	return false;   // name is bound to something non-procedural
+	return false;   // name is bound to something non-callable
 }

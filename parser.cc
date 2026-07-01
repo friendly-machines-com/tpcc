@@ -334,7 +334,7 @@ Node* Parser::maybe_parse_statement() {
 			auto id = parse_identifier();
 			Node* target = resolve_lvalue(id);
 			// Dispatch on the next token: `:=` is assignment; anything else is
-			// a call (parenthesized or bare, if the target is a Procedure).
+			// a call (parenthesized or bare, if the target is a Callable).
 			if (input_token == ":=") {
 				parse_colon_equals();
 				auto value = parse_expression();
@@ -350,9 +350,9 @@ Node* Parser::maybe_parse_statement() {
 				}
 				parse_closing_paren();
 			}
-			Node* callee = finalize_call(target, args, id);
-			auto call = new ProcCall(callee, std::move(args));
-			call->ty = callee ? callee->ty : nullptr;
+			auto fc = finalize_call(target, args, id);
+			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+			call->ty = fc.callee ? fc.callee->ty : nullptr;
 			if (emitter) emitter->emit_statement(call);
 			return call;
 		}
@@ -418,18 +418,17 @@ Node* Parser::parse_numeral() {
 /** Walk the scope stack top-down looking up a value-position name (variable,
  *  constant, procedure, function, builtin). Raise if not found. */
 Node* Parser::resolve_value(std::string name) {
-	std::vector<Procedure*> collected;
+	std::vector<Callable*> collected;
 	// Walk top-down. First hit shadows unless it's overload-marked; then
 	// keep walking to aggregate additional overload-marked hits from lower
 	// scopes (cross-unit overloading).
-	Node* first_wrapped = nullptr;   // remember the with-wrapped form of a single-hit non-overload
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		Node* hit = it->frame->lookup_value(name);
 		if (!hit) continue;
-		auto as_proc = dynamic_cast<Procedure*>(hit);
+		auto as_call = dynamic_cast<Callable*>(hit);
 		auto as_set  = dynamic_cast<OverloadSet*>(hit);
-		if (collected.empty() && !as_proc && !as_set) {
-			// First (and terminating) hit is a non-callable or a non-overload value.
+		if (collected.empty() && !as_call && !as_set) {
+			// First (and terminating) hit is a non-callable value.
 			if (it->unwrap_via) {
 				auto m = new MemberAccess(it->unwrap_via, hit);
 				m->ty = hit->ty;
@@ -437,12 +436,12 @@ Node* Parser::resolve_value(std::string name) {
 			}
 			return hit;
 		}
-		if (as_proc) {
-			if (!as_proc->has_overload_directive) {
-				if (collected.empty()) return as_proc;   // plain proc, first-hit wins
-				break;                                    // shadowed by collected overloads above
+		if (as_call) {
+			if (!as_call->has_overload_directive) {
+				if (collected.empty()) return as_call;   // plain callable, first-hit wins
+				break;                                   // shadowed by collected overloads above
 			}
-			collected.push_back(as_proc);
+			collected.push_back(as_call);
 		} else if (as_set) {
 			// Every member of an OverloadSet already has has_overload_directive.
 			for (auto* m : as_set->members) collected.push_back(m);
@@ -509,8 +508,16 @@ Node* Parser::parse_value() {
 			auto id = parse_identifier();
 			Node* fn = resolve_value(id);
 			bool has_paren = maybe_parse_opening_paren();
-			bool procedural = dynamic_cast<Procedure*>(fn) || dynamic_cast<OverloadSet*>(fn);
-			if (has_paren || procedural) {
+			// A MemberAccess whose member is callable also triggers the auto-
+			// call path (bare `foo` inside a method body, resolved via implicit
+			// Self-with-scope, arrives here as MemberAccess(SelfSlot, method)).
+			bool callable = dynamic_cast<Callable*>(fn) || dynamic_cast<OverloadSet*>(fn);
+			if (!callable) {
+				if (auto ma = dynamic_cast<MemberAccess*>(fn)) {
+					callable = dynamic_cast<Callable*>(ma->b) || dynamic_cast<OverloadSet*>(ma->b);
+				}
+			}
+			if (has_paren || callable) {
 				std::vector<Node*> args;
 				if (has_paren) {
 					if (input_token != ")") {
@@ -521,9 +528,9 @@ Node* Parser::parse_value() {
 					}
 					parse_closing_paren();
 				}
-				Node* callee = finalize_call(fn, args, id);
-				auto call = new ProcCall(callee, std::move(args));
-				call->ty = callee ? callee->ty : nullptr;
+				auto fc = finalize_call(fn, args, id);
+				auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+				call->ty = fc.callee ? fc.callee->ty : nullptr;
 				return call;
 			}
 			return fn;
@@ -1198,7 +1205,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	auto proc = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
 	                          std::move(formals), return_type, has_overload);
 	Frame* enclosing = const_cast<Frame*>(this->scopes.back().frame);
-	if (!enclosing->register_procedure(pas_name, proc)) {
+	if (!enclosing->register_callable(pas_name, proc)) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 	}
 	if (peek_keyword("forward")) {
@@ -1256,20 +1263,28 @@ Node* Parser::parse_destructor() {
 }
 
 // Per-argument conversion costs for a candidate. Returns empty vector when
-// the candidate isn't viable (argument type-incompatible, or unfilled
-// non-default formal). Otherwise returns costs sized to proc->formals; the
-// entries past args.size() are 0 (default-supplied positions).
-static std::vector<int> per_arg_costs(Procedure* proc, const std::vector<Node*>& args) {
-	if (args.size() > proc->formals.size()) return {};
-	for (size_t i = args.size(); i < proc->formals.size(); i++) {
-		if (!proc->formals[i].default_value) return {};
+// the candidate isn't viable. Costs sized to formals.size() (+1 for Self
+// when candidate is a Method with receiver); entries past args.size() are 0
+// (default-supplied positions).
+static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::vector<Node*>& args) {
+	if (args.size() > c->formals.size()) return {};
+	for (size_t i = args.size(); i < c->formals.size(); i++) {
+		if (!c->formals[i].default_value) return {};
 	}
-	std::vector<int> costs(proc->formals.size(), 0);
+	// Self position (if any) is prepended to the cost vector.
+	auto m = dynamic_cast<Method*>(c);
+	size_t self_slots = (m && receiver) ? 1 : 0;
+	std::vector<int> costs(self_slots + c->formals.size(), 0);
+	if (self_slots) {
+		int sc = conversion_cost(receiver ? receiver->ty : nullptr, m->owner_class);
+		if (sc < 0) return {};
+		costs[0] = sc;
+	}
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
-		int c = conversion_cost(from, proc->formals[i].ty);
-		if (c < 0) return {};
-		costs[i] = c;
+		int cc = conversion_cost(from, c->formals[i].ty);
+		if (cc < 0) return {};
+		costs[self_slots + i] = cc;
 	}
 	return costs;
 }
@@ -1286,22 +1301,29 @@ static bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
 	return strict;
 }
 
-Node* Parser::finalize_call(Node* fn, std::vector<Node*>& args, std::string name_for_error) {
-	Procedure* proc = nullptr;
-	if (auto p = dynamic_cast<Procedure*>(fn)) {
-		proc = p;
-	} else if (auto os = dynamic_cast<OverloadSet*>(fn)) {
-		// Viable = type-compatible + defaults fill the rest.
-		std::vector<std::pair<Procedure*, std::vector<int>>> viable;
-		for (auto* p : os->members) {
-			auto c = per_arg_costs(p, args);
-			if (!c.empty()) viable.push_back({p, std::move(c)});
+Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error) {
+	// Peel MemberAccess: if the member is callable, its container is the
+	// receiver and the member is the effective callee.
+	Node* receiver = nullptr;
+	if (auto ma = dynamic_cast<MemberAccess*>(target)) {
+		if (dynamic_cast<Callable*>(ma->b) || dynamic_cast<OverloadSet*>(ma->b)) {
+			receiver = ma->a;
+			target = ma->b;
+		}
+	}
+	Callable* chosen = nullptr;
+	if (auto c = dynamic_cast<Callable*>(target)) {
+		chosen = c;
+	} else if (auto os = dynamic_cast<OverloadSet*>(target)) {
+		std::vector<std::pair<Callable*, std::vector<int>>> viable;
+		for (auto* c : os->members) {
+			auto costs = per_arg_costs(c, receiver, args);
+			if (!costs.empty()) viable.push_back({c, std::move(costs)});
 		}
 		if (viable.empty()) {
 			raise_parse_error("no matching overload for '" + name_for_error + "'");
 		}
-		// Winners are those not dominated by any other viable candidate.
-		std::vector<Procedure*> non_dominated;
+		std::vector<Callable*> non_dominated;
 		for (size_t i = 0; i < viable.size(); i++) {
 			bool dom = false;
 			for (size_t j = 0; j < viable.size(); j++) {
@@ -1315,32 +1337,28 @@ Node* Parser::finalize_call(Node* fn, std::vector<Node*>& args, std::string name
 		if (non_dominated.size() != 1) {
 			raise_parse_error("ambiguous overload for '" + name_for_error + "'");
 		}
-		proc = non_dominated[0];
+		chosen = non_dominated[0];
 	} else {
-		// Builtin or other callable Node -- leave args as-is (no formal-typed
-		// coercion / defaults) and return the original callee unchanged.
-		return fn;
+		// Builtin or other opaque callable -- no ranking / defaults / coercion.
+		return FinalizedCall{receiver, target};
 	}
 	// Materialize missing args from defaults.
-	while (args.size() < proc->formals.size()) {
-		auto& p = proc->formals[args.size()];
+	while (args.size() < chosen->formals.size()) {
+		auto& p = chosen->formals[args.size()];
 		if (!p.default_value) {
 			raise_parse_error("missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
 		}
 		args.push_back(p.default_value);
 	}
-	if (args.size() > proc->formals.size()) {
+	if (args.size() > chosen->formals.size()) {
 		raise_parse_error("too many arguments to '" + name_for_error + "'");
 	}
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
-		Type* target = proc->formals[i].ty;
-		Type* source = args[i]->ty;
-		if (source != target) {
-			args[i] = new Cast(args[i], target);
-		}
+		Type* t = chosen->formals[i].ty;
+		if (args[i]->ty != t) args[i] = new Cast(args[i], t);
 	}
-	return proc;
+	return FinalizedCall{receiver, chosen};
 }
 
 Unit* Parser::load_or_get_unit(std::string name) {

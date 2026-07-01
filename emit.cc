@@ -112,14 +112,14 @@ void Emitter::emit_with_epilogue() {
 	fprintf(out, "\t}\n");
 }
 
-void Emitter::emit_procedure_open(Procedure* p) {
+void Emitter::emit_procedure_open(Callable* c) {
 	if (!out) return;
 	fprintf(out, "\n");
-	emit_type_ref(p->return_type);
-	fprintf(out, " %s(", p->cxx_name.c_str());
-	for (size_t i = 0; i < p->formals.size(); i++) {
+	emit_type_ref(c->return_type);
+	fprintf(out, " %s(", c->cxx_name.c_str());
+	for (size_t i = 0; i < c->formals.size(); i++) {
 		if (i > 0) fprintf(out, ", ");
-		auto& f = p->formals[i];
+		auto& f = c->formals[i];
 		if (f.mode == ParamMode::Const) fprintf(out, "const ");
 		emit_type_ref(f.ty);
 		if (f.mode == ParamMode::Var || f.mode == ParamMode::Out
@@ -183,8 +183,8 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(out, "%.*s", (int)b->desc->rtl_name.size(), b->desc->rtl_name.data());
 		return;
 	}
-	if (auto p = dynamic_cast<Procedure*>(expr)) {
-		fprintf(out, "%s", p->cxx_name.c_str());
+	if (auto c = dynamic_cast<Callable*>(expr)) {
+		fprintf(out, "%s", c->cxx_name.c_str());
 		return;
 	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
@@ -194,6 +194,12 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
+		if (pc->receiver) {
+			emit_expression(pc->receiver);
+			// `->` when receiver's static type is a Pascal pointer; `.` otherwise.
+			bool ptr = pc->receiver->ty && dynamic_cast<PointerType*>(pc->receiver->ty);
+			fprintf(out, "%s", ptr ? "->" : ".");
+		}
 		emit_expression(pc->callee);
 		fprintf(out, "(");
 		for (size_t i = 0; i < pc->args.size(); i++) {
