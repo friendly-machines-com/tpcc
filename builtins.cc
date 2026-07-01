@@ -31,6 +31,19 @@ static constexpr std::array<BuiltinDesc, 3> kBuiltins{{
 	{"dec", "pas::p_dec", []() -> Type* { return nullptr; }, nullptr},
 }};
 
+// Pascal-visible predefined value constants. The type is looked up by name
+// from the root frame at registration time, so the referenced type must be
+// present in kIntrinsicTypes above.
+struct IntrinsicConstantDesc {
+	std::string_view pas_name;
+	uint64_t value;
+	std::string_view type_pas_name;
+};
+static constexpr std::array<IntrinsicConstantDesc, 2> kIntrinsicConstants{{
+	{"false", 0, "boolean"},
+	{"true",  1, "boolean"},
+}};
+
 void register_root_frame_entries(Frame* root) {
 	for (auto& t : kIntrinsicTypes) {
 		root->register_type(std::string(t.pas_name),
@@ -40,6 +53,12 @@ void register_root_frame_entries(Frame* root) {
 		root->register_variable(std::string(b.pas_name),
 		                        new Builtin(&b),
 		                        b.build_type());
+	}
+	for (auto& c : kIntrinsicConstants) {
+		Type* ty = root->lookup_type(std::string(c.type_pas_name));
+		root->register_variable(std::string(c.pas_name),
+		                        new Constant(c.value),
+		                        ty);
 	}
 }
 

@@ -396,7 +396,6 @@ Node* Parser::parse_value() {
 		if (result) {
 			return result;
 		} else {
-			// FIXME: bool literals also belong here
 			auto id = parse_identifier();
 			Node* fn = resolve_value(id);
 			if (maybe_parse_opening_paren()) { // function/procedure call
