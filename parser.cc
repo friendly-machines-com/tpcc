@@ -1134,17 +1134,35 @@ void Parser::parse_equals() {
 	}
 }
 
+size_t Parser::parse_decl_blocks() {
+	size_t pushed = 0;
+	while (true) {
+		if (peek_keyword("type")) {
+			parse_type_block(false);
+			pushed++;
+		} else if (peek_keyword("const")) {
+			parse_const_block();
+			pushed++;
+		} else if (peek_keyword("var")) {
+			parse_var_block();
+			pushed++;
+		} else if (peek_keyword("procedure")) {
+			parse_procedure_or_function(false);
+		} else if (peek_keyword("function")) {
+			parse_procedure_or_function(true);
+		} else {
+			break;
+		}
+	}
+	return pushed;
+}
+
 Node* Parser::parse_block() {
-	auto type_scope = maybe_parse_type_block(false);
-	auto const_scope = maybe_parse_const_block();
-	auto var_scope = maybe_parse_var_block();
+	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
 	auto body = parse_block_body();
 	parse_keyword("end");
-	// pop in reverse push order
-	if (var_scope) pop_scope();
-	if (const_scope) pop_scope();
-	if (type_scope) pop_scope();
+	for (size_t i = 0; i < pushed; i++) pop_scope();
 	return body;
 }
 
@@ -1224,17 +1242,13 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
 	}
 	if (emitter) emitter->emit_procedure_open(proc);
-	auto type_scope = maybe_parse_type_block(false);
-	auto const_scope = maybe_parse_const_block();
-	auto var_scope = maybe_parse_var_block();
+	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
 	proc->body = parse_block_body();
 	parse_keyword("end");
 	parse_semicolon();
 	if (emitter) emitter->emit_procedure_close();
-	if (var_scope) pop_scope();
-	if (const_scope) pop_scope();
-	if (type_scope) pop_scope();
+	for (size_t i = 0; i < pushed; i++) pop_scope();
 	pop_scope(); // body_frame
 }
 
@@ -1462,20 +1476,13 @@ Node* Parser::parse_program_or_unit() {
 		// Inlined equivalent of parse_block; we need to bracket the body-block
 		// with main() emission hooks, which parse_block itself doesn't know
 		// about (it's also called from procedure bodies).
-		auto type_scope = maybe_parse_type_block(false);
-		auto const_scope = maybe_parse_const_block();
-		auto var_scope = maybe_parse_var_block();
-		while (peek_keyword("procedure") || peek_keyword("function")) {
-			parse_procedure_or_function(peek_keyword("function"));
-		}
+		size_t pushed = parse_decl_blocks();
 		parse_keyword("begin");
 		if (emitter) emitter->emit_main_prologue();
 		auto body = parse_block_body();
 		parse_keyword("end");
 		if (emitter) emitter->emit_main_epilogue();
-		if (var_scope) pop_scope();
-		if (const_scope) pop_scope();
-		if (type_scope) pop_scope();
+		for (size_t i = 0; i < pushed; i++) pop_scope();
 		parse_period();
 		pop_scope();
 		unit->phase = UnitPhase::Done;
