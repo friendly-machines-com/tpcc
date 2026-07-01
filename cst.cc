@@ -36,6 +36,7 @@ And::And(Node* a, Node* b) : BinaryOperation(a, b) {}
 Or::Or(Node* a, Node* b) : BinaryOperation(a, b) {}
 ProcCall::ProcCall(Node* a, Node* b) : BinaryOperation(a, b) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
+MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
 ShiftLeft::ShiftLeft(Node* a, Node* b) : BinaryOperation(a, b) {}
 ShiftRight::ShiftRight(Node* a, Node* b) : BinaryOperation(a, b) {}
 Div::Div(Node* a, Node* b) : BinaryOperation(a, b) {}

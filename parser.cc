@@ -40,6 +40,7 @@ static std::unordered_set<std::string> keywords = {
 	"var",
 	"type",
 	"const",
+	"with",
 };
 
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter)
@@ -90,7 +91,11 @@ void Parser::push_input_file(FILE* input_file, std::string input_file_name, int 
 }
 
 void Parser::push_scope(Frame* scope) {
-	this->scopes.push_back(scope);
+	this->scopes.push_back(ScopeEntry{scope, nullptr});
+}
+
+void Parser::push_with_scope(Frame* scope, Node* unwrap_via) {
+	this->scopes.push_back(ScopeEntry{scope, unwrap_via});
 }
 
 void Parser::pop_scope() {
@@ -259,6 +264,21 @@ bool Parser::maybe_parse_directive(std::string directive) {
 	// remain usable as identifiers. The lexical match itself is identical.
 	return maybe_parse_keyword(directive);
 }
+/** Return the Frame that holds the fields/members of TY, or nullptr if TY
+ *  doesn't have one (i.e. isn't a record/class/object). Transparently walks
+ *  through an IncompleteType via `resolved`. Used by `with` to find the
+ *  field namespace to push. */
+static Frame* get_type_body_frame(Type* ty) {
+	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
+		if (!inc->resolved) return nullptr;
+		ty = inc->resolved;
+	}
+	if (auto r = dynamic_cast<RecordType*>(ty)) return r->children;
+	if (auto c = dynamic_cast<ClassType*>(ty)) return c->children;
+	if (auto o = dynamic_cast<ObjectType*>(ty)) return o->children;
+	return nullptr;
+}
+
 Node* Parser::maybe_parse_statement() {
 	if (peek_keyword("end")) {
 		return nullptr;
@@ -289,6 +309,27 @@ Node* Parser::maybe_parse_statement() {
 			auto body = parse_block_body();
 			parse_keyword("end");
 			return body;
+		} else if (peek_keyword("with")) {
+			parse_keyword("with");
+			// TODO: complex targets (`p^`, `arr[i]`, `f()`). For now the
+			// target must be a simple variable so we can read Type* off its
+			// StorageSlot; the alias-emission below is already correct for
+			// arbitrary targets when we lift this restriction.
+			auto id = parse_identifier();
+			Node* target = resolve_value(id);
+			auto target_slot = dynamic_cast<StorageSlot*>(target);
+			if (!target_slot) raise_parse_error("with target must currently be a simple variable");
+			Frame* body_frame = get_type_body_frame(target_slot->ty);
+			if (!body_frame) raise_parse_error("with target's type has no field body");
+			parse_keyword("do");
+			std::string alias = emitter ? emitter->next_fresh_cxx_name("pas_with") : std::string("pas_with_x");
+			auto alias_slot = new StorageSlot(alias, target_slot->ty);
+			if (emitter) emitter->emit_with_prologue(alias, target);
+			push_with_scope(body_frame, alias_slot);
+			parse_statement();
+			pop_scope();
+			if (emitter) emitter->emit_with_epilogue();
+			return nullptr;
 		} else {
 			auto id = parse_identifier();
 			Node* storage = resolve_lvalue(id);
@@ -361,7 +402,8 @@ Node* Parser::parse_numeral() {
  *  constant, procedure, function, builtin). Raise if not found. */
 Node* Parser::resolve_value(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Node* hit = (*it)->lookup_value(name)) {
+		if (Node* hit = it->frame->lookup_value(name)) {
+			if (it->unwrap_via) return new MemberAccess(it->unwrap_via, hit);
 			return hit;
 		}
 	}
@@ -372,7 +414,8 @@ Node* Parser::resolve_value(std::string name) {
 /** value that can be assigned to */
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Node* hit = (*it)->lookup_value(name)) {
+		if (Node* hit = it->frame->lookup_value(name)) {
+			if (it->unwrap_via) return new MemberAccess(it->unwrap_via, hit);
 			return hit;
 		}
 	}
@@ -387,7 +430,7 @@ Node* Parser::resolve_lvalue(std::string name) {
  *  false, an unresolved name is a hard error. */
 Type* Parser::resolve_type(std::string name, bool allow_forward) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Type* hit = (*it)->lookup_type(name)) {
+		if (Type* hit = it->frame->lookup_type(name)) {
 			return hit;
 		}
 	}
@@ -635,7 +678,7 @@ Frame* Parser::parse_aggregate_type_body() {
 			auto member_name = parse_identifier();
 			parse_colon();
 			auto ty = parse_type_expression(false);
-			this->scopes.back()->register_variable(member_name, new StorageSlot(pascal_to_cxx_name(member_name), ty), ty);
+			this->scopes.back().frame->register_variable(member_name, new StorageSlot(pascal_to_cxx_name(member_name), ty), ty);
 		}
 		if (input_token.size() && input_token != "end") {
 			if (!maybe_parse_semicolon()) {
@@ -764,7 +807,7 @@ Frame* Parser::parse_const_block() {
 		// FIXME: handle actual compile-time consts which have no colon (and are no variables).
 		parse_colon();
 		auto ty = parse_type_expression(false);
-		this->scopes.back()->register_variable(name, new StorageSlot(pascal_to_cxx_name(name), ty), ty);
+		this->scopes.back().frame->register_variable(name, new StorageSlot(pascal_to_cxx_name(name), ty), ty);
 		if (!maybe_parse_comma()) {
 			break;
 		}
@@ -857,7 +900,7 @@ Frame* Parser::parse_var_block() {
 		for (auto iter : names) {
 			auto name = iter;
 			auto slot = new StorageSlot(pascal_to_cxx_name(name), ty);
-			this->scopes.back()->register_variable(name, slot, ty);
+			this->scopes.back().frame->register_variable(name, slot, ty);
 			if (emitter) emitter->emit_var_decl(slot->cxx_name, ty);
 		}
 		parse_semicolon();
@@ -1017,7 +1060,7 @@ Node* Parser::parse_proc_formal_parameters() {
 		parse_colon();
 		auto ty = parse_type_expression(false);
 		auto storage = new StorageSlot(pascal_to_cxx_name(id), ty);
-		this->scopes.back()->register_variable(id, storage, ty);
+		this->scopes.back().frame->register_variable(id, storage, ty);
 		if (!maybe_parse_semicolon()) {
 			break;
 		}

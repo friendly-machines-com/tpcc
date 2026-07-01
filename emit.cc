@@ -11,7 +11,11 @@ std::string pascal_to_cxx_name(std::string pascal_name) {
 	return pascal_name;
 }
 
-Emitter::Emitter() : out(nullptr) {}
+Emitter::Emitter() : out(nullptr), fresh_counter(0) {}
+
+std::string Emitter::next_fresh_cxx_name(std::string prefix) {
+	return prefix + "_" + std::to_string(++fresh_counter);
+}
 
 Emitter::~Emitter() {
 	close();
@@ -62,6 +66,22 @@ void Emitter::emit_statement(Node* stmt) {
 	fprintf(out, "\t/* unsupported statement */\n");
 }
 
+void Emitter::emit_with_prologue(std::string alias_cxx_name, Node* target) {
+	if (!out) return;
+	// `auto&&` binds an lvalue target as a reference and lifetime-extends an
+	// rvalue target (e.g. a function call returning a record by value), so the
+	// with-body sees a single evaluation of the target expression regardless
+	// of value category.
+	fprintf(out, "\t{ auto&& %s = ", alias_cxx_name.c_str());
+	emit_expression(target);
+	fprintf(out, ";\n");
+}
+
+void Emitter::emit_with_epilogue() {
+	if (!out) return;
+	fprintf(out, "\t}\n");
+}
+
 void Emitter::emit_expression(Node* expr) {
 	if (!out) return;
 	if (auto c = dynamic_cast<Constant*>(expr)) {
@@ -70,6 +90,12 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto s = dynamic_cast<StorageSlot*>(expr)) {
 		fprintf(out, "%s", s->cxx_name.c_str());
+		return;
+	}
+	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
+		emit_expression(m->a);
+		fprintf(out, ".");
+		emit_expression(m->b);
 		return;
 	}
 	fprintf(out, "/* unsupported expression */");

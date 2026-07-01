@@ -88,6 +88,16 @@ public:
 	Dereference(Node* a);
 };
 
+/** container.member. `a` is the container (usually a StorageSlot for the
+ *  record variable or with-alias) and `b` is the member (usually the field's
+ *  StorageSlot). Produced by resolve_value/resolve_lvalue when a name hits
+ *  inside a with-pushed scope; will also carry explicit `rec.field` grammar
+ *  when that lands. */
+class MemberAccess: public BinaryOperation {
+public:
+	MemberAccess(Node* a, Node* b);
+};
+
 class Return: public UnaryOperation {
 public:
 	Return(Node* a);

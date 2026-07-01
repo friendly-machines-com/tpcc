@@ -21,6 +21,17 @@ public:
 
 class Frame;
 
+/** One entry on the parser's scope stack. `frame` is the declaration frame
+ *  (locals, unit interface, record body, etc.). `unwrap_via` is null for
+ *  every kind of scope except a `with` push: when non-null, a resolve hit in
+ *  this frame is wrapped as `MemberAccess(unwrap_via, hit)` before being
+ *  returned to the caller, so `field` inside `with rec do ...` produces
+ *  `rec.field` at emit time. */
+struct ScopeEntry {
+	Frame* frame;
+	Node* unwrap_via;
+};
+
 class Parser {
 private:
 	FILE* input_file;
@@ -33,7 +44,7 @@ private:
 	void parse_keyword(std::string s);
 	bool maybe_parse_keyword(std::string s);
 	std::vector<ParserInputFile> input_files; // TODO: stack
-	std::vector<Frame*> scopes; // TODO: stack
+	std::vector<ScopeEntry> scopes; // TODO: stack
 	// The type-block scope currently being parsed, or nullptr. Used as the
 	// registration site for implicit forward references (`^TFoo` before TFoo
 	// is declared); those must land in the enclosing type block's scope, not
@@ -118,7 +129,11 @@ protected:
 	bool maybe_parse_greater_equal();
 	bool maybe_parse_period();
 	void parse_period();
+	/** Push a plain declaration frame. */
 	void push_scope(Frame* scope);
+	/** Push a frame that participates in resolution as a `with` binding:
+	 *  hits in FRAME are wrapped as MemberAccess(UNWRAP_VIA, hit). */
+	void push_with_scope(Frame* scope, Node* unwrap_via);
 	void pop_scope();
 	Node* maybe_parse_proc_attributes();
 	Node* parse_procedure_prototype();
