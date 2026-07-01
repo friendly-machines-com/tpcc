@@ -1069,14 +1069,90 @@ Node* Parser::parse_destructor() {
 	parse_block();
 }
 
-Node* Parser::parse_unit() {
-	parse_keyword("unit");
+Unit* Parser::load_or_get_unit(std::string name) {
+	if (Unit* existing = unit_registry->lookup(name)) return existing;
+	// Search dir of the current input file, then CWD.
+	std::string dir;
+	auto slash = input_file_name.find_last_of('/');
+	if (slash != std::string::npos) dir = input_file_name.substr(0, slash + 1);
+	std::vector<std::string> candidates;
+	if (!dir.empty()) candidates.push_back(dir + name + ".pp");
+	candidates.push_back(name + ".pp");
+	FILE* f = nullptr;
+	std::string opened;
+	for (auto& p : candidates) {
+		f = fopen(p.c_str(), "r");
+		if (f) { opened = p; break; }
+	}
+	if (!f) raise_parse_error("cannot find unit file for: " + name);
+	// Nested Parser so the sub-load has its own token/scope state; the shared
+	// unit_registry is what lets circular-dep detection work across the two.
+	Parser sub(unit_registry);
+	sub.push_input_file(f, opened, 1);
+	sub.start();
+	sub.parse_program_or_unit();
+	Unit* loaded = unit_registry->lookup(name);
+	if (!loaded) raise_parse_error("file '" + opened + "' did not declare 'unit " + name + ";'");
+	return loaded;
+}
+
+size_t Parser::parse_uses_clause(bool in_interface, std::string current_name) {
+	size_t pushed = 0;
+	do {
+		std::string name = parse_identifier();
+		Unit* used = load_or_get_unit(name);
+		if (in_interface && used->phase == UnitPhase::InterfaceInProgress) {
+			raise_parse_error("circular interface dependency between '" + current_name + "' and '" + name + "'");
+		}
+		push_scope(used->interface_frame);
+		pushed++;
+		if (!maybe_parse_comma()) break;
+	} while (true);
+	return pushed;
+}
+
+Node* Parser::parse_unit_body() {
+	std::string name = parse_identifier();
+	parse_semicolon();
+	Frame* iface = new Frame(nullptr);
+	// Implementation frame's structural parent is the interface frame, so
+	// impl can transparently see interface decls via the parent chain.
+	Frame* impl = new Frame(iface);
+	Unit* unit = unit_registry->register_new(name, iface, impl);
+	unit->phase = UnitPhase::InterfaceInProgress;
+
 	parse_keyword("interface");
+	push_scope(iface);
+	size_t iface_uses = 0;
+	if (maybe_parse_keyword("uses")) {
+		iface_uses = parse_uses_clause(true, name);
+		parse_semicolon();
+	}
+	// TODO(later phase): parse interface declarations (types, consts, vars,
+	// procedure/function prototypes) here.
+	unit->phase = UnitPhase::InterfaceDone;
+
 	parse_keyword("implementation");
-	parse_keyword("initialization");
-	parse_keyword("finalization");
+	push_scope(impl);
+	unit->phase = UnitPhase::ImplementationInProgress;
+	size_t impl_uses = 0;
+	if (maybe_parse_keyword("uses")) {
+		impl_uses = parse_uses_clause(false, name);
+		parse_semicolon();
+	}
+	// TODO(later phase): parse implementation declarations + init/final bodies.
+
 	parse_keyword("end");
 	parse_period();
+
+	// Pop in reverse push order.
+	for (size_t i = 0; i < impl_uses; i++) pop_scope();
+	pop_scope(); // impl
+	for (size_t i = 0; i < iface_uses; i++) pop_scope();
+	pop_scope(); // iface
+
+	unit->phase = UnitPhase::Done;
+	return nullptr;
 }
 
 Node* Parser::parse_program_or_unit() {
@@ -1096,7 +1172,7 @@ Node* Parser::parse_program_or_unit() {
 		unit->phase = UnitPhase::Done;
 		return result;
 	} else if (maybe_parse_keyword("unit")) {
-		return parse_unit();
+		return parse_unit_body();
 	} else {
 		return raise_parse_error("unknown input token");
 	}

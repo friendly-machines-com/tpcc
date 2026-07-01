@@ -8,6 +8,7 @@
 class Node;
 class Symbol;
 class Type;
+class Unit;
 class UnitRegistry;
 
 class ParserInputFile {
@@ -83,7 +84,18 @@ protected:
 	void parse_colon();
 	void parse_equals();
 	bool maybe_parse_comma();
-	Node* parse_unit();
+	Node* parse_unit_body();
+	/** Parse a comma-separated `uses A, B, C` list (the `uses` keyword must
+	 *  have been consumed by the caller). Loads each named unit if not already
+	 *  in the registry, checks the phase rules (interface-position use of an
+	 *  InterfaceInProgress unit is a circular-dep error), and pushes each
+	 *  loaded unit's interface_frame onto the scope stack. Returns the count
+	 *  pushed so the caller can pop the same number at section end. */
+	size_t parse_uses_clause(bool in_interface, std::string current_name);
+	/** Return the Unit for NAME, loading its source from disk if it isn't
+	 *  already registered. Search order for the file: directory of the current
+	 *  input file, then CWD. */
+	Unit* load_or_get_unit(std::string name);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();
