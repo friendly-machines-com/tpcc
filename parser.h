@@ -66,6 +66,11 @@ protected:
 	Frame* parse_const_block();
 	Frame* parse_type_block(bool delphi_auto_end);
 	Frame* parse_var_block();
+	/** Parse a sequence of top-of-block declarations in any order (Pascal
+	 *  allows `type`, `const`, `var` blocks and `procedure`/`function` decls
+	 *  interleaved freely). Returns the count of scopes pushed so the caller
+	 *  can pop that many after the body. */
+	size_t parse_decl_blocks();
 	Node* parse_block();
 	void parse_semicolon();
 	Node* maybe_parse_statement();

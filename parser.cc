@@ -1180,7 +1180,9 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 void Parser::parse_procedure_or_function(bool is_function) {
 	parse_keyword(is_function ? "function" : "procedure");
 	std::string pas_name = parse_identifier();
-	std::vector<Parameter> formals = parse_proc_formal_parameters();
+	std::vector<Parameter> formals;
+	// Pascal allows omitting the empty parameter list: `procedure foo;`.
+	if (input_token == "(") formals = parse_proc_formal_parameters();
 	Type* return_type = &unit_type();
 	if (is_function) {
 		parse_colon();
@@ -1253,21 +1255,35 @@ Node* Parser::parse_destructor() {
 	parse_block();
 }
 
-// Score an overload candidate against the parsed args. Returns -1 for
-// no-match; nonnegative sums of conversion_cost otherwise.
-static int score_overload(Procedure* proc, const std::vector<Node*>& args) {
-	if (args.size() > proc->formals.size()) return -1;
-	int total = 0;
+// Per-argument conversion costs for a candidate. Returns empty vector when
+// the candidate isn't viable (argument type-incompatible, or unfilled
+// non-default formal). Otherwise returns costs sized to proc->formals; the
+// entries past args.size() are 0 (default-supplied positions).
+static std::vector<int> per_arg_costs(Procedure* proc, const std::vector<Node*>& args) {
+	if (args.size() > proc->formals.size()) return {};
+	for (size_t i = args.size(); i < proc->formals.size(); i++) {
+		if (!proc->formals[i].default_value) return {};
+	}
+	std::vector<int> costs(proc->formals.size(), 0);
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
 		int c = conversion_cost(from, proc->formals[i].ty);
-		if (c < 0) return -1;
-		total += c;
+		if (c < 0) return {};
+		costs[i] = c;
 	}
-	for (size_t i = args.size(); i < proc->formals.size(); i++) {
-		if (!proc->formals[i].default_value) return -1;
+	return costs;
+}
+
+// A dominates B iff A's cost is <= B's on every position AND strictly < on
+// at least one. Different-length vectors don't compare (ambiguity later).
+static bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
+	if (a.size() != b.size()) return false;
+	bool strict = false;
+	for (size_t i = 0; i < a.size(); i++) {
+		if (a[i] > b[i]) return false;
+		if (a[i] < b[i]) strict = true;
 	}
-	return total;
+	return strict;
 }
 
 Node* Parser::finalize_call(Node* fn, std::vector<Node*>& args, std::string name_for_error) {
@@ -1275,18 +1291,31 @@ Node* Parser::finalize_call(Node* fn, std::vector<Node*>& args, std::string name
 	if (auto p = dynamic_cast<Procedure*>(fn)) {
 		proc = p;
 	} else if (auto os = dynamic_cast<OverloadSet*>(fn)) {
-		int best = -1;
-		Procedure* winner = nullptr;
-		bool tied = false;
+		// Viable = type-compatible + defaults fill the rest.
+		std::vector<std::pair<Procedure*, std::vector<int>>> viable;
 		for (auto* p : os->members) {
-			int s = score_overload(p, args);
-			if (s < 0) continue;
-			if (winner == nullptr || s < best) { best = s; winner = p; tied = false; }
-			else if (s == best) tied = true;
+			auto c = per_arg_costs(p, args);
+			if (!c.empty()) viable.push_back({p, std::move(c)});
 		}
-		if (!winner) raise_parse_error("no matching overload for '" + name_for_error + "'");
-		if (tied) raise_parse_error("ambiguous overload for '" + name_for_error + "'");
-		proc = winner;
+		if (viable.empty()) {
+			raise_parse_error("no matching overload for '" + name_for_error + "'");
+		}
+		// Winners are those not dominated by any other viable candidate.
+		std::vector<Procedure*> non_dominated;
+		for (size_t i = 0; i < viable.size(); i++) {
+			bool dom = false;
+			for (size_t j = 0; j < viable.size(); j++) {
+				if (i != j && dominates(viable[j].second, viable[i].second)) {
+					dom = true;
+					break;
+				}
+			}
+			if (!dom) non_dominated.push_back(viable[i].first);
+		}
+		if (non_dominated.size() != 1) {
+			raise_parse_error("ambiguous overload for '" + name_for_error + "'");
+		}
+		proc = non_dominated[0];
 	} else {
 		// Builtin or other callable Node -- leave args as-is (no formal-typed
 		// coercion / defaults) and return the original callee unchanged.
