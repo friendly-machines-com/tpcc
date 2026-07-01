@@ -7,6 +7,7 @@ class Type;
 
 class Node {
 public:
+	virtual ~Node() = default;
 	std::string str() const;
 };
 
