@@ -2,6 +2,7 @@
 #include <typeinfo>
 #include "emit.h"
 #include "cst.h"
+#include "frame.h"
 #include "types.h"
 #include "builtins.h"
 
@@ -112,23 +113,83 @@ void Emitter::emit_with_epilogue() {
 	fprintf(out, "\t}\n");
 }
 
+// The cxx_name of the type that owns a Method, or empty if none.
+static std::string owner_cxx_name(Type* owner) {
+	if (auto r = dynamic_cast<RecordType*>(owner)) return r->cxx_name;
+	if (auto c = dynamic_cast<ClassType*>(owner))  return c->cxx_name;
+	if (auto o = dynamic_cast<ObjectType*>(owner)) return o->cxx_name;
+	return "";
+}
+
 void Emitter::emit_procedure_open(Callable* c) {
 	if (!out) return;
 	fprintf(out, "\n");
 	emit_type_ref(c->return_type);
-	fprintf(out, " %s(", c->cxx_name.c_str());
+	fprintf(out, " ");
+	if (auto m = dynamic_cast<Method*>(c)) {
+		std::string owner = owner_cxx_name(m->owner_class);
+		if (!owner.empty()) fprintf(out, "%s::", owner.c_str());
+	}
+	fprintf(out, "%s(", c->cxx_name.c_str());
 	for (size_t i = 0; i < c->formals.size(); i++) {
 		if (i > 0) fprintf(out, ", ");
 		auto& f = c->formals[i];
 		if (f.mode == ParamMode::Const) fprintf(out, "const ");
 		emit_type_ref(f.ty);
 		if (f.mode == ParamMode::Var || f.mode == ParamMode::Out
-		    || f.mode == ParamMode::Const) {
-			fprintf(out, "&");
-		}
+		    || f.mode == ParamMode::Const) fprintf(out, "&");
 		fprintf(out, " %s", f.cxx_name.c_str());
 	}
 	fprintf(out, ") {\n");
+}
+
+void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
+	if (!out) return;
+	Frame* body = nullptr;
+	const char* kw = "struct";
+	if (auto r = dynamic_cast<RecordType*>(ty)) { body = r->children; kw = "struct"; }
+	else if (auto c = dynamic_cast<ClassType*>(ty)) { body = c->children; kw = "class"; }
+	else if (auto o = dynamic_cast<ObjectType*>(ty)) { body = o->children; kw = "class"; }
+	else return;
+	fprintf(out, "\n%s %s {\n", kw, cxx_name.c_str());
+	if (kw[0] == 'c') fprintf(out, "public:\n");   // C++ classes default private
+	// TODO: Frame's std::map iterates alphabetically; Pascal semantics require
+	// source order for layout. Preserve insertion order in a later pass.
+	for (auto& kv : body->values()) {
+		Node* v = kv.second.value;
+		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
+			fprintf(out, "\t");
+			emit_type_ref(kv.second.ty);
+			fprintf(out, " %s;\n", slot->cxx_name.c_str());
+		} else if (auto call = dynamic_cast<Callable*>(v)) {
+			fprintf(out, "\t");
+			if (auto m = dynamic_cast<Method*>(call)) {
+				if (m->virtual_kind == Method::VirtualKind::Virtual
+				    || m->virtual_kind == Method::VirtualKind::Abstract
+				    || m->virtual_kind == Method::VirtualKind::Dynamic) {
+					fprintf(out, "virtual ");
+				}
+			}
+			emit_type_ref(call->return_type);
+			fprintf(out, " %s(", call->cxx_name.c_str());
+			for (size_t i = 0; i < call->formals.size(); i++) {
+				if (i > 0) fprintf(out, ", ");
+				auto& f = call->formals[i];
+				if (f.mode == ParamMode::Const) fprintf(out, "const ");
+				emit_type_ref(f.ty);
+				if (f.mode == ParamMode::Var || f.mode == ParamMode::Out
+				    || f.mode == ParamMode::Const) fprintf(out, "&");
+				fprintf(out, " %s", f.cxx_name.c_str());
+			}
+			fprintf(out, ")");
+			if (auto m = dynamic_cast<Method*>(call)) {
+				if (m->virtual_kind == Method::VirtualKind::Override) fprintf(out, " override");
+				if (m->virtual_kind == Method::VirtualKind::Abstract) fprintf(out, " = 0");
+			}
+			fprintf(out, ";\n");
+		}
+	}
+	fprintf(out, "};\n");
 }
 
 void Emitter::emit_procedure_close() {
@@ -188,17 +249,43 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
-		emit_expression(m->a);
-		fprintf(out, ".");
+		// Use `->` when the container is (a) an explicit Dereference (collapse
+		// `(*ptr).member` to `ptr->member`) or (b) a pointer-typed lvalue like
+		// a method's implicit `this` slot.
+		if (auto d = dynamic_cast<Dereference*>(m->a)) {
+			emit_expression(d->a);
+			fprintf(out, "->");
+		} else if (m->a->ty && dynamic_cast<PointerType*>(m->a->ty)) {
+			emit_expression(m->a);
+			fprintf(out, "->");
+		} else {
+			emit_expression(m->a);
+			fprintf(out, ".");
+		}
 		emit_expression(m->b);
+		return;
+	}
+	if (auto ix = dynamic_cast<Index*>(expr)) {
+		emit_expression(ix->a);
+		fprintf(out, "[");
+		emit_expression(ix->b);
+		fprintf(out, "]");
 		return;
 	}
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
 		if (pc->receiver) {
-			emit_expression(pc->receiver);
-			// `->` when receiver's static type is a Pascal pointer; `.` otherwise.
-			bool ptr = pc->receiver->ty && dynamic_cast<PointerType*>(pc->receiver->ty);
-			fprintf(out, "%s", ptr ? "->" : ".");
+			// Same `->` conditions as MemberAccess: explicit Dereference of a
+			// pointer, or a pointer-typed receiver (method `this` slot).
+			if (auto d = dynamic_cast<Dereference*>(pc->receiver)) {
+				emit_expression(d->a);
+				fprintf(out, "->");
+			} else if (pc->receiver->ty && dynamic_cast<PointerType*>(pc->receiver->ty)) {
+				emit_expression(pc->receiver);
+				fprintf(out, "->");
+			} else {
+				emit_expression(pc->receiver);
+				fprintf(out, ".");
+			}
 		}
 		emit_expression(pc->callee);
 		fprintf(out, "(");
@@ -260,19 +347,16 @@ void Emitter::emit_type_ref(Type* ty) {
 		fprintf(out, "void");
 		return;
 	}
-	// TODO: emit struct definitions at type-block time and then just spell
-	// the name here. For now, spell the name if we have one; leave a comment
-	// where struct emission has to land.
 	if (auto r = dynamic_cast<RecordType*>(ty)) {
-		fprintf(out, "%s /*record*/", r->cxx_name.empty() ? "struct{}" : r->cxx_name.c_str());
+		fprintf(out, "%s", r->cxx_name.empty() ? "/*anonymous record*/ struct{}" : r->cxx_name.c_str());
 		return;
 	}
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
-		fprintf(out, "%s /*class*/", c->cxx_name.empty() ? "struct{}" : c->cxx_name.c_str());
+		fprintf(out, "%s", c->cxx_name.empty() ? "/*anonymous class*/ struct{}" : c->cxx_name.c_str());
 		return;
 	}
 	if (auto o = dynamic_cast<ObjectType*>(ty)) {
-		fprintf(out, "%s /*object*/", o->cxx_name.empty() ? "struct{}" : o->cxx_name.c_str());
+		fprintf(out, "%s", o->cxx_name.empty() ? "/*anonymous object*/ struct{}" : o->cxx_name.c_str());
 		return;
 	}
 	if (auto p = dynamic_cast<PointerType*>(ty)) {

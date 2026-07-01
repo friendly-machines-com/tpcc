@@ -112,6 +112,14 @@ public:
 	MemberAccess(Node* a, Node* b);
 };
 
+/** array[index]. `a` is the array value; `b` is the index expression.
+ *  Result type (Node::ty) is the array's element type, set by the parser at
+ *  construction. */
+class Index: public BinaryOperation {
+public:
+	Index(Node* a, Node* b);
+};
+
 class Return: public UnaryOperation {
 public:
 	Return(Node* a);

@@ -30,6 +30,10 @@ public:
 	std::string next_fresh_cxx_name(std::string prefix);
 
 	void emit_program_prologue(std::string program_name);
+	// Emit a C++ struct/class definition for a named record/class/object
+	// type. Fields and method prototypes go inside; method bodies are still
+	// emitted separately (outside the class) by emit_procedure_open.
+	void emit_type_definition(std::string cxx_name, Type* ty);
 	void emit_var_decl(std::string cxx_name, Type* ty);
 	void emit_main_prologue();
 	void emit_main_epilogue();

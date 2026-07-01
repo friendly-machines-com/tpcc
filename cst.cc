@@ -38,6 +38,7 @@ ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
 	: receiver(receiver), callee(callee), args(std::move(args)) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
+Index::Index(Node* a, Node* b) : BinaryOperation(a, b) {}
 ShiftLeft::ShiftLeft(Node* a, Node* b) : BinaryOperation(a, b) {}
 ShiftRight::ShiftRight(Node* a, Node* b) : BinaryOperation(a, b) {}
 Div::Div(Node* a, Node* b) : BinaryOperation(a, b) {}

@@ -331,28 +331,26 @@ Node* Parser::maybe_parse_statement() {
 			if (emitter) emitter->emit_with_epilogue();
 			return nullptr;
 		} else {
-			auto id = parse_identifier();
-			Node* target = resolve_lvalue(id);
-			// Dispatch on the next token: `:=` is assignment; anything else is
-			// a call (parenthesized or bare, if the target is a Callable).
+			// A statement here is either an assignment (designator := expression)
+			// or a call (designator, possibly with auto-call). Parse the LHS as
+			// a raw designator so we don't auto-call in the assignment case.
+			Node* lhs = parse_designator();
 			if (input_token == ":=") {
 				parse_colon_equals();
-				auto value = parse_expression();
-				auto assign = new Assign(target, value);
+				if (!is_assignable(lhs)) {
+					raise_parse_error("LHS of ':=' is not assignable");
+				}
+				Node* rhs = parse_expression();
+				auto assign = new Assign(lhs, rhs);
 				if (emitter) emitter->emit_statement(assign);
 				return assign;
 			}
-			std::vector<Node*> args;
-			if (maybe_parse_opening_paren()) {
-				if (input_token != ")") {
-					args.push_back(parse_expression());
-					while (maybe_parse_comma()) args.push_back(parse_expression());
-				}
-				parse_closing_paren();
+			// Call statement: parse_designator already built the ProcCall for
+			// explicit `foo(x)`; for bare `foo`, apply auto-call now.
+			Node* call = maybe_auto_call(lhs);
+			if (!dynamic_cast<ProcCall*>(call)) {
+				raise_parse_error("statement is neither an assignment nor a call");
 			}
-			auto fc = finalize_call(target, args, id);
-			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-			call->ty = fc.callee ? fc.callee->ty : nullptr;
 			if (emitter) emitter->emit_statement(call);
 			return call;
 		}
@@ -506,34 +504,7 @@ Node* Parser::parse_value() {
 		} else {
 			// FIXME: bool literals also belong here
 			auto id = parse_identifier();
-			Node* fn = resolve_value(id);
-			bool has_paren = maybe_parse_opening_paren();
-			// A MemberAccess whose member is callable also triggers the auto-
-			// call path (bare `foo` inside a method body, resolved via implicit
-			// Self-with-scope, arrives here as MemberAccess(SelfSlot, method)).
-			bool callable = dynamic_cast<Callable*>(fn) || dynamic_cast<OverloadSet*>(fn);
-			if (!callable) {
-				if (auto ma = dynamic_cast<MemberAccess*>(fn)) {
-					callable = dynamic_cast<Callable*>(ma->b) || dynamic_cast<OverloadSet*>(ma->b);
-				}
-			}
-			if (has_paren || callable) {
-				std::vector<Node*> args;
-				if (has_paren) {
-					if (input_token != ")") {
-						args.push_back(parse_expression());
-						while (maybe_parse_comma()) {
-							args.push_back(parse_expression());
-						}
-					}
-					parse_closing_paren();
-				}
-				auto fc = finalize_call(fn, args, id);
-				auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-				call->ty = fc.callee ? fc.callee->ty : nullptr;
-				return call;
-			}
-			return fn;
+			return resolve_value(id);
 		}
 	}
 }
@@ -652,26 +623,140 @@ template<typename T> static Node* mk_unary_same(Node* x) {
 	return n;
 }
 
+// Small helper: is NODE a bare callable reference (Callable, OverloadSet, or
+// a MemberAccess whose member is either)? Used both for the auto-call check
+// and to decide whether to peel a MemberAccess in finalize_call.
+static bool node_is_bare_callable(Node* n) {
+	if (!n) return false;
+	if (dynamic_cast<Callable*>(n) || dynamic_cast<OverloadSet*>(n)) return true;
+	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
+		return dynamic_cast<Callable*>(ma->b) || dynamic_cast<OverloadSet*>(ma->b);
+	}
+	return false;
+}
+
+Node* Parser::maybe_auto_call(Node* n) {
+	if (!node_is_bare_callable(n)) return n;
+	// finalize_call handles the empty-args case: for a Callable it checks
+	// that either no formals exist or all remaining formals have defaults;
+	// for an OverloadSet it runs ranking and picks the parameterless winner.
+	// A candidate that requires args will fail there with a clear error.
+	std::vector<Node*> args;
+	auto fc = finalize_call(n, args, /*name for error*/ "");
+	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+	call->ty = fc.callee ? fc.callee->ty : nullptr;
+	return call;
+}
+
+// Static helpers used inside parse_designator's branches.
+static Type* unwrap_incomplete(Type* ty) {
+	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
+		if (!inc->resolved) return ty;
+		ty = inc->resolved;
+	}
+	return ty;
+}
+static Frame* body_frame_of(Type* ty) {
+	if (auto r = dynamic_cast<RecordType*>(ty)) return r->children;
+	if (auto c = dynamic_cast<ClassType*>(ty)) return c->children;
+	if (auto o = dynamic_cast<ObjectType*>(ty)) return o->children;
+	return nullptr;
+}
+
+Node* Parser::parse_designator() {
+	Node* result = parse_value();
+	while (true) {
+		if (input_token == ".") {
+			// Binary infix: RHS is a single identifier token. Before applying,
+			// if LHS is a bare callable it must be auto-called (else the `.`
+			// would try to look up a member of a callable, which is nonsense).
+			result = maybe_auto_call(result);
+			consume();
+			std::string member_name = parse_identifier();
+			Type* ct = unwrap_incomplete(result->ty);
+			Frame* members = body_frame_of(ct);
+			if (!members) raise_parse_error("member access on non-composite type");
+			Node* member = members->lookup_value(member_name);
+			if (!member) raise_parse_error("no member '" + member_name + "'");
+			auto ma = new MemberAccess(result, member);
+			ma->ty = member->ty;
+			result = ma;
+		} else if (input_token == "(") {
+			// Bracketed n-ary: RHS is a comma-separated list of expressions.
+			// No auto-call before `(` -- this `(` IS the call.
+			consume();
+			std::vector<Node*> args;
+			if (input_token != ")") {
+				args.push_back(parse_expression());
+				while (maybe_parse_comma()) args.push_back(parse_expression());
+			}
+			parse_closing_paren();
+			auto fc = finalize_call(result, args, /*name for error*/ "");
+			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+			call->ty = fc.callee ? fc.callee->ty : nullptr;
+			result = call;
+		} else if (input_token == "[") {
+			// Bracketed: RHS is a single expression. Auto-call bare callable
+			// LHS first (indexing into a callable reference is nonsense).
+			result = maybe_auto_call(result);
+			consume();
+			Node* idx = parse_expression();
+			parse_closing_bracket();
+			Type* ct = unwrap_incomplete(result->ty);
+			auto arr = dynamic_cast<FixedArrayType*>(ct);
+			if (!arr) raise_parse_error("index on non-array type");
+			auto ix = new Index(result, idx);
+			ix->ty = arr->item_type;
+			result = ix;
+		} else if (input_token == "^") {
+			// Postfix: no RHS. Auto-call bare callable LHS first (deref of a
+			// callable reference is nonsense).
+			result = maybe_auto_call(result);
+			consume();
+			Type* ct = unwrap_incomplete(result->ty);
+			auto p = dynamic_cast<PointerType*>(ct);
+			if (!p) raise_parse_error("deref of non-pointer type");
+			auto d = new Dereference(result);
+			d->ty = p->item_type;
+			result = d;
+		} else {
+			break;
+		}
+	}
+	return result;
+}
+
+bool Parser::is_assignable(Node* n) {
+	if (!n) return false;
+	if (dynamic_cast<StorageSlot*>(n)) return true;
+	if (dynamic_cast<Dereference*>(n)) return true;
+	if (dynamic_cast<Index*>(n)) return true;
+	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
+		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
+	}
+	return false;
+}
+
 Node* Parser::parse_power() {
 	// FIXME **
 	if (maybe_parse_keyword("not")) {
-		return mk_unary_same<Not>(parse_value());
+		return mk_unary_same<Not>(maybe_auto_call(parse_designator()));
 	} else if (maybe_parse_at()) {
-		auto x = parse_value();
+		auto x = parse_designator();   // @ takes a designator, not the auto-called value
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(x->ty)) : nullptr;
 		return n;
 	} else if (maybe_parse_minus()) {
-		return mk_unary_same<Negate>(parse_value());
+		return mk_unary_same<Negate>(maybe_auto_call(parse_designator()));
 	} else if (maybe_parse_plus()) {
-		return mk_unary_same<Positivize>(parse_value());
+		return mk_unary_same<Positivize>(maybe_auto_call(parse_designator()));
 	} else {
-		return parse_value();
+		return maybe_auto_call(parse_designator());
 	}
 }
 
 Node* Parser::parse_product() {
-	auto result = parse_value();
+	auto result = parse_power();
 	while (true) {
 		if (maybe_parse_star()) {
 			result = mk_arith<Multiply>(result, parse_power());
@@ -752,7 +837,10 @@ Node* Parser::parse_expression() {
 	return parse_comparison();
 }
 
-Frame* Parser::parse_aggregate_type_body() {
+/** Parse the body of a class/record/object. When `owner_class` is non-null,
+ *  procedure/function declarations inside are parsed as method prototypes
+ *  and registered with owner_class as their owner. */
+Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	Frame* body = new Frame(nullptr);
 	push_scope(body);
 	std::string visibility = "published";
@@ -772,6 +860,9 @@ Frame* Parser::parse_aggregate_type_body() {
 			parse_const_block();
 		} else if (peek_keyword("var")) {
 			parse_var_block();
+		} else if (peek_keyword("procedure") || peek_keyword("function")) {
+			parse_method_prototype(body, owner_class, peek_keyword("function"));
+			continue;   // parse_method_prototype consumes its terminating ';'
 		} else {
 			auto member_name = parse_identifier();
 			parse_colon();
@@ -790,14 +881,44 @@ Frame* Parser::parse_aggregate_type_body() {
 	return body;
 }
 
+void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function) {
+	parse_keyword(is_function ? "function" : "procedure");
+	std::string pas_name = parse_identifier();
+	std::vector<Parameter> formals;
+	if (input_token == "(") formals = parse_proc_formal_parameters();
+	Type* return_type = &unit_type();
+	if (is_function) {
+		parse_colon();
+		return_type = parse_type_expression(false);
+	}
+	parse_semicolon();
+	bool has_overload = false;
+	Method::VirtualKind vk = Method::VirtualKind::None;
+	while (true) {
+		if (peek_keyword("overload")) { parse_keyword("overload"); has_overload = true; parse_semicolon(); }
+		else if (peek_keyword("virtual"))  { parse_keyword("virtual");  vk = Method::VirtualKind::Virtual;  parse_semicolon(); }
+		else if (peek_keyword("override")) { parse_keyword("override"); vk = Method::VirtualKind::Override; parse_semicolon(); }
+		else if (peek_keyword("abstract")) { parse_keyword("abstract"); vk = Method::VirtualKind::Abstract; parse_semicolon(); }
+		else if (peek_keyword("dynamic"))  { parse_keyword("dynamic");  vk = Method::VirtualKind::Dynamic;  parse_semicolon(); }
+		else break;
+	}
+	auto m = new Method(pas_name, pascal_to_cxx_name(pas_name),
+	                    std::move(formals), return_type, has_overload,
+	                    owner_class, vk);
+	if (!body->register_callable(pas_name, m)) {
+		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+	}
+}
+
 Type* Parser::parse_class_type() {
 	parse_keyword("class");
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("class inheritance (class(Parent)) not implemented yet");
 	}
-	Frame* body = parse_aggregate_type_body();
+	auto ct = new ClassType(nullptr);
+	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
-	return new ClassType(body);
+	return ct;
 }
 
 Type* Parser::parse_record_type() {
@@ -805,9 +926,10 @@ Type* Parser::parse_record_type() {
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("record with parenthesized header not implemented yet");
 	}
-	Frame* body = parse_aggregate_type_body();
+	auto rt = new RecordType(nullptr);
+	rt->children = parse_aggregate_type_body(rt);
 	parse_keyword("end");
-	return new RecordType(body);
+	return rt;
 }
 
 Type* Parser::parse_object_type() {
@@ -815,9 +937,10 @@ Type* Parser::parse_object_type() {
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("object with parenthesized header not implemented yet");
 	}
-	Frame* body = parse_aggregate_type_body();
+	auto ot = new ObjectType(nullptr);
+	ot->children = parse_aggregate_type_body(ot);
 	parse_keyword("end");
-	return new ObjectType(body);
+	return ot;
 }
 
 Type* Parser::parse_array_type() {
@@ -957,11 +1080,13 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 		Type* rhs = parse_type_expression(false);
 		// Attach the LHS Pascal name (as its C++ identifier) to record-family
 		// types so emit_type_ref has a name to spell.
-		if (auto r = dynamic_cast<RecordType*>(rhs)) r->cxx_name = pascal_to_cxx_name(name);
-		else if (auto c = dynamic_cast<ClassType*>(rhs)) c->cxx_name = pascal_to_cxx_name(name);
-		else if (auto o = dynamic_cast<ObjectType*>(rhs)) o->cxx_name = pascal_to_cxx_name(name);
+		std::string cxx = pascal_to_cxx_name(name);
+		if (auto r = dynamic_cast<RecordType*>(rhs)) r->cxx_name = cxx;
+		else if (auto c = dynamic_cast<ClassType*>(rhs)) c->cxx_name = cxx;
+		else if (auto o = dynamic_cast<ObjectType*>(rhs)) o->cxx_name = cxx;
 		lhs_placeholder->resolved = rhs;
 		scope->rebind_type(name, rhs);
+		if (emitter) emitter->emit_type_definition(cxx, rhs);
 		parse_semicolon();
 	} while (true);
 	for (auto& kv : scope->types()) {
@@ -1204,7 +1329,61 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 
 void Parser::parse_procedure_or_function(bool is_function) {
 	parse_keyword(is_function ? "function" : "procedure");
-	std::string pas_name = parse_identifier();
+	std::string first_name = parse_identifier();
+	// Qualified name -> external method body: `procedure TFoo.Bar(...);`
+	// The Method entity was already registered inside the class body; we
+	// look it up, re-parse the formals for the syntactic hit, and attach the
+	// body to the existing Method.
+	if (input_token == ".") {
+		consume();
+		std::string method_name = parse_identifier();
+		Type* owner_ty = resolve_type(first_name, false);
+		Frame* owner_frame = nullptr;
+		if (auto r = dynamic_cast<RecordType*>(owner_ty)) owner_frame = r->children;
+		else if (auto c = dynamic_cast<ClassType*>(owner_ty)) owner_frame = c->children;
+		else if (auto o = dynamic_cast<ObjectType*>(owner_ty)) owner_frame = o->children;
+		if (!owner_frame) raise_parse_error("'" + first_name + "' is not a class/record/object");
+		Node* hit = owner_frame->lookup_value(method_name);
+		auto m = dynamic_cast<Method*>(hit);
+		if (!m) raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
+		std::vector<Parameter> formals;
+		if (input_token == "(") formals = parse_proc_formal_parameters();
+		// TODO: verify formals match the prototype; for now we accept whatever
+		// the definition site provided and use the prototype's formals as the
+		// source of truth for later resolution.
+		Type* return_type = &unit_type();
+		if (is_function) {
+			parse_colon();
+			return_type = parse_type_expression(false);
+		}
+		parse_semicolon();
+		// Body_frame parented at the class body so members are visible via
+		// parent chain. Push it, plus an implicit Self-with-scope so bare
+		// field/method references inside the body auto-wrap as
+		// MemberAccess(SelfSlot, member).
+		Frame* body_frame = new Frame(owner_frame);
+		m->body_frame = body_frame;
+		Type* self_ptr_ty = new PointerType(owner_ty);
+		auto self_slot = new StorageSlot("this", self_ptr_ty);
+		body_frame->register_variable("self", self_slot, self_ptr_ty);
+		for (auto& p : m->formals) {
+			body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
+		}
+		push_scope(body_frame);
+		push_with_scope(owner_frame, self_slot);
+		if (emitter) emitter->emit_procedure_open(m);
+		size_t pushed = parse_decl_blocks();
+		parse_keyword("begin");
+		m->body = parse_block_body();
+		parse_keyword("end");
+		parse_semicolon();
+		if (emitter) emitter->emit_procedure_close();
+		for (size_t i = 0; i < pushed; i++) pop_scope();
+		pop_scope();   // with-scope
+		pop_scope();   // body_frame
+		return;
+	}
+	std::string pas_name = std::move(first_name);
 	std::vector<Parameter> formals;
 	// Pascal allows omitting the empty parameter list: `procedure foo;`.
 	if (input_token == "(") formals = parse_proc_formal_parameters();

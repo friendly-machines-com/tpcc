@@ -83,6 +83,33 @@ protected:
 	Type* resolve_type(std::string name, bool allow_forward);
     bool maybe_parse_directive(std::string directive);
 	Node* parse_value();
+	/** Designator: value followed by zero-or-more selectors.
+	 *  Selectors:
+	 *    `.` identifier                 - MemberAccess (binary, RHS = ident)
+	 *    `(` [ expr {,expr} ] `)`       - ProcCall (bracketed arg list)
+	 *    `[` expression `]`             - Index (bracketed single expr)
+	 *    `^`                            - Dereference (postfix, no RHS)
+	 *  Sits between parse_power (unary) and parse_value (primary).
+	 *  Selectors bind tighter than unary: `not a.b` = `not (a.b)`.
+	 *
+	 *  Per-step auto-call: before applying `.`, `[`, or `^`, if the
+	 *  accumulated result is a bare callable and can be invoked with zero
+	 *  arguments, an implicit no-arg call is inserted first. Before `(` no
+	 *  auto-call happens because that `(` IS the call. End-of-designator
+	 *  auto-call is the caller's decision (value context yes, lvalue no)
+	 *  via maybe_auto_call. */
+	Node* parse_designator();
+	/** If NODE is a bare callable (Callable, OverloadSet, or MemberAccess
+	 *  whose member is either) AND at least one candidate can be invoked
+	 *  parameterlessly (no formals or all formals defaulted), wrap it in a
+	 *  no-arg ProcCall via finalize_call and return that. Otherwise return
+	 *  NODE unchanged. */
+	Node* maybe_auto_call(Node* n);
+	/** True when NODE is a syntactic form assignable to via `:=`: a bare
+	 *  StorageSlot, a MemberAccess whose member is a StorageSlot, a
+	 *  Dereference, or an Index. Everything else (constants, calls,
+	 *  callable references) rejects. */
+	bool is_assignable(Node* n);
 	Node* parse_comparison();
 	Node* parse_power();
 	Node* parse_product();
@@ -95,7 +122,11 @@ protected:
 	Type* parse_type_expression(bool allow_forward);
 	Node* parse_expression();
 	Node* parse_statement();
-	Frame* parse_aggregate_type_body();
+	Frame* parse_aggregate_type_body(Type* owner_class);
+	/** Parse a method prototype inside a class/record/object body. Registers
+	 *  the Method in BODY under its Pascal name (via register_callable, so
+	 *  overload directives interact the same way as for standalone callables). */
+	void parse_method_prototype(Frame* body, Type* owner_class, bool is_function);
 	bool maybe_parse_semicolon();
 	bool maybe_parse_opening_paren();
 	void parse_opening_paren();
