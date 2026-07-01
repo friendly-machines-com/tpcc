@@ -31,20 +31,19 @@ static constexpr std::array<BuiltinDesc, 3> kBuiltins{{
 	{"dec", "pas::p_dec", []() -> Type* { return nullptr; }, nullptr},
 }};
 
-void register_root_frame_entries(Frame* root) {
-	for (auto& t : kIntrinsicTypes) {
-		root->register_type(std::string(t.pas_name),
-		                    new IntrinsicType(t.pas_name, t.rtl_name));
-	}
-	for (auto& b : kBuiltins) {
-		root->register_variable(std::string(b.pas_name),
-		                        new Builtin(&b),
-		                        b.build_type());
-	}
-}
-
-Frame* make_root_frame() {
-	Frame* root = new Frame(nullptr);
-	register_root_frame_entries(root);
-	return root;
+const Frame& root_frame() {
+	static const Frame f = []() {
+		Frame ff(nullptr);
+		for (auto& t : kIntrinsicTypes) {
+			ff.register_type(std::string(t.pas_name),
+			                 new IntrinsicType(t.pas_name, t.rtl_name));
+		}
+		for (auto& b : kBuiltins) {
+			ff.register_variable(std::string(b.pas_name),
+			                     new Builtin(&b),
+			                     b.build_type());
+		}
+		return ff;
+	}();
+	return f;
 }

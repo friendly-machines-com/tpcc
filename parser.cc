@@ -90,11 +90,11 @@ void Parser::push_input_file(FILE* input_file, std::string input_file_name, int 
 	this->input_file_line_number = input_file_line_number;
 }
 
-void Parser::push_scope(Frame* scope) {
+void Parser::push_scope(const Frame* scope) {
 	this->scopes.push_back(ScopeEntry{scope, nullptr});
 }
 
-void Parser::push_with_scope(Frame* scope, Node* unwrap_via) {
+void Parser::push_with_scope(const Frame* scope, Node* unwrap_via) {
 	this->scopes.push_back(ScopeEntry{scope, unwrap_via});
 }
 
@@ -234,7 +234,7 @@ std::string Parser::consume() {
 	return text;
 }
 void Parser::start() {
-	push_scope(make_root_frame());
+	push_scope(&root_frame());
 	input_char = fgetc(input_file);
 	consume();
 }
@@ -678,7 +678,7 @@ Frame* Parser::parse_aggregate_type_body() {
 			auto member_name = parse_identifier();
 			parse_colon();
 			auto ty = parse_type_expression(false);
-			this->scopes.back().frame->register_variable(member_name, new StorageSlot(pascal_to_cxx_name(member_name), ty), ty);
+			body->register_variable(member_name, new StorageSlot(pascal_to_cxx_name(member_name), ty), ty);
 		}
 		if (input_token.size() && input_token != "end") {
 			if (!maybe_parse_semicolon()) {
@@ -807,7 +807,7 @@ Frame* Parser::parse_const_block() {
 		// FIXME: handle actual compile-time consts which have no colon (and are no variables).
 		parse_colon();
 		auto ty = parse_type_expression(false);
-		this->scopes.back().frame->register_variable(name, new StorageSlot(pascal_to_cxx_name(name), ty), ty);
+		scope->register_variable(name, new StorageSlot(pascal_to_cxx_name(name), ty), ty);
 		if (!maybe_parse_comma()) {
 			break;
 		}
@@ -900,7 +900,7 @@ Frame* Parser::parse_var_block() {
 		for (auto iter : names) {
 			auto name = iter;
 			auto slot = new StorageSlot(pascal_to_cxx_name(name), ty);
-			this->scopes.back().frame->register_variable(name, slot, ty);
+			scope->register_variable(name, slot, ty);
 			if (emitter) emitter->emit_var_decl(slot->cxx_name, ty);
 		}
 		parse_semicolon();
@@ -1060,7 +1060,12 @@ Node* Parser::parse_proc_formal_parameters() {
 		parse_colon();
 		auto ty = parse_type_expression(false);
 		auto storage = new StorageSlot(pascal_to_cxx_name(id), ty);
-		this->scopes.back().frame->register_variable(id, storage, ty);
+		// TODO: this registers formals into the enclosing scope, which is
+		// wrong (formals belong in the procedure's own body_frame). Fixed by
+		// the procedure refactor, which will pass an explicit target Frame*
+		// here. Until then, the target is scopes.back() and must be treated
+		// as non-const; the const_cast marks that this is a known escape.
+		const_cast<Frame*>(this->scopes.back().frame)->register_variable(id, storage, ty);
 		if (!maybe_parse_semicolon()) {
 			break;
 		}

@@ -44,5 +44,9 @@ public:
 	Builtin(const BuiltinDesc* desc);
 };
 
-void register_root_frame_entries(Frame* root);
-Frame* make_root_frame();
+// The single, program-wide root frame. Holds intrinsic types (Integer,
+// Boolean, ...) and builtin procedures/functions (Ord, Inc, Dec, ...).
+// Function-local static: initialized on first call, no cross-TU static-init
+// order dependency. Every Parser pushes this frame at the bottom of its
+// scope stack, so intrinsic Type* identities are shared across parsers.
+const Frame& root_frame();

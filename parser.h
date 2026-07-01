@@ -28,7 +28,7 @@ class Frame;
  *  returned to the caller, so `field` inside `with rec do ...` produces
  *  `rec.field` at emit time. */
 struct ScopeEntry {
-	Frame* frame;
+	const Frame* frame;
 	Node* unwrap_via;
 };
 
@@ -130,10 +130,10 @@ protected:
 	bool maybe_parse_period();
 	void parse_period();
 	/** Push a plain declaration frame. */
-	void push_scope(Frame* scope);
+	void push_scope(const Frame* scope);
 	/** Push a frame that participates in resolution as a `with` binding:
 	 *  hits in FRAME are wrapped as MemberAccess(UNWRAP_VIA, hit). */
-	void push_with_scope(Frame* scope, Node* unwrap_via);
+	void push_with_scope(const Frame* scope, Node* unwrap_via);
 	void pop_scope();
 	Node* maybe_parse_proc_attributes();
 	Node* parse_procedure_prototype();
