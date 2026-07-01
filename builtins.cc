@@ -11,11 +11,12 @@ Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 // Pascal-visible intrinsic types. To add one: append a row AND add the
 // corresponding `using t_<name> = ...` in rtl.h. Linker enforces the
 // rtl.h side if any emitted code uses the type.
-static constexpr std::array<IntrinsicTypeDesc, 4> kIntrinsicTypes{{
-	{"integer", "pas::t_integer"},
-	{"longint", "pas::t_longint"},
-	{"boolean", "pas::t_boolean"},
-	{"char",    "pas::t_char"},
+static constexpr std::array<IntrinsicTypeDesc, 5> kIntrinsicTypes{{
+	{"integer",     "pas::t_integer"},
+	{"longint",     "pas::t_longint"},
+	{"boolean",     "pas::t_boolean"},
+	{"char",        "pas::t_char"},
+	{"shortstring", "pas::t_shortstring"},
 }};
 
 // Pascal-visible builtin procedures/functions. To add one: append a row

@@ -22,6 +22,11 @@ using t_longint = int64_t;
 using t_boolean = bool;
 using t_char    = char;
 
+struct t_shortstring {
+	uint8_t length;
+	char data[255];
+};
+
 template<typename T> inline void p_inc(T& x, t_integer n = 1) { x += static_cast<T>(n); }
 template<typename T> inline void p_dec(T& x, t_integer n = 1) { x -= static_cast<T>(n); }
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
