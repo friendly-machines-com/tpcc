@@ -12,6 +12,7 @@
 #include "evaluator.h"
 #include "builtins.h"
 #include "units.h"
+#include "emit.h"
 
 static std::unordered_set<std::string> keywords = {
 	"program",
@@ -41,7 +42,8 @@ static std::unordered_set<std::string> keywords = {
 	"const",
 };
 
-Parser::Parser(UnitRegistry* unit_registry) : unit_registry(unit_registry) {
+Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter)
+	: unit_registry(unit_registry), emitter(emitter) {
 }
 void Parser::pop_input_file() {
 	assert(!input_files.empty());
@@ -292,7 +294,9 @@ Node* Parser::maybe_parse_statement() {
 			Node* storage = resolve_lvalue(id);
 			parse_colon_equals();
 			auto value = parse_expression();
-			return new Assign(storage, value);
+			auto assign = new Assign(storage, value);
+			if (emitter) emitter->emit_statement(assign);
+			return assign;
 		}
 		// FIXME: raise_parse_error("missing statement");
 	}
@@ -631,7 +635,7 @@ Frame* Parser::parse_aggregate_type_body() {
 			auto member_name = parse_identifier();
 			parse_colon();
 			auto ty = parse_type_expression(false);
-			this->scopes.back()->register_variable(member_name, new StorageSlot(ty), ty);
+			this->scopes.back()->register_variable(member_name, new StorageSlot(pascal_to_cxx_name(member_name), ty), ty);
 		}
 		if (input_token.size() && input_token != "end") {
 			if (!maybe_parse_semicolon()) {
@@ -760,7 +764,7 @@ Frame* Parser::parse_const_block() {
 		// FIXME: handle actual compile-time consts which have no colon (and are no variables).
 		parse_colon();
 		auto ty = parse_type_expression(false);
-		this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
+		this->scopes.back()->register_variable(name, new StorageSlot(pascal_to_cxx_name(name), ty), ty);
 		if (!maybe_parse_comma()) {
 			break;
 		}
@@ -852,7 +856,9 @@ Frame* Parser::parse_var_block() {
 		auto ty = parse_type_expression(false);
 		for (auto iter : names) {
 			auto name = iter;
-			this->scopes.back()->register_variable(name, new StorageSlot(ty), ty);
+			auto slot = new StorageSlot(pascal_to_cxx_name(name), ty);
+			this->scopes.back()->register_variable(name, slot, ty);
+			if (emitter) emitter->emit_var_decl(slot->cxx_name, ty);
 		}
 		parse_semicolon();
 	} while (true);
@@ -1010,7 +1016,7 @@ Node* Parser::parse_proc_formal_parameters() {
 		// TODO: ",b,c,d"
 		parse_colon();
 		auto ty = parse_type_expression(false);
-		auto storage = new StorageSlot(ty);
+		auto storage = new StorageSlot(pascal_to_cxx_name(id), ty);
 		this->scopes.back()->register_variable(id, storage, ty);
 		if (!maybe_parse_semicolon()) {
 			break;
@@ -1087,7 +1093,7 @@ Unit* Parser::load_or_get_unit(std::string name) {
 	if (!f) raise_parse_error("cannot find unit file for: " + name);
 	// Nested Parser so the sub-load has its own token/scope state; the shared
 	// unit_registry is what lets circular-dep detection work across the two.
-	Parser sub(unit_registry);
+	Parser sub(unit_registry, nullptr);
 	sub.push_input_file(f, opened, 1);
 	sub.start();
 	sub.parse_program_or_unit();
@@ -1166,11 +1172,25 @@ Node* Parser::parse_program_or_unit() {
 		if (peek_keyword("uses")) {
 			raise_parse_error("`uses` clauses are not yet supported");
 		}
-		auto result = parse_block();
+		if (emitter) emitter->emit_program_prologue(name);
+		// Inlined equivalent of parse_block; we need to bracket the body-block
+		// with main() emission hooks, which parse_block itself doesn't know
+		// about (it's also called from procedure bodies).
+		auto type_scope = maybe_parse_type_block(false);
+		auto const_scope = maybe_parse_const_block();
+		auto var_scope = maybe_parse_var_block();
+		parse_keyword("begin");
+		if (emitter) emitter->emit_main_prologue();
+		auto body = parse_block_body();
+		parse_keyword("end");
+		if (emitter) emitter->emit_main_epilogue();
+		if (var_scope) pop_scope();
+		if (const_scope) pop_scope();
+		if (type_scope) pop_scope();
 		parse_period();
 		pop_scope();
 		unit->phase = UnitPhase::Done;
-		return result;
+		return body;
 	} else if (maybe_parse_keyword("unit")) {
 		return parse_unit_body();
 	} else {

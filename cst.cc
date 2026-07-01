@@ -55,7 +55,8 @@ Negate::Negate(Node* a) : UnaryOperation(a) {}
 Positivize::Positivize(Node* a) : UnaryOperation(a) {}
 AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
 
-StorageSlot::StorageSlot(Type* ty) {
+StorageSlot::StorageSlot(std::string cxx_name, Type* ty) {
+	this->cxx_name = cxx_name;
 	this->ty = ty;
 }
 

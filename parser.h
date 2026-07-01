@@ -10,6 +10,7 @@ class Symbol;
 class Type;
 class Unit;
 class UnitRegistry;
+class Emitter;
 
 class ParserInputFile {
 public:
@@ -39,6 +40,11 @@ private:
 	// in whatever inner scope (record/class body) happens to be on top.
 	Frame* current_type_block = nullptr;
 	UnitRegistry* unit_registry;
+	// May be null. When non-null, emission hooks in the parser call into it
+	// as declarations and statements are parsed. Null is used only by
+	// sub-parsers loading a `uses`d unit until unit-level emission (.h/.cc
+	// per unit) is implemented.
+	Emitter* emitter;
 protected:
 	std::string input_token;
 	Node* parse_block_body();
@@ -129,7 +135,7 @@ protected:
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 
 public:
-	Parser(UnitRegistry* unit_registry);
+	Parser(UnitRegistry* unit_registry, Emitter* emitter);
 	void push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number);
 	void pop_input_file();
 	void start();

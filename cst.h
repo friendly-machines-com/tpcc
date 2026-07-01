@@ -109,7 +109,12 @@ public:
 
 struct StorageSlot: public Node {
 	Type* ty;
-	StorageSlot(Type* ty);
+	// Identifier as it will appear in the emitted C++ output. May diverge from
+	// the Pascal source name (mangling for C++ reserved words, later
+	// unit-name prefixing). Kept on the node so emission is a straight walk
+	// without a separate reverse-lookup back to the Frame that holds this slot.
+	std::string cxx_name;
+	StorageSlot(std::string cxx_name, Type* ty);
 };
 
 class Constant: public Node {
