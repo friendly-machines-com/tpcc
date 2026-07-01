@@ -50,3 +50,24 @@ public:
 // order dependency. Every Parser pushes this frame at the bottom of its
 // scope stack, so intrinsic Type* identities are shared across parsers.
 const Frame& root_frame();
+
+// Shared singletons for internal-only types not registered under any Pascal
+// name. Callers compare by identity (pointer equality) against &unit_type()
+// or &untyped_integer_type(). Non-const because the callers store the address
+// in Type* fields (Node::ty etc.); the underlying objects have no non-const
+// methods, so returning non-const doesn't risk mutation of the singleton.
+UnitType& unit_type();
+UntypedIntegerType& untyped_integer_type();
+
+// Cached lookups of frequently-referenced intrinsics from root_frame().
+Type* boolean_type();
+
+// Result type of an arithmetic/bitwise binary op given operand types. Handles
+// UntypedInteger adaptation and integer widening; returns nullptr if the two
+// types don't combine (caller decides whether that's an error).
+Type* common_arith_type(Type* a, Type* b);
+
+// Cost of converting FROM to TO: 0 = same (or Untyped fits), 1 = widening,
+// -1 = no implicit conversion. Used by both call-site coercion and overload
+// ranking.
+int conversion_cost(Type* from, Type* to);

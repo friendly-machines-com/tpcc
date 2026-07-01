@@ -5,6 +5,7 @@
 
 class Node;
 class StorageSlot;
+class Procedure;
 
 struct FrameValueEntry {
 	Node* value;
@@ -35,5 +36,13 @@ public:
      *  its real Type* at type-block-end). No-op-safe for a fresh name. */
     void rebind_type(std::string name, Type* ty);
     bool register_variable(std::string name, Node* v, Type* ty); // FIXME: StorageSlot would already have ty
+    /** Register a Procedure under NAME, applying Pascal's overload rules:
+     *  a second registration succeeds only if both the existing and new
+     *  declarations have has_overload_directive set (in which case the slot
+     *  promotes from Procedure to OverloadSet, or the new entry is appended
+     *  to an existing OverloadSet). Otherwise it's a duplicate identifier.
+     *  Returns true on success, false on a duplicate/overload-mismatch error
+     *  (caller reports the diagnostic with source location context). */
+    bool register_procedure(std::string name, Procedure* p);
     const std::map<std::string, Type*>& types() const { return type_items; }
 };

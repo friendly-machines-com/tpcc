@@ -28,10 +28,13 @@ ObjectType::ObjectType(Frame* children) {
 	this->children = children;
 }
 
-UnitType::UnitType(Frame* interface_children, Frame* implementation_children) {
+ModuleType::ModuleType(Frame* interface_children, Frame* implementation_children) {
 	this->interface_children = interface_children;
 	this->implementation_children = implementation_children;
 }
+
+UnitType::UnitType() = default;
+UntypedIntegerType::UntypedIntegerType() = default;
 
 BoundedCardinalType::BoundedCardinalType(uint64_t lower_bound, uint64_t higher_bound) {
 	this->lower_bound = lower_bound;

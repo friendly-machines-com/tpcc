@@ -4,6 +4,7 @@
 
 class Node;
 class Type;
+class Procedure;
 
 /** Translate a Pascal source identifier to the identifier that will be written
  *  into the emitted C++ output. Currently identity; the extension point for
@@ -35,6 +36,12 @@ public:
 	void emit_statement(Node* stmt);
 	void emit_with_prologue(std::string alias_cxx_name, Node* target);
 	void emit_with_epilogue();
+
+	// Procedure/function definition emission. emit_procedure_open writes the
+	// C++ signature plus opening brace; body statements emit between; then
+	// emit_procedure_close writes the closing brace.
+	void emit_procedure_open(Procedure* p);
+	void emit_procedure_close();
 
 	void emit_expression(Node* expr);
 	void emit_type_ref(Type* ty);

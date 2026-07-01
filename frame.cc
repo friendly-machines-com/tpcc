@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdio>
 #include "frame.h"
+#include "cst.h"
 
 FrameValueEntry::FrameValueEntry() : value(nullptr), ty(nullptr) {}
 
@@ -70,4 +71,30 @@ bool Frame::register_variable(std::string name, Node* v, Type* ty) {
 		value_items[name] = FrameValueEntry(v, ty);
 		return true;
 	}
+}
+
+bool Frame::register_procedure(std::string name, Procedure* p) {
+	auto iter = value_items.find(name);
+	if (iter == value_items.end()) {
+		value_items[name] = FrameValueEntry(p, p->return_type);
+		return true;
+	}
+	Node* existing = iter->second.value;
+	if (auto ep = dynamic_cast<Procedure*>(existing)) {
+		if (ep->has_overload_directive && p->has_overload_directive) {
+			auto set = new OverloadSet(name, std::vector<Procedure*>{ep, p});
+			iter->second.value = set;
+			iter->second.ty = nullptr;
+			return true;
+		}
+		return false;
+	}
+	if (auto os = dynamic_cast<OverloadSet*>(existing)) {
+		if (p->has_overload_directive) {
+			os->members.push_back(p);
+			return true;
+		}
+		return false;
+	}
+	return false;   // name is bound to something non-procedural
 }

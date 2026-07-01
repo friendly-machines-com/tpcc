@@ -17,10 +17,15 @@
 
 namespace pas {
 
-using t_integer = int32_t;
-using t_longint = int64_t;
-using t_boolean = bool;
-using t_char    = char;
+using t_byte     = uint8_t;
+using t_shortint = int8_t;
+using t_word     = uint16_t;
+using t_smallint = int16_t;
+using t_cardinal = uint32_t;
+using t_integer  = int32_t;
+using t_longint  = int64_t;
+using t_boolean  = bool;
+using t_char     = char;
 
 struct t_shortstring {
 	uint8_t length;

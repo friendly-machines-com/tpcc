@@ -332,12 +332,29 @@ Node* Parser::maybe_parse_statement() {
 			return nullptr;
 		} else {
 			auto id = parse_identifier();
-			Node* storage = resolve_lvalue(id);
-			parse_colon_equals();
-			auto value = parse_expression();
-			auto assign = new Assign(storage, value);
-			if (emitter) emitter->emit_statement(assign);
-			return assign;
+			Node* target = resolve_lvalue(id);
+			// Dispatch on the next token: `:=` is assignment; anything else is
+			// a call (parenthesized or bare, if the target is a Procedure).
+			if (input_token == ":=") {
+				parse_colon_equals();
+				auto value = parse_expression();
+				auto assign = new Assign(target, value);
+				if (emitter) emitter->emit_statement(assign);
+				return assign;
+			}
+			std::vector<Node*> args;
+			if (maybe_parse_opening_paren()) {
+				if (input_token != ")") {
+					args.push_back(parse_expression());
+					while (maybe_parse_comma()) args.push_back(parse_expression());
+				}
+				parse_closing_paren();
+			}
+			Node* callee = finalize_call(target, args, id);
+			auto call = new ProcCall(callee, std::move(args));
+			call->ty = callee ? callee->ty : nullptr;
+			if (emitter) emitter->emit_statement(call);
+			return call;
 		}
 		// FIXME: raise_parse_error("missing statement");
 	}
@@ -377,7 +394,7 @@ Node* Parser::maybe_parse_numeral() {
 				return raise_parse_error("malformed numeral: " + input_token);
 			}
 			// FIXME: continue for non-integer here.
-			auto lit = new Constant(value);
+			auto lit = new Constant(value, &untyped_integer_type());
 			consume();
 			return lit;
 		} else {
@@ -401,21 +418,56 @@ Node* Parser::parse_numeral() {
 /** Walk the scope stack top-down looking up a value-position name (variable,
  *  constant, procedure, function, builtin). Raise if not found. */
 Node* Parser::resolve_value(std::string name) {
+	std::vector<Procedure*> collected;
+	// Walk top-down. First hit shadows unless it's overload-marked; then
+	// keep walking to aggregate additional overload-marked hits from lower
+	// scopes (cross-unit overloading).
+	Node* first_wrapped = nullptr;   // remember the with-wrapped form of a single-hit non-overload
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Node* hit = it->frame->lookup_value(name)) {
-			if (it->unwrap_via) return new MemberAccess(it->unwrap_via, hit);
+		Node* hit = it->frame->lookup_value(name);
+		if (!hit) continue;
+		auto as_proc = dynamic_cast<Procedure*>(hit);
+		auto as_set  = dynamic_cast<OverloadSet*>(hit);
+		if (collected.empty() && !as_proc && !as_set) {
+			// First (and terminating) hit is a non-callable or a non-overload value.
+			if (it->unwrap_via) {
+				auto m = new MemberAccess(it->unwrap_via, hit);
+				m->ty = hit->ty;
+				return m;
+			}
 			return hit;
 		}
+		if (as_proc) {
+			if (!as_proc->has_overload_directive) {
+				if (collected.empty()) return as_proc;   // plain proc, first-hit wins
+				break;                                    // shadowed by collected overloads above
+			}
+			collected.push_back(as_proc);
+		} else if (as_set) {
+			// Every member of an OverloadSet already has has_overload_directive.
+			for (auto* m : as_set->members) collected.push_back(m);
+		} else {
+			// Non-callable value below a collected overload block -- stop.
+			break;
+		}
 	}
-	raise_parse_error("unresolved value identifier: " + name);
-	return nullptr;
+	if (collected.empty()) {
+		raise_parse_error("unresolved value identifier: " + name);
+		return nullptr;
+	}
+	if (collected.size() == 1) return collected[0];
+	return new OverloadSet(name, std::move(collected));
 }
 
 /** value that can be assigned to */
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (Node* hit = it->frame->lookup_value(name)) {
-			if (it->unwrap_via) return new MemberAccess(it->unwrap_via, hit);
+			if (it->unwrap_via) {
+				auto m = new MemberAccess(it->unwrap_via, hit);
+				m->ty = hit->ty;
+				return m;
+			}
 			return hit;
 		}
 	}
@@ -456,13 +508,25 @@ Node* Parser::parse_value() {
 			// FIXME: bool literals also belong here
 			auto id = parse_identifier();
 			Node* fn = resolve_value(id);
-			if (maybe_parse_opening_paren()) { // function/procedure call
-				auto args = parse_expression();
-				parse_closing_paren();
-				return new ProcCall(fn, args);
-			} else {
-				return fn;
+			bool has_paren = maybe_parse_opening_paren();
+			bool procedural = dynamic_cast<Procedure*>(fn) || dynamic_cast<OverloadSet*>(fn);
+			if (has_paren || procedural) {
+				std::vector<Node*> args;
+				if (has_paren) {
+					if (input_token != ")") {
+						args.push_back(parse_expression());
+						while (maybe_parse_comma()) {
+							args.push_back(parse_expression());
+						}
+					}
+					parse_closing_paren();
+				}
+				Node* callee = finalize_call(fn, args, id);
+				auto call = new ProcCall(callee, std::move(args));
+				call->ty = callee ? callee->ty : nullptr;
+				return call;
 			}
+			return fn;
 		}
 	}
 }
@@ -564,16 +628,36 @@ bool Parser::maybe_parse_greater_equal() {
 	}
 }
 
+// Helpers that construct a Node and set its result type in one expression.
+template<typename T> static Node* mk_arith(Node* a, Node* b) {
+	auto n = new T(a, b);
+	n->ty = common_arith_type(a->ty, b->ty);
+	return n;
+}
+template<typename T> static Node* mk_compare(Node* a, Node* b) {
+	auto n = new T(a, b);
+	n->ty = boolean_type();
+	return n;
+}
+template<typename T> static Node* mk_unary_same(Node* x) {
+	auto n = new T(x);
+	n->ty = x->ty;
+	return n;
+}
+
 Node* Parser::parse_power() {
 	// FIXME **
 	if (maybe_parse_keyword("not")) {
-		return new Not(parse_value());
+		return mk_unary_same<Not>(parse_value());
 	} else if (maybe_parse_at()) {
-		return new AddrOf(parse_value());
+		auto x = parse_value();
+		auto n = new AddrOf(x);
+		n->ty = x->ty ? static_cast<Type*>(new PointerType(x->ty)) : nullptr;
+		return n;
 	} else if (maybe_parse_minus()) {
-		return new Negate(parse_value());
+		return mk_unary_same<Negate>(parse_value());
 	} else if (maybe_parse_plus()) {
-		return new Positivize(parse_value());
+		return mk_unary_same<Positivize>(parse_value());
 	} else {
 		return parse_value();
 	}
@@ -583,25 +667,33 @@ Node* Parser::parse_product() {
 	auto result = parse_value();
 	while (true) {
 		if (maybe_parse_star()) {
-			result = new Multiply(result, parse_power());
+			result = mk_arith<Multiply>(result, parse_power());
 		} else if (maybe_parse_slash()) {
-			result = new Divide(result, parse_power());
+			// TODO: Pascal `/` returns Real regardless of operand types; needs
+			// a Real intrinsic before we can set ty correctly. Using
+			// common_arith_type as a placeholder.
+			result = mk_arith<Divide>(result, parse_power());
 		} else if (maybe_parse_keyword("div")) {
-			result = new Div(result, parse_power());
+			result = mk_arith<Div>(result, parse_power());
 		} else if (maybe_parse_keyword("mod")) {
-			result = new Mod(result, parse_power());
+			result = mk_arith<Mod>(result, parse_power());
 		} else if (maybe_parse_keyword("and")) {
-			result = new And(result, parse_power());
+			result = mk_arith<And>(result, parse_power());
 		} else if (maybe_parse_keyword("shl")) {
-			result = new ShiftLeft(result, parse_power());
+			result = mk_arith<ShiftLeft>(result, parse_power());
 		} else if (maybe_parse_keyword("shr")) {
-			result = new ShiftRight(result, parse_power());
+			result = mk_arith<ShiftRight>(result, parse_power());
 		} else if (maybe_parse_keyword("as")) {
-			result = new Coerce(result, parse_power());
+			// `x as T`: b is the parsed type-position expression whose ty is
+			// the target. Result type is that target.
+			auto rhs = parse_power();
+			auto n = new Coerce(result, rhs);
+			n->ty = rhs->ty;
+			result = n;
 		} else if (maybe_parse_less_less()) {
-			result = new ShiftLeft(result, parse_power());
+			result = mk_arith<ShiftLeft>(result, parse_power());
 		} else if (maybe_parse_greater_greater()) {
-			result = new ShiftRight(result, parse_power());
+			result = mk_arith<ShiftRight>(result, parse_power());
 		} else {
 			break;
 		}
@@ -613,14 +705,13 @@ Node* Parser::parse_sum() {
 	auto result = parse_product();
 	while (true) {
 		if (maybe_parse_plus()) {
-			result = new Add(result, parse_product());
+			result = mk_arith<Add>(result, parse_product());
 		} else if (maybe_parse_minus()) {
-			result = new Subtract(result, parse_product());
+			result = mk_arith<Subtract>(result, parse_product());
 		} else if (maybe_parse_keyword("or")) {
-			result = new Or(result, parse_product());
+			result = mk_arith<Or>(result, parse_product());
 		} else if (maybe_parse_keyword("xor")) {
-			result = new Xor(result, parse_product());
-		// ><
+			result = mk_arith<Xor>(result, parse_product());
 		} else {
 			break;
 		}
@@ -632,17 +723,17 @@ Node* Parser::parse_comparison() {
 	auto result = parse_sum();
 	while (true) {
 		if (maybe_parse_equal()) {
-			result = new Equal(result, parse_sum());
+			result = mk_compare<Equal>(result, parse_sum());
 		} else if (maybe_parse_less_greater()) {
-			result = new NotEqual(result, parse_sum());
+			result = mk_compare<NotEqual>(result, parse_sum());
 		} else if (maybe_parse_less()) {
-			result = new Less(result, parse_sum());
+			result = mk_compare<Less>(result, parse_sum());
 		} else if (maybe_parse_greater()) {
-			result = new Greater(result, parse_sum());
+			result = mk_compare<Greater>(result, parse_sum());
 		} else if (maybe_parse_less_equal()) {
-			result = new LessOrEqual(result, parse_sum());
+			result = mk_compare<LessOrEqual>(result, parse_sum());
 		} else if (maybe_parse_greater_equal()) {
-			result = new GreaterOrEqual(result, parse_sum());
+			result = mk_compare<GreaterOrEqual>(result, parse_sum());
 		} else {
 			break;
 		}
@@ -857,6 +948,11 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 			scope->register_type(name, lhs_placeholder);
 		}
 		Type* rhs = parse_type_expression(false);
+		// Attach the LHS Pascal name (as its C++ identifier) to record-family
+		// types so emit_type_ref has a name to spell.
+		if (auto r = dynamic_cast<RecordType*>(rhs)) r->cxx_name = pascal_to_cxx_name(name);
+		else if (auto c = dynamic_cast<ClassType*>(rhs)) c->cxx_name = pascal_to_cxx_name(name);
+		else if (auto o = dynamic_cast<ObjectType*>(rhs)) o->cxx_name = pascal_to_cxx_name(name);
 		lhs_placeholder->resolved = rhs;
 		scope->rebind_type(name, rhs);
 		parse_semicolon();
@@ -1050,53 +1146,87 @@ Node* Parser::maybe_parse_proc_attributes() {
 	// TODO: inline
 }
 
-Node* Parser::parse_proc_formal_parameters() {
+std::vector<Parameter> Parser::parse_proc_formal_parameters() {
+	std::vector<Parameter> result;
 	parse_opening_paren();
-	do {
-		// TODO: var, out.
-		// TODO: a,b: Integer;
-		auto id = parse_identifier();
-		// TODO: ",b,c,d"
-		parse_colon();
-		auto ty = parse_type_expression(false);
-		auto storage = new StorageSlot(pascal_to_cxx_name(id), ty);
-		// TODO: this registers formals into the enclosing scope, which is
-		// wrong (formals belong in the procedure's own body_frame). Fixed by
-		// the procedure refactor, which will pass an explicit target Frame*
-		// here. Until then, the target is scopes.back() and must be treated
-		// as non-const; the const_cast marks that this is a known escape.
-		const_cast<Frame*>(this->scopes.back().frame)->register_variable(id, storage, ty);
-		if (!maybe_parse_semicolon()) {
-			break;
-		}
-	} while (true);
+	if (input_token != ")") {
+		do {
+			ParamMode mode = ParamMode::Value;
+			if (maybe_parse_keyword("var"))        mode = ParamMode::Var;
+			else if (maybe_parse_keyword("out"))   mode = ParamMode::Out;
+			else if (maybe_parse_keyword("const")) mode = ParamMode::Const;
+			std::vector<std::string> names;
+			names.push_back(parse_identifier());
+			while (maybe_parse_comma()) names.push_back(parse_identifier());
+			parse_colon();
+			Type* ty = parse_type_expression(false);
+			Node* default_value = nullptr;
+			if (input_token == "=") {
+				if (names.size() > 1) {
+					raise_parse_error("default value not allowed with comma-grouped parameter names");
+				}
+				consume();
+				default_value = parse_expression();
+			}
+			for (auto& n : names) {
+				result.push_back(Parameter{n, pascal_to_cxx_name(n), ty, mode, default_value});
+			}
+		} while (maybe_parse_semicolon());
+	}
 	parse_closing_paren();
+	return result;
 }
 
-Node* Parser::parse_procedure_prototype() {
-	parse_keyword("procedure");
-	auto id = parse_identifier();
-	auto formal_parameters = parse_proc_formal_parameters();
-	maybe_parse_proc_attributes();
-}
-
-Node* Parser::parse_procedure() {
-	parse_procedure_prototype();
-	parse_block();
-}
-
-Node* Parser::parse_function_prototype() {
-	parse_keyword("function");
-	auto id = parse_identifier();
-	auto formal_parameters = parse_proc_formal_parameters();
-	parse_colon();
-	auto result_type = parse_type_expression(false);
-	maybe_parse_proc_attributes();
-}
-
-Node* Parser::parse_function() {
-	parse_function_prototype();
-	parse_block();
+void Parser::parse_procedure_or_function(bool is_function) {
+	parse_keyword(is_function ? "function" : "procedure");
+	std::string pas_name = parse_identifier();
+	std::vector<Parameter> formals = parse_proc_formal_parameters();
+	Type* return_type = &unit_type();
+	if (is_function) {
+		parse_colon();
+		return_type = parse_type_expression(false);
+	}
+	parse_semicolon();
+	bool has_overload = false;
+	while (peek_keyword("overload")) {
+		parse_keyword("overload");
+		has_overload = true;
+		parse_semicolon();
+	}
+	auto proc = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
+	                          std::move(formals), return_type, has_overload);
+	Frame* enclosing = const_cast<Frame*>(this->scopes.back().frame);
+	if (!enclosing->register_procedure(pas_name, proc)) {
+		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+	}
+	if (peek_keyword("forward")) {
+		parse_keyword("forward");
+		parse_semicolon();
+		// Prototype-only registration; body attached by a later definition.
+		// TODO: match a later definition against this prototype instead of
+		// treating it as a fresh registration (which currently errors as
+		// duplicate).
+		return;
+	}
+	Frame* body_frame = new Frame(enclosing);
+	proc->body_frame = body_frame;
+	push_scope(body_frame);
+	for (auto& p : proc->formals) {
+		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
+	}
+	if (emitter) emitter->emit_procedure_open(proc);
+	auto type_scope = maybe_parse_type_block(false);
+	auto const_scope = maybe_parse_const_block();
+	auto var_scope = maybe_parse_var_block();
+	parse_keyword("begin");
+	proc->body = parse_block_body();
+	parse_keyword("end");
+	parse_semicolon();
+	if (emitter) emitter->emit_procedure_close();
+	if (var_scope) pop_scope();
+	if (const_scope) pop_scope();
+	if (type_scope) pop_scope();
+	pop_scope(); // body_frame
 }
 
 Node* Parser::parse_constructor_prototype() {
@@ -1121,6 +1251,67 @@ Node* Parser::parse_destructor_prototype() {
 Node* Parser::parse_destructor() {
 	parse_destructor_prototype();
 	parse_block();
+}
+
+// Score an overload candidate against the parsed args. Returns -1 for
+// no-match; nonnegative sums of conversion_cost otherwise.
+static int score_overload(Procedure* proc, const std::vector<Node*>& args) {
+	if (args.size() > proc->formals.size()) return -1;
+	int total = 0;
+	for (size_t i = 0; i < args.size(); i++) {
+		Type* from = args[i] ? args[i]->ty : nullptr;
+		int c = conversion_cost(from, proc->formals[i].ty);
+		if (c < 0) return -1;
+		total += c;
+	}
+	for (size_t i = args.size(); i < proc->formals.size(); i++) {
+		if (!proc->formals[i].default_value) return -1;
+	}
+	return total;
+}
+
+Node* Parser::finalize_call(Node* fn, std::vector<Node*>& args, std::string name_for_error) {
+	Procedure* proc = nullptr;
+	if (auto p = dynamic_cast<Procedure*>(fn)) {
+		proc = p;
+	} else if (auto os = dynamic_cast<OverloadSet*>(fn)) {
+		int best = -1;
+		Procedure* winner = nullptr;
+		bool tied = false;
+		for (auto* p : os->members) {
+			int s = score_overload(p, args);
+			if (s < 0) continue;
+			if (winner == nullptr || s < best) { best = s; winner = p; tied = false; }
+			else if (s == best) tied = true;
+		}
+		if (!winner) raise_parse_error("no matching overload for '" + name_for_error + "'");
+		if (tied) raise_parse_error("ambiguous overload for '" + name_for_error + "'");
+		proc = winner;
+	} else {
+		// Builtin or other callable Node -- leave args as-is (no formal-typed
+		// coercion / defaults) and return the original callee unchanged.
+		return fn;
+	}
+	// Materialize missing args from defaults.
+	while (args.size() < proc->formals.size()) {
+		auto& p = proc->formals[args.size()];
+		if (!p.default_value) {
+			raise_parse_error("missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
+		}
+		args.push_back(p.default_value);
+	}
+	if (args.size() > proc->formals.size()) {
+		raise_parse_error("too many arguments to '" + name_for_error + "'");
+	}
+	// Insert Cast for any arg whose type differs from the formal.
+	for (size_t i = 0; i < args.size(); i++) {
+		Type* target = proc->formals[i].ty;
+		Type* source = args[i]->ty;
+		if (source != target) {
+			args[i] = new Cast(args[i], target);
+		}
+	}
+	return proc;
 }
 
 Unit* Parser::load_or_get_unit(std::string name) {
@@ -1227,6 +1418,9 @@ Node* Parser::parse_program_or_unit() {
 		auto type_scope = maybe_parse_type_block(false);
 		auto const_scope = maybe_parse_const_block();
 		auto var_scope = maybe_parse_var_block();
+		while (peek_keyword("procedure") || peek_keyword("function")) {
+			parse_procedure_or_function(peek_keyword("function"));
+		}
 		parse_keyword("begin");
 		if (emitter) emitter->emit_main_prologue();
 		auto body = parse_block_body();

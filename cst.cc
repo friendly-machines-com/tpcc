@@ -34,7 +34,8 @@ Divide::Divide(Node* a, Node* b) : BinaryOperation(a, b) {}
 Xor::Xor(Node* a, Node* b) : BinaryOperation(a, b) {}
 And::And(Node* a, Node* b) : BinaryOperation(a, b) {}
 Or::Or(Node* a, Node* b) : BinaryOperation(a, b) {}
-ProcCall::ProcCall(Node* a, Node* b) : BinaryOperation(a, b) {}
+ProcCall::ProcCall(Node* callee, std::vector<Node*> args)
+	: callee(callee), args(std::move(args)) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
 ShiftLeft::ShiftLeft(Node* a, Node* b) : BinaryOperation(a, b) {}
@@ -55,13 +56,33 @@ Return::Return(Node* a) : UnaryOperation(a) {}
 Negate::Negate(Node* a) : UnaryOperation(a) {}
 Positivize::Positivize(Node* a) : UnaryOperation(a) {}
 AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
+Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
 
 StorageSlot::StorageSlot(std::string cxx_name, Type* ty) {
 	this->cxx_name = cxx_name;
 	this->ty = ty;
 }
 
-Constant::Constant(uint64_t value) {
+Constant::Constant(uint64_t value, Type* ty) {
 	this->value = value;
+	this->ty = ty;
 }
+
+Procedure::Procedure(std::string pas_name,
+                     std::string cxx_name,
+                     std::vector<Parameter> formals,
+                     Type* return_type,
+                     bool has_overload_directive)
+	: pas_name(std::move(pas_name)),
+	  cxx_name(std::move(cxx_name)),
+	  formals(std::move(formals)),
+	  return_type(return_type),
+	  has_overload_directive(has_overload_directive),
+	  body(nullptr),
+	  body_frame(nullptr) {
+	this->ty = return_type;
+}
+
+OverloadSet::OverloadSet(std::string pas_name, std::vector<Procedure*> members)
+	: pas_name(std::move(pas_name)), members(std::move(members)) {}
 

@@ -87,6 +87,12 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(out, ";\n");
 		return;
 	}
+	if (auto pc = dynamic_cast<ProcCall*>(stmt)) {
+		fprintf(out, "\t");
+		emit_expression(pc);
+		fprintf(out, ";\n");
+		return;
+	}
 	unhandled_node("emit_statement", stmt);
 }
 
@@ -106,6 +112,63 @@ void Emitter::emit_with_epilogue() {
 	fprintf(out, "\t}\n");
 }
 
+void Emitter::emit_procedure_open(Procedure* p) {
+	if (!out) return;
+	fprintf(out, "\n");
+	emit_type_ref(p->return_type);
+	fprintf(out, " %s(", p->cxx_name.c_str());
+	for (size_t i = 0; i < p->formals.size(); i++) {
+		if (i > 0) fprintf(out, ", ");
+		auto& f = p->formals[i];
+		if (f.mode == ParamMode::Const) fprintf(out, "const ");
+		emit_type_ref(f.ty);
+		if (f.mode == ParamMode::Var || f.mode == ParamMode::Out
+		    || f.mode == ParamMode::Const) {
+			fprintf(out, "&");
+		}
+		fprintf(out, " %s", f.cxx_name.c_str());
+	}
+	fprintf(out, ") {\n");
+}
+
+void Emitter::emit_procedure_close() {
+	if (!out) return;
+	fprintf(out, "}\n");
+}
+
+// Result-type of the whole expression drives the choice between bitwise and
+// short-circuit for `and`/`or`; other ops have a unique mapping.
+static const char* cxx_binary_operator(BinaryOperation* op) {
+	bool booleans = op->ty == boolean_type();
+	if (dynamic_cast<Add*>(op))            return "+";
+	if (dynamic_cast<Subtract*>(op))       return "-";
+	if (dynamic_cast<Multiply*>(op))       return "*";
+	if (dynamic_cast<Divide*>(op))         return "/";
+	if (dynamic_cast<Div*>(op))            return "/";
+	if (dynamic_cast<Mod*>(op))            return "%";
+	if (dynamic_cast<And*>(op))            return booleans ? "&&" : "&";
+	if (dynamic_cast<Or*>(op))             return booleans ? "||" : "|";
+	if (dynamic_cast<Xor*>(op))            return "^";
+	if (dynamic_cast<ShiftLeft*>(op))      return "<<";
+	if (dynamic_cast<ShiftRight*>(op))     return ">>";
+	if (dynamic_cast<Equal*>(op))          return "==";
+	if (dynamic_cast<NotEqual*>(op))       return "!=";
+	if (dynamic_cast<Less*>(op))           return "<";
+	if (dynamic_cast<Greater*>(op))        return ">";
+	if (dynamic_cast<LessOrEqual*>(op))    return "<=";
+	if (dynamic_cast<GreaterOrEqual*>(op)) return ">=";
+	return nullptr;
+}
+
+static const char* cxx_unary_operator(UnaryOperation* op) {
+	if (dynamic_cast<Not*>(op))         return "!";
+	if (dynamic_cast<Negate*>(op))      return "-";
+	if (dynamic_cast<Positivize*>(op))  return "+";
+	if (dynamic_cast<AddrOf*>(op))      return "&";
+	if (dynamic_cast<Dereference*>(op)) return "*";
+	return nullptr;
+}
+
 void Emitter::emit_expression(Node* expr) {
 	if (!out) return;
 	if (auto c = dynamic_cast<Constant*>(expr)) {
@@ -116,19 +179,99 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(out, "%s", s->cxx_name.c_str());
 		return;
 	}
+	if (auto b = dynamic_cast<Builtin*>(expr)) {
+		fprintf(out, "%.*s", (int)b->desc->rtl_name.size(), b->desc->rtl_name.data());
+		return;
+	}
+	if (auto p = dynamic_cast<Procedure*>(expr)) {
+		fprintf(out, "%s", p->cxx_name.c_str());
+		return;
+	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
 		emit_expression(m->a);
 		fprintf(out, ".");
 		emit_expression(m->b);
 		return;
 	}
+	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
+		emit_expression(pc->callee);
+		fprintf(out, "(");
+		for (size_t i = 0; i < pc->args.size(); i++) {
+			if (i > 0) fprintf(out, ", ");
+			emit_expression(pc->args[i]);
+		}
+		fprintf(out, ")");
+		return;
+	}
+	if (auto ca = dynamic_cast<Cast*>(expr)) {
+		fprintf(out, "static_cast<");
+		emit_type_ref(ca->ty);
+		fprintf(out, ">(");
+		emit_expression(ca->a);
+		fprintf(out, ")");
+		return;
+	}
+	if (auto co = dynamic_cast<Coerce*>(expr)) {
+		fprintf(out, "static_cast<");
+		emit_type_ref(co->ty);
+		fprintf(out, ">(");
+		emit_expression(co->a);
+		fprintf(out, ")");
+		return;
+	}
+	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
+		if (const char* op = cxx_unary_operator(u)) {
+			fprintf(out, "%s", op);
+			emit_expression(u->a);
+			return;
+		}
+	}
+	if (auto bin = dynamic_cast<BinaryOperation*>(expr)) {
+		if (const char* op = cxx_binary_operator(bin)) {
+			fprintf(out, "(");
+			emit_expression(bin->a);
+			fprintf(out, " %s ", op);
+			emit_expression(bin->b);
+			fprintf(out, ")");
+			return;
+		}
+	}
 	unhandled_node("emit_expression", expr);
 }
 
 void Emitter::emit_type_ref(Type* ty) {
 	if (!out) return;
+	// Follow IncompleteType placeholders through to the real underlying type.
+	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
+		if (!inc->resolved) break;
+		ty = inc->resolved;
+	}
 	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
 		fprintf(out, "%.*s", (int)it->rtl_name.size(), it->rtl_name.data());
+		return;
+	}
+	if (dynamic_cast<UnitType*>(ty)) {
+		fprintf(out, "void");
+		return;
+	}
+	// TODO: emit struct definitions at type-block time and then just spell
+	// the name here. For now, spell the name if we have one; leave a comment
+	// where struct emission has to land.
+	if (auto r = dynamic_cast<RecordType*>(ty)) {
+		fprintf(out, "%s /*record*/", r->cxx_name.empty() ? "struct{}" : r->cxx_name.c_str());
+		return;
+	}
+	if (auto c = dynamic_cast<ClassType*>(ty)) {
+		fprintf(out, "%s /*class*/", c->cxx_name.empty() ? "struct{}" : c->cxx_name.c_str());
+		return;
+	}
+	if (auto o = dynamic_cast<ObjectType*>(ty)) {
+		fprintf(out, "%s /*object*/", o->cxx_name.empty() ? "struct{}" : o->cxx_name.c_str());
+		return;
+	}
+	if (auto p = dynamic_cast<PointerType*>(ty)) {
+		emit_type_ref(p->item_type);
+		fprintf(out, "*");
 		return;
 	}
 	unhandled_type("emit_type_ref", ty);

@@ -41,16 +41,21 @@ struct FixedSetType: public Type {
 
 struct RecordType: public Type {
 	Frame* children;
+	// C++ identifier emitted for this record. Empty until the containing
+	// type-block declaration assigns it (parse_type_block).
+	std::string cxx_name;
 	RecordType(Frame* children);
 };
 
 struct ClassType: public Type {
 	Frame* children;
+	std::string cxx_name;
 	ClassType(Frame* children);
 };
 
 struct ObjectType: public Type {
 	Frame* children;
+	std::string cxx_name;
 	ObjectType(Frame* children);
 };
 
@@ -59,8 +64,26 @@ struct PointerType: public Type {
 	PointerType(Type* item_type);
 };
 
-struct UnitType: public Type {
+/** The type of a Pascal `unit X;` module. Renamed from UnitType to avoid
+ *  colliding with the type-theoretic UnitType (one-inhabitant type) below. */
+struct ModuleType: public Type {
 	Frame* interface_children;
 	Frame* implementation_children;
-	UnitType(Frame* interface_children, Frame* implementation_children);
+	ModuleType(Frame* interface_children, Frame* implementation_children);
+};
+
+/** The type-theoretic Unit (one inhabitant). Represents the "return type" of
+ *  a Pascal procedure -- procedures do return, they just return no meaningful
+ *  value. Not a Pascal-visible type; a shared singleton instance is registered
+ *  in the root frame under no Pascal name. Emitted as C++ `void`. */
+struct UnitType: public Type {
+	UnitType();
+};
+
+/** The type of a numeric literal before context pins it to a specific integer
+ *  type. Widens to any concrete integer type at conversion cost 0 when the
+ *  literal value fits. Shared singleton in the root frame; not registered
+ *  under any Pascal name. */
+struct UntypedIntegerType: public Type {
+	UntypedIntegerType();
 };

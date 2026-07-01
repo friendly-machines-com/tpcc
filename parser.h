@@ -11,6 +11,7 @@ class Type;
 class Unit;
 class UnitRegistry;
 class Emitter;
+struct Parameter;
 
 class ParserInputFile {
 public:
@@ -113,6 +114,12 @@ protected:
 	 *  already registered. Search order for the file: directory of the current
 	 *  input file, then CWD. */
 	Unit* load_or_get_unit(std::string name);
+	/** Given a resolved callee (Procedure, OverloadSet, or Builtin) and parsed
+	 *  arguments, pick the concrete callee (running overload ranking if it's a
+	 *  set), materialize defaults, and insert Cast coercions where needed.
+	 *  Returns the finalized callee Node* (Procedure or Builtin) to place in
+	 *  ProcCall.callee. Errors on no-match, ambiguous overload, or bad args. */
+	Node* finalize_call(Node* fn, std::vector<Node*>& args, std::string name_for_error);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();
@@ -136,15 +143,18 @@ protected:
 	void push_with_scope(const Frame* scope, Node* unwrap_via);
 	void pop_scope();
 	Node* maybe_parse_proc_attributes();
-	Node* parse_procedure_prototype();
-	Node* parse_procedure();
-	Node* parse_function_prototype();
-	Node* parse_function();
+	/** Parse `procedure NAME(...);` (is_function=false) or
+	 *  `function NAME(...): T;` (is_function=true). Attribute list (`overload;`)
+	 *  is consumed after the terminating `;`. If followed by a body, parses
+	 *  it into a fresh body_frame; if followed by `forward;`, leaves body
+	 *  null. Registers the resulting Procedure in the current scope and emits
+	 *  the signature/body when an emitter is attached. */
+	void parse_procedure_or_function(bool is_function);
 	Node* parse_constructor_prototype();
 	Node* parse_constructor();
 	Node* parse_destructor_prototype();
 	Node* parse_destructor();
-	Node* parse_proc_formal_parameters();
+	std::vector<Parameter> parse_proc_formal_parameters();
 
 	[[noreturn]] Node* raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
