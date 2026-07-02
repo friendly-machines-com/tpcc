@@ -42,6 +42,7 @@ UntypedIntegerType& untyped_integer_type() {
 }
 
 Type* boolean_type() { return &k_boolean; }
+Type* shortstring_type() { return &k_shortstring; }
 
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.

@@ -232,8 +232,21 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 
 void Emitter::emit_expression(Node* expr) {
 	if (!out) return;
-	if (auto c = dynamic_cast<Constant*>(expr)) {
+	if (auto c = dynamic_cast<Integer*>(expr)) {
 		fprintf(out, "%llu", (unsigned long long)c->value);
+		return;
+	}
+	if (auto s = dynamic_cast<String*>(expr)) {
+		fputc('"', out);
+		for (char ch : s->value) {
+			if (ch == '"' || ch == '\\') fputc('\\', out);
+			if ((unsigned char)ch < 0x20) {
+				fprintf(out, "\\x%02x", (unsigned char)ch);
+			} else {
+				fputc(ch, out);
+			}
+		}
+		fputc('"', out);
 		return;
 	}
 	if (auto s = dynamic_cast<StorageSlot*>(expr)) {

@@ -157,10 +157,16 @@ struct StorageSlot: public Node {
 	StorageSlot(std::string cxx_name, Type* ty);
 };
 
-class Constant: public Node {
+class Integer: public Node {
 public:
 	uint64_t value;
-	Constant(uint64_t value, Type* ty);
+	Integer(uint64_t value, Type* ty);
+};
+
+class String: public Node {
+public:
+	std::string value;
+	String(std::string value, Type* ty);
 };
 
 class ShiftLeft: public BinaryOperation {

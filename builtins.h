@@ -61,6 +61,7 @@ UntypedIntegerType& untyped_integer_type();
 
 // Cached lookups of frequently-referenced intrinsics from root_frame().
 Type* boolean_type();
+Type* shortstring_type();
 
 // Result type of an arithmetic/bitwise binary op given operand types. Handles
 // UntypedInteger adaptation and integer widening; returns nullptr if the two

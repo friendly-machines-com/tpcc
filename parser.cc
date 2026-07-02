@@ -413,15 +413,19 @@ std::string Parser::consume() {
 	} else if (input_char == '\'') {
 		sst << (char) input_char;
 		consume_lowlevel();
-		while (input_char != EOF && input_char != '\'') {
+		while (true) {
+			while (input_char != EOF && input_char != '\'') {
+				sst << (char) input_char;
+				consume_lowlevel();
+			}
+			if (input_char != '\'') { raise_parse_error("missing end quote"); }
 			sst << (char) input_char;
 			consume_lowlevel();
-		}
-		if (input_char == '\'') {
+			// A doubled quote inside the string represents one literal
+			// quote character; consume it and keep going.
+			if (input_char != '\'') break;
 			sst << (char) input_char;
 			consume_lowlevel();
-		} else {
-			raise_parse_error("missing end quote");
 		}
 	} else if (input_char == '{') {
 		sst << (char) input_char;
@@ -615,7 +619,7 @@ Node* Parser::maybe_parse_numeral() {
 				return raise_parse_error("malformed numeral: " + input_token);
 			}
 			// FIXME: continue for non-integer here.
-			auto lit = new Constant(value, &untyped_integer_type());
+			auto lit = new Integer(value, &untyped_integer_type());
 			consume();
 			return lit;
 		} else {
@@ -720,16 +724,20 @@ Node* Parser::parse_value() {
 		auto result = parse_expression();
 		parse_closing_paren();
 		return result;
-	} else {
-		auto result = maybe_parse_numeral();
-		if (result) {
-			return result;
-		} else {
-			// FIXME: bool literals also belong here
-			auto id = parse_identifier();
-			return resolve_value(id);
-		}
 	}
+	if (auto n = maybe_parse_numeral()) return n;
+	if (!input_token.empty() && input_token.front() == '\'') {
+		std::string s;
+		for (size_t i = 1; i + 1 < input_token.size(); ++i) {
+			s.push_back(input_token[i]);
+			if (input_token[i] == '\'' && i + 2 < input_token.size() && input_token[i + 1] == '\'') ++i;
+		}
+		consume();
+		return new String(std::move(s), shortstring_type());
+	}
+	// FIXME: bool literals also belong here (need enum-member support).
+	auto id = parse_identifier();
+	return resolve_value(id);
 }
 
 bool Parser::maybe_parse_at() {

@@ -64,8 +64,13 @@ StorageSlot::StorageSlot(std::string cxx_name, Type* ty) {
 	this->ty = ty;
 }
 
-Constant::Constant(uint64_t value, Type* ty) {
+Integer::Integer(uint64_t value, Type* ty) {
 	this->value = value;
+	this->ty = ty;
+}
+
+String::String(std::string value, Type* ty) {
+	this->value = std::move(value);
 	this->ty = ty;
 }
 
