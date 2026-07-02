@@ -274,6 +274,10 @@ public:
 	// onto its own FILE* via ungetc so it resumes exactly on that byte
 	// after pop_input_file.
 	void push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number);
+	// Same as push_input_file, but transfers ownership of a heap buffer
+	// that backs `input_file` (an fmemopen result). The buffer stays alive
+	// with the input entry and is released when the entry is popped.
+	void push_input_file_and_buffer(FILE* input_file, std::string input_file_name, int input_file_line_number, std::unique_ptr<char[]> buffer, size_t buffer_len);
 	void pop_input_file();
 	void start();
 	Node* parse_program_or_unit();

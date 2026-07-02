@@ -85,6 +85,9 @@ int Parser::consume_lowlevel() {
 	return result;
 }
 void Parser::push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number) {
+	push_input_file_and_buffer(input_file, input_file_name, input_file_line_number, nullptr, 0);
+}
+void Parser::push_input_file_and_buffer(FILE* input_file, std::string input_file_name, int input_file_line_number, std::unique_ptr<char[]> buffer, size_t buffer_len) {
 	// If we're mid-parse, the tokenizer has one character already read from
 	// the current source sitting in input_char. Push it back onto that
 	// FILE*'s stream so the parent resumes on exactly the right byte after
@@ -95,7 +98,9 @@ void Parser::push_input_file(FILE* input_file, std::string input_file_name, int 
 	input_files.push_back(ParserInputFile {
 		.input_file = input_file,
 		.input_file_name = input_file_name,
-		.input_file_line_number = input_file_line_number
+		.input_file_line_number = input_file_line_number,
+		.owned_buffer = std::move(buffer),
+		.owned_buffer_len = buffer_len,
 	});
 	this->input_file = input_file;
 	this->input_file_name = input_file_name;
@@ -325,13 +330,15 @@ void Parser::handle_directive(const std::string& body) {
 		return;
 	}
 	if (name == "i" || name == "include") {
-		// {$I %MACRO%} is a distinct form: NAME is looked up as a compiler
-		// macro (%DATE%, %TIME%, %LINE%, %FILE%, ...) or environment variable
-		// and expanded as an inline Pascal string literal, not a file lookup.
-		// Not yet implemented; hard-error separately so a real missing-file
-		// diagnostic doesn't get muddled with an unsupported macro form.
 		if (rest.size() >= 2 && rest.front() == '%' && rest.back() == '%') {
-			raise_parse_error("{$I " + rest + "} macro form not implemented");
+			std::string literal = expand_include_macro(rest);
+			size_t n = literal.size();
+			auto buf = std::make_unique<char[]>(n);
+			memcpy(buf.get(), literal.data(), n);
+			FILE* f = fmemopen(buf.get(), n, "r");
+			if (!f) raise_parse_error("fmemopen failed for {$I " + rest + "}");
+			push_input_file_and_buffer(f, "<" + rest + ">", 1, std::move(buf), n);
+			return;
 		}
 		std::vector<std::string> empty;
 		auto [f, path] = resolve_include(rest, input_file_name,
@@ -419,21 +426,17 @@ std::string Parser::consume() {
 	} else if (input_char == '{') {
 		sst << (char) input_char;
 		consume_lowlevel();
-		if (input_char == '$') { // {$I ...
-			sst << (char) input_char;
-			consume_lowlevel();
+		if (input_char == '$') {
+			consume_lowlevel(); // skip $
+			std::string body;
 			while (input_char != EOF && input_char != '}') {
-				sst << (char) input_char;
+				body.push_back((char) input_char);
 				consume_lowlevel();
 			}
-			if (input_char == '}') {
-				sst << (char) input_char;
-				consume_lowlevel();
-				// FIXME: push_input_file
-				return consume();
-			} else {
-				raise_parse_error("missing end comment");
-			}
+			if (input_char != '}') raise_parse_error("missing end comment");
+			consume_lowlevel(); // skip }
+			handle_directive(body);
+			return consume();
 		} else {
 			while (input_char != EOF && input_char != '}') {
 				sst << (char) input_char;
