@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <charconv>
+#include <functional>
 #include <optional>
 #include <sstream>
 #include <set>
@@ -121,6 +122,206 @@ void Parser::pop_scope() {
 
 [[noreturn]] Type* Parser::raise_type_parse_error(std::string message) {
 	emit_parse_error(input_file_name, input_file_line_number, message);
+}
+
+bool Parser::is_defined(const std::string& sym) const {
+	return options && options->defines.count(sym) > 0;
+}
+
+// Evaluate a `{$if ...}` condition. Grammar: `defined(X)` or bare `X` (short
+// for `defined(X)`), combined with `not`, `and`, `or`, and parentheses.
+// Unrecognised syntax raises a parse error.
+bool Parser::eval_directive_expr(const std::string& expr) const {
+	size_t p = 0;
+	auto skip_ws = [&]() {
+		while (p < expr.size() && (expr[p] == ' ' || expr[p] == '\t')) p++;
+	};
+	auto peek_word = [&]() -> std::string {
+		skip_ws();
+		size_t q = p;
+		while (q < expr.size() && (isalnum((unsigned char)expr[q]) || expr[q] == '_')) q++;
+		return expr.substr(p, q - p);
+	};
+	auto lower = [](const std::string& s) {
+		std::string r;
+		for (char c : s) r.push_back((char)tolower((unsigned char)c));
+		return r;
+	};
+	std::function<bool()> parse_or;
+	std::function<bool()> parse_atom = [&]() -> bool {
+		skip_ws();
+		if (p < expr.size() && expr[p] == '(') {
+			p++;
+			bool v = parse_or();
+			skip_ws();
+			if (p >= expr.size() || expr[p] != ')') {
+				raise_parse_error("missing ')' in {$if ...} expression");
+			}
+			p++;
+			return v;
+		}
+		std::string w = peek_word();
+		std::string lw = lower(w);
+		if (lw == "not") { p += w.size(); return !parse_atom(); }
+		if (lw == "defined") {
+			p += w.size();
+			skip_ws();
+			if (p >= expr.size() || expr[p] != '(') {
+				raise_parse_error("expected '(' after 'defined' in {$if ...}");
+			}
+			p++;
+			std::string sym = peek_word();
+			if (sym.empty()) raise_parse_error("expected identifier in defined(...)");
+			p += sym.size();
+			skip_ws();
+			if (p >= expr.size() || expr[p] != ')') {
+				raise_parse_error("missing ')' in defined(...)");
+			}
+			p++;
+			return is_defined(sym);
+		}
+		if (!w.empty()) {
+			p += w.size();
+			return is_defined(w);
+		}
+		raise_parse_error("unrecognised token in {$if ...}: '" + expr.substr(p) + "'");
+	};
+	auto parse_and = [&]() -> bool {
+		bool v = parse_atom();
+		while (true) {
+			skip_ws();
+			if (lower(peek_word()) != "and") break;
+			p += peek_word().size();
+			bool r = parse_atom();
+			v = v && r;
+		}
+		return v;
+	};
+	parse_or = [&]() -> bool {
+		bool v = parse_and();
+		while (true) {
+			skip_ws();
+			if (lower(peek_word()) != "or") break;
+			p += peek_word().size();
+			bool r = parse_and();
+			v = v || r;
+		}
+		return v;
+	};
+	bool result = parse_or();
+	skip_ws();
+	if (p != expr.size()) {
+		raise_parse_error("unrecognised trailing form in {$if ...}: '"
+		                  + expr.substr(p) + "'");
+	}
+	return result;
+}
+
+// Split BODY into (directive_name_lowercased, argument-after-name-trimmed).
+static std::pair<std::string, std::string> split_directive(const std::string& body) {
+	size_t p = 0;
+	while (p < body.size() && (body[p] == ' ' || body[p] == '\t')) p++;
+	std::string name;
+	while (p < body.size() && (isalnum((unsigned char)body[p]) || body[p] == '_')) {
+		name.push_back((char)tolower((unsigned char)body[p]));
+		p++;
+	}
+	while (p < body.size() && (body[p] == ' ' || body[p] == '\t')) p++;
+	std::string rest = body.substr(p);
+	while (!rest.empty() && (rest.back() == ' ' || rest.back() == '\t'
+	                         || rest.back() == '\r' || rest.back() == '\n')) rest.pop_back();
+	return {name, rest};
+}
+
+// Search for an include file: current input file's directory, then each
+// entry in include search paths. The filename is used as given (no
+// extension guessing).
+static std::pair<FILE*, std::string> resolve_include(
+    const std::string& name,
+    const std::string& current_input,
+    const std::vector<std::string>& search_paths)
+{
+	std::vector<std::string> dirs;
+	std::string cur_dir;
+	auto slash = current_input.find_last_of('/');
+	if (slash != std::string::npos) cur_dir = current_input.substr(0, slash + 1);
+	dirs.push_back(cur_dir);
+	for (auto& d : search_paths) {
+		std::string s = d;
+		if (!s.empty() && s.back() != '/') s.push_back('/');
+		dirs.push_back(s);
+	}
+	for (auto& d : dirs) {
+		std::string candidate = d + name;
+		if (FILE* f = fopen(candidate.c_str(), "r")) return {f, candidate};
+	}
+	return {nullptr, ""};
+}
+
+void Parser::handle_directive(const std::string& body) {
+	auto [name, rest] = split_directive(body);
+	if (name == "ifdef" || name == "ifndef") {
+		bool outer = current_active();
+		bool cond = is_defined(rest);
+		if (name == "ifndef") cond = !cond;
+		ifdef_stack.push_back({outer, cond, outer && cond});
+		return;
+	}
+	if (name == "if") {
+		bool outer = current_active();
+		bool cond = eval_directive_expr(rest);
+		ifdef_stack.push_back({outer, cond, outer && cond});
+		return;
+	}
+	if (name == "else") {
+		if (ifdef_stack.empty()) raise_parse_error("$else without matching $ifdef");
+		auto& f = ifdef_stack.back();
+		bool now = f.outer && !f.taken;
+		f.active = now;
+		f.taken = f.taken || now;
+		return;
+	}
+	if (name == "elseif") {
+		if (ifdef_stack.empty()) raise_parse_error("$elseif without matching $ifdef");
+		auto& f = ifdef_stack.back();
+		bool now = f.outer && !f.taken && eval_directive_expr(rest);
+		f.active = now;
+		f.taken = f.taken || now;
+		return;
+	}
+	if (name == "endif" || name == "ifend") {
+		if (ifdef_stack.empty()) raise_parse_error("$endif without matching $ifdef");
+		ifdef_stack.pop_back();
+		return;
+	}
+	if (!current_active()) return;
+	if (name == "define") {
+		if (options) options->defines[rest] = "";
+		return;
+	}
+	if (name == "undef") {
+		if (options) options->defines.erase(rest);
+		return;
+	}
+	if (name == "i" || name == "include") {
+		// {$I %MACRO%} is a distinct form: NAME is looked up as a compiler
+		// macro (%DATE%, %TIME%, %LINE%, %FILE%, ...) or environment variable
+		// and expanded as an inline Pascal string literal, not a file lookup.
+		// Not yet implemented; hard-error separately so a real missing-file
+		// diagnostic doesn't get muddled with an unsupported macro form.
+		if (rest.size() >= 2 && rest.front() == '%' && rest.back() == '%') {
+			raise_parse_error("{$I " + rest + "} macro form not implemented");
+		}
+		std::vector<std::string> empty;
+		auto [f, path] = resolve_include(rest, input_file_name,
+		                                 options ? options->include_search_paths : empty);
+		if (!f) raise_parse_error("cannot open include file: " + rest);
+		push_input_file(f, path, 1);
+		input_char = fgetc(input_file);
+		return;
+	}
+	// Other directives are accepted here for now. As we hit code where the
+	// current no-op is wrong, tighten by name.
 }
 
 std::string Parser::consume() {
