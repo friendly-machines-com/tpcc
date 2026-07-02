@@ -43,8 +43,8 @@ static std::unordered_set<std::string> keywords = {
 	"with",
 };
 
-Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter)
-	: unit_registry(unit_registry), emitter(emitter) {
+Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options)
+	: unit_registry(unit_registry), emitter(emitter), options(options) {
 }
 void Parser::pop_input_file() {
 	assert(!input_files.empty());
@@ -1572,7 +1572,7 @@ Unit* Parser::load_or_get_unit(std::string name) {
 	if (!f) raise_parse_error("cannot find unit file for: " + name);
 	// Nested Parser so the sub-load has its own token/scope state; the shared
 	// unit_registry is what lets circular-dep detection work across the two.
-	Parser sub(unit_registry, nullptr);
+	Parser sub(unit_registry, nullptr, options);
 	sub.push_input_file(f, opened, 1);
 	sub.start();
 	sub.parse_program_or_unit();

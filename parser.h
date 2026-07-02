@@ -3,6 +3,7 @@
 #include <string>
 #include <stack>
 #include <vector>
+#include <map>
 #include <optional>
 
 class Node;
@@ -12,6 +13,22 @@ class Unit;
 class UnitRegistry;
 class Emitter;
 struct Parameter;
+
+/** Shared compiler-wide options set from the command line and consulted by
+ *  the tokenizer's directive handling and by unit/include file lookup. One
+ *  instance lives in main; every Parser (main plus sub-parsers spawned by
+ *  `uses` loading) reads from it and can mutate `defines` via `{$define}` /
+ *  `{$undef}` seen in source. */
+struct CompilerOptions {
+	// Symbol -> value ("" for boolean defines). Populated from -d<sym>[:=<val>]
+	// and from {$define} directives.
+	std::map<std::string, std::string> defines;
+	// -Fu<path> entries. load_or_get_unit walks these when a `uses` name
+	// isn't in the current-input dir or CWD.
+	std::vector<std::string> unit_search_paths;
+	// -Fi<path> entries. Used by {$i <file>} include-file resolution.
+	std::vector<std::string> include_search_paths;
+};
 
 class ParserInputFile {
 public:
@@ -57,6 +74,36 @@ private:
 	// sub-parsers loading a `uses`d unit until unit-level emission (.h/.cc
 	// per unit) is implemented.
 	Emitter* emitter;
+	// Shared across the top-level parser and any sub-parsers it spawns.
+	CompilerOptions* options;
+	// One frame per open {$ifdef}/{$if}/{$ifndef}. Empty = top of file, always
+	// active. `outer` records the enclosing state at push time so $else and
+	// $elseif can restore correctly. `taken` records whether any prior branch
+	// at this level has been taken (so $else after a taken $if doesn't
+	// re-activate). `active` is the current visible state; the tokenizer skips
+	// tokens whenever the top frame's active is false.
+	struct IfdefFrame {
+		bool outer;
+		bool taken;
+		bool active;
+	};
+	std::vector<IfdefFrame> ifdef_stack;
+	// True when no frame is inactive (or the stack is empty). Tokenizer drops
+	// non-directive tokens when this is false.
+	bool current_active() const {
+		return ifdef_stack.empty() || ifdef_stack.back().active;
+	}
+	// Interpret the body of a `{$...}` directive (without the leading `$` or
+	// trailing `}`). Handles ifdef/ifndef/if/else/elseif/endif/define/undef/
+	// include; other directives are consumed and ignored.
+	void handle_directive(const std::string& body);
+	// True when SYM was passed via `-d` or `{$define SYM}`.
+	bool is_defined(const std::string& sym) const;
+	// Tiny evaluator for `{$if ...}` conditions: supports `defined(X)`,
+	// `not`, `and`, `or`, and parentheses. Numeric compares are not yet
+	// implemented; a condition mp doesn't understand evaluates to true and
+	// logs a note (so we don't silently drop needed code).
+	bool eval_directive_expr(const std::string& expr) const;
 protected:
 	std::string input_token;
 	Node* parse_block_body();
@@ -203,7 +250,7 @@ protected:
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 
 public:
-	Parser(UnitRegistry* unit_registry, Emitter* emitter);
+	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);
 	void push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number);
 	void pop_input_file();
 	void start();
