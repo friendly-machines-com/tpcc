@@ -1,7 +1,9 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 #include <charconv>
+#include <format>
 #include <functional>
 #include <optional>
 #include <sstream>
@@ -55,12 +57,14 @@ void Parser::pop_input_file() {
 		input_file = nullptr;
 		input_file_name = "";
 		input_file_line_number = 0;
+		input_char = EOF;
 		return;
 	}
 	auto& p = input_files.back();
 	input_file = p.input_file;
 	input_file_name = p.input_file_name;
 	input_file_line_number = p.input_file_line_number;
+	input_char = fgetc(input_file);
 }
 int Parser::consume_lowlevel() {
 	int result = input_char;
@@ -72,15 +76,22 @@ int Parser::consume_lowlevel() {
 		return result;
 	}
 	input_char = fgetc(input_file);
-	if (input_char == EOF) {
+	// If the current source is exhausted and there's a parent to fall back
+	// to, pop and re-seed input_char from the parent's stream (which has
+	// the char that was pending at push time waiting via ungetc).
+	while (input_char == EOF && input_files.size() > 1) {
 		pop_input_file();
-		if (input_file) {
-			consume_lowlevel();
-		}
 	}
 	return result;
 }
 void Parser::push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number) {
+	// If we're mid-parse, the tokenizer has one character already read from
+	// the current source sitting in input_char. Push it back onto that
+	// FILE*'s stream so the parent resumes on exactly the right byte after
+	// this new source is popped.
+	if (!input_files.empty() && input_char != EOF) {
+		ungetc(input_char, this->input_file);
+	}
 	input_files.push_back(ParserInputFile {
 		.input_file = input_file,
 		.input_file_name = input_file_name,
@@ -89,6 +100,7 @@ void Parser::push_input_file(FILE* input_file, std::string input_file_name, int 
 	this->input_file = input_file;
 	this->input_file_name = input_file_name;
 	this->input_file_line_number = input_file_line_number;
+	input_char = fgetc(input_file);
 }
 
 void Parser::push_scope(const Frame* scope) {
@@ -131,7 +143,7 @@ bool Parser::is_defined(const std::string& sym) const {
 // Evaluate a `{$if ...}` condition. Grammar: `defined(X)` or bare `X` (short
 // for `defined(X)`), combined with `not`, `and`, `or`, and parentheses.
 // Unrecognised syntax raises a parse error.
-bool Parser::eval_directive_expr(const std::string& expr) const {
+bool Parser::eval_directive_expr(const std::string& expr) {
 	size_t p = 0;
 	auto skip_ws = [&]() {
 		while (p < expr.size() && (expr[p] == ' ' || expr[p] == '\t')) p++;
@@ -258,6 +270,15 @@ static std::pair<FILE*, std::string> resolve_include(
 	return {nullptr, ""};
 }
 
+std::string Parser::expand_include_macro(const std::string& rest) {
+	if (rest != "%DATE%") raise_parse_error("unsupported include macro: " + rest);
+	auto now = std::chrono::system_clock::now();
+	auto zoned = std::chrono::current_zone()->to_local(now);
+	auto today = std::chrono::floor<std::chrono::days>(zoned);
+	std::chrono::year_month_day ymd{today};
+	return std::format("'{:%Y/%m/%d}'", ymd);
+}
+
 void Parser::handle_directive(const std::string& body) {
 	auto [name, rest] = split_directive(body);
 	if (name == "ifdef" || name == "ifndef") {
@@ -317,7 +338,6 @@ void Parser::handle_directive(const std::string& body) {
 		                                 options ? options->include_search_paths : empty);
 		if (!f) raise_parse_error("cannot open include file: " + rest);
 		push_input_file(f, path, 1);
-		input_char = fgetc(input_file);
 		return;
 	}
 	// Other directives are accepted here for now. As we hit code where the
@@ -436,7 +456,6 @@ std::string Parser::consume() {
 }
 void Parser::start() {
 	push_scope(&root_frame());
-	input_char = fgetc(input_file);
 	consume();
 }
 bool Parser::peek_keyword(std::string s) {

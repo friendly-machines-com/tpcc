@@ -1,5 +1,5 @@
 
-CXXFLAGS = -g3 -std=c++17 -Wall
+CXXFLAGS = -g3 -std=c++20 -Wall
 
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $<

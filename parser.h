@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdio>
+#include <cstddef>
+#include <memory>
 #include <string>
 #include <stack>
 #include <vector>
@@ -35,6 +37,16 @@ public:
 	FILE* input_file;
 	std::string input_file_name;
 	int input_file_line_number;
+	// Backing bytes when input_file is an fmemopen over an in-memory buffer
+	// this entry owns (macro expansion for `{$I %DATE%}` etc.); null for
+	// real files. std::unique_ptr<char[]> is the array specialization
+	// ([unique.ptr.runtime], C++11 20.7.1.3): its destructor calls
+	// delete[] to match make_unique<char[]>(n) which uses new char[n], and
+	// moving/reassigning it just transfers the raw pointer, so the heap
+	// bytes stay at a fixed address for fmemopen's lifetime regardless of
+	// what happens to the surrounding container.
+	std::unique_ptr<char[]> owned_buffer;
+	size_t owned_buffer_len;
 };
 
 class Frame;
@@ -97,13 +109,17 @@ private:
 	// trailing `}`). Handles ifdef/ifndef/if/else/elseif/endif/define/undef/
 	// include; other directives are consumed and ignored.
 	void handle_directive(const std::string& body);
+	// Expand a `%NAME%` argument in `{$I %NAME%}` to the source text spliced
+	// at that position (a Pascal string literal for %DATE%). Only %DATE% is
+	// handled; any other name raises a parse error.
+	std::string expand_include_macro(const std::string& rest);
 	// True when SYM was passed via `-d` or `{$define SYM}`.
 	bool is_defined(const std::string& sym) const;
 	// Tiny evaluator for `{$if ...}` conditions: supports `defined(X)`,
 	// `not`, `and`, `or`, and parentheses. Numeric compares are not yet
 	// implemented; a condition mp doesn't understand evaluates to true and
 	// logs a note (so we don't silently drop needed code).
-	bool eval_directive_expr(const std::string& expr) const;
+	bool eval_directive_expr(const std::string& expr);
 protected:
 	std::string input_token;
 	Node* parse_block_body();
@@ -251,6 +267,12 @@ protected:
 
 public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);
+	// Push a source onto the input stack and make it current. Reads one
+	// byte from `input_file` into `input_char` so the tokenizer sees the
+	// new source's first character on its next consume_lowlevel call. If a
+	// parent source was active, its pending `input_char` is pushed back
+	// onto its own FILE* via ungetc so it resumes exactly on that byte
+	// after pop_input_file.
 	void push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number);
 	void pop_input_file();
 	void start();
