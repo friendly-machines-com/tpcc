@@ -1952,8 +1952,14 @@ Node* Parser::parse_program_or_unit() {
 		Unit* unit = unit_registry->register_new(name, nullptr, impl);
 		unit->phase = UnitPhase::InterfaceInProgress;
 		push_scope(impl);
-		if (peek_keyword("uses")) {
-			raise_parse_error("`uses` clauses are not yet supported");
+		// Program-body `uses`: same shape as a unit's implementation-side
+		// `uses` (no interface phase to worry about). Each named unit's
+		// interface_frame gets pushed so its exports are visible to the
+		// program body.
+		size_t prog_uses = 0;
+		if (maybe_parse_keyword("uses")) {
+			prog_uses = parse_uses_clause(false, name);
+			parse_semicolon();
 		}
 		if (emitter) emitter->emit_program_prologue(name);
 		// Inlined equivalent of parse_block; we need to bracket the body-block
@@ -1966,6 +1972,7 @@ Node* Parser::parse_program_or_unit() {
 		parse_keyword("end");
 		if (emitter) emitter->emit_main_epilogue();
 		for (size_t i = 0; i < pushed; i++) pop_scope();
+		for (size_t i = 0; i < prog_uses; i++) pop_scope();
 		parse_period();
 		pop_scope();
 		unit->phase = UnitPhase::Done;
