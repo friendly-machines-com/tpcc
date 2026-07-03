@@ -7,6 +7,7 @@
 #include <vector>
 #include <map>
 #include <optional>
+#include "ci_less.h"
 
 class Node;
 class Symbol;
@@ -23,8 +24,9 @@ struct Parameter;
  *  `{$undef}` seen in source. */
 struct CompilerOptions {
 	// Symbol -> value ("" for boolean defines). Populated from -d<sym>[:=<val>]
-	// and from {$define} directives.
-	std::map<std::string, std::string> defines;
+	// and from {$define} directives. Case-insensitive per Pascal identifier
+	// rules -- `defined(Unix)` matches `-dUNIX`.
+	std::map<std::string, std::string, CILess> defines;
 	// -Fu<path> entries. load_or_get_unit walks these when a `uses` name
 	// isn't in the current-input dir or CWD.
 	std::vector<std::string> unit_search_paths;

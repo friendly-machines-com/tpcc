@@ -6,7 +6,7 @@
 #include <system_error>
 
 bool eval_directive_expr(const std::string& expr,
-                         const std::map<std::string, std::string>& defines)
+                         const std::map<std::string, std::string, CILess>& defines)
 {
 	size_t p = 0;
 	auto skip_ws = [&]() {

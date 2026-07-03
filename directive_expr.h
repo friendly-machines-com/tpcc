@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 #include <string>
+#include "ci_less.h"
 
 // Thrown by eval_directive_expr on any grammar or semantic error. The caller
 // is expected to catch it and attach location context (file, line) before
@@ -25,4 +26,4 @@ struct DirectiveExprError {
 // its stored value is parsed as int64; empty or absent value is an error.
 // Top-level result must itself be 0 or 1.
 bool eval_directive_expr(const std::string& expr,
-                         const std::map<std::string, std::string>& defines);
+                         const std::map<std::string, std::string, CILess>& defines);

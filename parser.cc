@@ -155,7 +155,7 @@ bool Parser::is_defined(const std::string& sym) const {
 // glue that attaches the parser's file/line context to any error the
 // standalone evaluator raises.
 bool Parser::eval_directive_expr(const std::string& expr) {
-	static const std::map<std::string, std::string> empty;
+	static const std::map<std::string, std::string, CILess> empty;
 	try {
 		return ::eval_directive_expr(expr, options ? options->defines : empty);
 	} catch (const DirectiveExprError& e) {
