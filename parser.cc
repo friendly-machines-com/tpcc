@@ -251,7 +251,23 @@ void Parser::handle_directive(const std::string& body) {
 	}
 	if (!current_active()) return;
 	if (name == "define") {
-		if (options) options->defines[rest] = "";
+		// `{$define X}` sets X with no value; `{$define X := VALUE}` stores
+		// VALUE (trimmed) so numeric-compare {$if X < N} etc. can consume it.
+		if (options) {
+			auto eq = rest.find(":=");
+			if (eq == std::string::npos) {
+				options->defines[rest] = "";
+			} else {
+				std::string sym = rest.substr(0, eq);
+				while (!sym.empty() && (sym.back() == ' ' || sym.back() == '\t')) sym.pop_back();
+				std::string val = rest.substr(eq + 2);
+				size_t v0 = 0;
+				while (v0 < val.size() && (val[v0] == ' ' || val[v0] == '\t')) v0++;
+				val.erase(0, v0);
+				while (!val.empty() && (val.back() == ' ' || val.back() == '\t')) val.pop_back();
+				options->defines[sym] = val;
+			}
+		}
 		return;
 	}
 	if (name == "undef") {
