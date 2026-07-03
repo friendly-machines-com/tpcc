@@ -297,7 +297,6 @@ void Parser::handle_directive(const std::string& body) {
 }
 
 std::string Parser::consume() {
-	auto result = input_token;
 	std::stringstream sst;
 	sst.str("");
 	while (input_char == ' ' || input_char == '\n' || input_char == '\r') {
