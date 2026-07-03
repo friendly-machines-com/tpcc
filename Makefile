@@ -1,26 +1,29 @@
 
 CXXFLAGS = -g3 -std=c++20 -Wall
 
-%.o: %.cc
-	$(CXX) $(CXXFLAGS) -c $<
+src/%.o: src/%.cc
+	$(CXX) $(CXXFLAGS) -o $@ -c $<
 
 all: mp
 
-mp: main.o parser.o cst.o directive_expr.o frame.o types.o evaluator.o builtins.o units.o emit.o
+mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types.o src/evaluator.o src/builtins.o src/units.o src/emit.o
 	$(CXX) -o $@ $^
 
-main.o: main.cc parser.h units.h emit.h
-parser.o: parser.cc parser.h cst.h directive_expr.h frame.h types.h evaluator.h units.h emit.h
-cst.o: cst.cc cst.h
-directive_expr.o: directive_expr.cc directive_expr.h
-frame.o: frame.cc frame.h types.h cst.h
-types.o: types.cc types.h
-evaluator.o: evaluator.cc evaluator.h cst.h frame.h types.h
-builtins.o: builtins.cc builtins.h cst.h
-units.o: units.cc units.h frame.h
-emit.o: emit.cc emit.h cst.h types.h builtins.h
+src/main.o: src/main.cc src/parser.h src/units.h src/emit.h
+src/parser.o: src/parser.cc src/parser.h src/cst.h src/directive_expr.h src/frame.h src/types.h src/evaluator.h src/units.h src/emit.h
+src/cst.o: src/cst.cc src/cst.h
+src/directive_expr.o: src/directive_expr.cc src/directive_expr.h
+src/frame.o: src/frame.cc src/frame.h src/types.h src/cst.h
+src/types.o: src/types.cc src/types.h
+src/evaluator.o: src/evaluator.cc src/evaluator.h src/cst.h src/frame.h src/types.h
+src/builtins.o: src/builtins.cc src/builtins.h src/cst.h
+src/units.o: src/units.cc src/units.h src/frame.h
+src/emit.o: src/emit.cc src/emit.h src/cst.h src/types.h src/builtins.h
 
 clean:
-	rm -f *.o mp core
+	rm -f src/*.o
 
-.PHONY: all clean
+distclean: clean
+	rm -f mp core
+
+.PHONY: all clean distclean
