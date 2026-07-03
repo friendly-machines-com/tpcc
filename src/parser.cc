@@ -352,7 +352,25 @@ std::string Parser::consume() {
 			sst << (char) input_char;
 			consume_lowlevel();
 		}
-	} else if (input_char != EOF && strchr("=;,[]()@*+-/^", input_char)) {
+    } else if (input_char == '/') {
+        sst << (char) input_char;
+        consume_lowlevel();
+        if (input_char == '/') { // line comment
+            sst << (char) input_char;
+            consume_lowlevel();
+            while (input_char != EOF && input_char != '\n') {
+                sst << (char) input_char;
+                consume_lowlevel();
+            }
+            if (input_char == '\n') {
+                sst << (char) input_char;
+                consume_lowlevel();
+                return consume();
+            } else {
+                raise_parse_error("missing newline");
+            }
+        }
+	} else if (input_char != EOF && strchr("=;,[]()@*+-^", input_char)) {
 		sst << (char) input_char;
 		consume_lowlevel();
 	} else if (input_char == '\'') {
