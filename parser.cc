@@ -95,6 +95,11 @@ void Parser::push_input_file_and_buffer(FILE* input_file, std::string input_file
 	if (!input_files.empty() && input_char != EOF) {
 		ungetc(input_char, this->input_file);
 	}
+	// Freeze the current line number into the outgoing top entry so pop
+	// restores the caller's position, not the caller's start line.
+	if (!input_files.empty()) {
+		input_files.back().input_file_line_number = this->input_file_line_number;
+	}
 	input_files.push_back(ParserInputFile {
 		.input_file = input_file,
 		.input_file_name = input_file_name,
