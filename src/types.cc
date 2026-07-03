@@ -1,5 +1,5 @@
-#include <cassert>
 #include "types.h"
+#include <cassert>
 
 IncompleteType::IncompleteType(std::string name) : name(name), resolved(nullptr) {}
 

@@ -1,9 +1,9 @@
-#include <sstream>
 #include "cst.h"
+#include <sstream>
 
 std::string Node::str() const {
 	std::stringstream sst;
-	sst << (void*) this;
+	sst << (void*)this;
 	return sst.str();
 }
 
@@ -35,7 +35,7 @@ Xor::Xor(Node* a, Node* b) : BinaryOperation(a, b) {}
 And::And(Node* a, Node* b) : BinaryOperation(a, b) {}
 Or::Or(Node* a, Node* b) : BinaryOperation(a, b) {}
 ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
-	: receiver(receiver), callee(callee), args(std::move(args)) {}
+    : receiver(receiver), callee(callee), args(std::move(args)) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
 Index::Index(Node* a, Node* b) : BinaryOperation(a, b) {}
@@ -75,41 +75,40 @@ String::String(std::string value, Type* ty) {
 }
 
 Callable::Callable(std::string pas_name,
-                   std::string cxx_name,
-                   std::vector<Parameter> formals,
-                   Type* return_type,
-                   bool has_overload_directive)
-	: pas_name(std::move(pas_name)),
-	  cxx_name(std::move(cxx_name)),
-	  formals(std::move(formals)),
-	  return_type(return_type),
-	  has_overload_directive(has_overload_directive),
-	  body(nullptr),
-	  body_frame(nullptr) {
+		   std::string cxx_name,
+		   std::vector<Parameter> formals,
+		   Type* return_type,
+		   bool has_overload_directive)
+    : pas_name(std::move(pas_name)),
+      cxx_name(std::move(cxx_name)),
+      formals(std::move(formals)),
+      return_type(return_type),
+      has_overload_directive(has_overload_directive),
+      body(nullptr),
+      body_frame(nullptr) {
 	this->ty = return_type;
 }
 
 Procedure::Procedure(std::string pas_name,
-                     std::string cxx_name,
-                     std::vector<Parameter> formals,
-                     Type* return_type,
-                     bool has_overload_directive)
-	: Callable(std::move(pas_name), std::move(cxx_name), std::move(formals),
-	           return_type, has_overload_directive) {}
+		     std::string cxx_name,
+		     std::vector<Parameter> formals,
+		     Type* return_type,
+		     bool has_overload_directive)
+    : Callable(std::move(pas_name), std::move(cxx_name), std::move(formals),
+	       return_type, has_overload_directive) {}
 
 Method::Method(std::string pas_name,
-               std::string cxx_name,
-               std::vector<Parameter> formals,
-               Type* return_type,
-               bool has_overload_directive,
-               Type* owner_class,
-               VirtualKind virtual_kind)
-	: Callable(std::move(pas_name), std::move(cxx_name), std::move(formals),
-	           return_type, has_overload_directive),
-	  owner_class(owner_class),
-	  virtual_kind(virtual_kind),
-	  vtable_slot(-1) {}
+	       std::string cxx_name,
+	       std::vector<Parameter> formals,
+	       Type* return_type,
+	       bool has_overload_directive,
+	       Type* owner_class,
+	       VirtualKind virtual_kind)
+    : Callable(std::move(pas_name), std::move(cxx_name), std::move(formals),
+	       return_type, has_overload_directive),
+      owner_class(owner_class),
+      virtual_kind(virtual_kind),
+      vtable_slot(-1) {}
 
 OverloadSet::OverloadSet(std::string pas_name, std::vector<Callable*> members)
-	: pas_name(std::move(pas_name)), members(std::move(members)) {}
-
+    : pas_name(std::move(pas_name)), members(std::move(members)) {}

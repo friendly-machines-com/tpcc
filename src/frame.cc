@@ -1,7 +1,7 @@
-#include <cassert>
-#include <cstdio>
 #include "frame.h"
 #include "cst.h"
+#include <cassert>
+#include <cstdio>
 
 FrameValueEntry::FrameValueEntry() : value(nullptr), ty(nullptr) {}
 
@@ -96,5 +96,5 @@ bool Frame::register_callable(std::string name, Callable* c) {
 		}
 		return false;
 	}
-	return false;   // name is bound to something non-callable
+	return false; // name is bound to something non-callable
 }

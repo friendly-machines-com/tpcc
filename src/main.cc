@@ -1,11 +1,11 @@
+#include "emit.h"
+#include "parser.h"
+#include "units.h"
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
-#include "parser.h"
-#include "units.h"
-#include "emit.h"
 
 /** Given "path/to/foo.pp" produce "path/to/foo.cc"; if there's no extension
  *  (or the last dot is in a directory component), append .cc. */
@@ -22,10 +22,17 @@ static std::string derive_output_path(std::string input) {
 // empty for a boolean define. FPC accepts both `:=` and `=` in this position.
 static void parse_define_arg(const char* arg, std::string& sym, std::string& val) {
 	const char* p = arg;
-	while (*p && *p != ':' && *p != '=') p++;
+	while (*p && *p != ':' && *p != '=')
+		p++;
 	sym.assign(arg, p - arg);
-	if (*p == ':' && p[1] == '=') { val.assign(p + 2); return; }
-	if (*p == '=') { val.assign(p + 1); return; }
+	if (*p == ':' && p[1] == '=') {
+		val.assign(p + 2);
+		return;
+	}
+	if (*p == '=') {
+		val.assign(p + 1);
+		return;
+	}
 	val.clear();
 }
 
@@ -83,7 +90,8 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "mp: no source file given (use -h for help)\n");
 		return 2;
 	}
-	if (output_path.empty()) output_path = derive_output_path(source_path);
+	if (output_path.empty())
+		output_path = derive_output_path(source_path);
 
 	UnitRegistry registry;
 	Emitter emitter;

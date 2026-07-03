@@ -1,16 +1,16 @@
-#include <cstdlib>
-#include <typeinfo>
 #include "emit.h"
+#include "builtins.h"
 #include "cst.h"
 #include "frame.h"
 #include "types.h"
-#include "builtins.h"
+#include <cstdlib>
+#include <typeinfo>
 
 // NODE may be null; SITE names the caller for the error message.
 [[noreturn]] static void unhandled_node(const char* site, const Node* node) {
 	if (node) {
 		fprintf(stderr, "internal compiler error: %s does not handle node kind '%s'\n",
-		        site, typeid(*node).name());
+			site, typeid(*node).name());
 	} else {
 		fprintf(stderr, "internal compiler error: %s called with null node\n", site);
 	}
@@ -20,7 +20,7 @@
 [[noreturn]] static void unhandled_type(const char* site, const Type* ty) {
 	if (ty) {
 		fprintf(stderr, "internal compiler error: %s does not handle type kind '%s'\n",
-		        site, typeid(*ty).name());
+			site, typeid(*ty).name());
 	} else {
 		fprintf(stderr, "internal compiler error: %s called with null type\n", site);
 	}
@@ -58,28 +58,33 @@ void Emitter::close() {
 }
 
 void Emitter::emit_program_prologue(std::string program_name) {
-	if (!out) return;
+	if (!out)
+		return;
 	fprintf(out, "#include \"rtl/rtl.h\"\n\n");
 }
 
 void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
-	if (!out) return;
+	if (!out)
+		return;
 	emit_type_ref(ty);
 	fprintf(out, " %s;\n", cxx_name.c_str());
 }
 
 void Emitter::emit_main_prologue() {
-	if (!out) return;
+	if (!out)
+		return;
 	fprintf(out, "\nint main() {\n");
 }
 
 void Emitter::emit_main_epilogue() {
-	if (!out) return;
+	if (!out)
+		return;
 	fprintf(out, "\treturn 0;\n}\n");
 }
 
 void Emitter::emit_statement(Node* stmt) {
-	if (!out) return;
+	if (!out)
+		return;
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
 		fprintf(out, "\t");
 		emit_expression(a->a);
@@ -98,7 +103,8 @@ void Emitter::emit_statement(Node* stmt) {
 }
 
 void Emitter::emit_with_prologue(std::string alias_cxx_name, Node* target) {
-	if (!out) return;
+	if (!out)
+		return;
 	// `auto&&` binds an lvalue target as a reference and lifetime-extends an
 	// rvalue target (e.g. a function call returning a record by value), so the
 	// with-body sees a single evaluation of the target expression regardless
@@ -109,50 +115,67 @@ void Emitter::emit_with_prologue(std::string alias_cxx_name, Node* target) {
 }
 
 void Emitter::emit_with_epilogue() {
-	if (!out) return;
+	if (!out)
+		return;
 	fprintf(out, "\t}\n");
 }
 
 // The cxx_name of the type that owns a Method, or empty if none.
 static std::string owner_cxx_name(Type* owner) {
-	if (auto r = dynamic_cast<RecordType*>(owner)) return r->cxx_name;
-	if (auto c = dynamic_cast<ClassType*>(owner))  return c->cxx_name;
-	if (auto o = dynamic_cast<ObjectType*>(owner)) return o->cxx_name;
+	if (auto r = dynamic_cast<RecordType*>(owner))
+		return r->cxx_name;
+	if (auto c = dynamic_cast<ClassType*>(owner))
+		return c->cxx_name;
+	if (auto o = dynamic_cast<ObjectType*>(owner))
+		return o->cxx_name;
 	return "";
 }
 
 void Emitter::emit_procedure_open(Callable* c) {
-	if (!out) return;
+	if (!out)
+		return;
 	fprintf(out, "\n");
 	emit_type_ref(c->return_type);
 	fprintf(out, " ");
 	if (auto m = dynamic_cast<Method*>(c)) {
 		std::string owner = owner_cxx_name(m->owner_class);
-		if (!owner.empty()) fprintf(out, "%s::", owner.c_str());
+		if (!owner.empty())
+			fprintf(out, "%s::", owner.c_str());
 	}
 	fprintf(out, "%s(", c->cxx_name.c_str());
 	for (size_t i = 0; i < c->formals.size(); i++) {
-		if (i > 0) fprintf(out, ", ");
+		if (i > 0)
+			fprintf(out, ", ");
 		auto& f = c->formals[i];
-		if (f.mode == ParamMode::Const) fprintf(out, "const ");
+		if (f.mode == ParamMode::Const)
+			fprintf(out, "const ");
 		emit_type_ref(f.ty);
-		if (f.mode == ParamMode::Var || f.mode == ParamMode::Out
-		    || f.mode == ParamMode::Const) fprintf(out, "&");
+		if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
+			fprintf(out, "&");
 		fprintf(out, " %s", f.cxx_name.c_str());
 	}
 	fprintf(out, ") {\n");
 }
 
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
-	if (!out) return;
+	if (!out)
+		return;
 	Frame* body = nullptr;
 	const char* kw = "struct";
-	if (auto r = dynamic_cast<RecordType*>(ty)) { body = r->children; kw = "struct"; }
-	else if (auto c = dynamic_cast<ClassType*>(ty)) { body = c->children; kw = "class"; }
-	else if (auto o = dynamic_cast<ObjectType*>(ty)) { body = o->children; kw = "class"; }
-	else return;
+	if (auto r = dynamic_cast<RecordType*>(ty)) {
+		body = r->children;
+		kw = "struct";
+	} else if (auto c = dynamic_cast<ClassType*>(ty)) {
+		body = c->children;
+		kw = "class";
+	} else if (auto o = dynamic_cast<ObjectType*>(ty)) {
+		body = o->children;
+		kw = "class";
+	} else
+		return;
 	fprintf(out, "\n%s %s {\n", kw, cxx_name.c_str());
-	if (kw[0] == 'c') fprintf(out, "public:\n");   // C++ classes default private
+	if (kw[0] == 'c')
+		fprintf(out, "public:\n"); // C++ classes default private
 	// TODO: Frame's std::map iterates alphabetically; Pascal semantics require
 	// source order for layout. Preserve insertion order in a later pass.
 	for (auto& kv : body->values()) {
@@ -164,27 +187,29 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
 			fprintf(out, "\t");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (m->virtual_kind == Method::VirtualKind::Virtual
-				    || m->virtual_kind == Method::VirtualKind::Abstract
-				    || m->virtual_kind == Method::VirtualKind::Dynamic) {
+				if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic) {
 					fprintf(out, "virtual ");
 				}
 			}
 			emit_type_ref(call->return_type);
 			fprintf(out, " %s(", call->cxx_name.c_str());
 			for (size_t i = 0; i < call->formals.size(); i++) {
-				if (i > 0) fprintf(out, ", ");
+				if (i > 0)
+					fprintf(out, ", ");
 				auto& f = call->formals[i];
-				if (f.mode == ParamMode::Const) fprintf(out, "const ");
+				if (f.mode == ParamMode::Const)
+					fprintf(out, "const ");
 				emit_type_ref(f.ty);
-				if (f.mode == ParamMode::Var || f.mode == ParamMode::Out
-				    || f.mode == ParamMode::Const) fprintf(out, "&");
+				if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
+					fprintf(out, "&");
 				fprintf(out, " %s", f.cxx_name.c_str());
 			}
 			fprintf(out, ")");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (m->virtual_kind == Method::VirtualKind::Override) fprintf(out, " override");
-				if (m->virtual_kind == Method::VirtualKind::Abstract) fprintf(out, " = 0");
+				if (m->virtual_kind == Method::VirtualKind::Override)
+					fprintf(out, " override");
+				if (m->virtual_kind == Method::VirtualKind::Abstract)
+					fprintf(out, " = 0");
 			}
 			fprintf(out, ";\n");
 		}
@@ -193,7 +218,8 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 }
 
 void Emitter::emit_procedure_close() {
-	if (!out) return;
+	if (!out)
+		return;
 	fprintf(out, "}\n");
 }
 
@@ -201,37 +227,60 @@ void Emitter::emit_procedure_close() {
 // short-circuit for `and`/`or`; other ops have a unique mapping.
 static const char* cxx_binary_operator(BinaryOperation* op) {
 	bool booleans = op->ty == boolean_type();
-	if (dynamic_cast<Add*>(op))            return "+";
-	if (dynamic_cast<Subtract*>(op))       return "-";
-	if (dynamic_cast<Multiply*>(op))       return "*";
-	if (dynamic_cast<Divide*>(op))         return "/";
-	if (dynamic_cast<Div*>(op))            return "/";
-	if (dynamic_cast<Mod*>(op))            return "%";
-	if (dynamic_cast<And*>(op))            return booleans ? "&&" : "&";
-	if (dynamic_cast<Or*>(op))             return booleans ? "||" : "|";
-	if (dynamic_cast<Xor*>(op))            return "^";
-	if (dynamic_cast<ShiftLeft*>(op))      return "<<";
-	if (dynamic_cast<ShiftRight*>(op))     return ">>";
-	if (dynamic_cast<Equal*>(op))          return "==";
-	if (dynamic_cast<NotEqual*>(op))       return "!=";
-	if (dynamic_cast<Less*>(op))           return "<";
-	if (dynamic_cast<Greater*>(op))        return ">";
-	if (dynamic_cast<LessOrEqual*>(op))    return "<=";
-	if (dynamic_cast<GreaterOrEqual*>(op)) return ">=";
+	if (dynamic_cast<Add*>(op))
+		return "+";
+	if (dynamic_cast<Subtract*>(op))
+		return "-";
+	if (dynamic_cast<Multiply*>(op))
+		return "*";
+	if (dynamic_cast<Divide*>(op))
+		return "/";
+	if (dynamic_cast<Div*>(op))
+		return "/";
+	if (dynamic_cast<Mod*>(op))
+		return "%";
+	if (dynamic_cast<And*>(op))
+		return booleans ? "&&" : "&";
+	if (dynamic_cast<Or*>(op))
+		return booleans ? "||" : "|";
+	if (dynamic_cast<Xor*>(op))
+		return "^";
+	if (dynamic_cast<ShiftLeft*>(op))
+		return "<<";
+	if (dynamic_cast<ShiftRight*>(op))
+		return ">>";
+	if (dynamic_cast<Equal*>(op))
+		return "==";
+	if (dynamic_cast<NotEqual*>(op))
+		return "!=";
+	if (dynamic_cast<Less*>(op))
+		return "<";
+	if (dynamic_cast<Greater*>(op))
+		return ">";
+	if (dynamic_cast<LessOrEqual*>(op))
+		return "<=";
+	if (dynamic_cast<GreaterOrEqual*>(op))
+		return ">=";
 	return nullptr;
 }
 
 static const char* cxx_unary_operator(UnaryOperation* op) {
-	if (dynamic_cast<Not*>(op))         return "!";
-	if (dynamic_cast<Negate*>(op))      return "-";
-	if (dynamic_cast<Positivize*>(op))  return "+";
-	if (dynamic_cast<AddrOf*>(op))      return "&";
-	if (dynamic_cast<Dereference*>(op)) return "*";
+	if (dynamic_cast<Not*>(op))
+		return "!";
+	if (dynamic_cast<Negate*>(op))
+		return "-";
+	if (dynamic_cast<Positivize*>(op))
+		return "+";
+	if (dynamic_cast<AddrOf*>(op))
+		return "&";
+	if (dynamic_cast<Dereference*>(op))
+		return "*";
 	return nullptr;
 }
 
 void Emitter::emit_expression(Node* expr) {
-	if (!out) return;
+	if (!out)
+		return;
 	if (auto c = dynamic_cast<Integer*>(expr)) {
 		fprintf(out, "%llu", (unsigned long long)c->value);
 		return;
@@ -239,7 +288,8 @@ void Emitter::emit_expression(Node* expr) {
 	if (auto s = dynamic_cast<String*>(expr)) {
 		fputc('"', out);
 		for (char ch : s->value) {
-			if (ch == '"' || ch == '\\') fputc('\\', out);
+			if (ch == '"' || ch == '\\')
+				fputc('\\', out);
 			if ((unsigned char)ch < 0x20) {
 				fprintf(out, "\\x%02x", (unsigned char)ch);
 			} else {
@@ -303,7 +353,8 @@ void Emitter::emit_expression(Node* expr) {
 		emit_expression(pc->callee);
 		fprintf(out, "(");
 		for (size_t i = 0; i < pc->args.size(); i++) {
-			if (i > 0) fprintf(out, ", ");
+			if (i > 0)
+				fprintf(out, ", ");
 			emit_expression(pc->args[i]);
 		}
 		fprintf(out, ")");
@@ -346,10 +397,12 @@ void Emitter::emit_expression(Node* expr) {
 }
 
 void Emitter::emit_type_ref(Type* ty) {
-	if (!out) return;
+	if (!out)
+		return;
 	// Follow IncompleteType placeholders through to the real underlying type.
 	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-		if (!inc->resolved) break;
+		if (!inc->resolved)
+			break;
 		ty = inc->resolved;
 	}
 	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
