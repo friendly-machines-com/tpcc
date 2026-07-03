@@ -8,11 +8,8 @@ IntrinsicType::IntrinsicType(std::string_view pas_name, std::string_view rtl_nam
 
 Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 
-// Named intrinsic type instances at namespace scope. Their addresses are
-// stable and can be referenced from builtin descriptor lambdas without
-// touching root_frame() during its own initialization.
 // Integer rows are ordered narrowest -> widest; the ordering is what
-// common_arith_type / conversion_cost use to compute widening.
+// common_arith_type and conversion_cost use to compute widening.
 namespace {
 IntrinsicType k_byte("byte", "pas::t_byte");
 IntrinsicType k_shortint("shortint", "pas::t_shortint");
