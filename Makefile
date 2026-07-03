@@ -6,12 +6,13 @@ CXXFLAGS = -g3 -std=c++20 -Wall
 
 all: mp
 
-mp: main.o parser.o cst.o frame.o types.o evaluator.o builtins.o units.o emit.o
+mp: main.o parser.o cst.o directive_expr.o frame.o types.o evaluator.o builtins.o units.o emit.o
 	$(CXX) -o $@ $^
 
 main.o: main.cc parser.h units.h emit.h
-parser.o: parser.cc parser.h cst.h frame.h types.h evaluator.h units.h emit.h
+parser.o: parser.cc parser.h cst.h directive_expr.h frame.h types.h evaluator.h units.h emit.h
 cst.o: cst.cc cst.h
+directive_expr.o: directive_expr.cc directive_expr.h
 frame.o: frame.cc frame.h types.h cst.h
 types.o: types.cc types.h
 evaluator.o: evaluator.cc evaluator.h cst.h frame.h types.h
