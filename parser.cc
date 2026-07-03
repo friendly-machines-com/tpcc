@@ -404,6 +404,10 @@ std::string Parser::consume() {
 	}
 	auto text = sst.str();
 	input_token = text;
+	// Drop any token produced while an outer `{$ifdef}`/`{$if}` frame is
+	// inactive. Directives are already handled in-line and never reach
+	// here, so they still update the ifdef stack correctly.
+	if (!current_active() && !text.empty()) return consume();
 	return text;
 }
 void Parser::start() {
