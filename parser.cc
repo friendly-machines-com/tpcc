@@ -150,9 +150,21 @@ bool Parser::is_defined(const std::string& sym) const {
 	return options && options->defines.count(sym) > 0;
 }
 
-// Evaluate a `{$if ...}` condition. Grammar: `defined(X)` or bare `X` (short
-// for `defined(X)`), combined with `not`, `and`, `or`, and parentheses.
-// Unrecognised syntax raises a parse error.
+// Evaluate a `{$if ...}` condition. Grammar:
+//   expr    := or_expr
+//   or_expr := and_expr ('or' and_expr)*
+//   and_expr:= cmp_expr ('and' cmp_expr)*
+//   cmp_expr:= term (('<'|'>'|'=') term)?
+//   term    := 'not' term
+//            | 'defined' '(' IDENT ')'
+//            | '(' expr ')'
+//            | INT
+//            | IDENT
+// Values internally are int64. `defined()` and compares yield 0/1.
+// `not`/`and`/`or` require operands in {0,1}; anything else hard-errors.
+// A bare IDENT resolves via options->defines and its stored value is parsed
+// as int64; empty or absent value hard-errors. The top-level result must
+// itself be 0 or 1.
 bool Parser::eval_directive_expr(const std::string& expr) {
 	size_t p = 0;
 	auto skip_ws = [&]() {
@@ -169,12 +181,35 @@ bool Parser::eval_directive_expr(const std::string& expr) {
 		for (char c : s) r.push_back((char)tolower((unsigned char)c));
 		return r;
 	};
-	std::function<bool()> parse_or;
-	std::function<bool()> parse_atom = [&]() -> bool {
+	auto require_bool = [&](int64_t v, const char* where) -> bool {
+		if (v == 0) return false;
+		if (v == 1) return true;
+		raise_parse_error(std::string("non-boolean value ") + std::to_string(v)
+			+ " where boolean required (" + where + ") in {$if ...}");
+	};
+	auto lookup_ident = [&](const std::string& name) -> int64_t {
+		if (!options || !options->defines.count(name)) {
+			raise_parse_error("undefined identifier '" + name + "' in {$if ...}");
+		}
+		const std::string& s = options->defines.at(name);
+		if (s.empty()) {
+			raise_parse_error("identifier '" + name
+				+ "' has no value (defined without :=) but is used numerically in {$if ...}");
+		}
+		int64_t v;
+		auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), v);
+		if (ec != std::errc() || ptr != s.data() + s.size()) {
+			raise_parse_error("value '" + s + "' of '" + name
+				+ "' is not an integer in {$if ...}");
+		}
+		return v;
+	};
+	std::function<int64_t()> parse_or;
+	std::function<int64_t()> parse_term = [&]() -> int64_t {
 		skip_ws();
 		if (p < expr.size() && expr[p] == '(') {
 			p++;
-			bool v = parse_or();
+			int64_t v = parse_or();
 			skip_ws();
 			if (p >= expr.size() || expr[p] != ')') {
 				raise_parse_error("missing ')' in {$if ...} expression");
@@ -182,9 +217,25 @@ bool Parser::eval_directive_expr(const std::string& expr) {
 			p++;
 			return v;
 		}
+		if (p < expr.size() && (isdigit((unsigned char)expr[p])
+			|| (expr[p] == '-' && p + 1 < expr.size() && isdigit((unsigned char)expr[p+1])))) {
+			size_t q = p;
+			if (expr[q] == '-') q++;
+			while (q < expr.size() && isdigit((unsigned char)expr[q])) q++;
+			int64_t v;
+			auto [ptr, ec] = std::from_chars(expr.data() + p, expr.data() + q, v);
+			if (ec != std::errc() || ptr != expr.data() + q) {
+				raise_parse_error("malformed integer '" + expr.substr(p, q - p) + "' in {$if ...}");
+			}
+			p = q;
+			return v;
+		}
 		std::string w = peek_word();
 		std::string lw = lower(w);
-		if (lw == "not") { p += w.size(); return !parse_atom(); }
+		if (lw == "not") {
+			p += w.size();
+			return require_bool(parse_term(), "operand of 'not'") ? 0 : 1;
+		}
 		if (lw == "defined") {
 			p += w.size();
 			skip_ws();
@@ -200,43 +251,55 @@ bool Parser::eval_directive_expr(const std::string& expr) {
 				raise_parse_error("missing ')' in defined(...)");
 			}
 			p++;
-			return is_defined(sym);
+			return is_defined(sym) ? 1 : 0;
 		}
 		if (!w.empty()) {
 			p += w.size();
-			return is_defined(w);
+			return lookup_ident(w);
 		}
 		raise_parse_error("unrecognised token in {$if ...}: '" + expr.substr(p) + "'");
 	};
-	auto parse_and = [&]() -> bool {
-		bool v = parse_atom();
+	auto parse_cmp = [&]() -> int64_t {
+		int64_t a = parse_term();
+		skip_ws();
+		if (p < expr.size() && (expr[p] == '<' || expr[p] == '>' || expr[p] == '=')) {
+			char op = expr[p++];
+			int64_t b = parse_term();
+			switch (op) {
+				case '<': return a <  b ? 1 : 0;
+				case '>': return a >  b ? 1 : 0;
+				case '=': return a == b ? 1 : 0;
+			}
+		}
+		return a;
+	};
+	auto parse_and = [&]() -> int64_t {
+		bool v = require_bool(parse_cmp(), "operand of 'and'");
 		while (true) {
 			skip_ws();
 			if (lower(peek_word()) != "and") break;
-			p += peek_word().size();
-			bool r = parse_atom();
-			v = v && r;
+			p += 3;
+			v = require_bool(parse_cmp(), "operand of 'and'") && v;
 		}
-		return v;
+		return v ? 1 : 0;
 	};
-	parse_or = [&]() -> bool {
-		bool v = parse_and();
+	parse_or = [&]() -> int64_t {
+		bool v = require_bool(parse_and(), "operand of 'or'");
 		while (true) {
 			skip_ws();
 			if (lower(peek_word()) != "or") break;
-			p += peek_word().size();
-			bool r = parse_and();
-			v = v || r;
+			p += 2;
+			v = require_bool(parse_and(), "operand of 'or'") || v;
 		}
-		return v;
+		return v ? 1 : 0;
 	};
-	bool result = parse_or();
+	int64_t result = parse_or();
 	skip_ws();
 	if (p != expr.size()) {
 		raise_parse_error("unrecognised trailing form in {$if ...}: '"
 		                  + expr.substr(p) + "'");
 	}
-	return result;
+	return require_bool(result, "top-level {$if ...} value");
 }
 
 // Split BODY into (directive_name_lowercased, argument-after-name-trimmed).
