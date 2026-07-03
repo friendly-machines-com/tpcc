@@ -1,54 +1,54 @@
+#include "parser.h"
+#include "builtins.h"
+#include "cst.h"
+#include "directive_expr.h"
+#include "emit.h"
+#include "evaluator.h"
+#include "frame.h"
+#include "units.h"
 #include <cassert>
+#include <charconv>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
-#include <chrono>
-#include <charconv>
 #include <format>
 #include <functional>
 #include <optional>
-#include <sstream>
 #include <set>
+#include <sstream>
 #include <unordered_set>
-#include "parser.h"
-#include "cst.h"
-#include "directive_expr.h"
-#include "frame.h"
-#include "evaluator.h"
-#include "builtins.h"
-#include "units.h"
-#include "emit.h"
 
 static std::unordered_set<std::string> keywords = {
-	"program",
-	"unit",
-	"interface",
-	"implementation",
-	"record",
-	"object",
-	"class",
-	"inherited",
-	"interface",
-	"procedure",
-	"function",
-	"constructor",
-	"destructor",
-	"if",
-	"then",
-	"else",
-	"while",
-	"do",
-	"repeat",
-	"until",
-	"begin",
-	"end",
-	"var",
-	"type",
-	"const",
-	"with",
+    "program",
+    "unit",
+    "interface",
+    "implementation",
+    "record",
+    "object",
+    "class",
+    "inherited",
+    "interface",
+    "procedure",
+    "function",
+    "constructor",
+    "destructor",
+    "if",
+    "then",
+    "else",
+    "while",
+    "do",
+    "repeat",
+    "until",
+    "begin",
+    "end",
+    "var",
+    "type",
+    "const",
+    "with",
 };
 
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options)
-	: unit_registry(unit_registry), emitter(emitter), options(options) {
+    : unit_registry(unit_registry), emitter(emitter), options(options) {
 }
 void Parser::pop_input_file() {
 	assert(!input_files.empty());
@@ -101,12 +101,12 @@ void Parser::push_input_file_and_buffer(FILE* input_file, std::string input_file
 	if (!input_files.empty()) {
 		input_files.back().input_file_line_number = this->input_file_line_number;
 	}
-	input_files.push_back(ParserInputFile {
-		.input_file = input_file,
-		.input_file_name = input_file_name,
-		.input_file_line_number = input_file_line_number,
-		.owned_buffer = std::move(buffer),
-		.owned_buffer_len = buffer_len,
+	input_files.push_back(ParserInputFile{
+	    .input_file = input_file,
+	    .input_file_name = input_file_name,
+	    .input_file_line_number = input_file_line_number,
+	    .owned_buffer = std::move(buffer),
+	    .owned_buffer_len = buffer_len,
 	});
 	this->input_file = input_file;
 	this->input_file_name = input_file_name;
@@ -166,16 +166,18 @@ bool Parser::eval_directive_expr(const std::string& expr) {
 // Split BODY into (directive_name_lowercased, argument-after-name-trimmed).
 static std::pair<std::string, std::string> split_directive(const std::string& body) {
 	size_t p = 0;
-	while (p < body.size() && (body[p] == ' ' || body[p] == '\t')) p++;
+	while (p < body.size() && (body[p] == ' ' || body[p] == '\t'))
+		p++;
 	std::string name;
 	while (p < body.size() && (isalnum((unsigned char)body[p]) || body[p] == '_')) {
 		name.push_back((char)tolower((unsigned char)body[p]));
 		p++;
 	}
-	while (p < body.size() && (body[p] == ' ' || body[p] == '\t')) p++;
+	while (p < body.size() && (body[p] == ' ' || body[p] == '\t'))
+		p++;
 	std::string rest = body.substr(p);
-	while (!rest.empty() && (rest.back() == ' ' || rest.back() == '\t'
-	                         || rest.back() == '\r' || rest.back() == '\n')) rest.pop_back();
+	while (!rest.empty() && (rest.back() == ' ' || rest.back() == '\t' || rest.back() == '\r' || rest.back() == '\n'))
+		rest.pop_back();
 	return {name, rest};
 }
 
@@ -185,27 +187,30 @@ static std::pair<std::string, std::string> split_directive(const std::string& bo
 static std::pair<FILE*, std::string> resolve_include(
     const std::string& name,
     const std::string& current_input,
-    const std::vector<std::string>& search_paths)
-{
+    const std::vector<std::string>& search_paths) {
 	std::vector<std::string> dirs;
 	std::string cur_dir;
 	auto slash = current_input.find_last_of('/');
-	if (slash != std::string::npos) cur_dir = current_input.substr(0, slash + 1);
+	if (slash != std::string::npos)
+		cur_dir = current_input.substr(0, slash + 1);
 	dirs.push_back(cur_dir);
 	for (auto& d : search_paths) {
 		std::string s = d;
-		if (!s.empty() && s.back() != '/') s.push_back('/');
+		if (!s.empty() && s.back() != '/')
+			s.push_back('/');
 		dirs.push_back(s);
 	}
 	for (auto& d : dirs) {
 		std::string candidate = d + name;
-		if (FILE* f = fopen(candidate.c_str(), "r")) return {f, candidate};
+		if (FILE* f = fopen(candidate.c_str(), "r"))
+			return {f, candidate};
 	}
 	return {nullptr, ""};
 }
 
 std::string Parser::expand_include_macro(const std::string& rest) {
-	if (rest != "%DATE%") raise_parse_error("unsupported include macro: " + rest);
+	if (rest != "%DATE%")
+		raise_parse_error("unsupported include macro: " + rest);
 	auto now = std::chrono::system_clock::now();
 	auto zoned = std::chrono::current_zone()->to_local(now);
 	auto today = std::chrono::floor<std::chrono::days>(zoned);
@@ -218,7 +223,8 @@ void Parser::handle_directive(const std::string& body) {
 	if (name == "ifdef" || name == "ifndef") {
 		bool outer = current_active();
 		bool cond = is_defined(rest);
-		if (name == "ifndef") cond = !cond;
+		if (name == "ifndef")
+			cond = !cond;
 		ifdef_stack.push_back({outer, cond, outer && cond});
 		return;
 	}
@@ -229,7 +235,8 @@ void Parser::handle_directive(const std::string& body) {
 		return;
 	}
 	if (name == "else") {
-		if (ifdef_stack.empty()) raise_parse_error("$else without matching $ifdef");
+		if (ifdef_stack.empty())
+			raise_parse_error("$else without matching $ifdef");
 		auto& f = ifdef_stack.back();
 		bool now = f.outer && !f.taken;
 		f.active = now;
@@ -237,7 +244,8 @@ void Parser::handle_directive(const std::string& body) {
 		return;
 	}
 	if (name == "elseif") {
-		if (ifdef_stack.empty()) raise_parse_error("$elseif without matching $ifdef");
+		if (ifdef_stack.empty())
+			raise_parse_error("$elseif without matching $ifdef");
 		auto& f = ifdef_stack.back();
 		bool now = f.outer && !f.taken && eval_directive_expr(rest);
 		f.active = now;
@@ -245,11 +253,13 @@ void Parser::handle_directive(const std::string& body) {
 		return;
 	}
 	if (name == "endif" || name == "ifend") {
-		if (ifdef_stack.empty()) raise_parse_error("$endif without matching $ifdef");
+		if (ifdef_stack.empty())
+			raise_parse_error("$endif without matching $ifdef");
 		ifdef_stack.pop_back();
 		return;
 	}
-	if (!current_active()) return;
+	if (!current_active())
+		return;
 	if (name == "define") {
 		// `{$define X}` sets X with no value; `{$define X := VALUE}` stores
 		// VALUE (trimmed) so numeric-compare {$if X < N} etc. can consume it.
@@ -259,19 +269,23 @@ void Parser::handle_directive(const std::string& body) {
 				options->defines[rest] = "";
 			} else {
 				std::string sym = rest.substr(0, eq);
-				while (!sym.empty() && (sym.back() == ' ' || sym.back() == '\t')) sym.pop_back();
+				while (!sym.empty() && (sym.back() == ' ' || sym.back() == '\t'))
+					sym.pop_back();
 				std::string val = rest.substr(eq + 2);
 				size_t v0 = 0;
-				while (v0 < val.size() && (val[v0] == ' ' || val[v0] == '\t')) v0++;
+				while (v0 < val.size() && (val[v0] == ' ' || val[v0] == '\t'))
+					v0++;
 				val.erase(0, v0);
-				while (!val.empty() && (val.back() == ' ' || val.back() == '\t')) val.pop_back();
+				while (!val.empty() && (val.back() == ' ' || val.back() == '\t'))
+					val.pop_back();
 				options->defines[sym] = val;
 			}
 		}
 		return;
 	}
 	if (name == "undef") {
-		if (options) options->defines.erase(rest);
+		if (options)
+			options->defines.erase(rest);
 		return;
 	}
 	if (name == "i" || name == "include") {
@@ -281,14 +295,16 @@ void Parser::handle_directive(const std::string& body) {
 			auto buf = std::make_unique<char[]>(n);
 			memcpy(buf.get(), literal.data(), n);
 			FILE* f = fmemopen(buf.get(), n, "r");
-			if (!f) raise_parse_error("fmemopen failed for {$I " + rest + "}");
+			if (!f)
+				raise_parse_error("fmemopen failed for {$I " + rest + "}");
 			push_input_file_and_buffer(f, "<" + rest + ">", 1, std::move(buf), n);
 			return;
 		}
 		std::vector<std::string> empty;
 		auto [f, path] = resolve_include(rest, input_file_name,
-		                                 options ? options->include_search_paths : empty);
-		if (!f) raise_parse_error("cannot open include file: " + rest);
+						 options ? options->include_search_paths : empty);
+		if (!f)
+			raise_parse_error("cannot open include file: " + rest);
 		push_input_file(f, path, 1);
 		return;
 	}
@@ -308,108 +324,112 @@ std::string Parser::consume() {
 	}
 	if ((input_char >= 'a' && input_char <= 'z') | (input_char >= 'A' && input_char <= 'Z') || input_char == '_') {
 		while ((input_char >= 'a' && input_char <= 'z') || (input_char >= 'A' && input_char <= 'Z') || input_char == '_') {
-			sst << (char) tolower(input_char);
+			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
 	} else if (input_char == '$') {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 		while ((input_char >= '0' && input_char <= '9') || (input_char >= 'a' && input_char <= 'f') || (input_char >= 'A' && input_char <= 'F') || input_char == '.' || input_char == '_') {
-			sst << (char) tolower(input_char);
+			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
 	} else if ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
 		while ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
-			sst << (char) input_char;
+			sst << (char)input_char;
 			consume_lowlevel();
 		}
 	} else if (input_char == '#') {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 		while ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
-			sst << (char) input_char;
+			sst << (char)input_char;
 			consume_lowlevel();
 		}
 	} else if (input_char == '<') {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 		if (input_char == '=' || input_char == '<' || input_char == '>') {
-			sst << (char) input_char;
+			sst << (char)input_char;
 			consume_lowlevel();
 		}
 	} else if (input_char == '>') {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 		if (input_char == '=' || input_char == '>' || input_char == '<') {
-			sst << (char) input_char;
+			sst << (char)input_char;
 			consume_lowlevel();
 		}
 	} else if (input_char == ':') {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 		if (input_char == '=') {
-			sst << (char) input_char;
+			sst << (char)input_char;
 			consume_lowlevel();
 		}
-    } else if (input_char == '/') {
-        sst << (char) input_char;
-        consume_lowlevel();
-        if (input_char == '/') { // line comment
-            sst << (char) input_char;
-            consume_lowlevel();
-            while (input_char != EOF && input_char != '\n') {
-                sst << (char) input_char;
-                consume_lowlevel();
-            }
-            if (input_char == '\n') {
-                sst << (char) input_char;
-                consume_lowlevel();
-                return consume();
-            } else {
-                raise_parse_error("missing newline");
-            }
-        }
+	} else if (input_char == '/') {
+		sst << (char)input_char;
+		consume_lowlevel();
+		if (input_char == '/') { // line comment
+			sst << (char)input_char;
+			consume_lowlevel();
+			while (input_char != EOF && input_char != '\n') {
+				sst << (char)input_char;
+				consume_lowlevel();
+			}
+			if (input_char == '\n') {
+				sst << (char)input_char;
+				consume_lowlevel();
+				return consume();
+			} else {
+				raise_parse_error("missing newline");
+			}
+		}
 	} else if (input_char != EOF && strchr("=;,[]()@*+-^", input_char)) {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 	} else if (input_char == '\'') {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 		while (true) {
 			while (input_char != EOF && input_char != '\'') {
-				sst << (char) input_char;
+				sst << (char)input_char;
 				consume_lowlevel();
 			}
-			if (input_char != '\'') { raise_parse_error("missing end quote"); }
-			sst << (char) input_char;
+			if (input_char != '\'') {
+				raise_parse_error("missing end quote");
+			}
+			sst << (char)input_char;
 			consume_lowlevel();
 			// A doubled quote inside the string represents one literal
 			// quote character; consume it and keep going.
-			if (input_char != '\'') break;
-			sst << (char) input_char;
+			if (input_char != '\'')
+				break;
+			sst << (char)input_char;
 			consume_lowlevel();
 		}
 	} else if (input_char == '{') {
-		sst << (char) input_char;
+		sst << (char)input_char;
 		consume_lowlevel();
 		if (input_char == '$') {
 			consume_lowlevel(); // skip $
 			std::string body;
 			while (input_char != EOF && input_char != '}') {
-				body.push_back((char) input_char);
+				body.push_back((char)input_char);
 				consume_lowlevel();
 			}
-			if (input_char != '}') raise_parse_error("missing end comment");
+			if (input_char != '}')
+				raise_parse_error("missing end comment");
 			consume_lowlevel(); // skip }
 			handle_directive(body);
 			return consume();
 		} else {
 			while (input_char != EOF && input_char != '}') {
-				sst << (char) input_char;
+				sst << (char)input_char;
 				consume_lowlevel();
 			}
 			if (input_char == '}') {
-				sst << (char) input_char;
+				sst << (char)input_char;
 				consume_lowlevel();
 				return consume();
 			} else {
@@ -424,7 +444,8 @@ std::string Parser::consume() {
 	// Drop any token produced while an outer `{$ifdef}`/`{$if}` frame is
 	// inactive. Directives are already handled in-line and never reach
 	// here, so they still update the ifdef stack correctly.
-	if (!current_active() && !text.empty()) return consume();
+	if (!current_active() && !text.empty())
+		return consume();
 	return text;
 }
 void Parser::start() {
@@ -463,12 +484,16 @@ bool Parser::maybe_parse_directive(std::string directive) {
  *  field namespace to push. */
 static Frame* get_type_body_frame(Type* ty) {
 	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-		if (!inc->resolved) return nullptr;
+		if (!inc->resolved)
+			return nullptr;
 		ty = inc->resolved;
 	}
-	if (auto r = dynamic_cast<RecordType*>(ty)) return r->children;
-	if (auto c = dynamic_cast<ClassType*>(ty)) return c->children;
-	if (auto o = dynamic_cast<ObjectType*>(ty)) return o->children;
+	if (auto r = dynamic_cast<RecordType*>(ty))
+		return r->children;
+	if (auto c = dynamic_cast<ClassType*>(ty))
+		return c->children;
+	if (auto o = dynamic_cast<ObjectType*>(ty))
+		return o->children;
 	return nullptr;
 }
 
@@ -511,17 +536,21 @@ Node* Parser::maybe_parse_statement() {
 			auto id = parse_identifier();
 			Node* target = resolve_value(id);
 			auto target_slot = dynamic_cast<StorageSlot*>(target);
-			if (!target_slot) raise_parse_error("with target must currently be a simple variable");
+			if (!target_slot)
+				raise_parse_error("with target must currently be a simple variable");
 			Frame* body_frame = get_type_body_frame(target_slot->ty);
-			if (!body_frame) raise_parse_error("with target's type has no field body");
+			if (!body_frame)
+				raise_parse_error("with target's type has no field body");
 			parse_keyword("do");
 			std::string alias = emitter ? emitter->next_fresh_cxx_name("pas_with") : std::string("pas_with_x");
 			auto alias_slot = new StorageSlot(alias, target_slot->ty);
-			if (emitter) emitter->emit_with_prologue(alias, target);
+			if (emitter)
+				emitter->emit_with_prologue(alias, target);
 			push_with_scope(body_frame, alias_slot);
 			parse_statement();
 			pop_scope();
-			if (emitter) emitter->emit_with_epilogue();
+			if (emitter)
+				emitter->emit_with_epilogue();
 			return nullptr;
 		} else {
 			// A statement here is either an assignment (designator := expression)
@@ -535,7 +564,8 @@ Node* Parser::maybe_parse_statement() {
 				}
 				Node* rhs = parse_expression();
 				auto assign = new Assign(lhs, rhs);
-				if (emitter) emitter->emit_statement(assign);
+				if (emitter)
+					emitter->emit_statement(assign);
 				return assign;
 			}
 			// Call statement: parse_designator already built the ProcCall for
@@ -544,7 +574,8 @@ Node* Parser::maybe_parse_statement() {
 			if (!dynamic_cast<ProcCall*>(call)) {
 				raise_parse_error("statement is neither an assignment nor a call");
 			}
-			if (emitter) emitter->emit_statement(call);
+			if (emitter)
+				emitter->emit_statement(call);
 			return call;
 		}
 		// FIXME: raise_parse_error("missing statement");
@@ -563,7 +594,7 @@ std::optional<std::string> Parser::maybe_parse_identifier() {
 std::string Parser::parse_identifier() {
 	auto result = maybe_parse_identifier();
 	if (!result) {
-		(void) raise_parse_error("expected identifier");
+		(void)raise_parse_error("expected identifier");
 	}
 	return *result;
 }
@@ -615,9 +646,10 @@ Node* Parser::resolve_value(std::string name) {
 	// scopes (cross-unit overloading).
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		Node* hit = it->frame->lookup_value(name);
-		if (!hit) continue;
+		if (!hit)
+			continue;
 		auto as_call = dynamic_cast<Callable*>(hit);
-		auto as_set  = dynamic_cast<OverloadSet*>(hit);
+		auto as_set = dynamic_cast<OverloadSet*>(hit);
 		if (collected.empty() && !as_call && !as_set) {
 			// First (and terminating) hit is a non-callable value.
 			if (it->unwrap_via) {
@@ -629,13 +661,15 @@ Node* Parser::resolve_value(std::string name) {
 		}
 		if (as_call) {
 			if (!as_call->has_overload_directive) {
-				if (collected.empty()) return as_call;   // plain callable, first-hit wins
-				break;                                   // shadowed by collected overloads above
+				if (collected.empty())
+					return as_call; // plain callable, first-hit wins
+				break;			// shadowed by collected overloads above
 			}
 			collected.push_back(as_call);
 		} else if (as_set) {
 			// Every member of an OverloadSet already has has_overload_directive.
-			for (auto* m : as_set->members) collected.push_back(m);
+			for (auto* m : as_set->members)
+				collected.push_back(m);
 		} else {
 			// Non-callable value below a collected overload block -- stop.
 			break;
@@ -645,7 +679,8 @@ Node* Parser::resolve_value(std::string name) {
 		raise_parse_error("unresolved value identifier: " + name);
 		return nullptr;
 	}
-	if (collected.size() == 1) return collected[0];
+	if (collected.size() == 1)
+		return collected[0];
 	return new OverloadSet(name, std::move(collected));
 }
 
@@ -691,12 +726,14 @@ Node* Parser::parse_value() {
 		parse_closing_paren();
 		return result;
 	}
-	if (auto n = maybe_parse_numeral()) return n;
+	if (auto n = maybe_parse_numeral())
+		return n;
 	if (!input_token.empty() && input_token.front() == '\'') {
 		std::string s;
 		for (size_t i = 1; i + 1 < input_token.size(); ++i) {
 			s.push_back(input_token[i]);
-			if (input_token[i] == '\'' && i + 2 < input_token.size() && input_token[i + 1] == '\'') ++i;
+			if (input_token[i] == '\'' && i + 2 < input_token.size() && input_token[i + 1] == '\'')
+				++i;
 		}
 		consume();
 		return new String(std::move(s), shortstring_type());
@@ -804,17 +841,20 @@ bool Parser::maybe_parse_greater_equal() {
 }
 
 // Helpers that construct a Node and set its result type in one expression.
-template<typename T> static Node* mk_arith(Node* a, Node* b) {
+template <typename T>
+static Node* mk_arith(Node* a, Node* b) {
 	auto n = new T(a, b);
 	n->ty = common_arith_type(a->ty, b->ty);
 	return n;
 }
-template<typename T> static Node* mk_compare(Node* a, Node* b) {
+template <typename T>
+static Node* mk_compare(Node* a, Node* b) {
 	auto n = new T(a, b);
 	n->ty = boolean_type();
 	return n;
 }
-template<typename T> static Node* mk_unary_same(Node* x) {
+template <typename T>
+static Node* mk_unary_same(Node* x) {
 	auto n = new T(x);
 	n->ty = x->ty;
 	return n;
@@ -824,8 +864,10 @@ template<typename T> static Node* mk_unary_same(Node* x) {
 // a MemberAccess whose member is either)? Used both for the auto-call check
 // and to decide whether to peel a MemberAccess in finalize_call.
 static bool node_is_bare_callable(Node* n) {
-	if (!n) return false;
-	if (dynamic_cast<Callable*>(n) || dynamic_cast<OverloadSet*>(n)) return true;
+	if (!n)
+		return false;
+	if (dynamic_cast<Callable*>(n) || dynamic_cast<OverloadSet*>(n))
+		return true;
 	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
 		return dynamic_cast<Callable*>(ma->b) || dynamic_cast<OverloadSet*>(ma->b);
 	}
@@ -833,7 +875,8 @@ static bool node_is_bare_callable(Node* n) {
 }
 
 Node* Parser::maybe_auto_call(Node* n) {
-	if (!node_is_bare_callable(n)) return n;
+	if (!node_is_bare_callable(n))
+		return n;
 	// finalize_call handles the empty-args case: for a Callable it checks
 	// that either no formals exist or all remaining formals have defaults;
 	// for an OverloadSet it runs ranking and picks the parameterless winner.
@@ -848,15 +891,19 @@ Node* Parser::maybe_auto_call(Node* n) {
 // Static helpers used inside parse_designator's branches.
 static Type* unwrap_incomplete(Type* ty) {
 	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-		if (!inc->resolved) return ty;
+		if (!inc->resolved)
+			return ty;
 		ty = inc->resolved;
 	}
 	return ty;
 }
 static Frame* body_frame_of(Type* ty) {
-	if (auto r = dynamic_cast<RecordType*>(ty)) return r->children;
-	if (auto c = dynamic_cast<ClassType*>(ty)) return c->children;
-	if (auto o = dynamic_cast<ObjectType*>(ty)) return o->children;
+	if (auto r = dynamic_cast<RecordType*>(ty))
+		return r->children;
+	if (auto c = dynamic_cast<ClassType*>(ty))
+		return c->children;
+	if (auto o = dynamic_cast<ObjectType*>(ty))
+		return o->children;
 	return nullptr;
 }
 
@@ -872,9 +919,11 @@ Node* Parser::parse_designator() {
 			std::string member_name = parse_identifier();
 			Type* ct = unwrap_incomplete(result->ty);
 			Frame* members = body_frame_of(ct);
-			if (!members) raise_parse_error("member access on non-composite type");
+			if (!members)
+				raise_parse_error("member access on non-composite type");
 			Node* member = members->lookup_value(member_name);
-			if (!member) raise_parse_error("no member '" + member_name + "'");
+			if (!member)
+				raise_parse_error("no member '" + member_name + "'");
 			auto ma = new MemberAccess(result, member);
 			ma->ty = member->ty;
 			result = ma;
@@ -885,7 +934,8 @@ Node* Parser::parse_designator() {
 			std::vector<Node*> args;
 			if (input_token != ")") {
 				args.push_back(parse_expression());
-				while (maybe_parse_comma()) args.push_back(parse_expression());
+				while (maybe_parse_comma())
+					args.push_back(parse_expression());
 			}
 			parse_closing_paren();
 			auto fc = finalize_call(result, args, /*name for error*/ "");
@@ -901,7 +951,8 @@ Node* Parser::parse_designator() {
 			parse_closing_bracket();
 			Type* ct = unwrap_incomplete(result->ty);
 			auto arr = dynamic_cast<FixedArrayType*>(ct);
-			if (!arr) raise_parse_error("index on non-array type");
+			if (!arr)
+				raise_parse_error("index on non-array type");
 			auto ix = new Index(result, idx);
 			ix->ty = arr->item_type;
 			result = ix;
@@ -912,7 +963,8 @@ Node* Parser::parse_designator() {
 			consume();
 			Type* ct = unwrap_incomplete(result->ty);
 			auto p = dynamic_cast<PointerType*>(ct);
-			if (!p) raise_parse_error("deref of non-pointer type");
+			if (!p)
+				raise_parse_error("deref of non-pointer type");
 			auto d = new Dereference(result);
 			d->ty = p->item_type;
 			result = d;
@@ -924,10 +976,14 @@ Node* Parser::parse_designator() {
 }
 
 bool Parser::is_assignable(Node* n) {
-	if (!n) return false;
-	if (dynamic_cast<StorageSlot*>(n)) return true;
-	if (dynamic_cast<Dereference*>(n)) return true;
-	if (dynamic_cast<Index*>(n)) return true;
+	if (!n)
+		return false;
+	if (dynamic_cast<StorageSlot*>(n))
+		return true;
+	if (dynamic_cast<Dereference*>(n))
+		return true;
+	if (dynamic_cast<Index*>(n))
+		return true;
 	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
 		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
 	}
@@ -939,7 +995,7 @@ Node* Parser::parse_power() {
 	if (maybe_parse_keyword("not")) {
 		return mk_unary_same<Not>(maybe_auto_call(parse_designator()));
 	} else if (maybe_parse_at()) {
-		auto x = parse_designator();   // @ takes a designator, not the auto-called value
+		auto x = parse_designator(); // @ takes a designator, not the auto-called value
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(x->ty)) : nullptr;
 		return n;
@@ -1042,7 +1098,8 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	push_scope(body);
 	std::string visibility = "published";
 	do {
-		if (peek_keyword("end")) break;
+		if (peek_keyword("end"))
+			break;
 		if (maybe_parse_directive("published")) {
 			visibility = "published";
 		} else if (maybe_parse_directive("public")) {
@@ -1059,7 +1116,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			parse_var_block();
 		} else if (peek_keyword("procedure") || peek_keyword("function")) {
 			parse_method_prototype(body, owner_class, peek_keyword("function"));
-			continue;   // parse_method_prototype consumes its terminating ';'
+			continue; // parse_method_prototype consumes its terminating ';'
 		} else {
 			auto member_name = parse_identifier();
 			parse_colon();
@@ -1082,7 +1139,8 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	parse_keyword(is_function ? "function" : "procedure");
 	std::string pas_name = parse_identifier();
 	std::vector<Parameter> formals;
-	if (input_token == "(") formals = parse_proc_formal_parameters();
+	if (input_token == "(")
+		formals = parse_proc_formal_parameters();
 	Type* return_type = &unit_type();
 	if (is_function) {
 		parse_colon();
@@ -1092,16 +1150,32 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	bool has_overload = false;
 	Method::VirtualKind vk = Method::VirtualKind::None;
 	while (true) {
-		if (peek_keyword("overload")) { parse_keyword("overload"); has_overload = true; parse_semicolon(); }
-		else if (peek_keyword("virtual"))  { parse_keyword("virtual");  vk = Method::VirtualKind::Virtual;  parse_semicolon(); }
-		else if (peek_keyword("override")) { parse_keyword("override"); vk = Method::VirtualKind::Override; parse_semicolon(); }
-		else if (peek_keyword("abstract")) { parse_keyword("abstract"); vk = Method::VirtualKind::Abstract; parse_semicolon(); }
-		else if (peek_keyword("dynamic"))  { parse_keyword("dynamic");  vk = Method::VirtualKind::Dynamic;  parse_semicolon(); }
-		else break;
+		if (peek_keyword("overload")) {
+			parse_keyword("overload");
+			has_overload = true;
+			parse_semicolon();
+		} else if (peek_keyword("virtual")) {
+			parse_keyword("virtual");
+			vk = Method::VirtualKind::Virtual;
+			parse_semicolon();
+		} else if (peek_keyword("override")) {
+			parse_keyword("override");
+			vk = Method::VirtualKind::Override;
+			parse_semicolon();
+		} else if (peek_keyword("abstract")) {
+			parse_keyword("abstract");
+			vk = Method::VirtualKind::Abstract;
+			parse_semicolon();
+		} else if (peek_keyword("dynamic")) {
+			parse_keyword("dynamic");
+			vk = Method::VirtualKind::Dynamic;
+			parse_semicolon();
+		} else
+			break;
 	}
 	auto m = new Method(pas_name, pascal_to_cxx_name(pas_name),
-	                    std::move(formals), return_type, has_overload,
-	                    owner_class, vk);
+			    std::move(formals), return_type, has_overload,
+			    owner_class, vk);
 	if (!body->register_callable(pas_name, m)) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 	}
@@ -1260,7 +1334,8 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 	current_type_block = scope;
 	do {
 		auto name_optional = maybe_parse_identifier();
-		if (!name_optional) break;
+		if (!name_optional)
+			break;
 		auto name = *name_optional;
 		parse_equals();
 		Type* existing = scope->lookup_type(name);
@@ -1278,12 +1353,16 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 		// Attach the LHS Pascal name (as its C++ identifier) to record-family
 		// types so emit_type_ref has a name to spell.
 		std::string cxx = pascal_to_cxx_name(name);
-		if (auto r = dynamic_cast<RecordType*>(rhs)) r->cxx_name = cxx;
-		else if (auto c = dynamic_cast<ClassType*>(rhs)) c->cxx_name = cxx;
-		else if (auto o = dynamic_cast<ObjectType*>(rhs)) o->cxx_name = cxx;
+		if (auto r = dynamic_cast<RecordType*>(rhs))
+			r->cxx_name = cxx;
+		else if (auto c = dynamic_cast<ClassType*>(rhs))
+			c->cxx_name = cxx;
+		else if (auto o = dynamic_cast<ObjectType*>(rhs))
+			o->cxx_name = cxx;
 		lhs_placeholder->resolved = rhs;
 		scope->rebind_type(name, rhs);
-		if (emitter) emitter->emit_type_definition(cxx, rhs);
+		if (emitter)
+			emitter->emit_type_definition(cxx, rhs);
 		parse_semicolon();
 	} while (true);
 	for (auto& kv : scope->types()) {
@@ -1326,7 +1405,8 @@ Frame* Parser::parse_var_block() {
 			auto name = iter;
 			auto slot = new StorageSlot(pascal_to_cxx_name(name), ty);
 			scope->register_variable(name, slot, ty);
-			if (emitter) emitter->emit_var_decl(slot->cxx_name, ty);
+			if (emitter)
+				emitter->emit_var_decl(slot->cxx_name, ty);
 		}
 		parse_semicolon();
 	} while (true);
@@ -1484,7 +1564,8 @@ Node* Parser::parse_block() {
 	parse_keyword("begin");
 	auto body = parse_block_body();
 	parse_keyword("end");
-	for (size_t i = 0; i < pushed; i++) pop_scope();
+	for (size_t i = 0; i < pushed; i++)
+		pop_scope();
 	return body;
 }
 
@@ -1499,12 +1580,16 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 	if (input_token != ")") {
 		do {
 			ParamMode mode = ParamMode::Value;
-			if (maybe_parse_keyword("var"))        mode = ParamMode::Var;
-			else if (maybe_parse_keyword("out"))   mode = ParamMode::Out;
-			else if (maybe_parse_keyword("const")) mode = ParamMode::Const;
+			if (maybe_parse_keyword("var"))
+				mode = ParamMode::Var;
+			else if (maybe_parse_keyword("out"))
+				mode = ParamMode::Out;
+			else if (maybe_parse_keyword("const"))
+				mode = ParamMode::Const;
 			std::vector<std::string> names;
 			names.push_back(parse_identifier());
-			while (maybe_parse_comma()) names.push_back(parse_identifier());
+			while (maybe_parse_comma())
+				names.push_back(parse_identifier());
 			parse_colon();
 			Type* ty = parse_type_expression(false);
 			Node* default_value = nullptr;
@@ -1536,15 +1621,21 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		std::string method_name = parse_identifier();
 		Type* owner_ty = resolve_type(first_name, false);
 		Frame* owner_frame = nullptr;
-		if (auto r = dynamic_cast<RecordType*>(owner_ty)) owner_frame = r->children;
-		else if (auto c = dynamic_cast<ClassType*>(owner_ty)) owner_frame = c->children;
-		else if (auto o = dynamic_cast<ObjectType*>(owner_ty)) owner_frame = o->children;
-		if (!owner_frame) raise_parse_error("'" + first_name + "' is not a class/record/object");
+		if (auto r = dynamic_cast<RecordType*>(owner_ty))
+			owner_frame = r->children;
+		else if (auto c = dynamic_cast<ClassType*>(owner_ty))
+			owner_frame = c->children;
+		else if (auto o = dynamic_cast<ObjectType*>(owner_ty))
+			owner_frame = o->children;
+		if (!owner_frame)
+			raise_parse_error("'" + first_name + "' is not a class/record/object");
 		Node* hit = owner_frame->lookup_value(method_name);
 		auto m = dynamic_cast<Method*>(hit);
-		if (!m) raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
+		if (!m)
+			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
 		std::vector<Parameter> formals;
-		if (input_token == "(") formals = parse_proc_formal_parameters();
+		if (input_token == "(")
+			formals = parse_proc_formal_parameters();
 		// TODO: verify formals match the prototype; for now we accept whatever
 		// the definition site provided and use the prototype's formals as the
 		// source of truth for later resolution.
@@ -1568,16 +1659,19 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		}
 		push_scope(body_frame);
 		push_with_scope(owner_frame, self_slot);
-		if (emitter) emitter->emit_procedure_open(m);
+		if (emitter)
+			emitter->emit_procedure_open(m);
 		size_t pushed = parse_decl_blocks();
 		parse_keyword("begin");
 		m->body = parse_block_body();
 		parse_keyword("end");
 		parse_semicolon();
-		if (emitter) emitter->emit_procedure_close();
-		for (size_t i = 0; i < pushed; i++) pop_scope();
-		pop_scope();   // with-scope
-		pop_scope();   // body_frame
+		if (emitter)
+			emitter->emit_procedure_close();
+		for (size_t i = 0; i < pushed; i++)
+			pop_scope();
+		pop_scope(); // with-scope
+		pop_scope(); // body_frame
 		return;
 	}
 	std::string pas_name = std::move(first_name);
@@ -1588,7 +1682,8 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	// means a no-parameter proc.
 	bool had_paren = (input_token == "(");
 	std::vector<Parameter> formals;
-	if (had_paren) formals = parse_proc_formal_parameters();
+	if (had_paren)
+		formals = parse_proc_formal_parameters();
 	Type* return_type = &unit_type();
 	if (is_function) {
 		parse_colon();
@@ -1620,7 +1715,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 
 	if (!body_follows) {
 		auto proto = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
-		                           std::move(formals), return_type, has_overload);
+					   std::move(formals), return_type, has_overload);
 		if (!enclosing->register_callable(pas_name, proto)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 		}
@@ -1634,7 +1729,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		parse_keyword("forward");
 		parse_semicolon();
 		auto proto = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
-		                           std::move(formals), return_type, has_overload);
+					   std::move(formals), return_type, has_overload);
 		if (!enclosing->register_callable(pas_name, proto)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 		}
@@ -1661,16 +1756,21 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	Node* existing = enclosing->lookup_value(pas_name);
 	if (existing) {
 		auto sig_matches = [&](Callable* c) -> bool {
-			if (c->formals.size() != formals.size()) return false;
-			if (c->return_type != return_type) return false;
+			if (c->formals.size() != formals.size())
+				return false;
+			if (c->return_type != return_type)
+				return false;
 			for (size_t i = 0; i < formals.size(); i++) {
-				if (c->formals[i].ty != formals[i].ty) return false;
-				if (c->formals[i].mode != formals[i].mode) return false;
+				if (c->formals[i].ty != formals[i].ty)
+					return false;
+				if (c->formals[i].mode != formals[i].mode)
+					return false;
 			}
 			return true;
 		};
 		auto attach_to = [&](Callable* c) -> Procedure* {
-			if (c->body) raise_parse_error("duplicate implementation of '" + pas_name + "'");
+			if (c->body)
+				raise_parse_error("duplicate implementation of '" + pas_name + "'");
 			if (!had_paren) {
 				formals = c->formals;
 				return_type = c->return_type;
@@ -1684,7 +1784,8 @@ void Parser::parse_procedure_or_function(bool is_function) {
 				c->formals = formals;
 			}
 			auto p = dynamic_cast<Procedure*>(c);
-			if (!p) raise_parse_error("'" + pas_name + "' is not a standalone procedure");
+			if (!p)
+				raise_parse_error("'" + pas_name + "' is not a standalone procedure");
 			return p;
 		};
 		if (auto ec = dynamic_cast<Callable*>(existing)) {
@@ -1698,18 +1799,21 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			if (!had_paren) {
 				Callable* pick = nullptr;
 				for (auto* m : os->members) {
-					if (m->body) continue;
-					if (pick) raise_parse_error("short-form impl of '" + pas_name
-						+ "' is ambiguous: multiple overloads still need a body");
+					if (m->body)
+						continue;
+					if (pick)
+						raise_parse_error("short-form impl of '" + pas_name + "' is ambiguous: multiple overloads still need a body");
 					pick = m;
 				}
-				if (!pick) raise_parse_error("no unimplemented prototype of '" + pas_name
-					+ "' for short-form definition");
+				if (!pick)
+					raise_parse_error("no unimplemented prototype of '" + pas_name + "' for short-form definition");
 				target = attach_to(pick);
 			} else {
 				for (auto* m : os->members) {
-					if (!sig_matches(m)) continue;
-					if (target) raise_parse_error("ambiguous overload match for '" + pas_name + "'");
+					if (!sig_matches(m))
+						continue;
+					if (target)
+						raise_parse_error("ambiguous overload match for '" + pas_name + "'");
 					target = attach_to(m);
 				}
 				// If no sig match found: fresh registration below.
@@ -1720,7 +1824,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	}
 	if (!target) {
 		target = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
-		                       std::move(formals), return_type, has_overload);
+				       std::move(formals), return_type, has_overload);
 		if (!enclosing->register_callable(pas_name, target)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 		}
@@ -1732,21 +1836,24 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	for (auto& p : target->formals) {
 		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
 	}
-	if (emitter) emitter->emit_procedure_open(target);
+	if (emitter)
+		emitter->emit_procedure_open(target);
 	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
 	target->body = parse_block_body();
 	parse_keyword("end");
 	parse_semicolon();
-	if (emitter) emitter->emit_procedure_close();
-	for (size_t i = 0; i < pushed; i++) pop_scope();
+	if (emitter)
+		emitter->emit_procedure_close();
+	for (size_t i = 0; i < pushed; i++)
+		pop_scope();
 	pop_scope(); // body_frame
 }
 
 Node* Parser::parse_constructor_prototype() {
 	parse_keyword("constructor");
 	auto id = parse_identifier();
-    auto formal_parameters = parse_proc_formal_parameters();
+	auto formal_parameters = parse_proc_formal_parameters();
 	maybe_parse_proc_attributes();
 }
 
@@ -1758,7 +1865,7 @@ Node* Parser::parse_constructor() {
 Node* Parser::parse_destructor_prototype() {
 	parse_keyword("destructor");
 	auto id = parse_identifier();
-    auto formal_parameters = parse_proc_formal_parameters();
+	auto formal_parameters = parse_proc_formal_parameters();
 	maybe_parse_proc_attributes();
 }
 
@@ -1772,9 +1879,11 @@ Node* Parser::parse_destructor() {
 // when candidate is a Method with receiver); entries past args.size() are 0
 // (default-supplied positions).
 static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::vector<Node*>& args) {
-	if (args.size() > c->formals.size()) return {};
+	if (args.size() > c->formals.size())
+		return {};
 	for (size_t i = args.size(); i < c->formals.size(); i++) {
-		if (!c->formals[i].default_value) return {};
+		if (!c->formals[i].default_value)
+			return {};
 	}
 	// Self position (if any) is prepended to the cost vector.
 	auto m = dynamic_cast<Method*>(c);
@@ -1782,13 +1891,15 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 	std::vector<int> costs(self_slots + c->formals.size(), 0);
 	if (self_slots) {
 		int sc = conversion_cost(receiver ? receiver->ty : nullptr, m->owner_class);
-		if (sc < 0) return {};
+		if (sc < 0)
+			return {};
 		costs[0] = sc;
 	}
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
 		int cc = conversion_cost(from, c->formals[i].ty);
-		if (cc < 0) return {};
+		if (cc < 0)
+			return {};
 		costs[self_slots + i] = cc;
 	}
 	return costs;
@@ -1797,11 +1908,14 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 // A dominates B iff A's cost is <= B's on every position AND strictly < on
 // at least one. Different-length vectors don't compare (ambiguity later).
 static bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
-	if (a.size() != b.size()) return false;
+	if (a.size() != b.size())
+		return false;
 	bool strict = false;
 	for (size_t i = 0; i < a.size(); i++) {
-		if (a[i] > b[i]) return false;
-		if (a[i] < b[i]) strict = true;
+		if (a[i] > b[i])
+			return false;
+		if (a[i] < b[i])
+			strict = true;
 	}
 	return strict;
 }
@@ -1823,7 +1937,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		std::vector<std::pair<Callable*, std::vector<int>>> viable;
 		for (auto* c : os->members) {
 			auto costs = per_arg_costs(c, receiver, args);
-			if (!costs.empty()) viable.push_back({c, std::move(costs)});
+			if (!costs.empty())
+				viable.push_back({c, std::move(costs)});
 		}
 		if (viable.empty()) {
 			raise_parse_error("no matching overload for '" + name_for_error + "'");
@@ -1837,7 +1952,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 					break;
 				}
 			}
-			if (!dom) non_dominated.push_back(viable[i].first);
+			if (!dom)
+				non_dominated.push_back(viable[i].first);
 		}
 		if (non_dominated.size() != 1) {
 			raise_parse_error("ambiguous overload for '" + name_for_error + "'");
@@ -1861,27 +1977,35 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* t = chosen->formals[i].ty;
-		if (args[i]->ty != t) args[i] = new Cast(args[i], t);
+		if (args[i]->ty != t)
+			args[i] = new Cast(args[i], t);
 	}
 	return FinalizedCall{receiver, chosen};
 }
 
 Unit* Parser::load_or_get_unit(std::string name) {
-	if (Unit* existing = unit_registry->lookup(name)) return existing;
+	if (Unit* existing = unit_registry->lookup(name))
+		return existing;
 	// Search dir of the current input file, then CWD.
 	std::string dir;
 	auto slash = input_file_name.find_last_of('/');
-	if (slash != std::string::npos) dir = input_file_name.substr(0, slash + 1);
+	if (slash != std::string::npos)
+		dir = input_file_name.substr(0, slash + 1);
 	std::vector<std::string> candidates;
-	if (!dir.empty()) candidates.push_back(dir + name + ".pp");
+	if (!dir.empty())
+		candidates.push_back(dir + name + ".pp");
 	candidates.push_back(name + ".pp");
 	FILE* f = nullptr;
 	std::string opened;
 	for (auto& p : candidates) {
 		f = fopen(p.c_str(), "r");
-		if (f) { opened = p; break; }
+		if (f) {
+			opened = p;
+			break;
+		}
 	}
-	if (!f) raise_parse_error("cannot find unit file for: " + name);
+	if (!f)
+		raise_parse_error("cannot find unit file for: " + name);
 	// Nested Parser so the sub-load has its own token/scope state; the shared
 	// unit_registry is what lets circular-dep detection work across the two.
 	Parser sub(unit_registry, nullptr, options);
@@ -1889,7 +2013,8 @@ Unit* Parser::load_or_get_unit(std::string name) {
 	sub.start();
 	sub.parse_program_or_unit();
 	Unit* loaded = unit_registry->lookup(name);
-	if (!loaded) raise_parse_error("file '" + opened + "' did not declare 'unit " + name + ";'");
+	if (!loaded)
+		raise_parse_error("file '" + opened + "' did not declare 'unit " + name + ";'");
 	return loaded;
 }
 
@@ -1903,7 +2028,8 @@ size_t Parser::parse_uses_clause(bool in_interface, std::string current_name) {
 		}
 		push_scope(used->interface_frame);
 		pushed++;
-		if (!maybe_parse_comma()) break;
+		if (!maybe_parse_comma())
+			break;
 	} while (true);
 	return pushed;
 }
@@ -1950,11 +2076,15 @@ Node* Parser::parse_unit_body() {
 
 	// Pop in reverse push order: impl-side decl blocks, impl-side uses,
 	// impl frame, iface-side decl blocks, iface-side uses, iface frame.
-	for (size_t i = 0; i < impl_decls; i++) pop_scope();
-	for (size_t i = 0; i < impl_uses; i++) pop_scope();
+	for (size_t i = 0; i < impl_decls; i++)
+		pop_scope();
+	for (size_t i = 0; i < impl_uses; i++)
+		pop_scope();
 	pop_scope(); // impl
-	for (size_t i = 0; i < iface_decls; i++) pop_scope();
-	for (size_t i = 0; i < iface_uses; i++) pop_scope();
+	for (size_t i = 0; i < iface_decls; i++)
+		pop_scope();
+	for (size_t i = 0; i < iface_uses; i++)
+		pop_scope();
 	pop_scope(); // iface
 
 	unit->phase = UnitPhase::Done;
@@ -1978,18 +2108,23 @@ Node* Parser::parse_program_or_unit() {
 			prog_uses = parse_uses_clause(false, name);
 			parse_semicolon();
 		}
-		if (emitter) emitter->emit_program_prologue(name);
+		if (emitter)
+			emitter->emit_program_prologue(name);
 		// Inlined equivalent of parse_block; we need to bracket the body-block
 		// with main() emission hooks, which parse_block itself doesn't know
 		// about (it's also called from procedure bodies).
 		size_t pushed = parse_decl_blocks();
 		parse_keyword("begin");
-		if (emitter) emitter->emit_main_prologue();
+		if (emitter)
+			emitter->emit_main_prologue();
 		auto body = parse_block_body();
 		parse_keyword("end");
-		if (emitter) emitter->emit_main_epilogue();
-		for (size_t i = 0; i < pushed; i++) pop_scope();
-		for (size_t i = 0; i < prog_uses; i++) pop_scope();
+		if (emitter)
+			emitter->emit_main_epilogue();
+		for (size_t i = 0; i < pushed; i++)
+			pop_scope();
+		for (size_t i = 0; i < prog_uses; i++)
+			pop_scope();
 		parse_period();
 		pop_scope();
 		unit->phase = UnitPhase::Done;
