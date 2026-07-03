@@ -1564,9 +1564,14 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		return;
 	}
 	std::string pas_name = std::move(first_name);
+	// Track whether the caller wrote `(...)` to distinguish long form
+	// `procedure Foo(a: Integer);` from short form `procedure Foo;`. The
+	// short form in an implementation section means "match a prototype and
+	// adopt its formals"; in an interface section (or standalone) it just
+	// means a no-parameter proc.
+	bool had_paren = (input_token == "(");
 	std::vector<Parameter> formals;
-	// Pascal allows omitting the empty parameter list: `procedure foo;`.
-	if (input_token == "(") formals = parse_proc_formal_parameters();
+	if (had_paren) formals = parse_proc_formal_parameters();
 	Type* return_type = &unit_type();
 	if (is_function) {
 		parse_colon();
@@ -1579,31 +1584,141 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		has_overload = true;
 		parse_semicolon();
 	}
-	auto proc = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
-	                          std::move(formals), return_type, has_overload);
 	Frame* enclosing = const_cast<Frame*>(this->scopes.back().frame);
-	if (!enclosing->register_callable(pas_name, proc)) {
-		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
-	}
-	if (peek_keyword("forward")) {
-		parse_keyword("forward");
-		parse_semicolon();
-		// Prototype-only registration; body attached by a later definition.
-		// TODO: match a later definition against this prototype instead of
-		// treating it as a fresh registration (which currently errors as
-		// duplicate).
+
+	// Decide whether a body follows or this is a prototype-only declaration.
+	// A body starts with `forward;`, `begin`, or a local decl block keyword
+	// (`var`/`const`/`type`). Anything else means the parser is looking at
+	// the next top-level declaration (interface case: `procedure Bar;`,
+	// `end`, `implementation`, etc.) so we've just registered a prototype.
+	// Note that `procedure`/`function` after our `;` never triggers a body
+	// path here: mp doesn't support nested subprograms, so those tokens
+	// always mean "next sibling declaration."
+	bool body_follows =
+	    peek_keyword("forward") ||
+	    peek_keyword("begin") ||
+	    peek_keyword("var") ||
+	    peek_keyword("const") ||
+	    peek_keyword("type");
+
+	if (!body_follows) {
+		auto proto = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
+		                           std::move(formals), return_type, has_overload);
+		if (!enclosing->register_callable(pas_name, proto)) {
+			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+		}
 		return;
 	}
+
+	if (peek_keyword("forward")) {
+		// Explicit forward within a single unit's implementation section.
+		// Registered like an interface prototype; the matching definition
+		// below will attach the body.
+		parse_keyword("forward");
+		parse_semicolon();
+		auto proto = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
+		                           std::move(formals), return_type, has_overload);
+		if (!enclosing->register_callable(pas_name, proto)) {
+			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+		}
+		return;
+	}
+
+	// A body follows. Two shapes at the syntactic level:
+	//   Long form: formals were listed. If an existing prototype has a
+	//     matching signature and no body, attach. If no signature match,
+	//     fall through to register fresh -- this is the overload case
+	//     (different signature, same name).
+	//   Short form: no formals listed. Adopt formals + return type from
+	//     the unique unimplemented prototype of this name; error if not
+	//     unique or no prototype exists.
+	// Safety of the OverloadSet fork: Frame::register_callable at
+	// frame.cc:76 promotes a second registration under the same name to
+	// OverloadSet only when BOTH declarations are marked `overload;`; any
+	// other second registration is rejected outright. Frame invariant:
+	// a name bound to Callable* means "exactly one prototype", and a name
+	// bound to OverloadSet* means "N prototypes, all overload-marked."
+	// Short form has no signature to disambiguate an OverloadSet and can
+	// only succeed if at most one member is still unimplemented.
+	Procedure* target = nullptr;
+	Node* existing = enclosing->lookup_value(pas_name);
+	if (existing) {
+		auto sig_matches = [&](Callable* c) -> bool {
+			if (c->formals.size() != formals.size()) return false;
+			if (c->return_type != return_type) return false;
+			for (size_t i = 0; i < formals.size(); i++) {
+				if (c->formals[i].ty != formals[i].ty) return false;
+				if (c->formals[i].mode != formals[i].mode) return false;
+			}
+			return true;
+		};
+		auto attach_to = [&](Callable* c) -> Procedure* {
+			if (c->body) raise_parse_error("duplicate implementation of '" + pas_name + "'");
+			if (!had_paren) {
+				formals = c->formals;
+				return_type = c->return_type;
+			} else {
+				// Long form: types already verified to match the prototype;
+				// swap in the impl-side formals so both body_frame
+				// registration and the .cc signature emit see the names
+				// the body actually uses. Pascal allows the impl to rename
+				// formals, and C++ doesn't require decl and def parameter
+				// names to match.
+				c->formals = formals;
+			}
+			auto p = dynamic_cast<Procedure*>(c);
+			if (!p) raise_parse_error("'" + pas_name + "' is not a standalone procedure");
+			return p;
+		};
+		if (auto ec = dynamic_cast<Callable*>(existing)) {
+			if (!had_paren) {
+				target = attach_to(ec);
+			} else if (sig_matches(ec)) {
+				target = attach_to(ec);
+			}
+			// else: sig mismatch on long form -> fresh registration below.
+		} else if (auto os = dynamic_cast<OverloadSet*>(existing)) {
+			if (!had_paren) {
+				Callable* pick = nullptr;
+				for (auto* m : os->members) {
+					if (m->body) continue;
+					if (pick) raise_parse_error("short-form impl of '" + pas_name
+						+ "' is ambiguous: multiple overloads still need a body");
+					pick = m;
+				}
+				if (!pick) raise_parse_error("no unimplemented prototype of '" + pas_name
+					+ "' for short-form definition");
+				target = attach_to(pick);
+			} else {
+				for (auto* m : os->members) {
+					if (!sig_matches(m)) continue;
+					if (target) raise_parse_error("ambiguous overload match for '" + pas_name + "'");
+					target = attach_to(m);
+				}
+				// If no sig match found: fresh registration below.
+			}
+		}
+		// Non-callable existing binding: fall through -- register_callable
+		// will fail and produce the appropriate error at the next step.
+	}
+	if (!target) {
+		target = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
+		                       std::move(formals), return_type, has_overload);
+		if (!enclosing->register_callable(pas_name, target)) {
+			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+		}
+	}
+
 	Frame* body_frame = new Frame(enclosing);
-	proc->body_frame = body_frame;
+	target->body_frame = body_frame;
 	push_scope(body_frame);
-	for (auto& p : proc->formals) {
+	for (auto& p : target->formals) {
 		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
 	}
-	if (emitter) emitter->emit_procedure_open(proc);
+	if (emitter) emitter->emit_procedure_open(target);
 	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
-	proc->body = parse_block_body();
+	target->body = parse_block_body();
 	parse_keyword("end");
 	parse_semicolon();
 	if (emitter) emitter->emit_procedure_close();
@@ -1793,8 +1908,11 @@ Node* Parser::parse_unit_body() {
 		iface_uses = parse_uses_clause(true, name);
 		parse_semicolon();
 	}
-	// TODO(later phase): parse interface declarations (types, consts, vars,
-	// procedure/function prototypes) here.
+	// Interface section: parse_decl_blocks handles type/const/var/proc/func.
+	// Procedures parsed here fall out as prototypes because
+	// parse_procedure_or_function's body_follows check sees no body-starter
+	// after their `;` and returns without expecting a body.
+	size_t iface_decls = parse_decl_blocks();
 	unit->phase = UnitPhase::InterfaceDone;
 
 	parse_keyword("implementation");
@@ -1805,14 +1923,20 @@ Node* Parser::parse_unit_body() {
 		impl_uses = parse_uses_clause(false, name);
 		parse_semicolon();
 	}
-	// TODO(later phase): parse implementation declarations + init/final bodies.
+	// Implementation section: same dispatcher; procedures with bodies attach
+	// to the interface prototypes via the lookup-then-adopt path in
+	// parse_procedure_or_function.
+	size_t impl_decls = parse_decl_blocks();
 
 	parse_keyword("end");
 	parse_period();
 
-	// Pop in reverse push order.
+	// Pop in reverse push order: impl-side decl blocks, impl-side uses,
+	// impl frame, iface-side decl blocks, iface-side uses, iface frame.
+	for (size_t i = 0; i < impl_decls; i++) pop_scope();
 	for (size_t i = 0; i < impl_uses; i++) pop_scope();
 	pop_scope(); // impl
+	for (size_t i = 0; i < iface_decls; i++) pop_scope();
 	for (size_t i = 0; i < iface_uses; i++) pop_scope();
 	pop_scope(); // iface
 
