@@ -14,6 +14,7 @@ type
   Int64 = external nil name 'pas::t_int64';
   Boolean = (False, True);
   Char = external nil name 'pas::t_char';
+  Double = external nil name 'pas::t_double';
   
 implementation
 
