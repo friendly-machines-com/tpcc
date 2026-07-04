@@ -511,8 +511,8 @@ Node* Parser::maybe_parse_statement() {
 			auto condition = parse_expression();
 			parse_keyword("then");
 			parse_statement();
-			parse_keyword("else");
-			parse_statement();
+			if (maybe_parse_keyword("else"))
+				parse_statement();
 		} else if (peek_keyword("while")) {
 			parse_keyword("while");
 			auto condition = parse_expression();
@@ -1436,7 +1436,8 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 		}
 		Type* rhs = parse_type_expression(false);
 		// Attach the LHS Pascal name (as its C++ identifier) to record-family
-		// types so emit_type_ref has a name to spell.
+		// types and enums so emit_type_ref has a name to spell instead of
+		// re-emitting the body inline at every use site.
 		std::string cxx = pascal_to_cxx_name(name);
 		if (auto r = dynamic_cast<RecordType*>(rhs))
 			r->cxx_name = cxx;
@@ -1444,6 +1445,8 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 			c->cxx_name = cxx;
 		else if (auto o = dynamic_cast<ObjectType*>(rhs))
 			o->cxx_name = cxx;
+		else if (auto e = dynamic_cast<EnumType*>(rhs))
+			e->cxx_name = cxx;
 		lhs_placeholder->resolved = rhs;
 		scope->rebind_type(name, rhs);
 		if (emitter)
