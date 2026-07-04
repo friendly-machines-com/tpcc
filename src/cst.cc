@@ -86,7 +86,7 @@ String::String(std::string value, Type* ty) {
 }
 
 Callable::Callable(std::string cxx_name,
-           RoutineType* ty,
+		   RoutineType* ty,
 		   bool has_overload_directive)
     : cxx_name(std::move(cxx_name)),
       ty(ty),
@@ -96,20 +96,20 @@ Callable::Callable(std::string cxx_name,
 }
 
 Procedure::Procedure(std::string pas_name,
-             RoutineType* ty,
+		     RoutineType* ty,
 		     bool has_overload_directive)
-    : Callable(std::move(pas_name),// FIXME: Remove
-      ty,
-      has_overload_directive) {
+    : Callable(std::move(pas_name), // FIXME: Remove
+	       ty,
+	       has_overload_directive) {
 }
 
 Method::Method(std::string pas_name,
-           RoutineType* ty,
+	       RoutineType* ty,
 	       bool has_overload_directive,
 	       Type* owner_class,
 	       VirtualKind virtual_kind)
     : Callable(std::move(pas_name), // FIXME: Remove
-           ty,
+	       ty,
 	       has_overload_directive),
       owner_class(owner_class),
       virtual_kind(virtual_kind),
