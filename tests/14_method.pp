@@ -1,3 +1,4 @@
+// fail
 program p;
 type
   TFoo = record
