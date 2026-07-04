@@ -116,11 +116,19 @@ void Parser::push_input_file_and_buffer(FILE* input_file, std::string input_file
 }
 
 void Parser::push_scope(const Frame* scope) {
-	this->scopes.push_back(ScopeEntry{scope, nullptr});
+	this->scopes.push_back(ScopeEntry{scope, nullptr, current_type_block});
+	current_type_block = const_cast<Frame*>(scope);
 }
 
+// `with` introduces an alias overlay for value lookup only (member names of
+// the with-target). It is NOT a declaration site -- new type/var/const decls
+// encountered inside the with-body still belong to the enclosing declaration
+// Frame, so we don't update current_type_block here. We DO push a ScopeEntry
+// so name-resolution walks through the with-target's frame; on pop, the
+// saved_type_block we record (the enclosing decl Frame, untouched) restores
+// trivially.
 void Parser::push_with_scope(const Frame* scope, Node* unwrap_via) {
-	this->scopes.push_back(ScopeEntry{scope, unwrap_via});
+	this->scopes.push_back(ScopeEntry{scope, unwrap_via, current_type_block});
 }
 
 void Parser::pop_scope() {
@@ -128,6 +136,7 @@ void Parser::pop_scope() {
 		fprintf(stderr, "internal compiler error: pop_scope on empty scope stack\n");
 		abort();
 	}
+	current_type_block = scopes.back().saved_type_block;
 	this->scopes.pop_back();
 }
 
@@ -1414,9 +1423,9 @@ DELPHI_AUTO_END: will automatically stop at some aggregate control directives (l
 Frame* Parser::parse_type_block(bool delphi_auto_end) {
 	auto scope = new Frame(nullptr);
 	parse_keyword("type");
+	// push_scope sets current_type_block = scope and saves the previous value
+	// on the scope stack; pop_scope (called by the caller) restores it.
 	push_scope(scope);
-	Frame* prev_type_block = current_type_block;
-	current_type_block = scope;
 	do {
 		auto name_optional = maybe_parse_identifier();
 		if (!name_optional)
@@ -1460,7 +1469,6 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 			}
 		}
 	}
-	current_type_block = prev_type_block;
 	return scope;
 }
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually */
@@ -2114,6 +2122,14 @@ size_t Parser::parse_uses_clause(bool in_interface, std::string current_name) {
 	return pushed;
 }
 
+size_t Parser::implicit_uses(std::string user_name) {
+	if (strcasecmp(user_name.c_str(), "system") == 0)
+		return 0;
+	Unit* sys = load_or_get_unit("system");
+	push_scope(sys->interface_frame);
+	return 1;
+}
+
 void Parser::parse_unit_body() {
 	std::string name = parse_identifier();
 	parse_semicolon();
@@ -2126,9 +2142,12 @@ void Parser::parse_unit_body() {
 
 	parse_keyword("interface");
 	push_scope(iface);
-	size_t iface_uses = 0;
+	// Implicit `system` first, so built-ins (Boolean, True, False, ...) resolve
+	// in every unit's interface section. Stays on the scope stack through the
+	// implementation section too (interface-side uses pop only at unit end).
+	size_t iface_uses = implicit_uses(name);
 	if (maybe_parse_keyword("uses")) {
-		iface_uses = parse_uses_clause(true, name);
+		iface_uses += parse_uses_clause(true, name);
 		parse_semicolon();
 	}
 	// Interface section: parse_decl_blocks handles type/const/var/proc/func.
@@ -2181,10 +2200,11 @@ void Parser::parse_program_or_unit() {
 		// Program-body `uses`: same shape as a unit's implementation-side
 		// `uses` (no interface phase to worry about). Each named unit's
 		// interface_frame gets pushed so its exports are visible to the
-		// program body.
-		size_t prog_uses = 0;
+		// program body. Implicit `system` goes first so built-ins resolve
+		// even with no `uses` clause.
+		size_t prog_uses = implicit_uses(name);
 		if (maybe_parse_keyword("uses")) {
-			prog_uses = parse_uses_clause(false, name);
+			prog_uses += parse_uses_clause(false, name);
 			parse_semicolon();
 		}
 		if (emitter)

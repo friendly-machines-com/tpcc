@@ -59,10 +59,21 @@ class Frame;
  *  every kind of scope except a `with` push: when non-null, a resolve hit in
  *  this frame is wrapped as `MemberAccess(unwrap_via, hit)` before being
  *  returned to the caller, so `field` inside `with rec do ...` produces
- *  `rec.field` at emit time. */
+ *  `rec.field` at emit time.
+ *
+ *  `saved_type_block` records the value of `Parser::current_type_block` at
+ *  push time so pop_scope can restore it. Each Frame interleaves TWO name
+ *  namespaces (types and values -- see Frame's `type_items` and
+ *  `value_items`); `current_type_block` is the Frame new decls land in
+ *  right now, i.e. whichever declaration Frame was most recently pushed.
+ *  push_scope updates it; push_with_scope deliberately does NOT -- a `with`
+ *  scope is an alias overlay for value lookup only, not a declaration
+ *  site, so new type/var decls inside a `with` body still belong to the
+ *  enclosing declaration Frame and must register there. */
 struct ScopeEntry {
 	const Frame* frame;
 	Node* unwrap_via;
+	Frame* saved_type_block;
 };
 
 class Parser {
@@ -213,6 +224,14 @@ protected:
 	 *  loaded unit's interface_frame onto the scope stack. Returns the count
 	 *  pushed so the caller can pop the same number at section end. */
 	size_t parse_uses_clause(bool in_interface, std::string current_name);
+	/** Implicitly load and push the `system` unit's interface frame at the
+	 *  front of the uses list so built-in identifiers (Boolean, True, False,
+	 *  etc.) resolve in every program and unit. USER_NAME is the unit/program
+	 *  being parsed; if it case-insensitively equals "system" we're parsing
+	 *  system itself and must not recurse into another load. Returns the
+	 *  count of scopes pushed (0 or 1). The push happens BEFORE any
+	 *  user-written `uses` clause so user-named units can shadow system. */
+	size_t implicit_uses(std::string user_name);
 	/** Return the Unit for NAME, loading its source from disk if it isn't
 	 *  already registered. Search order for the file: directory of the current
 	 *  input file, then CWD. */

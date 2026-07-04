@@ -15,10 +15,19 @@ struct FrameValueEntry {
 };
 
 /** A Frame is the storage for one declaration block (the result of `var x,y,z:
- *  Integer;` or the body of a record/class/object/unit). It owns name-to-entity
- *  maps. A frame's optional `parent` pointer captures STRUCTURAL relationships
- *  (nested class, subclass-to-superclass), not lexical lookup chains; those
- *  live in the Parser's `scopes` stack of frames. */
+ *  Integer;` or the body of a record/class/object/unit). A frame's optional
+ *  `parent` pointer captures STRUCTURAL relationships (nested class,
+ *  subclass-to-superclass), not lexical lookup chains; those live in the
+ *  Parser's `scopes` stack of frames.
+ *
+ *  A Frame interleaves TWO independent name namespaces: `type_items` (for
+ *  type identifiers like `TFoo`) and `value_items` (for vars, consts, enum
+ *  members, callables). They are separate maps ON PURPOSE: Pascal allows
+ *  `type Foo = Integer; var Foo: Foo;` in the same scope, where the `Foo`
+ *  type and the `Foo` variable share an identifier but refer to unrelated
+ *  entities. Merging the maps would break that. Each map enforces its own
+ *  duplicate rule (two types with the same name, or two values with the
+ *  same name, are duplicates; a type and a value sharing a name is not). */
 class Frame {
 private:
 	std::map<std::string, Type*> type_items;
