@@ -19,34 +19,56 @@
 #include <unordered_set>
 
 static std::unordered_set<std::string> keywords = {
-    "program",
-    "unit",
-    "interface",
-    "implementation",
-    "packed",
-    "record",
-    "object",
-    "class",
-    "inherited",
-    "interface",
-    "procedure",
-    "function",
-    "constructor",
-    "destructor",
-    "operator",
-    "if",
-    "then",
-    "else",
-    "while",
-    "do",
-    "repeat",
-    "until",
-    "begin",
-    "end",
-    "var",
-    "type",
-    "const",
-    "with",
+	"abstract",
+	"and", // operator
+	"array",
+	"as",
+	"begin",
+	"case",
+	"class",
+	"const",
+	"constructor",
+	"destructor",
+	"div", //operator
+	"do",
+	"dynamic", // FIXME
+	"else",
+	"end",
+	"forward", // FIXME directive ?
+	"function",
+	"if",
+	"implementation",
+	"inherited",
+	"interface",
+	"mod", //operator
+	"nil",
+	"not", //operator
+	"object",
+	"of",
+	"operator",
+	"or", //operator
+	"out", // FIXME directive ?
+	"overload",
+	"override",
+	"packed",
+	"procedure",
+	"program",
+	"record",
+	"repeat",
+	"set",
+	"shl", //operator
+	"shr", //operator
+	"string",
+	"then",
+	"type",
+	"unit",
+	"until",
+	"uses",
+	"var",
+	"virtual", // FIXME directive ?
+	"while",
+	"with",
+	"xor", //operator
 };
 
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options)
