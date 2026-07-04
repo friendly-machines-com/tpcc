@@ -33,6 +33,7 @@ static std::unordered_set<std::string> keywords = {
     "function",
     "constructor",
     "destructor",
+    "operator",
     "if",
     "then",
     "else",
