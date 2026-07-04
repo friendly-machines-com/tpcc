@@ -2016,27 +2016,24 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		}
 		parse_routine_body(m, owner_frame);
 		return;
-	}
-
-	// Standalone Routine
-	bool had_paren = (input_token == "(");
-	RoutineType* sig = parse_routine_signature(is_function, false);
-	parse_semicolon();
-
-	while (maybe_parse_keyword("overload")) {
-		has_overload = true;
+	} else { // Standalone Routine
+		bool had_paren = (input_token == "(");
+		RoutineType* sig = parse_routine_signature(is_function, false);
 		parse_semicolon();
-	}
-	bool body_follows = peek_keyword("begin") || peek_keyword("var") ||
-			    peek_keyword("const") || peek_keyword("type");
-	if (peek_keyword("forward")) {
-		parse_keyword("forward");
-		parse_semicolon();
-		body_follows = false;
-	}
-	Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
-	if (body_follows) {
-		parse_routine_body(target, nullptr);
+		while (maybe_parse_keyword("overload")) {
+			has_overload = true;
+			parse_semicolon();
+		}
+		bool body_follows = peek_keyword("begin") || peek_keyword("var") ||
+		   peek_keyword("const") || peek_keyword("type");
+		if (maybe_parse_keyword("forward")) {
+			parse_semicolon();
+			body_follows = false;
+		}
+		Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
+		if (body_follows) {
+			parse_routine_body(target, nullptr);
+		}
 	}
 }
 
