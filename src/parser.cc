@@ -1201,7 +1201,7 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 	}
 	rt->selector_type = tag_type;
 	parse_keyword("of");
-	while (true) {
+	while (!peek_keyword("end")) {
 		// Case label list -- comma-separated constant expressions. Values
 		// are discarded: layout is a flat overlapping union regardless of
 		// which label is active.
