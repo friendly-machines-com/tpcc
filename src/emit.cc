@@ -136,6 +136,56 @@ void Emitter::emit_with_epilogue() {
 	fprintf(out, "\t}\n");
 }
 
+void Emitter::emit_if_prologue(Node* condition) {
+	if (!out)
+		return;
+	fprintf(out, "\tif (");
+	emit_expression(condition);
+	fprintf(out, ") {\n");
+}
+
+void Emitter::emit_if_else() {
+	if (!out)
+		return;
+	fprintf(out, "\t} else {\n");
+}
+
+void Emitter::emit_if_epilogue() {
+	if (!out)
+		return;
+	fprintf(out, "\t}\n");
+}
+
+void Emitter::emit_while_prologue(Node* condition) {
+	if (!out)
+		return;
+	fprintf(out, "\twhile (");
+	emit_expression(condition);
+	fprintf(out, ") {\n");
+}
+
+void Emitter::emit_while_epilogue() {
+	if (!out)
+		return;
+	fprintf(out, "\t}\n");
+}
+
+void Emitter::emit_repeat_prologue() {
+	if (!out)
+		return;
+	fprintf(out, "\tdo {\n");
+}
+
+void Emitter::emit_repeat_epilogue(Node* condition) {
+	if (!out)
+		return;
+	// Pascal `repeat S until C` repeats while C is false; the C++ equivalent
+	// is `do S while(!(C));`.
+	fprintf(out, "\t} while(!(");
+	emit_expression(condition);
+	fprintf(out, "));\n");
+}
+
 // The cxx_name of the type that owns a Method, or empty if none.
 static std::string owner_cxx_name(Type* owner) {
 	if (auto r = dynamic_cast<RecordType*>(owner))

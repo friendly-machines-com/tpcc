@@ -510,20 +510,39 @@ Node* Parser::maybe_parse_statement() {
 			parse_keyword("if");
 			auto condition = parse_expression();
 			parse_keyword("then");
+			if (emitter)
+				emitter->emit_if_prologue(condition);
 			parse_statement();
-			if (maybe_parse_keyword("else"))
+			if (maybe_parse_keyword("else")) {
+				if (emitter)
+					emitter->emit_if_else();
 				parse_statement();
+			}
+			if (emitter)
+				emitter->emit_if_epilogue();
 		} else if (peek_keyword("while")) {
 			parse_keyword("while");
 			auto condition = parse_expression();
 			parse_keyword("do");
+			if (emitter)
+				emitter->emit_while_prologue(condition);
 			auto body = parse_statement();
-			// FIXME
+			if (emitter)
+				emitter->emit_while_epilogue();
+			// FIXME: body is parsed and emitted but the Node is dropped --
+			// the AST has no While node, so any future AST-driven pass has
+			// no visibility into this loop.
 		} else if (peek_keyword("repeat")) {
 			parse_keyword("repeat");
+			if (emitter)
+				emitter->emit_repeat_prologue();
 			auto body = parse_block_body();
 			parse_keyword("until");
 			auto condition = parse_expression();
+			if (emitter)
+				emitter->emit_repeat_epilogue(condition);
+			// FIXME: same as while above -- body and condition are parsed
+			// and emitted, not retained on the AST.
 		} else if (peek_keyword("begin")) {
 			parse_keyword("begin");
 			auto body = parse_block_body();

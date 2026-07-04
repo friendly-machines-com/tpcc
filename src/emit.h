@@ -41,6 +41,17 @@ public:
 	void emit_statement(Node* stmt);
 	void emit_with_prologue(std::string alias_cxx_name, Node* target);
 	void emit_with_epilogue();
+	// Control-flow framing. Each is parse-time emission: parser parses the
+	// condition/body via its usual recursive parse_statement / parse_block_body
+	// calls (which themselves emit), and these methods wrap that output in
+	// the matching C++ construct.
+	void emit_if_prologue(Node* condition);
+	void emit_if_else();
+	void emit_if_epilogue();
+	void emit_while_prologue(Node* condition);
+	void emit_while_epilogue();
+	void emit_repeat_prologue();
+	void emit_repeat_epilogue(Node* condition);
 
 	// Procedure/function definition emission. emit_procedure_open writes the
 	// C++ signature plus opening brace; body statements emit between; then
