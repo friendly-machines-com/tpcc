@@ -1,8 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class Frame;
+class StorageSlot;
 
 class Type {
 public:
@@ -39,12 +41,42 @@ struct FixedSetType: public Type {
 	FixedSetType(Type* item_type);
 };
 
+struct VariantArm {
+	struct Field {
+		StorageSlot* slot;
+		Type* ty;
+	};
+	std::vector<Field> fields;
+};
+
 struct RecordType: public Type {
 	Frame* children;
 	// C++ identifier emitted for this record. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
 	bool packed = false;
+
+	// Variant part. Pascal allows AT MOST ONE variant part, declared last
+	// in the record body as `case [<sel_name> ':'] <TagType> of <arms>`:
+	//
+	//   fixed_field_a: Integer;
+	//   fixed_field_b: Real;
+	//   case discriminator: Boolean of     // <-- "discriminator" is the
+	//                                       //     selector; omitting it
+	//                                       //     gives a tag-less variant
+	//     false: (uvalue: QWord);
+	//     true:  (svalue: Int64);
+	//
+	// The variant arms overlap in memory (C++ anon-union). The selector,
+	// when present, is just an ordinary field the program can read/write;
+	// we emit it as a regular struct member ahead of the union. The arms
+	// themselves don't influence layout beyond "these slots overlap".
+	bool has_selector = false;
+	std::string selector_pas_name;
+	std::string selector_cxx_name;
+	Type* selector_type = nullptr;
+	std::vector<VariantArm> arms;
+
 	RecordType(Frame* children, bool packed);
 };
 

@@ -4,6 +4,7 @@
 #include "frame.h"
 #include "types.h"
 #include <cstdlib>
+#include <set>
 #include <typeinfo>
 
 // NODE may be null; SITE names the caller for the error message.
@@ -162,8 +163,10 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		return;
 	Frame* body = nullptr;
 	const char* kw = "struct";
+	RecordType* rec = nullptr;
 	if (auto r = dynamic_cast<RecordType*>(ty)) {
 		body = r->children;
+		rec = r;
 		kw = "struct";
 	} else if (auto c = dynamic_cast<ClassType*>(ty)) {
 		body = c->children;
@@ -174,16 +177,43 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	} else
 		return;
 	const char* attributes = "";
-	if (auto r = dynamic_cast<RecordType*>(ty); r && r->packed)
+	if (rec && rec->packed)
 		attributes = "[[gnu::packed]] ";
 	fprintf(out, "\n%s %s%s {\n", kw, attributes, cxx_name.c_str());
 	if (kw[0] == 'c')
 		fprintf(out, "public:\n"); // C++ classes default private
+	// Variant-record emission strategy:
+	//
+	//   Pascal: a record is one flat namespace. Fixed fields, the optional
+	//   selector, and every variant arm's fields all share the same scope.
+	//   The arm structure exists ONLY to express that those slots overlap
+	//   in memory -- it has no name-lookup or type-checking role.
+	//
+	//   C++ mapping: fixed fields and the optional selector both become
+	//   ordinary struct members; the arms become ONE anonymous union whose
+	//   members all alias (matching Pascal's overlap semantics). Anonymous
+	//   unions are standard C++11; a nested anonymous struct would do the
+	//   same job but isn't ISO C++ (only GCC/Clang accept it), so we keep flat
+	//   layout with anon-union for portability.
+	//
+	//   Slot identity: variant slots are registered in the SAME Frame as
+	//   fixed slots (so name lookup via body_frame_of sees them) AND in
+	//   RecordType::arms (for source-order grouping). We skip them in the
+	//   main walk by StorageSlot* identity -- not by name -- so name
+	//   collisions elsewhere can't cause a fixed field to be silently
+	//   omitted.
+	std::set<StorageSlot*> variant_slots;
+	if (rec)
+		for (auto& arm : rec->arms)
+			for (auto& f : arm.fields)
+				variant_slots.insert(f.slot);
 	// TODO: Frame's std::map iterates alphabetically; Pascal semantics require
 	// source order for layout. Preserve insertion order in a later pass.
 	for (auto& kv : body->values()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
+			if (variant_slots.count(slot))
+				continue;
 			fprintf(out, "\t");
 			emit_type_ref(kv.second.ty);
 			fprintf(out, " %s;\n", slot->cxx_name.c_str());
@@ -215,6 +245,27 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 					fprintf(out, " = 0");
 			}
 			fprintf(out, ";\n");
+		}
+	}
+	// Variant part: selector (if present) emits as a regular field; arms
+	// collapse into a single anonymous union. See the strategy comment
+	// above the body walk for the rationale.
+	if (rec) {
+		if (rec->has_selector) {
+			fprintf(out, "\t");
+			emit_type_ref(rec->selector_type);
+			fprintf(out, " %s;\n", rec->selector_cxx_name.c_str());
+		}
+		if (!rec->arms.empty()) {
+			fprintf(out, "\tunion {\n");
+			for (auto& arm : rec->arms) {
+				for (auto& f : arm.fields) {
+					fprintf(out, "\t\t");
+					emit_type_ref(f.ty);
+					fprintf(out, " %s;\n", f.slot->cxx_name.c_str());
+				}
+			}
+			fprintf(out, "\t};\n");
 		}
 	}
 	fprintf(out, "};\n");

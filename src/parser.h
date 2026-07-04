@@ -12,6 +12,7 @@
 class Node;
 class Symbol;
 class Type;
+class RecordType;
 class Unit;
 class UnitRegistry;
 class Emitter;
@@ -188,6 +189,7 @@ protected:
 	Node* parse_expression();
 	Node* parse_statement();
 	Frame* parse_aggregate_type_body(Type* owner_class);
+	void parse_record_variant(RecordType* rt, Frame* body);
 	/** Parse a method prototype inside a class/record/object body. Registers
 	 *  the Method in BODY under its Pascal name (via register_callable, so
 	 *  overload directives interact the same way as for standalone callables). */

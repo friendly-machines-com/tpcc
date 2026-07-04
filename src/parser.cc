@@ -1119,6 +1119,12 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 		} else if (peek_keyword("procedure") || peek_keyword("function")) {
 			parse_method_prototype(body, owner_class, peek_keyword("function"));
 			continue; // parse_method_prototype consumes its terminating ';'
+		} else if (peek_keyword("case")) {
+			auto rt = dynamic_cast<RecordType*>(owner_class);
+			if (!rt)
+				raise_parse_error("variant part only valid in a record");
+			parse_record_variant(rt, body);
+			break; // variant part must come last; do not require a trailing ';'
 		} else {
 			auto member_name = parse_identifier();
 			parse_colon();
@@ -1135,6 +1141,63 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	} while (true);
 	pop_scope();
 	return body;
+}
+
+void Parser::parse_record_variant(RecordType* rt, Frame* body) {
+	parse_keyword("case");
+	// `case <sel_name> ':' <TagType> of ...` introduces a selector field;
+	// `case <TagType> of ...` is tag-less. Single-token lookahead: take an
+	// identifier first; if ':' follows, it's the selector name (consume ':'
+	// and parse the real tag type after it). Otherwise the identifier WAS
+	// the tag type -- resolve it directly.
+	auto first = parse_identifier();
+	Type* tag_type;
+	if (input_token == ":") {
+		parse_colon();
+		rt->has_selector = true;
+		rt->selector_pas_name = first;
+		rt->selector_cxx_name = pascal_to_cxx_name(first);
+		tag_type = parse_type_expression(false);
+	} else {
+		tag_type = resolve_type(first, false);
+	}
+	rt->selector_type = tag_type;
+	parse_keyword("of");
+	while (true) {
+		// Case label list -- comma-separated constant expressions. Values
+		// are discarded: layout is a flat overlapping union regardless of
+		// which label is active.
+		parse_expression();
+		while (maybe_parse_comma())
+			parse_expression();
+		parse_colon();
+		parse_opening_paren();
+		VariantArm arm;
+		if (input_token != ")") {
+			do {
+				auto fname = parse_identifier();
+				parse_colon();
+				auto fty = parse_type_expression(false);
+				auto slot = new StorageSlot(pascal_to_cxx_name(fname), fty);
+				// Variant slots live in the SAME Frame as fixed fields
+				// (Pascal requires globally-distinct field names within a
+				// record, so duplicate-name detection via register_variable
+				// is the language-level check we want) AND in the arm's
+				// field list (preserves source order and arm grouping for
+				// the emitter's union reconstruction). Storing the slot
+				// pointer in both gives the emitter identity-based
+				// "is this a variant slot?" without name lookups.
+				body->register_variable(fname, slot, fty);
+				arm.fields.push_back({slot, fty});
+				if (!maybe_parse_semicolon())
+					break;
+			} while (input_token != ")");
+		}
+		parse_closing_paren();
+		rt->arms.push_back(std::move(arm));
+		if (!maybe_parse_semicolon())
+			break;
+	}
 }
 
 void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function) {
@@ -1747,7 +1810,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	//     matching signature and no body, attach. If no signature match,
 	//     fall through to register fresh -- this is the overload case
 	//     (different signature, same name).
-	//   Short form: no formals listed. Adopt formals + return type from
+	//   Short form: no formals listed. Adopt formals and return type from
 	//     the unique unimplemented prototype of this name; error if not
 	//     unique or no prototype exists.
 	// Safety of the OverloadSet fork: Frame::register_callable at
