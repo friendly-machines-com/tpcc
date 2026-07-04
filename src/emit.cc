@@ -173,7 +173,10 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		kw = "class";
 	} else
 		return;
-	fprintf(out, "\n%s %s {\n", kw, cxx_name.c_str());
+	const char* attributes = "";
+	if (auto r = dynamic_cast<RecordType*>(ty); r && r->packed)
+		attributes = "[[gnu::packed]] ";
+	fprintf(out, "\n%s %s%s {\n", kw, attributes, cxx_name.c_str());
 	if (kw[0] == 'c')
 		fprintf(out, "public:\n"); // C++ classes default private
 	// TODO: Frame's std::map iterates alphabetically; Pascal semantics require

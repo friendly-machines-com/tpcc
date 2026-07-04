@@ -16,8 +16,9 @@ PointerType::PointerType(Type* item_type) {
 	this->item_type = item_type;
 }
 
-RecordType::RecordType(Frame* children) {
+RecordType::RecordType(Frame* children, bool packed) {
 	this->children = children;
+	this->packed = packed;
 }
 
 ClassType::ClassType(Frame* children) {

@@ -23,6 +23,7 @@ static std::unordered_set<std::string> keywords = {
     "unit",
     "interface",
     "implementation",
+    "packed",
     "record",
     "object",
     "class",
@@ -1193,11 +1194,15 @@ Type* Parser::parse_class_type() {
 }
 
 Type* Parser::parse_record_type() {
+	bool packed = false;
+	if (maybe_parse_keyword("packed")) {
+		packed = true;
+	}
 	parse_keyword("record");
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("record with parenthesized header not implemented yet");
 	}
-	auto rt = new RecordType(nullptr);
+	auto rt = new RecordType(nullptr, packed);
 	rt->children = parse_aggregate_type_body(rt);
 	parse_keyword("end");
 	return rt;
@@ -1259,7 +1264,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return parse_array_type();
 	} else if (peek_keyword("object")) {
 		return parse_object_type();
-	} else if (peek_keyword("record")) {
+	} else if (peek_keyword("packed") || peek_keyword("record")) {
 		return parse_record_type();
 	} else if (peek_keyword("class")) {
 		return parse_class_type();

@@ -44,7 +44,8 @@ struct RecordType: public Type {
 	// C++ identifier emitted for this record. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
-	RecordType(Frame* children);
+	bool packed = false;
+	RecordType(Frame* children, bool packed);
 };
 
 struct ClassType: public Type {
