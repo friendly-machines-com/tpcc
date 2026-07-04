@@ -1354,6 +1354,15 @@ Type* Parser::parse_enum_type() {
 	return et;
 }
 
+std::string Parser::parse_string_literal() {
+	if (input_token.empty() || input_token.front() != '\'') {
+		raise_parse_error("expected string literal");
+	}
+	auto result = extract_string_literal(input_token);
+	consume();
+	return result;
+}
+
 /** allow_forward: if true, an unresolved identifier at this parse position is
  *  auto-registered as an IncompleteType in the current type block rather than
  *  raising. Only the pointer branch propagates true; compound-type sub-parses
@@ -1392,12 +1401,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		parse_directive("external");
 		parse_keyword("nil"); // FIXME: allow string literals, eval.
 		parse_directive("name");
-		// FIXME: terrible.  Replace.
-		if (input_token.empty() || input_token.front() != '\'') {
-			raise_parse_error("expected string literal after 'name'");
-		}
-		std::string cxx_name = extract_string_literal(input_token);
-		consume();
+		std::string cxx_name = parse_string_literal();
 
 		// FIXME: terrible seam.
 		const Frame& f = root_frame();
@@ -2016,7 +2020,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		}
 		parse_routine_body(m, owner_frame);
 		return;
-	} else { // Standalone Routine
+	} else { // Standalone Routine or method prototype
 		bool had_paren = (input_token == "(");
 		RoutineType* sig = parse_routine_signature(is_function, false);
 		parse_semicolon();
@@ -2031,7 +2035,34 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			body_follows = false;
 		}
 		Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
-		if (body_follows) {
+		if (maybe_parse_directive("external")) {
+			parse_keyword("nil");
+			parse_directive("name");
+			std::string cxx_name = parse_string_literal();
+
+			// FIXME: terrible seam.
+			const Frame& f = root_frame();
+			std::string pas_name = cxx_name;
+			if (pas_name.starts_with("pas::p_")) {
+				pas_name.erase(0, std::string("pas::p_").length());
+			}
+			auto intrinsic = f.lookup_value(pas_name);
+			if (intrinsic == nullptr) {
+				raise_parse_error("unknown external routine implementation " + cxx_name);
+			}
+			// FIXME: Check intrinsic has the right target Procedure type.  See sig_matches.
+			// This is basically making TARGET an ALIAS for INTRINSIC.
+			target->has_body = true;
+			if (auto proc = dynamic_cast<Procedure*>(intrinsic)) {
+				target->cxx_name = proc->cxx_name;
+			} else if (auto builtin = dynamic_cast<Builtin*>(intrinsic)) {
+				auto desc = builtin->desc;
+				target->cxx_name = desc->rtl_name;
+			} else {
+				raise_parse_error("unknown intrinsic '" + pas_name + "' via external '" +  cxx_name + "'");
+			}
+			parse_semicolon();
+		} else if (body_follows) {
 			parse_routine_body(target, nullptr);
 		}
 	}
