@@ -44,12 +44,22 @@ void Emitter::emit_enum_decl(EnumType* e) {
 	fprintf(out, " }");
 }
 
-std::string pascal_to_cxx_name(std::string pascal_name) {
-	// Identity for now. Future work:
-	//   - mangle C++ reserved words that are legal Pascal identifiers
-	//     (class, template, new, delete, this, virtual, ...).
-	//   - prefix with unit name once cross-unit references need disambiguation.
-	return pascal_name;
+// Apply the `p_` prefix to a Pascal value identifier. Used at sites that
+// construct a cxx identifier without going through a value-node ctor (rare):
+// e.g. naming the slot for a record variant selector, naming an enum member
+// at parse time, etc. The prefix stays clear of C++ reserved words that are
+// legal Pascal identifiers (`new`, `class`, `false`, ...).
+std::string cxx_value_name(std::string pas_name) {
+	return "p_" + pas_name;
+}
+
+// Apply the `t_` prefix to a Pascal type identifier. Used at the
+// `type X = ...` alias site (parse_type_block) where the canonical cxx name
+// is assigned to a Type -- types don't take their name in their ctor (a Type
+// is nameless; names are Frame bindings, plural/optional), so the prefix
+// can't be applied inside the Type ctor the way it can for value nodes.
+std::string cxx_type_name(std::string pas_name) {
+	return "t_" + pas_name;
 }
 
 Emitter::Emitter() : out(nullptr), fresh_counter(0) {}
@@ -370,6 +380,12 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(out, ";\n");
 		return;
 	}
+}
+
+void Emitter::emit_type_alias(std::string cxx_name, std::string aliased_cxx_name) {
+	if (!out)
+		return;
+	fprintf(out, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
 }
 
 void Emitter::emit_procedure_close() {

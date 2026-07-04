@@ -567,9 +567,9 @@ void Parser::maybe_parse_statement() {
 			raise_parse_error("with target's type has no field body");
 		parse_keyword("do");
 		std::string alias = emitter ? emitter->next_fresh_cxx_name("pas_with") : std::string("pas_with_x");
-		auto alias_slot = new StorageSlot(alias, target_slot->ty);
+		auto alias_slot = new StorageSlot(cxx_value_name(alias), target_slot->ty);
 		if (emitter)
-			emitter->emit_with_prologue(alias, target);
+			emitter->emit_with_prologue(alias_slot->cxx_name, target);
 		push_with_scope(body_frame, alias_slot);
 		parse_statement();
 		pop_scope();
@@ -701,7 +701,7 @@ Node* Parser::resolve_value(std::string name) {
 	}
 	if (collected.size() == 1)
 		return collected[0];
-	return new OverloadSet(name, std::move(collected));
+	return new OverloadSet(std::move(collected));
 }
 
 /** value that can be assigned to */
@@ -1147,7 +1147,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			auto member_name = parse_identifier();
 			parse_colon();
 			auto ty = parse_type_expression(false);
-			body->register_variable(member_name, new StorageSlot(pascal_to_cxx_name(member_name), ty), ty);
+			body->register_variable(member_name, new StorageSlot(cxx_value_name(member_name), ty), ty);
 		}
 		if (input_token.size() && input_token != "end") {
 			if (!maybe_parse_semicolon()) {
@@ -1173,8 +1173,7 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 	if (input_token == ":") {
 		parse_colon();
 		rt->has_selector = true;
-		rt->selector_pas_name = first;
-		rt->selector_cxx_name = pascal_to_cxx_name(first);
+		rt->selector_cxx_name = cxx_value_name(first);
 		tag_type = parse_type_expression(false);
 	} else {
 		tag_type = resolve_type(first, false);
@@ -1196,7 +1195,7 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 				auto fname = parse_identifier();
 				parse_colon();
 				auto fty = parse_type_expression(false);
-				auto slot = new StorageSlot(pascal_to_cxx_name(fname), fty);
+				auto slot = new StorageSlot(cxx_value_name(fname), fty);
 				// Variant slots live in the SAME Frame as fixed fields
 				// (Pascal requires globally-distinct field names within a
 				// record, so duplicate-name detection via register_variable
@@ -1256,7 +1255,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		} else
 			break;
 	}
-	auto m = new Method(pas_name, pascal_to_cxx_name(pas_name),
+	auto m = new Method(cxx_value_name(pas_name),
 			    std::move(formals), return_type, has_overload,
 			    owner_class, vk);
 	if (!body->register_callable(pas_name, m)) {
@@ -1318,10 +1317,10 @@ Type* Parser::parse_enum_type() {
 	int64_t next_value = 0;
 	do {
 		auto pas = parse_identifier();
-		auto cxx = pascal_to_cxx_name(pas);
+		auto cxx = cxx_value_name(pas);
 		// FIXME: explicit member values (`Red = 5`) accepted by ISO/FPC are
 		// not parsed here -- every member takes next_value, then increments.
-		et->members.push_back({pas, cxx, next_value});
+		et->members.push_back({cxx, next_value});
 		// Register the member as a value in the enclosing scope so bare uses
 		// (`c := Red`) resolve. Pascal's default is unscoped enum members:
 		// they live in the same scope as the enum type itself, NOT inside
@@ -1384,27 +1383,24 @@ void Parser::parse_block_body() {
 		}
 	}
 }
-Frame* Parser::parse_const_block() {
+void Parser::parse_const_block() {
 	parse_keyword("const");
-	auto scope = new Frame(nullptr);
-	push_scope(scope);
+	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
+	Frame* scope = const_cast<Frame*>(scopes.back().frame);
 	do {
 		auto name = parse_identifier();
 		// FIXME: handle actual compile-time consts which have no colon (and are no variables).
 		parse_colon();
 		auto ty = parse_type_expression(false);
-		scope->register_variable(name, new StorageSlot(pascal_to_cxx_name(name), ty), ty);
+		scope->register_variable(name, new StorageSlot(cxx_value_name(name), ty), ty);
 		if (!maybe_parse_comma()) {
 			break;
 		}
 	} while (true);
-	return scope;
 }
-Frame* Parser::maybe_parse_const_block() {
+void Parser::maybe_parse_const_block() {
 	if (peek_keyword("const")) {
-		return parse_const_block();
-	} else {
-		return nullptr;
+		parse_const_block();
 	}
 }
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually.
@@ -1420,12 +1416,18 @@ DELPHI_AUTO_END: will automatically stop at some aggregate control directives (l
 // After the RHS is parsed the LHS placeholder's `resolved` is filled and the
 // frame slot is rebound to the real Type*. At block end any remaining
 // unresolved IncompleteType in the scope is an error.
-Frame* Parser::parse_type_block(bool delphi_auto_end) {
-	auto scope = new Frame(nullptr);
+void Parser::parse_type_block(bool delphi_auto_end) {
 	parse_keyword("type");
-	// push_scope sets current_type_block = scope and saves the previous value
-	// on the scope stack; pop_scope (called by the caller) restores it.
-	push_scope(scope);
+	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
+	// current_type_block still points at the enclosing decl Frame (set by the
+	// most recent push_scope), which is what parse_enum_type and the IncompleteType
+	// forward-decl machinery need: new types land in the same Frame that future
+	// lookups (including cross-unit, after `uses`) walk.
+	Frame* scope = const_cast<Frame*>(scopes.back().frame);
+	// Track type names declared in THIS block so the unresolved-forward check
+	// at the end can report a meaningful error rather than walking every type
+	// in the enclosing scope (which would re-check already-defined siblings).
+	std::vector<std::pair<std::string, IncompleteType*>> block_incompletes;
 	do {
 		auto name_optional = maybe_parse_identifier();
 		if (!name_optional)
@@ -1443,46 +1445,67 @@ Frame* Parser::parse_type_block(bool delphi_auto_end) {
 			lhs_placeholder = new IncompleteType(name);
 			scope->register_type(name, lhs_placeholder);
 		}
+		block_incompletes.push_back({name, lhs_placeholder});
 		Type* rhs = parse_type_expression(false);
 		// Attach the LHS Pascal name (as its C++ identifier) to record-family
 		// types and enums so emit_type_ref has a name to spell instead of
 		// re-emitting the body inline at every use site.
-		std::string cxx = pascal_to_cxx_name(name);
-		if (auto r = dynamic_cast<RecordType*>(rhs))
-			r->cxx_name = cxx;
-		else if (auto c = dynamic_cast<ClassType*>(rhs))
-			c->cxx_name = cxx;
-		else if (auto o = dynamic_cast<ObjectType*>(rhs))
-			o->cxx_name = cxx;
-		else if (auto e = dynamic_cast<EnumType*>(rhs))
-			e->cxx_name = cxx;
+		std::string cxx = cxx_type_name(name);
+		// If rhs is an aggregate/enum that already carries a C++ name, this
+		// binding is an alias (`type B = A;` where A was defined above). In
+		// that case do NOT overwrite rhs->cxx_name (that would rename A's
+		// canonical definition) and do NOT re-emit the body (ODR violation).
+		// Emit a `using t_B = t_A;` instead. First-wins for the canonical
+		// name; subsequent Pascal names become C++ aliases.
+		std::string existing_cxx;
+		if (auto r = dynamic_cast<RecordType*>(rhs)) existing_cxx = r->cxx_name;
+		else if (auto c = dynamic_cast<ClassType*>(rhs)) existing_cxx = c->cxx_name;
+		else if (auto o = dynamic_cast<ObjectType*>(rhs)) existing_cxx = o->cxx_name;
+		else if (auto e = dynamic_cast<EnumType*>(rhs)) existing_cxx = e->cxx_name;
+		if (!existing_cxx.empty() && existing_cxx != cxx) {
+			if (emitter)
+				emitter->emit_type_alias(cxx, existing_cxx);
+		} else {
+			if (auto r = dynamic_cast<RecordType*>(rhs)) r->cxx_name = cxx;
+			else if (auto c = dynamic_cast<ClassType*>(rhs)) c->cxx_name = cxx;
+			else if (auto o = dynamic_cast<ObjectType*>(rhs)) o->cxx_name = cxx;
+			else if (auto e = dynamic_cast<EnumType*>(rhs)) e->cxx_name = cxx;
+			if (emitter)
+				emitter->emit_type_definition(cxx, rhs);
+		}
+		// Patch the placeholder's `resolved` pointer to the real Type*. Anyone
+		// who captured the placeholder BEFORE this point (e.g. a `^TFoo` inside
+		// the RHS that grabbed the placeholder through lookup_type) still holds
+		// IncompleteType*; they deref through `resolved` to reach the real type.
 		lhs_placeholder->resolved = rhs;
+		// And replace the Frame binding (name -> placeholder) with (name -> rhs)
+		// so future name lookups return the real Type* directly without needed
+		// an unwrap step.
 		scope->rebind_type(name, rhs);
-		if (emitter)
-			emitter->emit_type_definition(cxx, rhs);
 		parse_semicolon();
 	} while (true);
-	for (auto& kv : scope->types()) {
-		if (auto inc = dynamic_cast<IncompleteType*>(kv.second)) {
-			if (!inc->resolved) {
-				raise_parse_error("forward-referenced type not defined in this type block: " + kv.first);
-			}
+	for (auto& [name, inc] : block_incompletes) {
+		if (inc && !inc->resolved) {
+			raise_parse_error("forward-referenced type not defined in this type block: " + name);
 		}
 	}
-	return scope;
 }
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually */
-Frame* Parser::maybe_parse_type_block(bool delphi_auto_end) {
+void Parser::maybe_parse_type_block(bool delphi_auto_end) {
 	if (peek_keyword("type")) {
-		return parse_type_block(delphi_auto_end);
-	} else {
-		return nullptr;
+		parse_type_block(delphi_auto_end);
 	}
 }
-Frame* Parser::parse_var_block() {
+void Parser::parse_var_block() {
 	parse_keyword("var");
-	auto scope = new Frame(nullptr);
-	push_scope(scope);
+	// Register each var directly into the enclosing declaration scope
+	// (unit interface_frame, program impl_frame, or procedure body_frame).
+	// We deliberately do NOT create a sub-frame: the var decls must persist
+	// past this block parse so callers in OTHER compilation units can resolve
+	// them after `uses`. The `pushed++` in parse_decl_blocks used to compensate
+	// for the push_scope here; with no push, parse_decl_blocks stays at 0 for
+	// var blocks.
+	Frame* scope = const_cast<Frame*>(scopes.back().frame);
 	do {
 		std::vector<std::string> names;
 		auto name_optional = maybe_parse_identifier();
@@ -1499,20 +1522,17 @@ Frame* Parser::parse_var_block() {
 		auto ty = parse_type_expression(false);
 		for (auto iter : names) {
 			auto name = iter;
-			auto slot = new StorageSlot(pascal_to_cxx_name(name), ty);
+			auto slot = new StorageSlot(cxx_value_name(name), ty);
 			scope->register_variable(name, slot, ty);
 			if (emitter)
 				emitter->emit_var_decl(slot->cxx_name, ty);
 		}
 		parse_semicolon();
 	} while (true);
-	return scope;
 }
-Frame* Parser::maybe_parse_var_block() {
+void Parser::maybe_parse_var_block() {
 	if (peek_keyword("var")) {
-		return parse_var_block();
-	} else {
-		return nullptr;
+		parse_var_block();
 	}
 }
 bool Parser::maybe_parse_semicolon() {
@@ -1637,13 +1657,12 @@ size_t Parser::parse_decl_blocks() {
 	while (true) {
 		if (peek_keyword("type")) {
 			parse_type_block(false);
-			pushed++;
+			// parse_type_block no longer pushes a sub-frame: it registers into
+			// the enclosing decl scope. No push, no pop to account for.
 		} else if (peek_keyword("const")) {
 			parse_const_block();
-			pushed++;
 		} else if (peek_keyword("var")) {
 			parse_var_block();
-			pushed++;
 		} else if (peek_keyword("procedure")) {
 			parse_procedure_or_function(false);
 		} else if (peek_keyword("function")) {
@@ -1696,7 +1715,7 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 				default_value = parse_expression();
 			}
 			for (auto& n : names) {
-				result.push_back(Parameter{n, pascal_to_cxx_name(n), ty, mode, default_value});
+				result.push_back(Parameter{n, cxx_value_name(n), ty, mode, default_value});
 			}
 		} while (maybe_parse_semicolon());
 	}
@@ -1810,7 +1829,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	    peek_keyword("type");
 
 	if (!body_follows) {
-		auto proto = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
+		auto proto = new Procedure(cxx_value_name(pas_name),
 					   std::move(formals), return_type, has_overload);
 		if (!enclosing->register_callable(pas_name, proto)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
@@ -1824,7 +1843,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		// below will attach the body.
 		parse_keyword("forward");
 		parse_semicolon();
-		auto proto = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
+		auto proto = new Procedure(cxx_value_name(pas_name),
 					   std::move(formals), return_type, has_overload);
 		if (!enclosing->register_callable(pas_name, proto)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
@@ -1919,7 +1938,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		// will fail and produce the appropriate error at the next step.
 	}
 	if (!target) {
-		target = new Procedure(pas_name, pascal_to_cxx_name(pas_name),
+		target = new Procedure(cxx_value_name(pas_name),
 				       std::move(formals), return_type, has_overload);
 		if (!enclosing->register_callable(pas_name, target)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);

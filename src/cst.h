@@ -149,10 +149,8 @@ public:
 };
 
 struct StorageSlot: public Node {
-	// Identifier as it will appear in the emitted C++ output. May diverge from
-	// the Pascal source name (mangling for C++ reserved words, later
-	// unit-name prefixing). Kept on the node so emission is a straight walk
-	// without a separate reverse-lookup back to the Frame that holds this slot.
+	// Identifier as it will appear in the emitted C++ output. The ctor applies
+	// the `p_` prefix to the Pascal source name; callers pass Pascal.
 	std::string cxx_name;
 	StorageSlot(std::string cxx_name, Type* ty);
 };
@@ -160,7 +158,8 @@ struct StorageSlot: public Node {
 /** Reference to a named member of an EnumType. Distinct from Integer/StorageSlot
  *  because we emit the member's C++ identifier verbatim (the C++ enum
  *  constant) -- not its integer value, and not a runtime slot. `ty` holds the
- *  EnumType; `value` is the member's ordinal for constant-folding. */
+ *  EnumType; `value` is the member's ordinal for constant-folding. The ctor
+ *  applies the `p_` prefix to the Pascal member name. */
 struct EnumMemberRef: public Node {
 	std::string cxx_name;
 	int64_t value;
@@ -242,6 +241,16 @@ struct Parameter {
 	Type* ty;
 	ParamMode mode;
 	Node* default_value; // null if none
+	Parameter(std::string pas_name,
+	          std::string cxx_name,
+	          Type* ty,
+	          ParamMode mode,
+	          Node* default_value)
+	    : pas_name(std::move(pas_name)),
+	      cxx_name(std::move(cxx_name)),
+	      ty(ty),
+	      mode(mode),
+	      default_value(default_value) {}
 };
 
 /** Shared base of standalone procedures/functions and methods. Holds
@@ -251,15 +260,13 @@ struct Parameter {
  *  declaration until the matching definition attaches it. */
 class Callable: public Node {
 public:
-	std::string pas_name;
 	std::string cxx_name;
 	std::vector<Parameter> formals;
 	Type* return_type;
 	bool has_overload_directive;
 	bool has_body = false;
 	Frame* body_frame;
-	Callable(std::string pas_name,
-	         std::string cxx_name,
+	Callable(std::string cxx_name,
 	         std::vector<Parameter> formals,
 	         Type* return_type,
 	         bool has_overload_directive);
@@ -272,7 +279,6 @@ public:
 class Procedure: public Callable {
 public:
 	Procedure(std::string pas_name,
-	          std::string cxx_name,
 	          std::vector<Parameter> formals,
 	          Type* return_type,
 	          bool has_overload_directive);
@@ -288,7 +294,6 @@ public:
 	VirtualKind virtual_kind;
 	int vtable_slot;   // -1 = unassigned; populated at class-layout time
 	Method(std::string pas_name,
-	       std::string cxx_name,
 	       std::vector<Parameter> formals,
 	       Type* return_type,
 	       bool has_overload_directive,
@@ -303,7 +308,6 @@ public:
  *  scopes. */
 class OverloadSet: public Node {
 public:
-	std::string pas_name;
 	std::vector<Callable*> members;
-	OverloadSet(std::string pas_name, std::vector<Callable*> members);
+	OverloadSet(std::vector<Callable*> members);
 };

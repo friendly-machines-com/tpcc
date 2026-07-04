@@ -82,7 +82,7 @@ bool Frame::register_callable(std::string name, Callable* c) {
 	Node* existing = iter->second.value;
 	if (auto ec = dynamic_cast<Callable*>(existing)) {
 		if (ec->has_overload_directive && c->has_overload_directive) {
-			auto set = new OverloadSet(name, std::vector<Callable*>{ec, c});
+			auto set = new OverloadSet(std::vector<Callable*>{ec, c});
 			iter->second.value = set;
 			iter->second.ty = nullptr;
 			return true;

@@ -7,13 +7,20 @@ class Type;
 class EnumType;
 class Callable;
 
-/** Translate a Pascal source identifier to the identifier that will be written
- *  into the emitted C++ output. Currently identity; the extension point for
- *  mangling (C++ reserved words like `class`, `template`, `new`; later,
- *  unit-name prefixing so cross-unit references don't collide). Kept as a
- *  free function because it's stateless and callers (StorageSlot ctor sites)
- *  don't need an Emitter instance yet. */
-std::string pascal_to_cxx_name(std::string pascal_name);
+/** No public name-mangling entry point. Prefixing (`t_` for type identifiers,
+ *  `p_` for value identifiers) is applied inside Type / Node constructors
+ *  where the kind is implicit -- callers pass Pascal names and the ctor
+ *  decides the prefix. This keeps C++ reserved-word collisions (`class`,
+ *  `new`, `false`, ...) from leaking to every emission call site.
+ *
+ *  Exceptions: `cxx_value_name` and `cxx_type_name` are the explicit-prefix
+ *  helpers for the (rare) sites that construct a cxx identifier from a Pascal
+ *  name without going through a node ctor (e.g. naming the canonical cxx
+ *  identifier to store on a Type at the `type X = ...` alias site, since
+ *  types don't take their name in the ctor). They apply the same `p_` / `t_`
+ *  prefix the value-ctor path applies internally. */
+std::string cxx_value_name(std::string pas_name);
+std::string cxx_type_name(std::string pas_name);
 
 class Emitter {
 private:
@@ -35,6 +42,10 @@ public:
 	// type. Fields and method prototypes go inside; method bodies are still
 	// emitted separately (outside the class) by emit_procedure_open.
 	void emit_type_definition(std::string cxx_name, Type* ty);
+	// Emit `using <cxx_name> = <aliased_cxx_name>;` for `type B = A;` where A
+	// is an already-named aggregate/enum. Avoids re-emitting A's body under B's
+	// name (ODR violation in C++).
+	void emit_type_alias(std::string cxx_name, std::string aliased_cxx_name);
 	void emit_var_decl(std::string cxx_name, Type* ty);
 	void emit_main_prologue();
 	void emit_main_epilogue();

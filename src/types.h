@@ -54,7 +54,6 @@ struct EnumType: public Type {
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
 	struct Member {
-		std::string pas_name;
 		std::string cxx_name;
 		// FIXME: explicit member values (`Red = 5`) are not parsed yet --
 		// every member takes the next sequential value from 0. Add an
@@ -90,7 +89,6 @@ struct RecordType: public Type {
 	// we emit it as a regular struct member ahead of the union. The arms
 	// themselves don't influence layout beyond "these slots overlap".
 	bool has_selector = false;
-	std::string selector_pas_name;
 	std::string selector_cxx_name;
 	Type* selector_type = nullptr;
 	std::vector<VariantArm> arms;

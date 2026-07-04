@@ -137,12 +137,12 @@ private:
 protected:
 	std::string input_token;
 	void parse_block_body();
-	Frame* maybe_parse_const_block();
-	Frame* maybe_parse_type_block(bool delphi_auto_end);
-	Frame* maybe_parse_var_block();
-	Frame* parse_const_block();
-	Frame* parse_type_block(bool delphi_auto_end);
-	Frame* parse_var_block();
+	void maybe_parse_const_block();
+	void maybe_parse_type_block(bool delphi_auto_end);
+	void maybe_parse_var_block();
+	void parse_const_block();
+	void parse_type_block(bool delphi_auto_end);
+	void parse_var_block();
 	/** Parse a sequence of top-of-block declarations in any order (Pascal
 	 *  allows `type`, `const`, `var` blocks and `procedure`/`function` decls
 	 *  interleaved freely). Returns the count of scopes pushed so the caller

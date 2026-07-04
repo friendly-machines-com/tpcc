@@ -59,6 +59,11 @@ Positivize::Positivize(Node* a) : UnaryOperation(a) {}
 AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
 
+// Value-identifier ctors: take an OPTIONAL Pascal name. If non-empty, apply
+// the `p_` prefix so the cxx identifier stays clear of C++ reserved words
+// (`new`, `class`, `false`, ...). If empty (anonymous entity -- nameless
+// parameter in a prototype, compiler temporary, procedural-type declaration
+// `procedure of object`, etc.), cxx_name stays empty and emission skips it.
 StorageSlot::StorageSlot(std::string cxx_name, Type* ty) {
 	this->cxx_name = cxx_name;
 	this->ty = ty;
@@ -80,13 +85,11 @@ String::String(std::string value, Type* ty) {
 	this->ty = ty;
 }
 
-Callable::Callable(std::string pas_name,
-		   std::string cxx_name,
+Callable::Callable(std::string cxx_name,
 		   std::vector<Parameter> formals,
 		   Type* return_type,
 		   bool has_overload_directive)
-    : pas_name(std::move(pas_name)),
-      cxx_name(std::move(cxx_name)),
+    : cxx_name(std::move(cxx_name)),
       formals(std::move(formals)),
       return_type(return_type),
       has_overload_directive(has_overload_directive),
@@ -96,25 +99,23 @@ Callable::Callable(std::string pas_name,
 }
 
 Procedure::Procedure(std::string pas_name,
-		     std::string cxx_name,
 		     std::vector<Parameter> formals,
 		     Type* return_type,
 		     bool has_overload_directive)
-    : Callable(std::move(pas_name), std::move(cxx_name), std::move(formals),
+    : Callable(std::move(pas_name), std::move(formals),
 	       return_type, has_overload_directive) {}
 
 Method::Method(std::string pas_name,
-	       std::string cxx_name,
 	       std::vector<Parameter> formals,
 	       Type* return_type,
 	       bool has_overload_directive,
 	       Type* owner_class,
 	       VirtualKind virtual_kind)
-    : Callable(std::move(pas_name), std::move(cxx_name), std::move(formals),
+    : Callable(std::move(pas_name), std::move(formals),
 	       return_type, has_overload_directive),
       owner_class(owner_class),
       virtual_kind(virtual_kind),
       vtable_slot(-1) {}
 
-OverloadSet::OverloadSet(std::string pas_name, std::vector<Callable*> members)
-    : pas_name(std::move(pas_name)), members(std::move(members)) {}
+OverloadSet::OverloadSet(std::vector<Callable*> members)
+    : members(std::move(members)) {}
