@@ -3,7 +3,7 @@ CXXFLAGS = -g3 -std=c++20 -Wall
 
 all: mp
 
-src/%.o: src/%.cc
+%.o: %.cc
 	$(CXX) $(CXXFLAGS) -o $@ -c $<
 
 mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types.o src/evaluator.o src/builtins.o src/units.o src/emit.o
