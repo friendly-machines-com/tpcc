@@ -29,6 +29,21 @@
 	exit(1);
 }
 
+void Emitter::emit_enum_decl(EnumType* e) {
+	if (!out)
+		return;
+	fprintf(out, "enum ");
+	if (!e->cxx_name.empty())
+		fprintf(out, "%s ", e->cxx_name.c_str());
+	fprintf(out, "{ ");
+	for (size_t i = 0; i < e->members.size(); i++) {
+		if (i)
+			fprintf(out, ", ");
+		fprintf(out, "%s", e->members[i].cxx_name.c_str());
+	}
+	fprintf(out, " }");
+}
+
 std::string pascal_to_cxx_name(std::string pascal_name) {
 	// Identity for now. Future work:
 	//   - mangle C++ reserved words that are legal Pascal identifiers
@@ -161,6 +176,21 @@ void Emitter::emit_procedure_open(Callable* c) {
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	if (!out)
 		return;
+	if (auto e = dynamic_cast<EnumType*>(ty)) {
+		// Pascal default is UNSCOPED enums: member identifiers leak into
+		// the surrounding scope (where the type is declared) so a use like
+		// `c := Red` resolves without qualification. C++ models this with
+		// an unscoped `enum` (not `enum class`): members inject into the
+		// enclosing namespace, exactly matching Pascal's semantics.
+		//
+		// `enum class` plus per-member `constexpr` aliases would be more
+		// C++-idiomatic but emits two decls per member for the same
+		// behavior we get free from a plain `enum`.
+		fprintf(out, "\n");
+		emit_enum_decl(e);
+		fprintf(out, ";\n");
+		return;
+	}
 	Frame* body = nullptr;
 	const char* kw = "struct";
 	RecordType* rec = nullptr;
@@ -357,6 +387,10 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(out, "%s", s->cxx_name.c_str());
 		return;
 	}
+	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
+		fprintf(out, "%s", e->cxx_name.c_str());
+		return;
+	}
 	if (auto b = dynamic_cast<Builtin*>(expr)) {
 		fprintf(out, "%.*s", (int)b->desc->rtl_name.size(), b->desc->rtl_name.data());
 		return;
@@ -477,6 +511,18 @@ void Emitter::emit_type_ref(Type* ty) {
 	}
 	if (auto o = dynamic_cast<ObjectType*>(ty)) {
 		fprintf(out, "%s", o->cxx_name.empty() ? "/*anonymous object*/ struct{}" : o->cxx_name.c_str());
+		return;
+	}
+	if (auto e = dynamic_cast<EnumType*>(ty)) {
+		// Anonymous inline enum (`var x: (A, B, C);`): emit the full
+		// declaration inline so the member constants exist at this use
+		// site. Two different anonymous enums share no type identity in
+		// Pascal and we don't synthesise any here, so cross-use conflicts
+		// would surface as g++ errors; named enums are the supported path.
+		if (e->cxx_name.empty())
+			emit_enum_decl(e);
+		else
+			fprintf(out, "%s", e->cxx_name.c_str());
 		return;
 	}
 	if (auto p = dynamic_cast<PointerType*>(ty)) {

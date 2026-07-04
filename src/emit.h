@@ -4,6 +4,7 @@
 
 class Node;
 class Type;
+class EnumType;
 class Callable;
 
 /** Translate a Pascal source identifier to the identifier that will be written
@@ -49,4 +50,13 @@ public:
 
 	void emit_expression(Node* expr);
 	void emit_type_ref(Type* ty);
+
+    private:
+	// Emit a full enum declaration body: `enum [NAME] { a, b, c }` -- no
+	// leading newline, no trailing semicolon. Caller frames those. Used by
+	// emit_type_definition (named, at type-block scope) and emit_type_ref's
+	// anonymous-enum branch (inline `var x: (A, B, C);`). References to an
+	// already-defined named enum do NOT go through here -- those just
+	// spell the cxx name.
+	void emit_enum_decl(EnumType* e);
 };

@@ -49,6 +49,24 @@ struct VariantArm {
 	std::vector<Field> fields;
 };
 
+struct EnumType: public Type {
+	// C++ identifier emitted for this enum. Empty until the containing
+	// type-block declaration assigns it (parse_type_block).
+	std::string cxx_name;
+	struct Member {
+		std::string pas_name;
+		std::string cxx_name;
+		// FIXME: explicit member values (`Red = 5`) are not parsed yet --
+		// every member takes the next sequential value from 0. Add an
+		// optional `= <const-expr>` after the member name and evaluate it
+		// at type-block end.
+		int64_t value;
+	};
+	// Source order, not sorted -- the default value of member N is N, and
+	// emission preserves declaration order.
+	std::vector<Member> members;
+};
+
 struct RecordType: public Type {
 	Frame* children;
 	// C++ identifier emitted for this record. Empty until the containing

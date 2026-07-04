@@ -64,6 +64,12 @@ StorageSlot::StorageSlot(std::string cxx_name, Type* ty) {
 	this->ty = ty;
 }
 
+EnumMemberRef::EnumMemberRef(std::string cxx_name, int64_t value, Type* ty) {
+	this->cxx_name = cxx_name;
+	this->value = value;
+	this->ty = ty;
+}
+
 Integer::Integer(uint64_t value, Type* ty) {
 	this->value = value;
 	this->ty = ty;

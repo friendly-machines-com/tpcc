@@ -1294,14 +1294,30 @@ Type* Parser::parse_array_type() {
 }
 
 Type* Parser::parse_enum_type() {
+	// Caller already consumed the `(` via maybe_parse_opening_paren in
+	// parse_type_expression.
+	auto et = new EnumType();
+	int64_t next_value = 0;
 	do {
-		parse_identifier();
-		if (!maybe_parse_comma()) {
+		auto pas = parse_identifier();
+		auto cxx = pascal_to_cxx_name(pas);
+		// FIXME: explicit member values (`Red = 5`) accepted by ISO/FPC are
+		// not parsed here -- every member takes next_value, then increments.
+		et->members.push_back({pas, cxx, next_value});
+		// Register the member as a value in the enclosing scope so bare uses
+		// (`c := Red`) resolve. Pascal's default is unscoped enum members:
+		// they live in the same scope as the enum type itself, NOT inside
+		// the type. (A future compiler might add `{$scopedenums+}` and route
+		// them through the type; that is not this compiler.)
+		auto ref = new EnumMemberRef(cxx, next_value, et);
+		if (!current_type_block->register_variable(pas, ref, et))
+			raise_parse_error("duplicate identifier: " + pas);
+		++next_value;
+		if (!maybe_parse_comma())
 			break;
-		}
 	} while (true);
 	parse_closing_paren();
-	return raise_type_parse_error("parse_enum_type: EnumType construction not implemented yet");
+	return et;
 }
 
 /** allow_forward: if true, an unresolved identifier at this parse position is
