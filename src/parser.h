@@ -164,6 +164,7 @@ protected:
 	Type* resolve_type(std::string name, bool allow_forward);
     bool maybe_parse_directive(std::string directive);
 	void parse_directive(std::string s);
+	void parse_operator(std::string s);
 	Node* parse_value();
 	/** Designator: value followed by zero-or-more selectors.
 	 *  Selectors:
@@ -201,6 +202,7 @@ protected:
 	Type* parse_record_type();
 	Type* parse_procedure_type();
 	Type* parse_function_type();
+	Type* parse_operator_type();
 	Type* parse_class_type();
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);

@@ -509,6 +509,37 @@ void Parser::parse_directive(std::string directive) {
 bool Parser::peek_directive(std::string directive) {
 	return peek_keyword(directive);
 }
+void Parser::parse_operator(std::string x) {
+	/* TODO: Limit to:
+*
++
+-
+-
+/
+:=
+:=
+:=
+:=
+:=
+:=
+:=
+<
+<=
+=
+>
+>=
+and
+div
+mod
+or
+shl
+shr
+xor
+*/
+	if (!maybe_parse_keyword(x)) {
+		raise_parse_error("expected operator " + x);
+	}
+}
 
 /** Return the Frame that holds the fields/members of TY, or nullptr if TY
  *  doesn't have one (i.e. isn't a record/class/object). Transparently walks
@@ -1345,6 +1376,8 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return parse_procedure_type();
 	} else if (peek_keyword("function")) {
 		return parse_function_type();
+	} else if (peek_keyword("operator")) {
+		return parse_operator_type();
 	} else if (peek_directive("external")) { // usually primitive; otherwise we would miss a lot of info
 		parse_directive("external");
 		parse_keyword("nil"); // FIXME: allow string literals, eval.
@@ -1682,6 +1715,8 @@ size_t Parser::parse_decl_blocks() {
 			parse_procedure_or_function(false);
 		} else if (peek_keyword("function")) {
 			parse_procedure_or_function(true);
+		} else if (peek_keyword("operator")) {
+			parse_procedure_or_function(true);
 		} else {
 			break;
 		}
@@ -1764,6 +1799,12 @@ Type* Parser::parse_procedure_type() {
 
 Type* Parser::parse_function_type() {
 	parse_keyword("function");
+	return parse_routine_signature(true, true);
+}
+
+Type* Parser::parse_operator_type() {
+	parse_keyword("operator");
+	// For now this is very similar to function.  Note: even parse_routine_signature uses parse_identifier() instead of parse_operator(), sigh.
 	return parse_routine_signature(true, true);
 }
 
@@ -1863,14 +1904,11 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 	return target;
 }
 
-// Helper to parse the block/body of a routine
 void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	Frame* enclosing = owner_frame ? owner_frame : const_cast<Frame*>(this->scopes.back().frame);
 	Frame* body_frame = new Frame(enclosing);
 	target->body_frame = body_frame;
-	
 	push_scope(body_frame);
-	
 	StorageSlot* self_slot = nullptr;
 	if (auto m = dynamic_cast<Method*>(target)) {
 		Type* self_ptr_ty = new PointerType(m->owner_class);
@@ -1878,12 +1916,10 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		body_frame->register_variable("self", self_slot, self_ptr_ty);
 		push_with_scope(owner_frame, self_slot);
 	}
-	
 	auto rty = static_cast<RoutineType*>(target->ty);
 	for (auto& p : rty->formals) {
 		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
 	}
-	
 	if (emitter) emitter->emit_procedure_open(target);
 	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
@@ -1892,64 +1928,62 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	parse_keyword("end");
 	parse_semicolon();
 	if (emitter) emitter->emit_procedure_close();
-	
 	for (size_t i = 0; i < pushed; i++) pop_scope();
 	if (self_slot) pop_scope(); // pop the with_scope
 	pop_scope(); // pop body_frame
 }
 
-// The clean orchestrator for decl/impl
 void Parser::parse_procedure_or_function(bool is_function) {
-	parse_keyword(is_function ? "function" : "procedure");
-	std::string first_name = parse_identifier();
+	std::string first_name;
+	if (input_token == "operator") {
+		if (!is_function) {
+			raise_parse_error("operator should have a return value");
+		}
+		parse_keyword("operator");
+		first_name = parse_identifier(); // well, parse_operator();
+	} else {
+		parse_keyword(is_function ? "function" : "procedure");
+		first_name = parse_identifier();
+	}
 
-	// 1. Out-of-line method impl (`procedure TFoo.Bar;`)
+	// `procedure TFoo.Bar;`
 	if (input_token == ".") {
 		consume();
 		std::string method_name = parse_identifier();
 		Type* owner_ty = resolve_type(first_name, false);
 		Frame* owner_frame = get_type_body_frame(owner_ty); // Reusing your existing helper!
 		if (!owner_frame) raise_parse_error("'" + first_name + "' is not a class/record/object");
-		
 		Node* hit = owner_frame->lookup_value(method_name);
 		auto m = dynamic_cast<Method*>(hit);
 		if (!m) raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
-		
 		RoutineType* sig = parse_routine_signature(is_function, false);
 		parse_semicolon();
-		
 		if (m->has_body) raise_parse_error("duplicate implementation of '" + method_name + "'");
-		
 		// If provided, update formal names for local body scope
 		if (sig->formals.size() > 0) {
 			static_cast<RoutineType*>(m->ty)->formals = sig->formals;
 		}
-		
 		parse_routine_body(m, owner_frame);
 		return;
 	}
 
-	// 2. Standalone Routine
+	// Standalone Routine
 	bool had_paren = (input_token == "(");
 	RoutineType* sig = parse_routine_signature(is_function, false);
 	parse_semicolon();
-	
+
 	bool has_overload = false;
 	while (maybe_parse_keyword("overload")) {
 		has_overload = true; parse_semicolon();
 	}
-	
-	bool body_follows = peek_keyword("begin") || peek_keyword("var") || 
+	bool body_follows = peek_keyword("begin") || peek_keyword("var") ||
 	                    peek_keyword("const") || peek_keyword("type");
-	
 	if (peek_keyword("forward")) {
 		parse_keyword("forward");
 		parse_semicolon();
 		body_follows = false;
 	}
-	
 	Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
-	
 	if (body_follows) {
 		parse_routine_body(target, nullptr);
 	}
