@@ -217,7 +217,7 @@ void Emitter::emit_procedure_open(Callable* c) {
 	if (!out)
 		return;
 	fprintf(out, "\n");
-	emit_type_ref(c->return_type);
+	emit_type_ref(c->ty->return_type);
 	fprintf(out, " ");
 	if (auto m = dynamic_cast<Method*>(c)) {
 		std::string owner = owner_cxx_name(m->owner_class);
@@ -225,10 +225,10 @@ void Emitter::emit_procedure_open(Callable* c) {
 			fprintf(out, "%s::", owner.c_str());
 	}
 	fprintf(out, "%s(", c->cxx_name.c_str());
-	for (size_t i = 0; i < c->formals.size(); i++) {
+	for (size_t i = 0; i < c->ty->formals.size(); i++) {
 		if (i > 0)
 			fprintf(out, ", ");
-		auto& f = c->formals[i];
+		auto& f = c->ty->formals[i];
 		if (f.mode == ParamMode::Const)
 			fprintf(out, "const ");
 		emit_type_ref(f.ty);
@@ -309,12 +309,12 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 					fprintf(out, "virtual ");
 				}
 			}
-			emit_type_ref(call->return_type);
+			emit_type_ref(call->ty->return_type);
 			fprintf(out, " %s(", call->cxx_name.c_str());
-			for (size_t i = 0; i < call->formals.size(); i++) {
+			for (size_t i = 0; i < call->ty->formals.size(); i++) {
 				if (i > 0)
 					fprintf(out, ", ");
-				auto& f = call->formals[i];
+				auto& f = call->ty->formals[i];
 				if (f.mode == ParamMode::Const)
 					fprintf(out, "const ");
 				emit_type_ref(f.ty);

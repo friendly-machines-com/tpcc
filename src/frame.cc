@@ -76,7 +76,7 @@ bool Frame::register_variable(std::string name, Node* v, Type* ty) {
 bool Frame::register_callable(std::string name, Callable* c) {
 	auto iter = value_items.find(name);
 	if (iter == value_items.end()) {
-		value_items[name] = FrameValueEntry(c, c->return_type);
+		value_items[name] = FrameValueEntry(c, static_cast<RoutineType*>(c->ty)->return_type);
 		return true;
 	}
 	Node* existing = iter->second.value;

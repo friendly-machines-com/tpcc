@@ -17,6 +17,9 @@ class Unit;
 class UnitRegistry;
 class Emitter;
 struct Parameter;
+class RoutineType;
+class Procedure;
+class Callable;
 
 /** Shared compiler-wide options set from the command line and consulted by
  *  the tokenizer's directive handling and by unit/include file lookup. One
@@ -196,6 +199,8 @@ protected:
 	Type* parse_array_type();
 	Type* parse_object_type();
 	Type* parse_record_type();
+	Type* parse_procedure_type();
+	Type* parse_function_type();
 	Type* parse_class_type();
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);
@@ -274,6 +279,9 @@ protected:
 	void push_with_scope(const Frame* scope, Node* unwrap_via);
 	void pop_scope();
 	void maybe_parse_proc_attributes();
+	RoutineType* parse_routine_signature(bool is_function, bool allow_of_object);
+	void parse_routine_body(Callable* target, Frame* owner_frame);
+	Procedure* match_or_create_procedure(const std::string& pas_name, RoutineType* sig, bool had_paren, bool has_overload);
 	/** Parse `procedure NAME(...);` (is_function=false) or
 	 *  `function NAME(...): T;` (is_function=true). Attribute list (`overload;`)
 	 *  is consumed after the terminating `;`. If followed by a body, parses

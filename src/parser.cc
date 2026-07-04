@@ -1238,52 +1238,6 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 	}
 }
 
-void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function) {
-	parse_keyword(is_function ? "function" : "procedure");
-	std::string pas_name = parse_identifier();
-	std::vector<Parameter> formals;
-	if (input_token == "(")
-		formals = parse_proc_formal_parameters();
-	Type* return_type = &unit_type();
-	if (is_function) {
-		parse_colon();
-		return_type = parse_type_expression(false);
-	}
-	parse_semicolon();
-	bool has_overload = false;
-	Method::VirtualKind vk = Method::VirtualKind::None;
-	while (true) {
-		if (peek_keyword("overload")) {
-			parse_keyword("overload");
-			has_overload = true;
-			parse_semicolon();
-		} else if (peek_keyword("virtual")) {
-			parse_keyword("virtual");
-			vk = Method::VirtualKind::Virtual;
-			parse_semicolon();
-		} else if (peek_keyword("override")) {
-			parse_keyword("override");
-			vk = Method::VirtualKind::Override;
-			parse_semicolon();
-		} else if (peek_keyword("abstract")) {
-			parse_keyword("abstract");
-			vk = Method::VirtualKind::Abstract;
-			parse_semicolon();
-		} else if (peek_keyword("dynamic")) {
-			parse_keyword("dynamic");
-			vk = Method::VirtualKind::Dynamic;
-			parse_semicolon();
-		} else
-			break;
-	}
-	auto m = new Method(cxx_value_name(pas_name),
-			    std::move(formals), return_type, has_overload,
-			    owner_class, vk);
-	if (!body->register_callable(pas_name, m)) {
-		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
-	}
-}
-
 Type* Parser::parse_class_type() {
 	parse_keyword("class");
 	if (maybe_parse_opening_paren()) {
@@ -1309,6 +1263,7 @@ Type* Parser::parse_record_type() {
 	parse_keyword("end");
 	return rt;
 }
+
 
 Type* Parser::parse_object_type() {
 	parse_keyword("object");
@@ -1386,6 +1341,10 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return parse_record_type();
 	} else if (peek_keyword("class")) {
 		return parse_class_type();
+	} else if (peek_keyword("procedure")) {
+		return parse_procedure_type();
+	} else if (peek_keyword("function")) {
+		return parse_function_type();
 	} else if (peek_directive("external")) { // usually primitive; otherwise we would miss a lot of info
 		parse_directive("external");
 		parse_keyword("nil"); // FIXME: allow string literals, eval.
@@ -1779,247 +1738,221 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 	return result;
 }
 
-void Parser::parse_procedure_or_function(bool is_function) {
-	parse_keyword(is_function ? "function" : "procedure");
-	std::string first_name = parse_identifier();
-	// Qualified name -> external method body: `procedure TFoo.Bar(...);`
-	// The Method entity was already registered inside the class body; we
-	// look it up, re-parse the formals for the syntactic hit, and attach the
-	// body to the existing Method.
-	if (input_token == ".") {
-		consume();
-		std::string method_name = parse_identifier();
-		Type* owner_ty = resolve_type(first_name, false);
-		Frame* owner_frame = nullptr;
-		if (auto r = dynamic_cast<RecordType*>(owner_ty))
-			owner_frame = r->children;
-		else if (auto c = dynamic_cast<ClassType*>(owner_ty))
-			owner_frame = c->children;
-		else if (auto o = dynamic_cast<ObjectType*>(owner_ty))
-			owner_frame = o->children;
-		if (!owner_frame)
-			raise_parse_error("'" + first_name + "' is not a class/record/object");
-		Node* hit = owner_frame->lookup_value(method_name);
-		auto m = dynamic_cast<Method*>(hit);
-		if (!m)
-			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
-		std::vector<Parameter> formals;
-		if (input_token == "(")
-			formals = parse_proc_formal_parameters();
-		// TODO: verify formals match the prototype; for now we accept whatever
-		// the definition site provided and use the prototype's formals as the
-		// source of truth for later resolution.
-		Type* return_type = &unit_type();
-		if (is_function) {
-			parse_colon();
-			return_type = parse_type_expression(false);
-		}
-		parse_semicolon();
-		// Body_frame parented at the class body so members are visible via
-		// parent chain. Push it, plus an implicit Self-with-scope so bare
-		// field/method references inside the body auto-wrap as
-		// MemberAccess(SelfSlot, member).
-		Frame* body_frame = new Frame(owner_frame);
-		m->body_frame = body_frame;
-		Type* self_ptr_ty = new PointerType(owner_ty);
-		auto self_slot = new StorageSlot("this", self_ptr_ty);
-		body_frame->register_variable("self", self_slot, self_ptr_ty);
-		for (auto& p : m->formals) {
-			body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
-		}
-		push_scope(body_frame);
-		push_with_scope(owner_frame, self_slot);
-		if (emitter)
-			emitter->emit_procedure_open(m);
-		size_t pushed = parse_decl_blocks();
-		parse_keyword("begin");
-		parse_block_body();
-		m->has_body = true;
-		parse_keyword("end");
-		parse_semicolon();
-		if (emitter)
-			emitter->emit_procedure_close();
-		for (size_t i = 0; i < pushed; i++)
-			pop_scope();
-		pop_scope(); // with-scope
-		pop_scope(); // body_frame
-		return;
-	}
-	std::string pas_name = std::move(first_name);
-	// Track whether the caller wrote `(...)` to distinguish long form
-	// `procedure Foo(a: Integer);` from short form `procedure Foo;`. The
-	// short form in an implementation section means "match a prototype and
-	// adopt its formals"; in an interface section (or standalone) it just
-	// means a no-parameter proc.
-	bool had_paren = (input_token == "(");
+RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_object) {
 	std::vector<Parameter> formals;
-	if (had_paren)
+	if (input_token == "(") {
 		formals = parse_proc_formal_parameters();
-	Type* return_type = &unit_type();
+	}
+	Type* ret_ty = &unit_type();
 	if (is_function) {
 		parse_colon();
-		return_type = parse_type_expression(false);
+		ret_ty = parse_type_expression(false);
 	}
+	bool is_method = false;
+	if (allow_of_object && peek_keyword("of")) {
+		parse_keyword("of");
+		parse_keyword("object");
+		is_method = true;
+	}
+	return new RoutineType(std::move(formals), ret_ty, is_method);
+}
+
+Type* Parser::parse_procedure_type() {
+	parse_keyword("procedure");
+	return parse_routine_signature(false, true);
+}
+
+Type* Parser::parse_function_type() {
+	parse_keyword("function");
+	return parse_routine_signature(true, true);
+}
+
+// Class Member Prototype Registration (Value Level)
+void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function) {
+	parse_keyword(is_function ? "function" : "procedure");
+	std::string pas_name = parse_identifier();
+	RoutineType* sig = parse_routine_signature(is_function, false);
 	parse_semicolon();
 	bool has_overload = false;
-	while (peek_keyword("overload")) {
-		parse_keyword("overload");
-		has_overload = true;
-		parse_semicolon();
+	Method::VirtualKind vk = Method::VirtualKind::None;
+	while (true) {
+		if (maybe_parse_keyword("overload")) {
+			has_overload = true; parse_semicolon();
+		} else if (maybe_parse_keyword("virtual")) {
+			vk = Method::VirtualKind::Virtual; parse_semicolon();
+		} else if (maybe_parse_keyword("override")) {
+			vk = Method::VirtualKind::Override; parse_semicolon();
+		} else if (maybe_parse_keyword("abstract")) {
+			vk = Method::VirtualKind::Abstract; parse_semicolon();
+		} else if (maybe_parse_keyword("dynamic")) {
+			vk = Method::VirtualKind::Dynamic; parse_semicolon();
+		} else break;
 	}
+	auto m = new Method(cxx_value_name(pas_name), sig, has_overload, owner_class, vk);
+	m->ty = sig; // The node's type IS the prototype.
+	if (!body->register_callable(pas_name, m)) {
+		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+	}
+}
+
+// -------------------------------------------------------------------------
+// 4. Standalone Routine Parsing (The dismantled god function)
+// -------------------------------------------------------------------------
+
+// Helper to handle overload matching and short-form implementation resolution
+Procedure* Parser::match_or_create_procedure(const std::string& pas_name, RoutineType* sig, bool had_paren, bool has_overload) {
 	Frame* enclosing = const_cast<Frame*>(this->scopes.back().frame);
-
-	// Decide whether a body follows or this is a prototype-only declaration.
-	// A body starts with `forward;`, `begin`, or a local decl block keyword
-	// (`var`/`const`/`type`). Anything else means the parser is looking at
-	// the next top-level declaration (interface case: `procedure Bar;`,
-	// `end`, `implementation`, etc.) so we've just registered a prototype.
-	// Note that `procedure`/`function` after our `;` never triggers a body
-	// path here: mp doesn't support nested subprograms, so those tokens
-	// always mean "next sibling declaration."
-	bool body_follows =
-	    peek_keyword("forward") ||
-	    peek_keyword("begin") ||
-	    peek_keyword("var") ||
-	    peek_keyword("const") ||
-	    peek_keyword("type");
-
-	if (!body_follows) {
-		auto proto = new Procedure(cxx_value_name(pas_name),
-					   std::move(formals), return_type, has_overload);
-		if (!enclosing->register_callable(pas_name, proto)) {
-			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
-		}
-		return;
-	}
-
-	if (peek_keyword("forward")) {
-		// Explicit forward within a single unit's implementation section.
-		// Registered like an interface prototype; the matching definition
-		// below will attach the body.
-		parse_keyword("forward");
-		parse_semicolon();
-		auto proto = new Procedure(cxx_value_name(pas_name),
-					   std::move(formals), return_type, has_overload);
-		if (!enclosing->register_callable(pas_name, proto)) {
-			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
-		}
-		return;
-	}
-
-	// A body follows. Two shapes at the syntactic level:
-	//   Long form: formals were listed. If an existing prototype has a
-	//     matching signature and no body, attach. If no signature match,
-	//     fall through to register fresh -- this is the overload case
-	//     (different signature, same name).
-	//   Short form: no formals listed. Adopt formals and return type from
-	//     the unique unimplemented prototype of this name; error if not
-	//     unique or no prototype exists.
-	// Safety of the OverloadSet fork: Frame::register_callable at
-	// frame.cc:76 promotes a second registration under the same name to
-	// OverloadSet only when BOTH declarations are marked `overload;`; any
-	// other second registration is rejected outright. Frame invariant:
-	// a name bound to Callable* means "exactly one prototype", and a name
-	// bound to OverloadSet* means "N prototypes, all overload-marked."
-	// Short form has no signature to disambiguate an OverloadSet and can
-	// only succeed if at most one member is still unimplemented.
-	Procedure* target = nullptr;
 	Node* existing = enclosing->lookup_value(pas_name);
+	
+	auto sig_matches = [&](Callable* c) -> bool {
+		auto rty = static_cast<RoutineType*>(c->ty);
+		if (rty->formals.size() != sig->formals.size()) return false;
+		if (rty->return_type != sig->return_type) return false;
+		for (size_t i = 0; i < sig->formals.size(); i++) {
+			if (rty->formals[i].ty != sig->formals[i].ty) return false;
+			if (rty->formals[i].mode != sig->formals[i].mode) return false;
+		}
+		return true;
+	};
+
+	auto attach_to = [&](Callable* c) -> Procedure* {
+		if (c->has_body) raise_parse_error("duplicate implementation of '" + pas_name + "'");
+		if (had_paren) {
+			// Pascal allows impl parameter names to differ from interface names.
+			// We update the prototype's names so local scope bindings match the body text.
+			static_cast<RoutineType*>(c->ty)->formals = sig->formals;
+		}
+		auto p = dynamic_cast<Procedure*>(c);
+		if (!p) raise_parse_error("'" + pas_name + "' is not a standalone procedure");
+		return p;
+	};
+
+	Procedure* target = nullptr;
 	if (existing) {
-		auto sig_matches = [&](Callable* c) -> bool {
-			if (c->formals.size() != formals.size())
-				return false;
-			if (c->return_type != return_type)
-				return false;
-			for (size_t i = 0; i < formals.size(); i++) {
-				if (c->formals[i].ty != formals[i].ty)
-					return false;
-				if (c->formals[i].mode != formals[i].mode)
-					return false;
-			}
-			return true;
-		};
-		auto attach_to = [&](Callable* c) -> Procedure* {
-			if (c->has_body)
-				raise_parse_error("duplicate implementation of '" + pas_name + "'");
-			if (!had_paren) {
-				formals = c->formals;
-				return_type = c->return_type;
-			} else {
-				// Long form: types already verified to match the prototype;
-				// swap in the impl-side formals so both body_frame
-				// registration and the .cc signature emit see the names
-				// the body actually uses. Pascal allows the impl to rename
-				// formals, and C++ doesn't require decl and def parameter
-				// names to match.
-				c->formals = formals;
-			}
-			auto p = dynamic_cast<Procedure*>(c);
-			if (!p)
-				raise_parse_error("'" + pas_name + "' is not a standalone procedure");
-			return p;
-		};
 		if (auto ec = dynamic_cast<Callable*>(existing)) {
-			if (!had_paren) {
-				target = attach_to(ec);
-			} else if (sig_matches(ec)) {
-				target = attach_to(ec);
-			}
-			// else: sig mismatch on long form -> fresh registration below.
+			if (!had_paren || sig_matches(ec)) target = attach_to(ec);
 		} else if (auto os = dynamic_cast<OverloadSet*>(existing)) {
 			if (!had_paren) {
 				Callable* pick = nullptr;
 				for (auto* m : os->members) {
-					if (m->has_body)
-						continue;
-					if (pick)
-						raise_parse_error("short-form impl of '" + pas_name + "' is ambiguous: multiple overloads still need a body");
-					pick = m;
+					if (!m->has_body) {
+						if (pick) raise_parse_error("ambiguous short-form impl");
+						pick = m;
+					}
 				}
-				if (!pick)
-					raise_parse_error("no unimplemented prototype of '" + pas_name + "' for short-form definition");
+				if (!pick) raise_parse_error("no unimplemented prototype");
 				target = attach_to(pick);
 			} else {
 				for (auto* m : os->members) {
-					if (!sig_matches(m))
-						continue;
-					if (target)
-						raise_parse_error("ambiguous overload match for '" + pas_name + "'");
-					target = attach_to(m);
+					if (sig_matches(m)) {
+						if (target) raise_parse_error("ambiguous overload match");
+						target = attach_to(m);
+					}
 				}
-				// If no sig match found: fresh registration below.
 			}
 		}
-		// Non-callable existing binding: fall through -- register_callable
-		// will fail and produce the appropriate error at the next step.
 	}
+	
 	if (!target) {
-		target = new Procedure(cxx_value_name(pas_name),
-				       std::move(formals), return_type, has_overload);
+		target = new Procedure(cxx_value_name(pas_name), sig, has_overload);
+		target->ty = sig;
 		if (!enclosing->register_callable(pas_name, target)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 		}
 	}
+	return target;
+}
 
+// Helper to parse the block/body of a routine
+void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
+	Frame* enclosing = owner_frame ? owner_frame : const_cast<Frame*>(this->scopes.back().frame);
 	Frame* body_frame = new Frame(enclosing);
 	target->body_frame = body_frame;
+	
 	push_scope(body_frame);
-	for (auto& p : target->formals) {
+	
+	StorageSlot* self_slot = nullptr;
+	if (auto m = dynamic_cast<Method*>(target)) {
+		Type* self_ptr_ty = new PointerType(m->owner_class);
+		self_slot = new StorageSlot("this", self_ptr_ty);
+		body_frame->register_variable("self", self_slot, self_ptr_ty);
+		push_with_scope(owner_frame, self_slot);
+	}
+	
+	auto rty = static_cast<RoutineType*>(target->ty);
+	for (auto& p : rty->formals) {
 		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
 	}
-	if (emitter)
-		emitter->emit_procedure_open(target);
+	
+	if (emitter) emitter->emit_procedure_open(target);
 	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
 	parse_block_body();
 	target->has_body = true;
 	parse_keyword("end");
 	parse_semicolon();
-	if (emitter)
-		emitter->emit_procedure_close();
-	for (size_t i = 0; i < pushed; i++)
-		pop_scope();
-	pop_scope(); // body_frame
+	if (emitter) emitter->emit_procedure_close();
+	
+	for (size_t i = 0; i < pushed; i++) pop_scope();
+	if (self_slot) pop_scope(); // pop the with_scope
+	pop_scope(); // pop body_frame
+}
+
+// The clean orchestrator for decl/impl
+void Parser::parse_procedure_or_function(bool is_function) {
+	parse_keyword(is_function ? "function" : "procedure");
+	std::string first_name = parse_identifier();
+
+	// 1. Out-of-line method impl (`procedure TFoo.Bar;`)
+	if (input_token == ".") {
+		consume();
+		std::string method_name = parse_identifier();
+		Type* owner_ty = resolve_type(first_name, false);
+		Frame* owner_frame = get_type_body_frame(owner_ty); // Reusing your existing helper!
+		if (!owner_frame) raise_parse_error("'" + first_name + "' is not a class/record/object");
+		
+		Node* hit = owner_frame->lookup_value(method_name);
+		auto m = dynamic_cast<Method*>(hit);
+		if (!m) raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
+		
+		RoutineType* sig = parse_routine_signature(is_function, false);
+		parse_semicolon();
+		
+		if (m->has_body) raise_parse_error("duplicate implementation of '" + method_name + "'");
+		
+		// If provided, update formal names for local body scope
+		if (sig->formals.size() > 0) {
+			static_cast<RoutineType*>(m->ty)->formals = sig->formals;
+		}
+		
+		parse_routine_body(m, owner_frame);
+		return;
+	}
+
+	// 2. Standalone Routine
+	bool had_paren = (input_token == "(");
+	RoutineType* sig = parse_routine_signature(is_function, false);
+	parse_semicolon();
+	
+	bool has_overload = false;
+	while (maybe_parse_keyword("overload")) {
+		has_overload = true; parse_semicolon();
+	}
+	
+	bool body_follows = peek_keyword("begin") || peek_keyword("var") || 
+	                    peek_keyword("const") || peek_keyword("type");
+	
+	if (peek_keyword("forward")) {
+		parse_keyword("forward");
+		parse_semicolon();
+		body_follows = false;
+	}
+	
+	Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
+	
+	if (body_follows) {
+		parse_routine_body(target, nullptr);
+	}
 }
 
 void Parser::parse_constructor_prototype() {
@@ -2051,16 +1984,19 @@ void Parser::parse_destructor() {
 // when candidate is a Method with receiver); entries past args.size() are 0
 // (default-supplied positions).
 static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::vector<Node*>& args) {
-	if (args.size() > c->formals.size())
+	// NEW: Get the true Type
+	auto rty = static_cast<RoutineType*>(c->ty);
+
+	if (args.size() > rty->formals.size())
 		return {};
-	for (size_t i = args.size(); i < c->formals.size(); i++) {
-		if (!c->formals[i].default_value)
+	for (size_t i = args.size(); i < rty->formals.size(); i++) {
+		if (!rty->formals[i].default_value)
 			return {};
 	}
 	// Self position (if any) is prepended to the cost vector.
 	auto m = dynamic_cast<Method*>(c);
 	size_t self_slots = (m && receiver) ? 1 : 0;
-	std::vector<int> costs(self_slots + c->formals.size(), 0);
+	std::vector<int> costs(self_slots + rty->formals.size(), 0);
 	if (self_slots) {
 		int sc = conversion_cost(receiver ? receiver->ty : nullptr, m->owner_class);
 		if (sc < 0)
@@ -2069,7 +2005,7 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 	}
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
-		int cc = conversion_cost(from, c->formals[i].ty);
+		int cc = conversion_cost(from, rty->formals[i].ty);
 		if (cc < 0)
 			return {};
 		costs[self_slots + i] = cc;
@@ -2136,19 +2072,23 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		return FinalizedCall{receiver, target};
 	}
 	// Materialize missing args from defaults.
-	while (args.size() < chosen->formals.size()) {
-		auto& p = chosen->formals[args.size()];
+	// NEW: Extract the prototype (RoutineType) from the chosen Callable's ty field
+	auto rty = static_cast<RoutineType*>(chosen->ty);
+
+	// Materialize missing args from defaults.
+	while (args.size() < rty->formals.size()) {
+		auto& p = rty->formals[args.size()];
 		if (!p.default_value) {
 			raise_parse_error("missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
 		}
 		args.push_back(p.default_value);
 	}
-	if (args.size() > chosen->formals.size()) {
+	if (args.size() > rty->formals.size()) {
 		raise_parse_error("too many arguments to '" + name_for_error + "'");
 	}
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
-		Type* t = chosen->formals[i].ty;
+		Type* t = rty->formals[i].ty;
 		if (args[i]->ty != t)
 			args[i] = new Cast(args[i], t);
 	}

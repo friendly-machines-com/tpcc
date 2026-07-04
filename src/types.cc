@@ -42,3 +42,9 @@ BoundedCardinalType::BoundedCardinalType(uint64_t lower_bound, uint64_t higher_b
 	this->higher_bound = higher_bound;
 	assert(higher_bound >= lower_bound);
 }
+
+RoutineType::RoutineType(std::vector<Parameter> formals, Type* return_type, bool is_method) {
+	this->formals = std::move(formals);
+	this->return_type = return_type;
+	this->is_method = is_method;
+}

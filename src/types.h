@@ -136,3 +136,34 @@ struct UnitType: public Type {
 struct UntypedIntegerType: public Type {
 	UntypedIntegerType();
 };
+
+enum class ParamMode { Value, Var, Out, Const };
+
+class Node;
+
+struct Parameter {
+    std::string pas_name;
+    std::string cxx_name;
+    Type* ty;
+    ParamMode mode;
+    Node* default_value; // null if none
+    Parameter(std::string pas_name,
+              std::string cxx_name,
+              Type* ty,
+              ParamMode mode,
+              Node* default_value)
+        : pas_name(std::move(pas_name)),
+          cxx_name(std::move(cxx_name)),
+          ty(ty),
+          mode(mode),
+          default_value(default_value) {}
+};
+
+class RoutineType : public Type {
+public:
+	std::vector<Parameter> formals;
+	Type* return_type;
+	bool is_method; // true for "of object"
+
+	RoutineType(std::vector<Parameter> formals, Type* return_type, bool is_method);
+};

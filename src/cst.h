@@ -5,6 +5,7 @@
 
 class Type;
 class Frame;
+class RoutineType;
 
 class Node {
 public:
@@ -233,26 +234,6 @@ public:
 	GreaterOrEqual(Node* a, Node* b);
 };
 
-enum class ParamMode { Value, Var, Out, Const };
-
-struct Parameter {
-	std::string pas_name;
-	std::string cxx_name;
-	Type* ty;
-	ParamMode mode;
-	Node* default_value; // null if none
-	Parameter(std::string pas_name,
-	          std::string cxx_name,
-	          Type* ty,
-	          ParamMode mode,
-	          Node* default_value)
-	    : pas_name(std::move(pas_name)),
-	      cxx_name(std::move(cxx_name)),
-	      ty(ty),
-	      mode(mode),
-	      default_value(default_value) {}
-};
-
 /** Shared base of standalone procedures/functions and methods. Holds
  *  everything call resolution and emission needs regardless of which of the
  *  two the callable is. `return_type` is unit_type() for procedures (Pascal
@@ -261,14 +242,12 @@ struct Parameter {
 class Callable: public Node {
 public:
 	std::string cxx_name;
-	std::vector<Parameter> formals;
-	Type* return_type;
+	RoutineType* ty;
 	bool has_overload_directive;
 	bool has_body = false;
 	Frame* body_frame;
 	Callable(std::string cxx_name,
-	         std::vector<Parameter> formals,
-	         Type* return_type,
+	         RoutineType* ty,
 	         bool has_overload_directive);
 };
 
@@ -279,8 +258,7 @@ public:
 class Procedure: public Callable {
 public:
 	Procedure(std::string pas_name,
-	          std::vector<Parameter> formals,
-	          Type* return_type,
+	          RoutineType* ty,
 	          bool has_overload_directive);
 };
 
@@ -294,8 +272,7 @@ public:
 	VirtualKind virtual_kind;
 	int vtable_slot;   // -1 = unassigned; populated at class-layout time
 	Method(std::string pas_name,
-	       std::vector<Parameter> formals,
-	       Type* return_type,
+	       RoutineType* ty,
 	       bool has_overload_directive,
 	       Type* owner_class,
 	       VirtualKind virtual_kind);
