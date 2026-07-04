@@ -247,7 +247,7 @@ struct Parameter {
 /** Shared base of standalone procedures/functions and methods. Holds
  *  everything call resolution and emission needs regardless of which of the
  *  two the callable is. `return_type` is unit_type() for procedures (Pascal
- *  `procedure`, no meaningful return); `body` is null on a forward
+ *  `procedure`, no meaningful return); `has_body` is false on a forward
  *  declaration until the matching definition attaches it. */
 class Callable: public Node {
 public:
@@ -256,7 +256,7 @@ public:
 	std::vector<Parameter> formals;
 	Type* return_type;
 	bool has_overload_directive;
-	Node* body;
+	bool has_body = false;
 	Frame* body_frame;
 	Callable(std::string pas_name,
 	         std::string cxx_name,

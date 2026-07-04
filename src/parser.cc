@@ -140,7 +140,7 @@ void Parser::pop_scope() {
 	exit(1);
 }
 
-[[noreturn]] Node* Parser::raise_parse_error(std::string message) {
+[[noreturn]] void Parser::raise_parse_error(std::string message) {
 	emit_parse_error(input_file_name, input_file_line_number, message);
 }
 
@@ -499,107 +499,97 @@ static Frame* get_type_body_frame(Type* ty) {
 	return nullptr;
 }
 
-Node* Parser::maybe_parse_statement() {
+void Parser::maybe_parse_statement() {
 	if (peek_keyword("end")) {
-		return nullptr;
-	} else {
-		if (peek_keyword("return")) { // FIXME Exit
-			consume();
-			return new Return(parse_expression());
-		} else if (peek_keyword("if")) {
-			parse_keyword("if");
-			auto condition = parse_expression();
-			parse_keyword("then");
+		return;
+	}
+	if (peek_keyword("return")) { // FIXME Exit
+		consume();
+		(void)parse_expression();
+	} else if (peek_keyword("if")) {
+		parse_keyword("if");
+		auto condition = parse_expression();
+		parse_keyword("then");
+		if (emitter)
+			emitter->emit_if_prologue(condition);
+		parse_statement();
+		if (maybe_parse_keyword("else")) {
 			if (emitter)
-				emitter->emit_if_prologue(condition);
+				emitter->emit_if_else();
 			parse_statement();
-			if (maybe_parse_keyword("else")) {
-				if (emitter)
-					emitter->emit_if_else();
-				parse_statement();
-			}
-			if (emitter)
-				emitter->emit_if_epilogue();
-		} else if (peek_keyword("while")) {
-			parse_keyword("while");
-			auto condition = parse_expression();
-			parse_keyword("do");
-			if (emitter)
-				emitter->emit_while_prologue(condition);
-			auto body = parse_statement();
-			if (emitter)
-				emitter->emit_while_epilogue();
-			// FIXME: body is parsed and emitted but the Node is dropped --
-			// the AST has no While node, so any future AST-driven pass has
-			// no visibility into this loop.
-		} else if (peek_keyword("repeat")) {
-			parse_keyword("repeat");
-			if (emitter)
-				emitter->emit_repeat_prologue();
-			auto body = parse_block_body();
-			parse_keyword("until");
-			auto condition = parse_expression();
-			if (emitter)
-				emitter->emit_repeat_epilogue(condition);
-			// FIXME: same as while above -- body and condition are parsed
-			// and emitted, not retained on the AST.
-		} else if (peek_keyword("begin")) {
-			parse_keyword("begin");
-			auto body = parse_block_body();
-			parse_keyword("end");
-			return body;
-		} else if (peek_keyword("with")) {
-			parse_keyword("with");
-			// TODO: complex targets (`p^`, `arr[i]`, `f()`). For now the
-			// target must be a simple variable so we can read Type* off its
-			// StorageSlot; the alias-emission below is already correct for
-			// arbitrary targets when we lift this restriction.
-			auto id = parse_identifier();
-			Node* target = resolve_value(id);
-			auto target_slot = dynamic_cast<StorageSlot*>(target);
-			if (!target_slot)
-				raise_parse_error("with target must currently be a simple variable");
-			Frame* body_frame = get_type_body_frame(target_slot->ty);
-			if (!body_frame)
-				raise_parse_error("with target's type has no field body");
-			parse_keyword("do");
-			std::string alias = emitter ? emitter->next_fresh_cxx_name("pas_with") : std::string("pas_with_x");
-			auto alias_slot = new StorageSlot(alias, target_slot->ty);
-			if (emitter)
-				emitter->emit_with_prologue(alias, target);
-			push_with_scope(body_frame, alias_slot);
-			parse_statement();
-			pop_scope();
-			if (emitter)
-				emitter->emit_with_epilogue();
-			return nullptr;
-		} else {
-			// A statement here is either an assignment (designator := expression)
-			// or a call (designator, possibly with auto-call). Parse the LHS as
-			// a raw designator so we don't auto-call in the assignment case.
-			Node* lhs = parse_designator();
-			if (input_token == ":=") {
-				parse_colon_equals();
-				if (!is_assignable(lhs)) {
-					raise_parse_error("LHS of ':=' is not assignable");
-				}
-				Node* rhs = parse_expression();
-				auto assign = new Assign(lhs, rhs);
-				if (emitter)
-					emitter->emit_statement(assign);
-				return assign;
-			}
-			// Call statement: parse_designator already built the ProcCall for
-			// explicit `foo(x)`; for bare `foo`, apply auto-call now.
-			Node* call = maybe_auto_call(lhs);
-			if (!dynamic_cast<ProcCall*>(call)) {
-				raise_parse_error("statement is neither an assignment nor a call");
-			}
-			if (emitter)
-				emitter->emit_statement(call);
-			return call;
 		}
-		// FIXME: raise_parse_error("missing statement");
+		if (emitter)
+			emitter->emit_if_epilogue();
+	} else if (peek_keyword("while")) {
+		parse_keyword("while");
+		auto condition = parse_expression();
+		parse_keyword("do");
+		if (emitter)
+			emitter->emit_while_prologue(condition);
+		parse_statement();
+		if (emitter)
+			emitter->emit_while_epilogue();
+	} else if (peek_keyword("repeat")) {
+		parse_keyword("repeat");
+		if (emitter)
+			emitter->emit_repeat_prologue();
+		parse_block_body();
+		parse_keyword("until");
+		auto condition = parse_expression();
+		if (emitter)
+			emitter->emit_repeat_epilogue(condition);
+	} else if (peek_keyword("begin")) {
+		parse_keyword("begin");
+		parse_block_body();
+		parse_keyword("end");
+	} else if (peek_keyword("with")) {
+		parse_keyword("with");
+		// TODO: complex targets (`p^`, `arr[i]`, `f()`). For now the
+		// target must be a simple variable so we can read Type* off its
+		// StorageSlot; the alias-emission below is already correct for
+		// arbitrary targets when we lift this restriction.
+		auto id = parse_identifier();
+		Node* target = resolve_value(id);
+		auto target_slot = dynamic_cast<StorageSlot*>(target);
+		if (!target_slot)
+			raise_parse_error("with target must currently be a simple variable");
+		Frame* body_frame = get_type_body_frame(target_slot->ty);
+		if (!body_frame)
+			raise_parse_error("with target's type has no field body");
+		parse_keyword("do");
+		std::string alias = emitter ? emitter->next_fresh_cxx_name("pas_with") : std::string("pas_with_x");
+		auto alias_slot = new StorageSlot(alias, target_slot->ty);
+		if (emitter)
+			emitter->emit_with_prologue(alias, target);
+		push_with_scope(body_frame, alias_slot);
+		parse_statement();
+		pop_scope();
+		if (emitter)
+			emitter->emit_with_epilogue();
+	} else {
+		// A statement here is either an assignment (designator := expression)
+		// or a call (designator, possibly with auto-call). Parse the LHS as
+		// a raw designator so we don't auto-call in the assignment case.
+		Node* lhs = parse_designator();
+		if (input_token == ":=") {
+			parse_colon_equals();
+			if (!is_assignable(lhs)) {
+				raise_parse_error("LHS of ':=' is not assignable");
+			}
+			Node* rhs = parse_expression();
+			auto assign = new Assign(lhs, rhs);
+			if (emitter)
+				emitter->emit_statement(assign);
+			return;
+		}
+		// Call statement: parse_designator already built the ProcCall for
+		// explicit `foo(x)`; for bare `foo`, apply auto-call now.
+		Node* call = maybe_auto_call(lhs);
+		if (!dynamic_cast<ProcCall*>(call)) {
+			raise_parse_error("statement is neither an assignment nor a call");
+		}
+		if (emitter)
+			emitter->emit_statement(call);
 	}
 }
 
@@ -634,7 +624,7 @@ Node* Parser::maybe_parse_numeral() {
 		if (*input != '.') {
 			auto [ptr, ec] = std::from_chars(input, input + input_size, value, base);
 			if (ec != std::errc() || ptr != input + input_size) {
-				return raise_parse_error("malformed numeral: " + input_token);
+				raise_parse_error("malformed numeral: " + input_token);
 			}
 			// FIXME: continue for non-integer here.
 			auto lit = new Integer(value, &untyped_integer_type());
@@ -642,7 +632,7 @@ Node* Parser::maybe_parse_numeral() {
 			return lit;
 		} else {
 			// FIXME: continue for non-integer here.
-			return raise_parse_error("unimplemented real numeral: " + input_token);
+			raise_parse_error("unimplemented real numeral: " + input_token);
 		}
 	} else {
 		return nullptr;
@@ -652,7 +642,7 @@ Node* Parser::maybe_parse_numeral() {
 Node* Parser::parse_numeral() {
 	auto result = maybe_parse_numeral();
 	if (!result) {
-		return raise_parse_error("expected numeral");
+		raise_parse_error("expected numeral");
 	} else {
 		return result;
 	}
@@ -1374,25 +1364,16 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 	}
 }
 
-Node* Parser::parse_statement() {
-	auto result = maybe_parse_statement();
-	if (result == nullptr) {
-		return raise_parse_error("missing statement");
-	}
-	return result;
+void Parser::parse_statement() {
+	maybe_parse_statement();
 }
-Node* Parser::parse_block_body() {
-	Block* block = new Block();
+void Parser::parse_block_body() {
 	while (input_token.size()) {
-		Node* stmt = maybe_parse_statement();
-		if (stmt) {
-			block->add(stmt);
-		}
+		maybe_parse_statement();
 		if (!maybe_parse_semicolon()) {
 			break;
 		}
 	}
-	return block;
 }
 Frame* Parser::parse_const_block() {
 	parse_keyword("const");
@@ -1666,17 +1647,16 @@ size_t Parser::parse_decl_blocks() {
 	return pushed;
 }
 
-Node* Parser::parse_block() {
+void Parser::parse_block() {
 	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
-	auto body = parse_block_body();
+	parse_block_body();
 	parse_keyword("end");
 	for (size_t i = 0; i < pushed; i++)
 		pop_scope();
-	return body;
 }
 
-Node* Parser::maybe_parse_proc_attributes() {
+void Parser::maybe_parse_proc_attributes() {
 	// parse_semicolon();
 	// TODO: inline
 }
@@ -1770,7 +1750,8 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			emitter->emit_procedure_open(m);
 		size_t pushed = parse_decl_blocks();
 		parse_keyword("begin");
-		m->body = parse_block_body();
+		parse_block_body();
+		m->has_body = true;
 		parse_keyword("end");
 		parse_semicolon();
 		if (emitter)
@@ -1876,7 +1857,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			return true;
 		};
 		auto attach_to = [&](Callable* c) -> Procedure* {
-			if (c->body)
+			if (c->has_body)
 				raise_parse_error("duplicate implementation of '" + pas_name + "'");
 			if (!had_paren) {
 				formals = c->formals;
@@ -1906,7 +1887,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			if (!had_paren) {
 				Callable* pick = nullptr;
 				for (auto* m : os->members) {
-					if (m->body)
+					if (m->has_body)
 						continue;
 					if (pick)
 						raise_parse_error("short-form impl of '" + pas_name + "' is ambiguous: multiple overloads still need a body");
@@ -1947,7 +1928,8 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		emitter->emit_procedure_open(target);
 	size_t pushed = parse_decl_blocks();
 	parse_keyword("begin");
-	target->body = parse_block_body();
+	parse_block_body();
+	target->has_body = true;
 	parse_keyword("end");
 	parse_semicolon();
 	if (emitter)
@@ -1957,26 +1939,26 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	pop_scope(); // body_frame
 }
 
-Node* Parser::parse_constructor_prototype() {
+void Parser::parse_constructor_prototype() {
 	parse_keyword("constructor");
 	auto id = parse_identifier();
 	auto formal_parameters = parse_proc_formal_parameters();
 	maybe_parse_proc_attributes();
 }
 
-Node* Parser::parse_constructor() {
+void Parser::parse_constructor() {
 	parse_constructor_prototype();
 	parse_block();
 }
 
-Node* Parser::parse_destructor_prototype() {
+void Parser::parse_destructor_prototype() {
 	parse_keyword("destructor");
 	auto id = parse_identifier();
 	auto formal_parameters = parse_proc_formal_parameters();
 	maybe_parse_proc_attributes();
 }
 
-Node* Parser::parse_destructor() {
+void Parser::parse_destructor() {
 	parse_destructor_prototype();
 	parse_block();
 }
@@ -2132,7 +2114,7 @@ size_t Parser::parse_uses_clause(bool in_interface, std::string current_name) {
 	return pushed;
 }
 
-Node* Parser::parse_unit_body() {
+void Parser::parse_unit_body() {
 	std::string name = parse_identifier();
 	parse_semicolon();
 	Frame* iface = new Frame(nullptr);
@@ -2186,10 +2168,9 @@ Node* Parser::parse_unit_body() {
 	pop_scope(); // iface
 
 	unit->phase = UnitPhase::Done;
-	return nullptr;
 }
 
-Node* Parser::parse_program_or_unit() {
+void Parser::parse_program_or_unit() {
 	if (maybe_parse_keyword("program")) {
 		auto name = parse_identifier();
 		parse_semicolon();
@@ -2215,7 +2196,7 @@ Node* Parser::parse_program_or_unit() {
 		parse_keyword("begin");
 		if (emitter)
 			emitter->emit_main_prologue();
-		auto body = parse_block_body();
+		parse_block_body();
 		parse_keyword("end");
 		if (emitter)
 			emitter->emit_main_epilogue();
@@ -2226,10 +2207,9 @@ Node* Parser::parse_program_or_unit() {
 		parse_period();
 		pop_scope();
 		unit->phase = UnitPhase::Done;
-		return body;
 	} else if (maybe_parse_keyword("unit")) {
-		return parse_unit_body();
+		parse_unit_body();
 	} else {
-		return raise_parse_error("unknown input token");
+		raise_parse_error("unknown input token");
 	}
 }

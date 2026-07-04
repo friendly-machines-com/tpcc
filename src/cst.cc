@@ -90,7 +90,7 @@ Callable::Callable(std::string pas_name,
       formals(std::move(formals)),
       return_type(return_type),
       has_overload_directive(has_overload_directive),
-      body(nullptr),
+      has_body(false),
       body_frame(nullptr) {
 	this->ty = return_type;
 }

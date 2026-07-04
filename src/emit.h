@@ -70,4 +70,11 @@ public:
 	// already-defined named enum do NOT go through here -- those just
 	// spell the cxx name.
 	void emit_enum_decl(EnumType* e);
+	// Emit a record/class/object body: `<kw> [NAME] { <fields> <variant-union> }`
+	// -- no leading newline, no trailing semicolon. Caller frames those. Used
+	// by emit_type_definition (named, top-level) and emit_type_ref's anonymous
+	// branch (inline at use site, e.g. `var x: record ... end;`). A named
+	// reference to an already-defined type does NOT go through here -- it just
+	// spells the cxx name.
+	void emit_aggregate_decl(std::string cxx_name, Type* ty);
 };

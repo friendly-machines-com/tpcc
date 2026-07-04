@@ -115,6 +115,12 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(out, ";\n");
 		return;
 	}
+	if (auto r = dynamic_cast<Return*>(stmt)) {
+		fprintf(out, "\treturn ");
+		emit_expression(r->a);
+		fprintf(out, ";\n");
+		return;
+	}
 	unhandled_node("emit_statement", stmt);
 }
 
@@ -223,24 +229,9 @@ void Emitter::emit_procedure_open(Callable* c) {
 	fprintf(out, ") {\n");
 }
 
-void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
+void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 	if (!out)
 		return;
-	if (auto e = dynamic_cast<EnumType*>(ty)) {
-		// Pascal default is UNSCOPED enums: member identifiers leak into
-		// the surrounding scope (where the type is declared) so a use like
-		// `c := Red` resolves without qualification. C++ models this with
-		// an unscoped `enum` (not `enum class`): members inject into the
-		// enclosing namespace, exactly matching Pascal's semantics.
-		//
-		// `enum class` plus per-member `constexpr` aliases would be more
-		// C++-idiomatic but emits two decls per member for the same
-		// behavior we get free from a plain `enum`.
-		fprintf(out, "\n");
-		emit_enum_decl(e);
-		fprintf(out, ";\n");
-		return;
-	}
 	Frame* body = nullptr;
 	const char* kw = "struct";
 	RecordType* rec = nullptr;
@@ -254,12 +245,16 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	} else if (auto o = dynamic_cast<ObjectType*>(ty)) {
 		body = o->children;
 		kw = "class";
-	} else
-		return;
+	} else {
+		unhandled_type("emit_aggregate_decl", ty);
+	}
 	const char* attributes = "";
 	if (rec && rec->packed)
 		attributes = "[[gnu::packed]] ";
-	fprintf(out, "\n%s %s%s {\n", kw, attributes, cxx_name.c_str());
+	fprintf(out, "%s%s", attributes, kw);
+	if (!cxx_name.empty())
+		fprintf(out, " %s", cxx_name.c_str());
+	fprintf(out, " {\n");
 	if (kw[0] == 'c')
 		fprintf(out, "public:\n"); // C++ classes default private
 	// Variant-record emission strategy:
@@ -348,7 +343,33 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 			fprintf(out, "\t};\n");
 		}
 	}
-	fprintf(out, "};\n");
+	fprintf(out, "}");
+}
+
+void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
+	if (!out)
+		return;
+	if (auto e = dynamic_cast<EnumType*>(ty)) {
+		// Pascal default is UNSCOPED enums: member identifiers leak into
+		// the surrounding scope (where the type is declared) so a use like
+		// `c := Red` resolves without qualification. C++ models this with
+		// an unscoped `enum` (not `enum class`): members inject into the
+		// enclosing namespace, exactly matching Pascal's semantics.
+		//
+		// `enum class` plus per-member `constexpr` aliases would be more
+		// C++-idiomatic but emits two decls per member for the same
+		// behavior we get free from a plain `enum`.
+		fprintf(out, "\n");
+		emit_enum_decl(e);
+		fprintf(out, ";\n");
+		return;
+	}
+	if (dynamic_cast<RecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<ObjectType*>(ty)) {
+		fprintf(out, "\n");
+		emit_aggregate_decl(cxx_name, ty);
+		fprintf(out, ";\n");
+		return;
+	}
 }
 
 void Emitter::emit_procedure_close() {
@@ -552,15 +573,24 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto r = dynamic_cast<RecordType*>(ty)) {
-		fprintf(out, "%s", r->cxx_name.empty() ? "/*anonymous record*/ struct{}" : r->cxx_name.c_str());
+		if (r->cxx_name.empty())
+			emit_aggregate_decl("", ty);
+		else
+			fprintf(out, "%s", r->cxx_name.c_str());
 		return;
 	}
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
-		fprintf(out, "%s", c->cxx_name.empty() ? "/*anonymous class*/ struct{}" : c->cxx_name.c_str());
+		if (c->cxx_name.empty())
+			emit_aggregate_decl("", ty);
+		else
+			fprintf(out, "%s", c->cxx_name.c_str());
 		return;
 	}
 	if (auto o = dynamic_cast<ObjectType*>(ty)) {
-		fprintf(out, "%s", o->cxx_name.empty() ? "/*anonymous object*/ struct{}" : o->cxx_name.c_str());
+		if (o->cxx_name.empty())
+			emit_aggregate_decl("", ty);
+		else
+			fprintf(out, "%s", o->cxx_name.c_str());
 		return;
 	}
 	if (auto e = dynamic_cast<EnumType*>(ty)) {

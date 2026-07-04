@@ -125,7 +125,7 @@ private:
 	bool eval_directive_expr(const std::string& expr);
 protected:
 	std::string input_token;
-	Node* parse_block_body();
+	void parse_block_body();
 	Frame* maybe_parse_const_block();
 	Frame* maybe_parse_type_block(bool delphi_auto_end);
 	Frame* maybe_parse_var_block();
@@ -137,9 +137,9 @@ protected:
 	 *  interleaved freely). Returns the count of scopes pushed so the caller
 	 *  can pop that many after the body. */
 	size_t parse_decl_blocks();
-	Node* parse_block();
+	void parse_block();
 	void parse_semicolon();
-	Node* maybe_parse_statement();
+	void maybe_parse_statement();
 	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
@@ -187,7 +187,7 @@ protected:
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);
 	Node* parse_expression();
-	Node* parse_statement();
+	void parse_statement();
 	Frame* parse_aggregate_type_body(Type* owner_class);
 	void parse_record_variant(RecordType* rt, Frame* body);
 	/** Parse a method prototype inside a class/record/object body. Registers
@@ -205,7 +205,7 @@ protected:
 	void parse_colon();
 	void parse_equals();
 	bool maybe_parse_comma();
-	Node* parse_unit_body();
+	void parse_unit_body();
 	/** Parse a comma-separated `uses A, B, C` list (the `uses` keyword must
 	 *  have been consumed by the caller). Loads each named unit if not already
 	 *  in the registry, checks the phase rules (interface-position use of an
@@ -252,7 +252,7 @@ protected:
 	 *  hits in FRAME are wrapped as MemberAccess(UNWRAP_VIA, hit). */
 	void push_with_scope(const Frame* scope, Node* unwrap_via);
 	void pop_scope();
-	Node* maybe_parse_proc_attributes();
+	void maybe_parse_proc_attributes();
 	/** Parse `procedure NAME(...);` (is_function=false) or
 	 *  `function NAME(...): T;` (is_function=true). Attribute list (`overload;`)
 	 *  is consumed after the terminating `;`. If followed by a body, parses
@@ -260,13 +260,13 @@ protected:
 	 *  null. Registers the resulting Procedure in the current scope and emits
 	 *  the signature/body when an emitter is attached. */
 	void parse_procedure_or_function(bool is_function);
-	Node* parse_constructor_prototype();
-	Node* parse_constructor();
-	Node* parse_destructor_prototype();
-	Node* parse_destructor();
+	void parse_constructor_prototype();
+	void parse_constructor();
+	void parse_destructor_prototype();
+	void parse_destructor();
 	std::vector<Parameter> parse_proc_formal_parameters();
 
-	[[noreturn]] Node* raise_parse_error(std::string message);
+	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 
 public:
@@ -284,5 +284,5 @@ public:
 	void push_input_file_and_buffer(FILE* input_file, std::string input_file_name, int input_file_line_number, std::unique_ptr<char[]> buffer, size_t buffer_len);
 	void pop_input_file();
 	void start();
-	Node* parse_program_or_unit();
+	void parse_program_or_unit();
 };
