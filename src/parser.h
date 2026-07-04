@@ -225,6 +225,8 @@ protected:
 	void parse_colon();
 	void parse_equals();
 	bool maybe_parse_comma();
+	bool maybe_parse_colon();
+	bool maybe_parse_colon_equals();
 	void parse_unit_body();
 	/** Parse a comma-separated `uses A, B, C` list (the `uses` keyword must
 	 *  have been consumed by the caller). Loads each named unit if not already

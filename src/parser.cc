@@ -540,12 +540,6 @@ void Parser::parse_operator(std::string x) {
 -
 /
 :=
-:=
-:=
-:=
-:=
-:=
-:=
 <
 <=
 =
@@ -655,8 +649,7 @@ void Parser::maybe_parse_statement() {
 		// or a call (designator, possibly with auto-call). Parse the LHS as
 		// a raw designator so we don't auto-call in the assignment case.
 		Node* lhs = parse_designator();
-		if (input_token == ":=") {
-			parse_colon_equals();
+		if (maybe_parse_colon_equals()) {
 			if (!is_assignable(lhs)) {
 				raise_parse_error("LHS of ':=' is not assignable");
 			}
@@ -1005,12 +998,11 @@ static Frame* body_frame_of(Type* ty) {
 Node* Parser::parse_designator() {
 	Node* result = parse_value();
 	while (true) {
-		if (input_token == ".") {
+		if (maybe_parse_period()) {
 			// Binary infix: RHS is a single identifier token. Before applying,
 			// if LHS is a bare callable it must be auto-called (else the `.`
 			// would try to look up a member of a callable, which is nonsense).
 			result = maybe_auto_call(result);
-			consume();
 			std::string member_name = parse_identifier();
 			Type* ct = unwrap_incomplete(result->ty);
 			Frame* members = body_frame_of(ct);
@@ -1022,10 +1014,9 @@ Node* Parser::parse_designator() {
 			auto ma = new MemberAccess(result, member);
 			ma->ty = member->ty;
 			result = ma;
-		} else if (input_token == "(") {
+		} else if (maybe_parse_opening_paren()) {
 			// Bracketed n-ary: RHS is a comma-separated list of expressions.
 			// No auto-call before `(` -- this `(` IS the call.
-			consume();
 			std::vector<Node*> args;
 			if (input_token != ")") {
 				args.push_back(parse_expression());
@@ -1037,11 +1028,10 @@ Node* Parser::parse_designator() {
 			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 			call->ty = fc.callee ? fc.callee->ty : nullptr;
 			result = call;
-		} else if (input_token == "[") {
+		} else if (maybe_parse_opening_bracket()) {
 			// Bracketed: RHS is a single expression. Auto-call bare callable
 			// LHS first (indexing into a callable reference is nonsense).
 			result = maybe_auto_call(result);
-			consume();
 			Node* idx = parse_expression();
 			parse_closing_bracket();
 			Type* ct = unwrap_incomplete(result->ty);
@@ -1051,11 +1041,10 @@ Node* Parser::parse_designator() {
 			auto ix = new Index(result, idx);
 			ix->ty = arr->item_type;
 			result = ix;
-		} else if (input_token == "^") {
+		} else if (maybe_parse_circumflex()) {
 			// Postfix: no RHS. Auto-call bare callable LHS first (deref of a
 			// callable reference is nonsense).
 			result = maybe_auto_call(result);
-			consume();
 			Type* ct = unwrap_incomplete(result->ty);
 			auto p = dynamic_cast<PointerType*>(ct);
 			if (!p)
@@ -1245,8 +1234,7 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 	// the tag type -- resolve it directly.
 	auto first = parse_identifier();
 	Type* tag_type;
-	if (input_token == ":") {
-		parse_colon();
+	if (maybe_parse_colon()) {
 		rt->has_selector = true;
 		rt->selector_cxx_name = cxx_value_name(first);
 		tag_type = parse_type_expression(false);
@@ -1653,6 +1641,22 @@ bool Parser::maybe_parse_comma() {
 		return false;
 	}
 }
+bool Parser::maybe_parse_colon() {
+	if (input_token == ":") {
+		consume();
+		return true;
+	} else {
+		return false;
+	}
+}
+bool Parser::maybe_parse_colon_equals() {
+	if (input_token == ":=") {
+		consume();
+		return true;
+	} else {
+		return false;
+	}
+}
 void Parser::parse_semicolon() {
 	if (!maybe_parse_semicolon()) {
 		raise_parse_error("missing semicolon");
@@ -1779,11 +1783,10 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 			parse_colon();
 			Type* ty = parse_type_expression(false);
 			Node* default_value = nullptr;
-			if (input_token == "=") {
+			if (maybe_parse_equal()) {
 				if (names.size() > 1) {
 					raise_parse_error("default value not allowed with comma-grouped parameter names");
 				}
-				consume();
 				default_value = parse_expression();
 			}
 			for (auto& n : names) {
@@ -1978,11 +1981,12 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 void Parser::parse_procedure_or_function(bool is_function) {
 	bool has_overload = false;
 	std::string first_name;
-	if (input_token == "operator") {
+	if (peek_keyword("operator")) {
 		if (!is_function) {
 			raise_parse_error("custom operator should have a return value");
 		}
 		parse_keyword("operator");
+		// Assumption: there are no method operators.
 		first_name = input_token; // TODO: well, parse_operator();
 		consume();
 		has_overload = true; // I think those should be implicitly "overload;"
@@ -1992,8 +1996,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	}
 
 	// `procedure TFoo.Bar;`
-	if (input_token == ".") {
-		consume();
+	if (maybe_parse_period()) {
 		std::string method_name = parse_identifier();
 		Type* owner_ty = resolve_type(first_name, false);
 		Frame* owner_frame = get_type_body_frame(owner_ty);
