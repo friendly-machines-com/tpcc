@@ -1976,6 +1976,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 }
 
 void Parser::parse_procedure_or_function(bool is_function) {
+	bool has_overload = false;
 	std::string first_name;
 	if (input_token == "operator") {
 		if (!is_function) {
@@ -1984,6 +1985,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		parse_keyword("operator");
 		first_name = input_token; // TODO: well, parse_operator();
 		consume();
+		has_overload = true; // I think those should be implicitly "overload;"
 	} else {
 		parse_keyword(is_function ? "function" : "procedure");
 		first_name = parse_identifier();
@@ -2018,7 +2020,6 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	RoutineType* sig = parse_routine_signature(is_function, false);
 	parse_semicolon();
 
-	bool has_overload = false;
 	while (maybe_parse_keyword("overload")) {
 		has_overload = true;
 		parse_semicolon();
