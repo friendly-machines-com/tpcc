@@ -20,9 +20,10 @@ IntrinsicType k_integer("pas::t_integer", 5);
 IntrinsicType k_longint("pas::t_longint", 6);
 IntrinsicType k_qword("pas::t_qword", 7); // FIXME: check archs
 IntrinsicType k_int64("pas::t_int64", 8); // FIXME: check archs
-IntrinsicType k_boolean("pas::t_boolean", -1);
-IntrinsicType k_char("pas::t_char", -1);
-IntrinsicType k_shortstring("pas::t_shortstring", -1);
+IntrinsicType k_double("pas::t_double", {});
+IntrinsicType k_boolean("pas::t_boolean", {});
+IntrinsicType k_char("pas::t_char", {});
+IntrinsicType k_shortstring("pas::t_shortstring", {});
 
 IntrinsicType* const k_all_intrinsics[] = {
     &k_byte,
@@ -34,6 +35,7 @@ IntrinsicType* const k_all_intrinsics[] = {
     &k_longint,
     &k_qword,
     &k_int64,
+    &k_double,
     &k_boolean,
     &k_char,
     &k_shortstring,
@@ -105,7 +107,7 @@ const Frame& root_frame() {
 	static const Frame f = []() {
 		Frame ff(nullptr);
 		for (IntrinsicType* t : k_all_intrinsics) {
-			// FIXXME: terrible seam.
+			// FIXME: terrible seam.
 			std::string pas_name = t->cxx_name;
 			if (pas_name.starts_with("pas::t_")) {
 				pas_name.erase(0, std::string("pas::t_").length());
