@@ -85,6 +85,7 @@ private:
 	int consume_lowlevel();
 	std::string consume();
 	bool peek_keyword(std::string s);
+	bool peek_directive(std::string s);
 	void parse_keyword(std::string s);
 	bool maybe_parse_keyword(std::string s);
 	std::vector<ParserInputFile> input_files; // TODO: stack
@@ -159,6 +160,7 @@ protected:
 	Node* resolve_value(std::string name);
 	Type* resolve_type(std::string name, bool allow_forward);
     bool maybe_parse_directive(std::string directive);
+	void parse_directive(std::string s);
 	Node* parse_value();
 	/** Designator: value followed by zero-or-more selectors.
 	 *  Selectors:

@@ -3,24 +3,26 @@
 #include "frame.h"
 #include <string>
 
-IntrinsicType::IntrinsicType(std::string_view pas_name, std::string_view rtl_name)
-    : pas_name(pas_name), rtl_name(rtl_name) {}
+IntrinsicType::IntrinsicType(std::string cxx_name, std::optional<int> rank)
+    : cxx_name(std::move(cxx_name)), rank(std::move(rank)) {}
 
 Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 
 // Integer rows are ordered narrowest -> widest; the ordering is what
 // common_arith_type and conversion_cost use to compute widening.
 namespace {
-IntrinsicType k_byte("byte", "pas::t_byte");
-IntrinsicType k_shortint("shortint", "pas::t_shortint");
-IntrinsicType k_word("word", "pas::t_word");
-IntrinsicType k_smallint("smallint", "pas::t_smallint");
-IntrinsicType k_cardinal("cardinal", "pas::t_cardinal");
-IntrinsicType k_integer("integer", "pas::t_integer");
-IntrinsicType k_longint("longint", "pas::t_longint");
-IntrinsicType k_boolean("boolean", "pas::t_boolean");
-IntrinsicType k_char("char", "pas::t_char");
-IntrinsicType k_shortstring("shortstring", "pas::t_shortstring");
+IntrinsicType k_byte("pas::t_byte", 0);
+IntrinsicType k_shortint("pas::t_shortint", 1);
+IntrinsicType k_word("pas::t_word", 2);
+IntrinsicType k_smallint("pas::t_smallint", 3);
+IntrinsicType k_cardinal("pas::t_cardinal", 4);
+IntrinsicType k_integer("pas::t_integer", 5);
+IntrinsicType k_longint("pas::t_longint", 6);
+IntrinsicType k_qword("pas::t_qword", 7); // FIXME: check archs
+IntrinsicType k_int64("pas::t_int64", 8); // FIXME: check archs
+IntrinsicType k_boolean("pas::t_boolean", -1);
+IntrinsicType k_char("pas::t_char", -1);
+IntrinsicType k_shortstring("pas::t_shortstring", -1);
 
 IntrinsicType* const k_all_intrinsics[] = {
     &k_byte,
@@ -30,6 +32,8 @@ IntrinsicType* const k_all_intrinsics[] = {
     &k_cardinal,
     &k_integer,
     &k_longint,
+    &k_qword,
+    &k_int64,
     &k_boolean,
     &k_char,
     &k_shortstring,
@@ -64,22 +68,9 @@ static int integer_widening_rank(Type* ty) {
 	auto it = dynamic_cast<IntrinsicType*>(ty);
 	if (!it)
 		return -1;
-	std::string_view n = it->pas_name;
-	if (n == "byte")
-		return 0;
-	if (n == "shortint")
-		return 1;
-	if (n == "word")
-		return 2;
-	if (n == "smallint")
-		return 3;
-	if (n == "cardinal")
-		return 4;
-	if (n == "integer")
-		return 5;
-	if (n == "longint")
-		return 6;
-	return -1;
+	if (!it->rank)
+		return -1;
+	return *(it->rank);
 }
 
 Type* common_arith_type(Type* a, Type* b) {
@@ -114,7 +105,13 @@ const Frame& root_frame() {
 	static const Frame f = []() {
 		Frame ff(nullptr);
 		for (IntrinsicType* t : k_all_intrinsics) {
-			ff.register_type(std::string(t->pas_name), t);
+			// FIXXME: terrible seam.
+	        std::string pas_name = t->cxx_name;
+	        if (pas_name.starts_with("pas::t_")) {
+    	       pas_name.erase(0, std::string("pas::t_").length());
+        	}
+
+			ff.register_type(std::string(pas_name), t); // FIXME: wtf, system unit exists.
 		}
 		for (auto& b : k_builtins) {
 			auto bi = new Builtin(&b);

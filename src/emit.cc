@@ -581,7 +581,7 @@ void Emitter::emit_type_ref(Type* ty) {
 		ty = inc->resolved;
 	}
 	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
-		fprintf(out, "%.*s", (int)it->rtl_name.size(), it->rtl_name.data());
+		fprintf(out, "%.*s", (int)it->cxx_name.size(), it->cxx_name.data());
 		return;
 	}
 	if (dynamic_cast<UnitType*>(ty)) {

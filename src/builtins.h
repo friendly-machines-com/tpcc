@@ -33,9 +33,9 @@ struct IntrinsicTypeDesc {
 
 class IntrinsicType: public Type {
 public:
-	std::string_view pas_name;
-	std::string_view rtl_name;
-	IntrinsicType(std::string_view pas_name, std::string_view rtl_name);
+	std::string cxx_name;
+	std::optional<int> rank;
+	IntrinsicType(std::string cxx_name, std::optional<int> rank);
 };
 
 class Builtin: public Node {

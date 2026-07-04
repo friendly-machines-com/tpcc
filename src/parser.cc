@@ -191,6 +191,18 @@ static std::pair<std::string, std::string> split_directive(const std::string& bo
 	return {name, rest};
 }
 
+// Extract the content of a single-quoted string literal token (with '' escape).
+// FIXME: Remove and use evaluate().
+static std::string extract_string_literal(const std::string& token) {
+	std::string s;
+	for (size_t i = 1; i + 1 < token.size(); ++i) {
+		s.push_back(token[i]);
+		if (token[i] == '\'' && i + 2 < token.size() && token[i + 1] == '\'')
+			++i;
+	}
+	return s;
+}
+
 // Try to open NAME (used verbatim -- extension is the caller's job) by
 // searching the directory of CURRENT_INPUT first, then each entry of
 // SEARCH_PATHS (normalized to end in '/'). Returns the opened FILE and the
@@ -470,7 +482,7 @@ void Parser::parse_keyword(std::string s) {
 	if (peek_keyword(s)) {
 		consume();
 	} else {
-		raise_parse_error("missing keyword: " + s);
+		raise_parse_error("expected keyword " + s);
 	}
 }
 bool Parser::maybe_parse_keyword(std::string s) {
@@ -489,6 +501,15 @@ bool Parser::maybe_parse_directive(std::string directive) {
 	// remain usable as identifiers. The lexical match itself is identical.
 	return maybe_parse_keyword(directive);
 }
+void Parser::parse_directive(std::string directive) {
+	if (!maybe_parse_directive(directive)) {
+		raise_parse_error("expected directive " + directive);
+	}
+}
+bool Parser::peek_directive(std::string directive) {
+	return peek_keyword(directive);
+}
+
 /** Return the Frame that holds the fields/members of TY, or nullptr if TY
  *  doesn't have one (i.e. isn't a record/class/object). Transparently walks
  *  through an IncompleteType via `resolved`. Used by `with` to find the
@@ -1365,6 +1386,33 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return parse_record_type();
 	} else if (peek_keyword("class")) {
 		return parse_class_type();
+	} else if (peek_directive("external")) { // usually primitive; otherwise we would miss a lot of info
+		parse_directive("external");
+		parse_keyword("nil"); // FIXME: allow string literals, eval.
+		parse_directive("name");
+		// FIXME: terrible.  Replace.
+		if (input_token.empty() || input_token.front() != '\'') {
+			raise_parse_error("expected string literal after 'name'");
+		}
+		std::string cxx_name = extract_string_literal(input_token);
+		consume();
+
+		// FIXME: terrible seam.
+		const Frame& f = root_frame();
+		std::string pas_name = cxx_name;
+		if (pas_name.starts_with("pas::t_")) {
+			pas_name.erase(0, std::string("pas::t_").length());
+		}
+		auto intrinsic = f.lookup_type(pas_name);
+		if (intrinsic == nullptr) {
+			return raise_type_parse_error(cxx_name);
+		}
+		// no null.
+
+		//auto intrinsic = new IntrinsicType(cxx_name); // FIXME: what? reuse or what?
+		//lhs_placeholder->resolved = intrinsic;
+		//scope->rebind_type(name, intrinsic);
+		return intrinsic;
 	} else {
 		// FIXME: constant folding for ranges (2..5 -> BoundedCardinalType)
 		auto id = parse_identifier();
@@ -1434,7 +1482,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			break;
 		auto name = *name_optional;
 		parse_equals();
-		Type* existing = scope->lookup_type(name);
+		Type* existing = scope->lookup_type(name);  // FIXME: WTF
 		IncompleteType* lhs_placeholder = nullptr;
 		if (existing) {
 			lhs_placeholder = dynamic_cast<IncompleteType*>(existing);
