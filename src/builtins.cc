@@ -106,10 +106,10 @@ const Frame& root_frame() {
 		Frame ff(nullptr);
 		for (IntrinsicType* t : k_all_intrinsics) {
 			// FIXXME: terrible seam.
-	        std::string pas_name = t->cxx_name;
-	        if (pas_name.starts_with("pas::t_")) {
-    	       pas_name.erase(0, std::string("pas::t_").length());
-        	}
+			std::string pas_name = t->cxx_name;
+			if (pas_name.starts_with("pas::t_")) {
+				pas_name.erase(0, std::string("pas::t_").length());
+			}
 
 			ff.register_type(std::string(pas_name), t); // FIXME: wtf, system unit exists.
 		}

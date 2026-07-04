@@ -1409,9 +1409,9 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		}
 		// no null.
 
-		//auto intrinsic = new IntrinsicType(cxx_name); // FIXME: what? reuse or what?
-		//lhs_placeholder->resolved = intrinsic;
-		//scope->rebind_type(name, intrinsic);
+		// auto intrinsic = new IntrinsicType(cxx_name); // FIXME: what? reuse or what?
+		// lhs_placeholder->resolved = intrinsic;
+		// scope->rebind_type(name, intrinsic);
 		return intrinsic;
 	} else {
 		// FIXME: constant folding for ranges (2..5 -> BoundedCardinalType)
@@ -1482,7 +1482,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			break;
 		auto name = *name_optional;
 		parse_equals();
-		Type* existing = scope->lookup_type(name);  // FIXME: WTF
+		Type* existing = scope->lookup_type(name); // FIXME: WTF
 		IncompleteType* lhs_placeholder = nullptr;
 		if (existing) {
 			lhs_placeholder = dynamic_cast<IncompleteType*>(existing);
@@ -1506,18 +1506,26 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		// Emit a `using t_B = t_A;` instead. First-wins for the canonical
 		// name; subsequent Pascal names become C++ aliases.
 		std::string existing_cxx;
-		if (auto r = dynamic_cast<RecordType*>(rhs)) existing_cxx = r->cxx_name;
-		else if (auto c = dynamic_cast<ClassType*>(rhs)) existing_cxx = c->cxx_name;
-		else if (auto o = dynamic_cast<ObjectType*>(rhs)) existing_cxx = o->cxx_name;
-		else if (auto e = dynamic_cast<EnumType*>(rhs)) existing_cxx = e->cxx_name;
+		if (auto r = dynamic_cast<RecordType*>(rhs))
+			existing_cxx = r->cxx_name;
+		else if (auto c = dynamic_cast<ClassType*>(rhs))
+			existing_cxx = c->cxx_name;
+		else if (auto o = dynamic_cast<ObjectType*>(rhs))
+			existing_cxx = o->cxx_name;
+		else if (auto e = dynamic_cast<EnumType*>(rhs))
+			existing_cxx = e->cxx_name;
 		if (!existing_cxx.empty() && existing_cxx != cxx) {
 			if (emitter)
 				emitter->emit_type_alias(cxx, existing_cxx);
 		} else {
-			if (auto r = dynamic_cast<RecordType*>(rhs)) r->cxx_name = cxx;
-			else if (auto c = dynamic_cast<ClassType*>(rhs)) c->cxx_name = cxx;
-			else if (auto o = dynamic_cast<ObjectType*>(rhs)) o->cxx_name = cxx;
-			else if (auto e = dynamic_cast<EnumType*>(rhs)) e->cxx_name = cxx;
+			if (auto r = dynamic_cast<RecordType*>(rhs))
+				r->cxx_name = cxx;
+			else if (auto c = dynamic_cast<ClassType*>(rhs))
+				c->cxx_name = cxx;
+			else if (auto o = dynamic_cast<ObjectType*>(rhs))
+				o->cxx_name = cxx;
+			else if (auto e = dynamic_cast<EnumType*>(rhs))
+				e->cxx_name = cxx;
 			if (emitter)
 				emitter->emit_type_definition(cxx, rhs);
 		}
