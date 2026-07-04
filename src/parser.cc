@@ -325,7 +325,7 @@ std::string Parser::consume() {
 		return "";
 	}
 	if ((input_char >= 'a' && input_char <= 'z') | (input_char >= 'A' && input_char <= 'Z') || input_char == '_') {
-		while ((input_char >= 'a' && input_char <= 'z') || (input_char >= 'A' && input_char <= 'Z') || input_char == '_') {
+		while ((input_char >= 'a' && input_char <= 'z') || (input_char >= 'A' && input_char <= 'Z') || input_char == '_' || (input_char >= '0' && input_char <= '9')) {
 			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
