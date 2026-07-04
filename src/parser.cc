@@ -1364,7 +1364,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		}
 		auto intrinsic = f.lookup_type(pas_name);
 		if (intrinsic == nullptr) {
-			return raise_type_parse_error(cxx_name);
+			return raise_type_parse_error("unknown external type " + cxx_name);
 		}
 		// no null.
 
