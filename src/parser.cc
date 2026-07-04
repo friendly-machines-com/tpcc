@@ -1979,10 +1979,11 @@ void Parser::parse_procedure_or_function(bool is_function) {
 	std::string first_name;
 	if (input_token == "operator") {
 		if (!is_function) {
-			raise_parse_error("operator should have a return value");
+			raise_parse_error("custom operator should have a return value");
 		}
 		parse_keyword("operator");
-		first_name = parse_identifier(); // well, parse_operator();
+		first_name = input_token; // TODO: well, parse_operator();
+		consume();
 	} else {
 		parse_keyword(is_function ? "function" : "procedure");
 		first_name = parse_identifier();
