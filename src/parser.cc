@@ -182,10 +182,11 @@ static std::pair<std::string, std::string> split_directive(const std::string& bo
 	return {name, rest};
 }
 
-// Search for an include file: current input file's directory, then each
-// entry in include search paths. The filename is used as given (no
-// extension guessing).
-static std::pair<FILE*, std::string> resolve_include(
+// Try to open NAME (used verbatim -- extension is the caller's job) by
+// searching the directory of CURRENT_INPUT first, then each entry of
+// SEARCH_PATHS (normalized to end in '/'). Returns the opened FILE and the
+// path that worked, or {nullptr, ""}.
+static std::pair<FILE*, std::string> search_for_file(
     const std::string& name,
     const std::string& current_input,
     const std::vector<std::string>& search_paths) {
@@ -302,7 +303,7 @@ void Parser::handle_directive(const std::string& body) {
 			return;
 		}
 		std::vector<std::string> empty;
-		auto [f, path] = resolve_include(rest, input_file_name,
+		auto [f, path] = search_for_file(rest, input_file_name,
 						 options ? options->include_search_paths : empty);
 		if (!f)
 			raise_parse_error("cannot open include file: " + rest);
@@ -1991,23 +1992,14 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 Unit* Parser::load_or_get_unit(std::string name) {
 	if (Unit* existing = unit_registry->lookup(name))
 		return existing;
-	// Search dir of the current input file, then CWD.
-	std::string dir;
-	auto slash = input_file_name.find_last_of('/');
-	if (slash != std::string::npos)
-		dir = input_file_name.substr(0, slash + 1);
-	std::vector<std::string> candidates;
-	if (!dir.empty())
-		candidates.push_back(dir + name + ".pp");
-	candidates.push_back(name + ".pp");
+	std::vector<std::string> empty;
+	const auto& paths = options ? options->unit_search_paths : empty;
 	FILE* f = nullptr;
 	std::string opened;
-	for (auto& p : candidates) {
-		f = fopen(p.c_str(), "r");
-		if (f) {
-			opened = p;
+	for (auto ext : {".pp", ".pas"}) {
+		std::tie(f, opened) = search_for_file(name + ext, input_file_name, paths);
+		if (f)
 			break;
-		}
 	}
 	if (!f)
 		raise_parse_error("cannot find unit file for: " + name);
