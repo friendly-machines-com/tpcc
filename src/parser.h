@@ -213,6 +213,7 @@ protected:
 	Type* parse_function_type();
 	Type* parse_operator_type();
 	Type* parse_class_type();
+	Type* parse_interface_type();
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);
 	Node* parse_expression();

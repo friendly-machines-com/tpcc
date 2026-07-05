@@ -198,6 +198,8 @@ static std::string owner_cxx_name(Type* owner) {
 		return r->cxx_name;
 	if (auto c = dynamic_cast<ClassType*>(owner))
 		return c->cxx_name;
+	if (auto i = dynamic_cast<InterfaceType*>(owner))
+		return i->cxx_name;
 	if (auto o = dynamic_cast<ObjectType*>(owner))
 		return o->cxx_name;
 	return "";
@@ -231,6 +233,7 @@ void Emitter::emit_procedure_open(Callable* c) {
 
 void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) {
 	bool is_class = false;
+	bool is_interface = false;
 	bool is_tobject = cxx_name == "pas::t_tobject" || cxx_name == "::pas::t_tobject";
 	if (!out)
 		return;
@@ -244,6 +247,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	} else if (auto c = dynamic_cast<ClassType*>(ty)) {
 		is_class = true;
 		body = c->children;
+		kw = "struct";
+	} else if (auto i = dynamic_cast<InterfaceType*>(ty)) {
+		is_interface = true;
+		body = i->children;
 		kw = "struct";
 	} else if (auto o = dynamic_cast<ObjectType*>(ty)) {
 		body = o->children;
@@ -333,6 +340,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	for (auto& kv : body->values()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
+			if (is_interface) {
+				unhandled_type("emit_aggregate_decl interfaces cannot have variables", ty);
+				continue;
+			}
 			if (variant_slots.count(slot))
 				continue;
 			fprintf(out, "\t");
@@ -344,7 +355,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				if (is_tobject && m->cxx_name == "p_classtype") { // prevent emitting a duplicate.
 					continue;
 				}
-				if (call->ty->kind == CLASS_METHOD && !in_meta) {
+				if (is_interface) {
+					fprintf(out, "virtual ");
+				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// autogenerate proxies in regular class
 					fprintf(out, "inline static");
 				} else if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic/*FIXME*/) {
@@ -366,7 +379,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			}
 			fprintf(out, ")");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (call->ty->kind == CLASS_METHOD && !in_meta) {
+				if (is_interface) {
+					fprintf(out, " = 0");
+				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method.
 					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
 					fprintf(out, " {\n");
@@ -430,7 +445,7 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(out, ";\n");
 		return;
 	}
-	if (dynamic_cast<RecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<ObjectType*>(ty)) {
+	if (dynamic_cast<RecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<ObjectType*>(ty) || dynamic_cast<InterfaceType*>(ty)) {
 		fprintf(out, "\n");
 		emit_aggregate_decl(cxx_name, ty);
 		fprintf(out, ";\n");
@@ -627,6 +642,13 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
+		if (c->cxx_name.empty())
+			emit_aggregate_decl("", ty);
+		else
+			fprintf(out, "%s", c->cxx_name.c_str());
+		return;
+	}
+	if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		if (c->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else

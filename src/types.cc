@@ -26,6 +26,10 @@ ClassType::ClassType(Frame* children) {
 	this->children = children;
 }
 
+InterfaceType::InterfaceType(Frame* children) {
+	this->children = children;
+}
+
 ObjectType::ObjectType(Frame* children) {
 	this->children = children;
 }

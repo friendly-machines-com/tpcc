@@ -102,6 +102,12 @@ struct ClassType: public Type {
 	ClassType(Frame* children);
 };
 
+struct InterfaceType: public Type {
+	Frame* children;
+	std::string cxx_name;
+	InterfaceType(Frame* children);
+};
+
 struct ObjectType: public Type {
 	Frame* children;
 	std::string cxx_name;

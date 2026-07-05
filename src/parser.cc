@@ -573,6 +573,8 @@ static Frame* get_type_body_frame(Type* ty) {
 		return r->children;
 	if (auto c = dynamic_cast<ClassType*>(ty))
 		return c->children;
+	if (auto i = dynamic_cast<InterfaceType*>(ty))
+		return i->children;
 	if (auto o = dynamic_cast<ObjectType*>(ty))
 		return o->children;
 	return nullptr;
@@ -970,6 +972,8 @@ static Frame* body_frame_of(Type* ty) {
 	if (auto r = dynamic_cast<RecordType*>(ty))
 		return r->children;
 	if (auto c = dynamic_cast<ClassType*>(ty))
+		return c->children;
+	if (auto c = dynamic_cast<InterfaceType*>(ty))
 		return c->children;
 	if (auto o = dynamic_cast<ObjectType*>(ty))
 		return o->children;
@@ -1374,6 +1378,17 @@ Type* Parser::parse_class_type() {
 	return ct;
 }
 
+Type* Parser::parse_interface_type() {
+	parse_keyword("interface");
+	if (maybe_parse_opening_paren()) {
+		return raise_type_parse_error("interface inheritance (interface(Parent)) not implemented yet");
+	}
+	auto ct = new InterfaceType(nullptr);
+	ct->children = parse_aggregate_type_body(ct);
+	parse_keyword("end");
+	return ct;
+}
+
 Type* Parser::parse_record_type() {
 	bool packed = false;
 	if (maybe_parse_keyword("packed")) {
@@ -1474,6 +1489,8 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return parse_record_type();
 	} else if (peek_keyword("class")) {
 		return parse_class_type();
+	} else if (peek_keyword("interface")) {
+		return parse_interface_type();
 	} else if (peek_keyword("procedure")) {
 		return parse_procedure_type();
 	} else if (peek_keyword("function")) {
@@ -1589,6 +1606,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			existing_cxx = r->cxx_name;
 		else if (auto c = dynamic_cast<ClassType*>(rhs))
 			existing_cxx = c->cxx_name;
+		else if (auto c = dynamic_cast<InterfaceType*>(rhs))
+			existing_cxx = c->cxx_name;
 		else if (auto o = dynamic_cast<ObjectType*>(rhs))
 			existing_cxx = o->cxx_name;
 		else if (auto e = dynamic_cast<EnumType*>(rhs))
@@ -1600,6 +1619,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			if (auto r = dynamic_cast<RecordType*>(rhs))
 				r->cxx_name = cxx;
 			else if (auto c = dynamic_cast<ClassType*>(rhs))
+				c->cxx_name = cxx;
+			else if (auto c = dynamic_cast<InterfaceType*>(rhs))
 				c->cxx_name = cxx;
 			else if (auto o = dynamic_cast<ObjectType*>(rhs))
 				o->cxx_name = cxx;

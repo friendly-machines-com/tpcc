@@ -203,6 +203,9 @@ struct t_tobject {
 
 using t_tclass = m_iobject;
 
+// TODO: Terrible.
+#define p_supports(instance, target_interface) (dynamic_cast<(target_interface)*>((instance)) != nullptr)
+
 //#define class_instance_new(X) (new X)
 
 } // namespace pas
