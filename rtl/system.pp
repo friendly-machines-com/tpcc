@@ -67,7 +67,8 @@ operator shr(a, b: Cardinal): Cardinal; external nil name 'pas::p_shr'; // FIXME
 // FIXME: function ord(const x): Cardinal; external nil name 'pas::p_ord';
 // FIXME: procedure inc(var x); external nil name 'pas::p_inc';
 // FIXME: procedure dec(var x); external nil name 'pas::p_dec';
- 
+// FIXME: function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
+
 implementation
 
 end.

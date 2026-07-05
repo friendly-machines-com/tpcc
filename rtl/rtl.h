@@ -26,6 +26,9 @@ using t_integer  = int32_t;
 using t_longint  = int32_t;
 using t_int64 = int64_t;
 using t_qword = uint64_t;
+using t_pointer = void*;
+using t_ptrint = intptr_t;
+using t_ptruint = uintptr_t;
 enum t_boolean {
 	p_false,
 	p_true,
@@ -86,6 +89,10 @@ inline t_boolean p_logicalnot(t_boolean a) {
 
 inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
 	return (a != 0) ^ (b != 0);
+}
+
+inline t_boolean p_assigned(const char* p) {
+	return (p != nullptr);
 }
 
 template<typename T> inline void p_inc(T& x, t_integer n = 1) { x = p_add(x, static_cast<T>(n)); }

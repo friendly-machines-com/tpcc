@@ -25,6 +25,9 @@ IntrinsicType k_double("pas::t_double", {});
 IntrinsicType k_boolean("pas::t_boolean", {});
 IntrinsicType k_char("pas::t_char", {});
 IntrinsicType k_shortstring("pas::t_shortstring", {});
+IntrinsicType k_pointer("pas::t_pointer", {});
+IntrinsicType k_ptrint("pas::t_ptrint", {});
+IntrinsicType k_ptruint("pas::t_ptruint", {});
 
 IntrinsicType* const k_all_intrinsics[] = {
     &k_byte,
@@ -40,6 +43,9 @@ IntrinsicType* const k_all_intrinsics[] = {
     &k_boolean,
     &k_char,
     &k_shortstring,
+    &k_pointer,
+    &k_ptrint,
+    &k_ptruint,
 };
 } // namespace
 
@@ -60,11 +66,12 @@ Type* shortstring_type() { return &k_shortstring; }
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 26> k_builtins{{
+static const std::array<BuiltinDesc, 30> k_builtins{{
     // Note: constant folder would be polymorphic.
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
+    {"pas::p_assigned", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
     {"pas::p_bitwiseand", nullptr},
