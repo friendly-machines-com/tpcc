@@ -303,6 +303,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				fprintf(out, "\t\tinline static %s meta{};\n", cxx_name.c_str());
 				fprintf(out, "\t\treturn &meta;\n");
 				fprintf(out, "\t}\n");
+			} else {
+				unhandled_type("parent 'classtype' duplicate", c);
 			}
 			if (!body->lookup_value_local("classname")) {
 				fprintf(out, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
