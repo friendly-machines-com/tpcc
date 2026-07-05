@@ -20,6 +20,7 @@ struct Parameter;
 class RoutineType;
 class Procedure;
 class Callable;
+class Builtin;
 
 /** Shared compiler-wide options set from the command line and consulted by
  *  the tokenizer's directive handling and by unit/include file lookup. One
@@ -138,6 +139,8 @@ private:
 	// implemented; a condition mp doesn't understand evaluates to true and
 	// logs a note (so we don't silently drop needed code).
 	bool eval_directive_expr(const std::string& expr);
+	Builtin* lookup_external_value(const char* lib, std::string cxx_name);
+	Type* lookup_external_type(const char* lib, std::string cxx_name);
 protected:
 	std::string input_token;
 	void parse_block_body();
@@ -228,6 +231,7 @@ protected:
 	bool maybe_parse_colon();
 	bool maybe_parse_colon_equals();
 	std::string parse_string_literal();
+
 	void parse_unit_body();
 	/** Parse a comma-separated `uses A, B, C` list (the `uses` keyword must
 	 *  have been consumed by the caller). Loads each named unit if not already

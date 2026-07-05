@@ -1404,17 +1404,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		parse_directive("name");
 		std::string cxx_name = parse_string_literal();
 
-		// FIXME: terrible seam.
-		const Frame& f = root_frame();
-		std::string pas_name = cxx_name;
-		if (pas_name.starts_with("pas::t_")) {
-			pas_name.erase(0, std::string("pas::t_").length());
-		}
-		auto intrinsic = f.lookup_type(pas_name);
-		if (intrinsic == nullptr) {
-			return raise_type_parse_error("unknown external type " + cxx_name);
-		}
-		// no null.
+		auto intrinsic = lookup_external_type(nullptr, cxx_name);
 
 		// auto intrinsic = new IntrinsicType(cxx_name); // FIXME: what? reuse or what?
 		// lhs_placeholder->resolved = intrinsic;
@@ -1979,6 +1969,49 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	pop_scope();	     // pop body_frame
 }
 
+Type* Parser::lookup_external_type(const char* lib, std::string cxx_name) {
+	// FIXME: terrible seam.
+	const Frame& f = root_frame();
+	std::string pas_name = cxx_name;
+	if (pas_name.starts_with("pas::t_")) {
+		pas_name.erase(0, std::string("pas::t_").length());
+	}
+	auto intrinsic = f.lookup_type(pas_name);
+	if (intrinsic == nullptr) {
+		return raise_type_parse_error("unknown external type " + cxx_name);
+	} else {
+		return intrinsic;
+	}
+}
+
+Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
+	if (lib == NULL) {
+		// FIXME: terrible seam.
+		const Frame& f = root_frame();
+		std::string pas_name = cxx_name;
+		if (pas_name.starts_with("pas::p_")) {
+			pas_name.erase(0, std::string("pas::p_").length());
+		}
+		auto v = f.lookup_value(pas_name);
+		if (v == nullptr) {
+			raise_parse_error("builtin '" + pas_name + "' not found");
+			return nullptr;
+		} else {
+			auto builtin = dynamic_cast<Builtin*>(v);
+			if (builtin == nullptr) {
+				raise_parse_error("builtin '" + pas_name + " not Builtin");
+				return nullptr;
+			} else {
+				return builtin;
+			}
+		}
+	} else {
+		raise_parse_error("external library not implemented");
+		return nullptr;
+	}
+}
+
+
 void Parser::parse_procedure_or_function(bool is_function) {
 	bool has_overload = false;
 	std::string first_name;
@@ -2036,27 +2069,20 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			parse_keyword("nil");
 			parse_directive("name");
 			std::string cxx_name = parse_string_literal();
-
-			// FIXME: terrible seam.
-			const Frame& f = root_frame();
-			std::string pas_name = cxx_name;
-			if (pas_name.starts_with("pas::p_")) {
-				pas_name.erase(0, std::string("pas::p_").length());
-			}
-			auto builtin = f.lookup_value(pas_name);
-			if (builtin == nullptr) {
-				raise_parse_error("unknown external routine implementation " + cxx_name);
-			}
-			// This is basically making TARGET an ALIAS for BUILTIN.
-			target->has_body = true;
-			if (auto qbuiltin = dynamic_cast<Builtin*>(builtin)) { // used
-				// These Builtins are all polymorphic and C++ overloads will just have to adjust to us.
-				auto desc = qbuiltin->desc;
-				target->cxx_name = desc->rtl_name;
-			} else {
-				raise_parse_error("unknown intrinsic '" + pas_name + "' via external '" +  cxx_name + "'");
-			}
 			parse_semicolon();
+
+			auto builtin = lookup_external_value(nullptr, cxx_name);
+			if (builtin != nullptr) {
+				// This is basically making TARGET an ALIAS for BUILTIN.
+				target->has_body = true;
+				if (auto qbuiltin = dynamic_cast<Builtin*>(builtin)) { // used
+					// These Builtins are all polymorphic and C++ overloads will just have to adjust to us.
+					auto desc = qbuiltin->desc;
+					target->cxx_name = desc->rtl_name;
+				} else {
+					raise_parse_error("unknown intrinsic via external '" +  cxx_name + "'");
+				}
+			}
 		} else if (body_follows) {
 			parse_routine_body(target, nullptr);
 		}
