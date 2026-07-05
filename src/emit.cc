@@ -271,6 +271,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
 			fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
 			fprintf(out, "\t}\n");
+
+			// TODO: maybe even add constructor wrappers here in the metaclass; they would do the (new X()).Create() and synth the result
 			// fallthrough
 		} else {
 			unhandled_type("emit_aggregate_decl", ty);
@@ -326,7 +328,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
 			fprintf(out, "\t");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (call->ty->kind == CLASS_METHOD) {
+				if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// autogenerate proxies in regular class
 					fprintf(out, "inline static");
 				} else if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic/*FIXME*/) {
@@ -348,7 +350,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			}
 			fprintf(out, ")");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (call->ty->kind == CLASS_METHOD) {
+				if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method.
 					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
 					fprintf(out, "{ return static_cast<%s*>(p_classtype())->%s(FIXME); }",
