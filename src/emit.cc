@@ -86,7 +86,7 @@ void Emitter::close() {
 void Emitter::emit_program_prologue(std::string program_name) {
 	if (!out)
 		return;
-	fprintf(out, "#include \"rtl/rtl.h\"\n\n");
+	fprintf(out, "#include \"rtl.h\"\n\n");
 }
 
 void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
