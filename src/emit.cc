@@ -333,6 +333,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
 			fprintf(out, "\t");
 			if (auto m = dynamic_cast<Method*>(call)) {
+				if (is_tobject && m->cxx_name == "p_classtype") { // prevent emitting a duplicate.
+					continue;
+				}
 				if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// autogenerate proxies in regular class
 					fprintf(out, "inline static");
