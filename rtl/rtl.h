@@ -41,6 +41,18 @@ struct t_shortstring {
 	char data[255];
 };
 
+inline t_shortstring p_add(t_shortstring&& a, t_shortstring&& b) {
+	uint16_t l = (uint16_t) a.length + (uint16_t) b.length;
+	if (l > 255) {
+		l = 255;
+	}
+	t_shortstring result {};
+	result.length = l;
+	memcpy(result.data, a.data, a.length);
+	memcpy(&result.data[a.length], b.data, b.length);
+	return a + b;
+}
+
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
 
 #define DEFINE_OPERATIONS(T) \
