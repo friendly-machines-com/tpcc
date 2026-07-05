@@ -35,6 +35,7 @@ enum t_boolean {
 };
 
 using t_char     = char;
+using unknown_type = void*;
 
 struct t_shortstring {
 	uint8_t length;

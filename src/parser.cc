@@ -1813,8 +1813,7 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 			names.push_back(parse_identifier());
 			while (maybe_parse_comma())
 				names.push_back(parse_identifier());
-			parse_colon();
-			Type* ty = parse_type_expression(false);
+			Type* ty = maybe_parse_colon() ? parse_type_expression(false) : unknown_type();
 			Node* default_value = nullptr;
 			if (maybe_parse_equal()) {
 				if (names.size() > 1) {

@@ -28,6 +28,7 @@ IntrinsicType k_shortstring("pas::t_shortstring", {});
 IntrinsicType k_pointer("pas::t_pointer", {});
 IntrinsicType k_ptrint("pas::t_ptrint", {});
 IntrinsicType k_ptruint("pas::t_ptruint", {});
+IntrinsicType k_unknown("pas::unknown_type", {});
 
 IntrinsicType* const k_all_intrinsics[] = {
     &k_byte,
@@ -46,6 +47,7 @@ IntrinsicType* const k_all_intrinsics[] = {
     &k_pointer,
     &k_ptrint,
     &k_ptruint,
+    &k_unknown,
 };
 } // namespace
 
@@ -62,6 +64,7 @@ UntypedIntegerType& untyped_integer_type() {
 Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
+Type* unknown_type() { return &k_unknown; }
 
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
