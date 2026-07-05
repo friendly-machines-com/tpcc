@@ -353,9 +353,20 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method.
 					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
-					fprintf(out, "{ return static_cast<%s*>(p_classtype())->%s(FIXME); }",
+					fprintf(out, " {\n");
+					fprintf(out, "\t%s static_cast<%s*>(p_classtype())->%s(",
+							call->ty->return_type == &unit_type() ? "" : "return",
 					        "m_meta",
 					        call->cxx_name.c_str()); // TODO: escape
+					for (size_t i = 0; i < call->ty->formals.size(); i++) {
+						auto& f = call->ty->formals[i];
+						if (i > 0) {
+							fprintf(out, ", ");
+						}
+						fprintf(out, " %s", f.cxx_name.c_str()); // TODO: escape
+					}
+					fprintf(out, "\t);\n");
+					fprintf(out, "}\n");
 				} else if (m->virtual_kind == Method::VirtualKind::Override) {
 					fprintf(out, " override");
 				} else if (m->virtual_kind == Method::VirtualKind::Abstract) {
