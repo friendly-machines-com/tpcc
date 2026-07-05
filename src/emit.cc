@@ -251,10 +251,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 		kw = "struct";
 	} else if (auto c = dynamic_cast<ClassType*>(ty)) {
 		body = c->children;
-		kw = "class";
+		kw = "struct";
 	} else if (auto o = dynamic_cast<ObjectType*>(ty)) {
 		body = o->children;
-		kw = "class";
+		kw = "struct";
 	} else {
 		unhandled_type("emit_aggregate_decl", ty);
 	}
@@ -265,8 +265,6 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 	if (!cxx_name.empty())
 		fprintf(out, " %s", cxx_name.c_str());
 	fprintf(out, " {\n");
-	if (kw[0] == 'c')
-		fprintf(out, "public:\n"); // C++ classes default private
 	// Variant-record emission strategy:
 	//
 	//   Pascal: a record is one flat namespace. Fixed fields, the optional
