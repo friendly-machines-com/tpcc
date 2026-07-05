@@ -68,6 +68,18 @@ public:
 	Assign(Node* a, Node* b);
 };
 
+enum ShortCircuitOperationKind {
+	AND,
+	OR,
+};
+
+class ShortCircuitOperation: public BinaryOperation {
+public:
+	enum ShortCircuitOperationKind kind;
+public:
+	ShortCircuitOperation(enum ShortCircuitOperationKind kind, Node* a, Node* b);
+};
+
 /** container.member. `a` is the container (usually a StorageSlot for the
  *  record variable or with-alias) and `b` is the member (usually the field's
  *  StorageSlot). Produced by resolve_value/resolve_lvalue when a name hits

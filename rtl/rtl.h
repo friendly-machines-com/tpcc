@@ -130,20 +130,12 @@ DEFINE_OPERATIONS(t_longint)
 DEFINE_OPERATIONS(t_int64)
 DEFINE_OPERATIONS(t_qword)
 
-inline t_boolean p_logicaland(t_boolean a, t_boolean b) {
-	return a && b;
-}
-
-inline t_boolean p_logicalor(t_boolean a, t_boolean b) {
-	return a || b;
-}
-
 inline t_boolean p_logicalnot(t_boolean a) {
 	return !a;
 }
 
 inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
-	return (a != 0) ^ (b != 0);
+	return ((a != 0) ^ (b != 0)) != 0;
 }
 
 inline t_boolean p_assigned(const void* p) {

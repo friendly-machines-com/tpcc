@@ -84,8 +84,8 @@ static const std::array<BuiltinDesc, 30> k_builtins{{
     {"pas::p_bitwiseor", nullptr},
     {"pas::p_bitwisexor", nullptr},
 
-    {"pas::p_logicalor", nullptr},
-    {"pas::p_logicaland", nullptr},
+    // Delphi {"pas::p_logicalor", nullptr},
+    // Delphi {"pas::p_logicaland", nullptr},
     {"pas::p_logicalnot", nullptr},
     {"pas::p_logicalxor", nullptr},
 
@@ -96,7 +96,7 @@ static const std::array<BuiltinDesc, 30> k_builtins{{
     {"pas::p_multiply", nullptr},
     {"pas::p_divide", nullptr},
     {"pas::p_intdivide", nullptr},
-    {"pas::p_assign", nullptr}, // delphi doesnt have it
+    {"pas::p_assign", nullptr}, // delphi doesnt have it; well it has some kind of "implicit" operator that does the same.
     {"pas::p_modulus", nullptr},
     {"pas::p_leftshift", nullptr},
     {"pas::p_rightshift", nullptr},

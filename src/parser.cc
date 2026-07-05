@@ -1116,7 +1116,8 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 Node* Parser::parse_power() {
 	// FIXME **
 	if (maybe_parse_keyword("not")) {
-		return mk_unary_same("not", maybe_auto_call(parse_designator()));
+		auto b = maybe_auto_call(parse_designator());
+		return mk_unary_same("not", b);
 	} else if (maybe_parse_at()) {
 		auto x = parse_designator(); // @ takes a designator, not the auto-called value
 		auto n = new AddrOf(x);
@@ -1143,7 +1144,9 @@ Node* Parser::parse_product() {
 		} else if (maybe_parse_keyword("mod")) {
 			result = mk_arith("mod", result, parse_power());
 		} else if (maybe_parse_keyword("and")) {
-			result = mk_arith("and", result, parse_power());
+			auto b = parse_power();
+			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(AND, ...) instead;
+			result = mk_arith("and", result, b);
 		} else if (maybe_parse_keyword("shl")) {
 			result = mk_arith("shl", result, parse_power());
 		} else if (maybe_parse_keyword("shr")) {
@@ -1181,9 +1184,13 @@ Node* Parser::parse_sum() {
 		} else if (maybe_parse_minus()) {
 			result = mk_arith("-", result, parse_product());
 		} else if (maybe_parse_keyword("or")) {
-			result = mk_arith("or", result, parse_product());
+			auto b = parse_product();
+			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(OR, ...) instead;
+			result = mk_arith("or", result, b);
 		} else if (maybe_parse_keyword("xor")) {
-			result = mk_arith("xor", result, parse_product());
+			auto b = parse_product();
+			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(XOR, ...) instead;
+			result = mk_arith("xor", result, b);
 		} else {
 			break;
 		}

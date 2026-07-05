@@ -575,6 +575,24 @@ void Emitter::emit_expression(Node* expr) {
 		emit_expression(m->b);
 		return;
 	}
+	if (auto o = dynamic_cast<ShortCircuitOperation*>(expr)) {
+		// TODO: support overloads, if any.
+		fprintf(out, "((");
+		emit_expression(o->a);
+		switch (o->kind) {
+		case AND:
+			fprintf(out, ") && (");
+			break;
+		case OR:
+			fprintf(out, ") || (");
+			break;
+		default:
+			abort();
+		}
+		emit_expression(o->b);
+		fprintf(out, "))");
+		return;
+	}
 	if (auto ix = dynamic_cast<Index*>(expr)) {
 		emit_expression(ix->a);
 		fprintf(out, "[");

@@ -29,10 +29,6 @@ type
     class function ClassParent: TClass; virtual;
   end;
   
-operator and(a, b: Boolean): Boolean; external nil name 'pas::p_logicaland';
-operator or(a, b: Boolean): Boolean; external nil name 'pas::p_logicalor';
-operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
-
 operator+(a, b: Cardinal): Cardinal; external nil name 'pas::p_add';
 operator+(a, b: Integer): Integer; external nil name 'pas::p_add';
 operator+(a, b: QWord): QWord; external nil name 'pas::p_add';
@@ -68,11 +64,6 @@ operator and(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwiseand';
 operator or(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwiseor';
 operator xor(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwisexor';
 
-operator and(a, b: Boolean): Boolean; external nil name 'pas::p_logicaland';
-operator or(a, b: Boolean): Boolean; external nil name 'pas::p_logicalor';
-operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
-operator not(a: Boolean): Boolean; external nil name 'pas::p_logicalnot';
-
 operator shl(a, b: Cardinal): Cardinal; external nil name 'pas::p_shl';
 operator shr(a, b: Cardinal): Cardinal; external nil name 'pas::p_shr'; // FIXME is shl shr operand 2 a byte ?
 
@@ -80,6 +71,9 @@ function ord(const x): Cardinal; external nil name 'pas::p_ord';
 procedure inc(var x); external nil name 'pas::p_inc';
 procedure dec(var x); external nil name 'pas::p_dec';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
+
+operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
+operator not(a: Boolean): Boolean; external nil name 'pas::p_logicalnot';
 
 destructor TObject.Destroy;
 begin
