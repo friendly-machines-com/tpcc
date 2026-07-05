@@ -19,8 +19,8 @@ IntrinsicType k_smallint("pas::t_smallint", 3);
 IntrinsicType k_cardinal("pas::t_cardinal", 4);
 IntrinsicType k_integer("pas::t_integer", 5);
 IntrinsicType k_longint("pas::t_longint", 6);
-IntrinsicType k_qword("pas::t_qword", 7); // FIXME: check archs
-IntrinsicType k_int64("pas::t_int64", 8); // FIXME: check archs
+IntrinsicType k_qword("pas::t_qword", 7);
+IntrinsicType k_int64("pas::t_int64", 8);
 IntrinsicType k_double("pas::t_double", {});
 IntrinsicType k_boolean("pas::t_boolean", {});
 IntrinsicType k_char("pas::t_char", {});
@@ -65,6 +65,7 @@ static const std::array<BuiltinDesc, 24> k_builtins{{
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
+    // TODO: Delphi has operators "explicit", "implicit".
 
     {"pas::p_bitwiseand", nullptr},
     {"pas::p_bitwiseor", nullptr},
@@ -93,44 +94,6 @@ static const std::array<BuiltinDesc, 24> k_builtins{{
     {"pas::p_greaterthanorequal", nullptr},
 
 }};
-
-// Integer widening rank; -1 for non-integer types.
-static int integer_widening_rank(Type* ty) {
-	auto it = dynamic_cast<IntrinsicType*>(ty);
-	if (!it)
-		return -1;
-	if (!it->rank)
-		return -1;
-	return *(it->rank);
-}
-
-Type* common_arith_type(Type* a, Type* b) {
-	if (!a || !b)
-		return nullptr;
-	if (a == b)
-		return a;
-	if (a == &untyped_integer_type())
-		return b;
-	if (b == &untyped_integer_type())
-		return a;
-	int ra = integer_widening_rank(a), rb = integer_widening_rank(b);
-	if (ra < 0 || rb < 0)
-		return nullptr;
-	return (ra >= rb) ? a : b;
-}
-
-int conversion_cost(Type* from, Type* to) {
-	if (!from || !to)
-		return -1;
-	if (from == to)
-		return 0;
-	if (from == &untyped_integer_type())
-		return 0; // literal adapts to any int
-	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
-	if (rfrom >= 0 && rto >= 0 && rto >= rfrom)
-		return 1;
-	return -1;
-}
 
 IntrinsicType* lookup_builtin_type(std::string cxx_name) {
 	for (IntrinsicType* t : k_all_intrinsics) {

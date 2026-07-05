@@ -1,4 +1,5 @@
 #include "types.h"
+#include "builtins.h"
 #include <cassert>
 
 IncompleteType::IncompleteType(std::string name) : name(name), resolved(nullptr) {}
@@ -47,4 +48,42 @@ RoutineType::RoutineType(std::vector<Parameter> formals, Type* return_type, bool
 	this->formals = std::move(formals);
 	this->return_type = return_type;
 	this->is_method = is_method;
+}
+
+// Integer widening rank; -1 for non-integer types.
+static int integer_widening_rank(Type* ty) {
+    auto it = dynamic_cast<IntrinsicType*>(ty);
+    if (!it)
+        return -1;
+    if (!it->rank)
+        return -1;
+    return *(it->rank);
+}
+
+Type* common_arith_type(Type* a, Type* b) {
+    if (!a || !b)
+        return nullptr;
+    if (a == b)
+        return a;
+    if (a == &untyped_integer_type())
+        return b;
+    if (b == &untyped_integer_type())
+        return a;
+    int ra = integer_widening_rank(a), rb = integer_widening_rank(b);
+    if (ra < 0 || rb < 0)
+        return nullptr;
+    return (ra >= rb) ? a : b;
+}
+
+int conversion_cost(Type* from, Type* to) {
+    if (!from || !to)
+        return -1;
+    if (from == to)
+        return 0;
+    if (from == &untyped_integer_type())
+        return 0; // literal adapts to any int
+    int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
+    if (rfrom >= 0 && rto >= 0 && rto >= rfrom)
+        return 1;
+    return -1;
 }

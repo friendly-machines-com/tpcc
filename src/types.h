@@ -167,3 +167,13 @@ public:
 
 	RoutineType(std::vector<Parameter> formals, Type* return_type, bool is_method);
 };
+
+// Result type of an arithmetic/bitwise binary op given operand types. Handles
+// UntypedInteger adaptation and integer widening; returns nullptr if the two
+// types don't combine (caller decides whether that's an error).
+Type* common_arith_type(Type* a, Type* b);
+
+// Cost of converting FROM to TO: 0 = same (or Untyped fits), 1 = widening,
+// -1 = no implicit conversion. Used by both call-site coercion and overload
+// ranking.
+int conversion_cost(Type* from, Type* to);
