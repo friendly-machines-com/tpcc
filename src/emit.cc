@@ -571,7 +571,10 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto co = dynamic_cast<Coerce*>(expr)) {
-		fprintf(out, "static_cast<");
+		// FIXME: operator:= like ::cast ? I'm not sure what the difference between cast and coerce is in Pascal.
+		// FIXME: emit assert(p_supports(co->a, co->ty))
+		// FIXME: emit dynamic cast maybe ?
+		fprintf(out, "dynamic_cast<");
 		emit_type_ref(co->ty);
 		fprintf(out, ">(");
 		emit_expression(co->a);
