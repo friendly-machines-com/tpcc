@@ -1226,12 +1226,16 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			break;
 		if (maybe_parse_directive("published")) {
 			visibility = "published";
+			continue;
 		} else if (maybe_parse_directive("public")) {
 			visibility = "public";
+			continue;
 		} else if (maybe_parse_directive("protected")) {
 			visibility = "protected";
+			continue;
 		} else if (maybe_parse_directive("private")) {
 			visibility = "private";
+			continue;
 		} else if (peek_keyword("type")) {
 			if (is_class) {
 				raise_parse_error("class type unsupported");
@@ -1901,6 +1905,7 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 	Type* ret_ty = &unit_type();
 	if (kind == CONSTRUCTOR) {
 		if (auto ty = dynamic_cast<ClassType*>(owner)) {
+			// That's so we can emit "(new X())->Create()".
 			ret_ty = ty;
 		} else {
 			raise_type_parse_error("expected class as owner");
