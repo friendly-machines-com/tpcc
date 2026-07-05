@@ -545,6 +545,7 @@ void Parser::parse_operator(std::string x) {
 =
 >
 >=
+<>
 and
 div
 mod

@@ -36,4 +36,90 @@ template<typename T> inline void p_inc(T& x, t_integer n = 1) { x += static_cast
 template<typename T> inline void p_dec(T& x, t_integer n = 1) { x -= static_cast<T>(n); }
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
 
+inline t_boolean p_and(t_boolean a, t_boolean b) {
+	return a && b;
+}
+
+inline t_boolean p_or(t_boolean a, t_boolean b) {
+	return a || b;
+}
+
+inline t_boolean p_not(t_boolean a) {
+	return !a;
+}
+
+inline t_boolean p_xor(t_boolean a, t_boolean b) {
+	return (a != 0) ^ (b != 0);
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_add(T a, T b) {
+	return a + b;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_subtract(T a, T b) {
+	return a - b;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_multiply(T a, T b) {
+	return a * b;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline double p_divide(T a, T b) {
+	return (double) a / (double) b;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_assign(T& target, T source) {
+	target = source;
+	return target;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_div(T a, T b) {
+    return a / b;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_mod(T a, T b) {
+    return a % b;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_shl(T a, T b) {
+    return a << b;
+}
+
+// FIXME: limit to integral types
+template<typename T> inline T p_shr(T a, T b) {
+    return a >> b;
+}
+
+template<typename T> inline t_boolean p_less(T a, T b) {
+	return a < b;
+}
+
+template<typename T> inline t_boolean p_less_equal(T a, T b) {
+	return a <= b;
+}
+
+template<typename T> inline t_boolean p_equal(T a, T b) {
+	return a == b;
+}
+
+template<typename T> inline t_boolean p_not_equal(T a, T b) {
+	return a != b;
+}
+
+template<typename T> inline t_boolean p_greater(T a, T b) {
+	return a > b;
+}
+
+template<typename T> inline t_boolean p_greater_equal(T a, T b) {
+	return a >= b;
+}
+
 } // namespace pas
