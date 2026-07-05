@@ -15,6 +15,9 @@ type
   Boolean = (False, True);
   Char = external nil name 'pas::t_char';
   Double = external nil name 'pas::t_double';
+  Pointer = external nil name 'pas::t_pointer';
+  PtrInt = external nil name 'pas::t_ptrint';
+  PtrUInt = external nil name 'pas::t_ptruint';
   TClass = external nil name 'pas::m_iobject'; // class of TObject
   shortstring = external nil name 'pas::t_shortstring';
   TObject = class
@@ -64,8 +67,8 @@ operator and(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwiseand';
 operator or(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwiseor';
 operator xor(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwisexor';
 
-operator shl(a, b: Cardinal): Cardinal; external nil name 'pas::p_shl';
-operator shr(a, b: Cardinal): Cardinal; external nil name 'pas::p_shr'; // FIXME is shl shr operand 2 a byte ?
+operator shl(a, b: Cardinal): Cardinal; external nil name 'pas::p_leftshift';
+operator shr(a, b: Cardinal): Cardinal; external nil name 'pas::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
 
 function ord(const x): Cardinal; external nil name 'pas::p_ord';
 procedure inc(var x); external nil name 'pas::p_inc';
