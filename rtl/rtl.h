@@ -30,6 +30,8 @@ using t_qword = uint64_t;
 using t_pointer = void*;
 using t_ptrint = intptr_t;
 using t_ptruint = uintptr_t;
+using t_sizeint = ssize_t;
+using t_sizeuint = size_t;
 enum t_boolean {
 	p_false,
 	p_true,

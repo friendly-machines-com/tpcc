@@ -18,6 +18,8 @@ type
   Pointer = external nil name 'pas::t_pointer';
   PtrInt = external nil name 'pas::t_ptrint';
   PtrUInt = external nil name 'pas::t_ptruint';
+  SizeInt = external nil name 'pas::t_sizeint';
+  SizeUInt = external nil name 'pas::t_sizeuint';
   TClass = external nil name 'pas::m_iobject'; // class of TObject
   shortstring = external nil name 'pas::t_shortstring';
   TObject = class

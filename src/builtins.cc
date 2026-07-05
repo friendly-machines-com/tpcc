@@ -28,6 +28,8 @@ IntrinsicType k_shortstring("pas::t_shortstring", {});
 IntrinsicType k_pointer("pas::t_pointer", {});
 IntrinsicType k_ptrint("pas::t_ptrint", {});
 IntrinsicType k_ptruint("pas::t_ptruint", {});
+IntrinsicType k_sizeint("pas::t_sizeint", {});
+IntrinsicType k_sizeuint("pas::t_sizeuint", {});
 IntrinsicType k_unknown("pas::unknown_type", {});
 IntrinsicType k_m_iobject("pas::m_iobject", {});
 
@@ -48,6 +50,8 @@ IntrinsicType* const k_all_intrinsics[] = {
     &k_pointer,
     &k_ptrint,
     &k_ptruint,
+    &k_sizeint,
+    &k_sizeuint,
     &k_unknown,
     &k_m_iobject,
 };
