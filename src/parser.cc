@@ -1970,40 +1970,26 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 }
 
 Type* Parser::lookup_external_type(const char* lib, std::string cxx_name) {
-	// FIXME: terrible seam.
-	const Frame& f = root_frame();
-	std::string pas_name = cxx_name;
-	if (pas_name.starts_with("pas::t_")) {
-		pas_name.erase(0, std::string("pas::t_").length());
-	}
-	auto intrinsic = f.lookup_type(pas_name);
-	if (intrinsic == nullptr) {
-		return raise_type_parse_error("unknown external type " + cxx_name);
+	if (lib == nullptr) {
+		auto intrinsic = lookup_builtin_type(cxx_name);
+		if (intrinsic == nullptr) {
+			return raise_type_parse_error("unknown external type " + cxx_name);
+		} else {
+			return intrinsic;
+		}
 	} else {
-		return intrinsic;
+		return raise_type_parse_error("unknown external library '" + std::string(lib) + "'");
 	}
 }
 
 Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
-	if (lib == NULL) {
-		// FIXME: terrible seam.
-		const Frame& f = root_frame();
-		std::string pas_name = cxx_name;
-		if (pas_name.starts_with("pas::p_")) {
-			pas_name.erase(0, std::string("pas::p_").length());
-		}
-		auto v = f.lookup_value(pas_name);
-		if (v == nullptr) {
-			raise_parse_error("builtin '" + pas_name + "' not found");
+	if (lib == nullptr) {
+		auto builtin = create_builtin_value(cxx_name);
+		if (builtin == nullptr) {
+			raise_parse_error("builtin '" + cxx_name + "' not found");
 			return nullptr;
 		} else {
-			auto builtin = dynamic_cast<Builtin*>(v);
-			if (builtin == nullptr) {
-				raise_parse_error("builtin '" + pas_name + " not Builtin");
-				return nullptr;
-			} else {
-				return builtin;
-			}
+			return builtin;
 		}
 	} else {
 		raise_parse_error("external library not implemented");

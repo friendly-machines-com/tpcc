@@ -18,7 +18,6 @@
 #include "frame.h"
 
 struct BuiltinDesc {
-	std::string_view pas_name;    // lowercase, matches tokenizer output
 	std::string_view rtl_name;    // e.g. "pas::p_ord"
 	// Constant-folder; nullable when a row has no folding rule (see also the
 	// TODO next to kBuiltins in builtins.cc).
@@ -71,3 +70,6 @@ Type* common_arith_type(Type* a, Type* b);
 // -1 = no implicit conversion. Used by both call-site coercion and overload
 // ranking.
 int conversion_cost(Type* from, Type* to);
+
+IntrinsicType* lookup_builtin_type(std::string cxx_name);
+Builtin* create_builtin_value(std::string cxx_name);

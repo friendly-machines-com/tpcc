@@ -62,35 +62,35 @@ Type* shortstring_type() { return &k_shortstring; }
 // rules for the ones that admit them (Ord on a Constant, at minimum).
 static const std::array<BuiltinDesc, 24> k_builtins{{
 	// Note: constant folder would be polymorphic.
-    {"ord", "pas::p_ord", nullptr},
-    {"inc", "pas::p_inc", nullptr},
-    {"dec", "pas::p_dec", nullptr},
+    {"pas::p_ord", nullptr},
+    {"pas::p_inc", nullptr},
+    {"pas::p_dec", nullptr},
 
-    {"bitwiseand", "pas::p_bitwiseand", nullptr},
-    {"bitwiseor", "pas::p_bitwiseor", nullptr},
-    {"bitwisexor", "pas::p_bitwisexor", nullptr},
+    {"pas::p_bitwiseand", nullptr},
+    {"pas::p_bitwiseor", nullptr},
+    {"pas::p_bitwisexor", nullptr},
 
-    {"logicalor", "pas::p_logicalor", nullptr},
-    {"logicaland", "pas::p_logicaland", nullptr},
-    {"logicalnot", "pas::p_logicalnot", nullptr},
-    {"logicalxor", "pas::p_logicalxor", nullptr},
+    {"pas::p_logicalor", nullptr},
+    {"pas::p_logicaland", nullptr},
+    {"pas::p_logicalnot", nullptr},
+    {"pas::p_logicalxor", nullptr},
 
-    {"add", "pas::p_add", nullptr},
-    {"subtract", "pas::p_subtract", nullptr},
-    {"multiply", "pas::p_multiply", nullptr},
-    {"divide", "pas::p_divide", nullptr},
-    {"intdivide", "pas::p_intdivide", nullptr},
-    {"assign", "pas::p_assign", nullptr}, // delphi doesnt have it
-    {"modulus", "pas::p_modulus", nullptr},
-    {"leftshift", "pas::p_leftshift", nullptr},
-    {"rightshift", "pas::p_rightshift", nullptr},
+    {"pas::p_add", nullptr},
+    {"pas::p_subtract", nullptr},
+    {"pas::p_multiply", nullptr},
+    {"pas::p_divide", nullptr},
+    {"pas::p_intdivide", nullptr},
+    {"pas::p_assign", nullptr}, // delphi doesnt have it
+    {"pas::p_modulus", nullptr},
+    {"pas::p_leftshift", nullptr},
+    {"pas::p_rightshift", nullptr},
 
-    {"lessthan", "pas::p_lessthan", nullptr},
-    {"lessthanorequal", "pas::p_lessthanorequal", nullptr},
-    {"equal", "pas::p_equal", nullptr},
-    //{"notequal", "pas::p_not_equal", nullptr}, // delphi doesnt have it
-    {"greaterthan", "pas::p_greaterthan", nullptr},
-    {"greaterthanorequal", "pas::p_greaterthanorequal", nullptr},
+    {"pas::p_lessthan", nullptr},
+    {"pas::p_lessthanorequal", nullptr},
+    {"pas::p_equal", nullptr},
+    //{"pas::p_not_equal", nullptr}, // delphi doesnt have it
+    {"pas::p_greaterthan", nullptr},
+    {"pas::p_greaterthanorequal", nullptr},
 
 }};
 
@@ -132,23 +132,28 @@ int conversion_cost(Type* from, Type* to) {
 	return -1;
 }
 
+IntrinsicType* lookup_builtin_type(std::string cxx_name) {
+	for (IntrinsicType* t : k_all_intrinsics) {
+		if (t->cxx_name == cxx_name) {
+			return t;
+		}
+	}
+	return nullptr;
+}
+
+Builtin* create_builtin_value(std::string cxx_name) {
+	for (auto& b : k_builtins) {
+		if (b.rtl_name == cxx_name) {
+			auto bi = new Builtin(&b);
+			return bi;
+		}
+	}
+	return nullptr;
+}
+
 const Frame& root_frame() {
 	static const Frame f = []() {
 		Frame ff(nullptr);
-		for (IntrinsicType* t : k_all_intrinsics) {
-			// FIXME: terrible seam.
-			std::string pas_name = t->cxx_name;
-			if (pas_name.starts_with("pas::t_")) {
-				pas_name.erase(0, std::string("pas::t_").length());
-			}
-
-			ff.register_type(std::string(pas_name), t);
-		}
-		for (auto& b : k_builtins) {
-			auto bi = new Builtin(&b);
-			auto ty = nullptr; // dummy, i.e. we are so polymorphic (not variadic)
-			ff.register_variable(std::string(b.pas_name), bi, ty);
-		}
 		return ff;
 	}();
 	return f;
