@@ -2157,6 +2157,11 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		self_slot = new StorageSlot("this", self_ptr_ty);
 		body_frame->register_variable("self", self_slot, self_ptr_ty);
 		push_with_scope(owner_frame, self_slot);
+
+		if (m->ty->return_type != &unit_type()) { // function
+			auto result_slot = new StorageSlot("p_result", m->ty->return_type);
+			body_frame->register_variable("result", result_slot, m->ty->return_type);
+		}
 	}
 	auto rty = static_cast<RoutineType*>(target->ty);
 	for (auto& p : rty->formals) {
@@ -2171,15 +2176,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	parse_keyword("end");
 	parse_semicolon();
 	if (emitter) {
-		bool constructor = false;
-		if (auto m = dynamic_cast<Method*>(target)) {
-			if (auto ty = dynamic_cast<RoutineType*>(m)) {
-				if (ty->kind == CONSTRUCTOR) {
-					constructor = true;
-				}
-			}
-		}
-		emitter->emit_procedure_close(constructor);
+		emitter->emit_procedure_close(target);
 	}
 	for (size_t i = 0; i < pushed; i++)
 		pop_scope();

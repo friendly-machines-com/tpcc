@@ -229,6 +229,32 @@ void Emitter::emit_procedure_open(Callable* c) {
 		fprintf(out, " %s", f.cxx_name.c_str());
 	}
 	fprintf(out, ") {\n");
+	if (c->ty->return_type != &unit_type()) { // function
+		fprintf(out, "\tauto p_result;\n");
+	}
+}
+
+void Emitter::emit_procedure_close(Callable* target) {
+	if (!out)
+		return;
+
+	bool constructor = false;
+	bool function = false;
+	if (auto m = dynamic_cast<Method*>(target)) {
+		if (auto ty = dynamic_cast<RoutineType*>(m)) {
+			if (ty->kind == CONSTRUCTOR) {
+				constructor = true;
+			} else if (ty->return_type != &unit_type()) {
+				function = true;
+			}
+		}
+	}
+	if (constructor) {
+		fprintf(out, "\treturn this;\n");
+	} else if (function) {
+		fprintf(out, "\treturn p_result;\n");
+	}
+	fprintf(out, "}\n");
 }
 
 void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) {
@@ -504,14 +530,6 @@ void Emitter::emit_type_alias(std::string cxx_name, std::string aliased_cxx_name
 	fprintf(out, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
 }
 
-void Emitter::emit_procedure_close(bool constructor) {
-	if (!out)
-		return;
-	if (constructor) {
-		fprintf(out, "\treturn this;\n");
-	}
-	fprintf(out, "}\n");
-}
 
 static const char* cxx_unary_operator(UnaryOperation* op) {
 	if (dynamic_cast<AddrOf*>(op))
