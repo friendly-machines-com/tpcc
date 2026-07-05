@@ -39,7 +39,7 @@ using unknown_type = void*;
 
 struct t_shortstring {
 	uint8_t length;
-	char data[255];
+	t_char data[255];
 };
 
 inline t_shortstring tpcc_shortstring_from_c(const char* s) {
