@@ -290,28 +290,31 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	if (!cxx_name.empty())
 		fprintf(out, " %s", cxx_name.c_str());
 
+	// Base-class list emits LAYOUT names (the struct, not the storage pointer
+	// form `t_foo*` that emit_type_ref would produce under the new model).
+	// Spell the cxx_name directly. Skip the "public " prefix when there's no
+	// super (avoids the pre-existing null-deref through emit_type_ref).
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
-		fprintf(out, "public ");
-		emit_type_ref(c->super);
+		bool first = true;
+		if (c->super) {
+			fprintf(out, "public %s", c->super->cxx_name.c_str());
+			first = false;
+		}
 		for (auto interface_type : c->implemented_interfaces) {
-			fprintf(out, ", ");
-			fprintf(out, "public ");
-			emit_type_ref(interface_type);
+			fprintf(out, first ? "public %s" : ", public %s",
+				interface_type->cxx_name.c_str());
+			first = false;
 		}
 	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		bool first = true;
 		for (auto interface_type : c->super_interfaces) {
-			if (!first) {
-				fprintf(out, ", ");
-			} else {
-				first = false;
-			}
-			fprintf(out, "public ");
-			emit_type_ref(interface_type);
+			fprintf(out, first ? "public %s" : ", public %s",
+				interface_type->cxx_name.c_str());
+			first = false;
 		}
 	} else if (auto c = dynamic_cast<ObjectType*>(ty)) {
-		fprintf(out, "public ");
-		emit_type_ref(c->super);
+		if (c->super)
+			fprintf(out, "public %s", c->super->cxx_name.c_str());
 	}
 
 	fprintf(out, " {\n");
@@ -542,6 +545,10 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 void Emitter::emit_expression(Node* expr) {
 	if (!out)
 		return;
+	if (dynamic_cast<NilLiteral*>(expr)) {
+		fprintf(out, "nullptr");
+		return;
+	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
 		fprintf(out, "%llu", (unsigned long long)c->value);
 		return;
@@ -578,12 +585,12 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
 		// Use `->` when the container is (a) an explicit Dereference (collapse
-		// `(*ptr).member` to `ptr->member`) or (b) a pointer-typed lvalue like
-		// a method's implicit `this` slot.
+		// `(*ptr).member` to `ptr->member`) or (b) a reference-typed lvalue
+		// (Pascal `class`, `interface`, or `^T` -- all pointers in C++).
 		if (auto d = dynamic_cast<Dereference*>(m->a)) {
 			emit_expression(d->a);
 			fprintf(out, "->");
-		} else if (m->a->ty && dynamic_cast<PointerType*>(m->a->ty)) {
+		} else if (m->a->ty && m->a->ty->is_reference_type()) {
 			emit_expression(m->a);
 			fprintf(out, "->");
 		} else {
@@ -635,12 +642,13 @@ void Emitter::emit_expression(Node* expr) {
 			}
 
 			// Same `->` conditions as MemberAccess: explicit Dereference of a
-			// pointer, or a pointer-typed receiver (method `this` slot).
+			// pointer, or a reference-typed receiver (method `this` slot for a
+			// class, or any `^T`-typed lvalue).
 			if (done) {
 			} else if (auto d = dynamic_cast<Dereference*>(receiver)) {
 				emit_expression(d->a);
 				fprintf(out, "->");
-			} else if (receiver->ty && dynamic_cast<PointerType*>(receiver->ty)) {
+			} else if (receiver->ty && receiver->ty->is_reference_type()) {
 				emit_expression(receiver);
 				fprintf(out, "->");
 			} else {
@@ -727,6 +735,7 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_aggregate_decl("", ty);
 		else
 			fprintf(out, "%s", c->cxx_name.c_str());
+		fprintf(out, "*");
 		return;
 	}
 	if (auto c = dynamic_cast<InterfaceType*>(ty)) {
@@ -734,6 +743,7 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_aggregate_decl("", ty);
 		else
 			fprintf(out, "%s", c->cxx_name.c_str());
+		fprintf(out, "*");
 		return;
 	}
 	if (auto o = dynamic_cast<ObjectType*>(ty)) {

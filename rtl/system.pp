@@ -20,8 +20,9 @@ type
   PtrUInt = external nil name 'pas::t_ptruint';
   SizeInt = external nil name 'pas::t_sizeint';
   SizeUInt = external nil name 'pas::t_sizeuint';
-  TClass = external nil name 'pas::m_iobject'; // class of TObject
   shortstring = external nil name 'pas::t_shortstring';
+  //TClass = external nil name 'pas::m_iobject'; // class of TObject;  this would technically be okay, but I am not sure how we would get enough type info into the compiler this way.
+  TClass = class of TObject; // instead, the compiler has now hardcoded that all "class of X" will be pas::m_iobject*".
   TObject = class
   public
     destructor Destroy; virtual;
@@ -88,17 +89,17 @@ end;
 
 class function TObject.ClassName: shortstring;
 begin
-  Result := ClassType.ClassName
+  Result := ClassType().ClassName
 end;
 
 class function TObject.InheritsFrom(klass: TClass): Boolean;
 begin
-  Result := ClassType.InheritsFrom(klass)
+  Result := ClassType().InheritsFrom(klass)
 end;
 
 class function TObject.ClassParent: TClass;
 begin
-  Result := ClassType.ClassParent
+  Result := ClassType().ClassParent
 end;
 
 end.

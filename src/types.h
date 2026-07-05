@@ -9,6 +9,11 @@ class StorageSlot;
 class Type {
 public:
 	virtual ~Type() = default;
+	// True iff a variable of this type is represented in C++ emission as a
+	// pointer (i.e. emission in storage position is `t_foo*`, member access
+	// uses `->`, `nil` is a legal value). Pascal `class` and `interface` are
+	// reference types like user `^T`; `record` and `object` are not.
+	virtual bool is_reference_type() const { return false; }
 };
 
 /** Placeholder for a type name that has been introduced but whose full
@@ -102,6 +107,7 @@ struct InterfaceType: public Type {
 	std::vector<InterfaceType*> super_interfaces; // FIXME: not transitive ?
 	InterfaceType(Frame* children, std::vector<InterfaceType*> super_interfaces);
 	InterfaceType(std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
+	bool is_reference_type() const override { return true; }
 };
 
 struct ClassType: public Type {
@@ -110,6 +116,7 @@ struct ClassType: public Type {
 	std::vector<InterfaceType*> implemented_interfaces; // FIXME: not transitive ?
 	ClassType* super;
 	ClassType(Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
+	bool is_reference_type() const override { return true; }
 };
 
 struct ObjectType: public Type {
@@ -122,6 +129,7 @@ struct ObjectType: public Type {
 struct PointerType: public Type {
 	Type* item_type;
 	PointerType(Type* item_type);
+	bool is_reference_type() const override { return true; }
 };
 
 /** The type of a Pascal `unit X;` module. Renamed from UnitType to avoid

@@ -94,7 +94,7 @@ Type* common_arith_type(Type* a, Type* b) {
 	return (ra >= rb) ? a : b;
 }
 
-// FIXME: add enums, sets
+// FIXME: add enums, sets; add class-to-interface via implemented_interfaces
 int conversion_cost(Type* from, Type* to) {
 	if (!from || !to)
 		return -1;
@@ -102,6 +102,19 @@ int conversion_cost(Type* from, Type* to) {
 		return 0;
 	if (from == &untyped_integer_type())
 		return 0; // literal adapts to any int
+	// Subclass-to-superclass: implicit, cost = depth (1 per inheritance step).
+	// Identity handled by `from == to` above.
+	if (from->is_reference_type() && to->is_reference_type()) {
+		int depth = 0;
+		for (ClassType* cur = dynamic_cast<ClassType*>(from); cur; cur = cur->super, ++depth)
+			if (cur->super == to)
+				return depth + 1;
+		depth = 0;
+		for (ObjectType* cur = dynamic_cast<ObjectType*>(from); cur; cur = cur->super, ++depth)
+			if (cur->super == to)
+				return depth + 1;
+		return -1;
+	}
 	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
 	if (rfrom >= 0 && rto >= 0 && rto >= rfrom)
 		return 1;

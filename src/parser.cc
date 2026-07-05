@@ -819,6 +819,10 @@ Node* Parser::parse_value() {
 	}
 	if (auto n = maybe_parse_numeral())
 		return n;
+	if (peek_keyword("nil")) {
+		consume();
+		return new NilLiteral();
+	}
 	if (!input_token.empty() && input_token.front() == '\'') {
 		std::string s;
 		for (size_t i = 1; i + 1 < input_token.size(); ++i) {
@@ -2153,9 +2157,19 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	push_scope(body_frame);
 	StorageSlot* self_slot = nullptr;
 	if (auto m = dynamic_cast<Method*>(target)) {
-		Type* self_ptr_ty = new PointerType(m->owner_class);
-		self_slot = new StorageSlot("this", self_ptr_ty);
-		body_frame->register_variable("self", self_slot, self_ptr_ty);
+		// Self is a reference to the owner instance. ClassType/InterfaceType
+		// are themselves reference types under the new model, so the storage
+		// form is `t_foo*` natively -- no PointerType wrap. ObjectType stays
+		// a value type, so wrap manually to keep `Self` pointer-shaped for
+		// member-access emission.
+		Type* self_ty = nullptr;
+		if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
+			self_ty = m->owner_class;
+		} else {
+			self_ty = new PointerType(m->owner_class);
+		}
+		self_slot = new StorageSlot("this", self_ty);
+		body_frame->register_variable("self", self_slot, self_ty);
 		push_with_scope(owner_frame, self_slot);
 
 		if (m->ty->return_type != &unit_type()) { // function
@@ -2355,6 +2369,16 @@ static bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
+	// `nil` literal: legal in any reference-type position (class/interface/^T).
+	// Adopt the surrounding target's type so emission and downstream checks
+	// see a concrete pointer type instead of a typeless literal.
+	if (dynamic_cast<NilLiteral*>(a)) {
+		if (target_ty && target_ty->is_reference_type()) {
+			a->ty = target_ty;
+			return a;
+		}
+		raise_parse_error("'nil' is only valid in a reference-type context");
+	}
 	if (a->ty == target_ty) {
 		return a;
 	} else if (target_ty == unknown_type()) { // this target is void* but the formal parameter is more like a reference

@@ -134,6 +134,14 @@ public:
 	String(std::string value, Type* ty);
 };
 
+/** Pascal `nil`. Constructed without a type: its type is fixed up by cast()
+ *  to the surrounding reference-type target during assignment / argument
+ *  passing. Emits as C++ `nullptr`. */
+class NilLiteral: public Node {
+public:
+	NilLiteral() = default;
+};
+
 class Coerce: public BinaryOperation {
 public:
 	Coerce(Node* a, Node* b);
