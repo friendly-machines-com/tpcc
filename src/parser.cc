@@ -1058,8 +1058,14 @@ bool Parser::is_assignable(Node* n) {
 Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
     auto fn = resolve_value(id);
 	std::vector<Node*> args;
-	args.push_back(a);
-	args.push_back(b);
+	auto common_ty = common_arith_type(a->ty, b->ty);
+	if (common_ty == nullptr) {
+		args.push_back(a);
+		args.push_back(b);
+	} else {
+		args.push_back(new Cast(a, common_ty));
+		args.push_back(new Cast(b, common_ty));
+	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = fc.callee ? fc.callee->ty : nullptr;
@@ -1080,8 +1086,14 @@ Node* Parser::mk_assign(Node* a, Node* b) {
 Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
     auto fn = resolve_value(id);
 	std::vector<Node*> args;
-	args.push_back(a);
-	args.push_back(b);
+	auto common_ty = common_arith_type(a->ty, b->ty);
+	if (common_ty == nullptr) {
+		args.push_back(a);
+		args.push_back(b);
+	} else {
+		args.push_back(new Cast(a, common_ty));
+		args.push_back(new Cast(b, common_ty));
+	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = fc.callee ? fc.callee->ty : nullptr;
