@@ -60,33 +60,37 @@ Type* shortstring_type() { return &k_shortstring; }
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 22> k_builtins{{
+static const std::array<BuiltinDesc, 24> k_builtins{{
 	// Note: constant folder would be polymorphic.
     {"ord", "pas::p_ord", nullptr},
     {"inc", "pas::p_inc", nullptr},
     {"dec", "pas::p_dec", nullptr},
 
-    {"and", "pas::p_and", nullptr},
-    {"or", "pas::p_or", nullptr},
-    {"not", "pas::p_not", nullptr},
-    {"xor", "pas::p_xor", nullptr},
+    {"bitwiseand", "pas::p_bitwiseand", nullptr},
+    {"bitwiseor", "pas::p_bitwiseor", nullptr},
+    {"bitwisexor", "pas::p_bitwisexor", nullptr},
+
+    {"logicalor", "pas::p_logicalor", nullptr},
+    {"logicaland", "pas::p_logicaland", nullptr},
+    {"logicalnot", "pas::p_logicalnot", nullptr},
+    {"logicalxor", "pas::p_logicalxor", nullptr},
 
     {"add", "pas::p_add", nullptr},
     {"subtract", "pas::p_subtract", nullptr},
     {"multiply", "pas::p_multiply", nullptr},
     {"divide", "pas::p_divide", nullptr},
-    {"assign", "pas::p_assign", nullptr},
-    {"div", "pas::p_div", nullptr},
-    {"mod", "pas::p_mod", nullptr},
-    {"shl", "pas::p_shl", nullptr},
-    {"shr", "pas::p_shr", nullptr},
+    {"intdivide", "pas::p_intdivide", nullptr},
+    {"assign", "pas::p_assign", nullptr}, // delphi doesnt have it
+    {"modulus", "pas::p_modulus", nullptr},
+    {"leftshift", "pas::p_leftshift", nullptr},
+    {"rightshift", "pas::p_rightshift", nullptr},
 
-    {"less", "pas::p_less", nullptr},
-    {"less_equal", "pas::p_less_equal", nullptr},
+    {"lessthan", "pas::p_lessthan", nullptr},
+    {"lessthanorequal", "pas::p_lessthanorequal", nullptr},
     {"equal", "pas::p_equal", nullptr},
-    {"not_equal", "pas::p_not_equal", nullptr},
-    {"greater", "pas::p_greater", nullptr},
-    {"greater_equal", "pas::p_greater_equal", nullptr},
+    //{"notequal", "pas::p_not_equal", nullptr}, // delphi doesnt have it
+    {"greaterthan", "pas::p_greaterthan", nullptr},
+    {"greaterthanorequal", "pas::p_greaterthanorequal", nullptr},
 
 }};
 
