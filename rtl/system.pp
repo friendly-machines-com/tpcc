@@ -16,6 +16,7 @@ type
   Char = external nil name 'pas::t_char';
   Double = external nil name 'pas::t_double';
   TClass = external nil name 'pas::m_iobject'; // class of TObject
+  shortstring = external nil name 'pas::t_shortstring';
   TObject = class
   public
     destructor Destroy; virtual;
@@ -23,7 +24,7 @@ type
     // Compiler generates (for any class): virtual m_tobject* pas::m_tobject::p_classtype() { return meta; }
     // Those class functions will be generated as regular functions in m_tobject--if anywhere.
     
-    class function ClassType: TClass; virtual; external nil name 'm_meta::p_classtype';
+    class function ClassType: TClass; virtual; external nil name 'p_classtype';
     class function ClassName: shortstring; virtual;
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;
