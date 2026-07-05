@@ -1,6 +1,7 @@
 #include "builtins.h"
 #include "cst.h"
 #include "frame.h"
+#include "types.h"
 #include <string>
 
 IntrinsicType::IntrinsicType(std::string cxx_name, std::optional<int> rank)
@@ -59,10 +60,33 @@ Type* shortstring_type() { return &k_shortstring; }
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 3> k_builtins{{
-    {"ord", "pas::p_ord", []() -> Type* { return &k_integer; }, nullptr},
-    {"inc", "pas::p_inc", []() -> Type* { return &unit_type(); }, nullptr},
-    {"dec", "pas::p_dec", []() -> Type* { return &unit_type(); }, nullptr},
+static const std::array<BuiltinDesc, 21> k_builtins{{
+	// Note: constant folder would be polymorphic.
+    {"ord", "pas::p_ord", nullptr},
+    {"inc", "pas::p_inc", nullptr},
+    {"dec", "pas::p_dec", nullptr},
+
+    {"and", "pas::p_and", nullptr},
+    {"or", "pas::p_or", nullptr},
+    {"not", "pas::p_not", nullptr},
+    {"xor", "pas::p_xor", nullptr},
+
+    {"add", "pas::p_add", nullptr},
+    {"subtract", "pas::p_subtract", nullptr},
+    {"multiply", "pas::p_multiply", nullptr},
+    {"divide", "pas::p_divide", nullptr},
+    {"assign", "pas::p_assign", nullptr},
+    {"div", "pas::p_div", nullptr},
+    {"mod", "pas::p_mod", nullptr},
+    {"shl", "pas::p_shl", nullptr},
+    {"shr", "pas::p_shr", nullptr},
+
+    {"less", "pas::p_less", nullptr},
+    {"less_equal", "pas::p_less_equal", nullptr},
+    {"equal", "pas::p_equal", nullptr},
+    {"greater", "pas::p_greater", nullptr},
+    {"greater_equal", "pas::p_greater_equal", nullptr},
+
 }};
 
 // Integer widening rank; -1 for non-integer types.
@@ -113,12 +137,12 @@ const Frame& root_frame() {
 				pas_name.erase(0, std::string("pas::t_").length());
 			}
 
-			ff.register_type(std::string(pas_name), t); // FIXME: wtf, system unit exists.
+			ff.register_type(std::string(pas_name), t);
 		}
 		for (auto& b : k_builtins) {
 			auto bi = new Builtin(&b);
-			bi->ty = b.build_type(); // Node::ty carries the return type
-			ff.register_variable(std::string(b.pas_name), bi, bi->ty);
+			auto ty = nullptr; // dummy, i.e. we are so polymorphic (not variadic)
+			ff.register_variable(std::string(b.pas_name), bi, ty);
 		}
 		return ff;
 	}();

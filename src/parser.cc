@@ -2046,17 +2046,15 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			if (pas_name.starts_with("pas::p_")) {
 				pas_name.erase(0, std::string("pas::p_").length());
 			}
-			auto intrinsic = f.lookup_value(pas_name);
-			if (intrinsic == nullptr) {
+			auto builtin = f.lookup_value(pas_name);
+			if (builtin == nullptr) {
 				raise_parse_error("unknown external routine implementation " + cxx_name);
 			}
-			// FIXME: Check intrinsic has the right target Procedure type.  See sig_matches.
-			// This is basically making TARGET an ALIAS for INTRINSIC.
+			// This is basically making TARGET an ALIAS for BUILTIN.
 			target->has_body = true;
-			if (auto proc = dynamic_cast<Procedure*>(intrinsic)) {
-				target->cxx_name = proc->cxx_name;
-			} else if (auto builtin = dynamic_cast<Builtin*>(intrinsic)) {
-				auto desc = builtin->desc;
+			if (auto qbuiltin = dynamic_cast<Builtin*>(builtin)) { // used
+				// These Builtins are all polymorphic and C++ overloads will just have to adjust to us.
+				auto desc = qbuiltin->desc;
 				target->cxx_name = desc->rtl_name;
 			} else {
 				raise_parse_error("unknown intrinsic '" + pas_name + "' via external '" +  cxx_name + "'");

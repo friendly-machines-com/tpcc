@@ -20,7 +20,6 @@
 struct BuiltinDesc {
 	std::string_view pas_name;    // lowercase, matches tokenizer output
 	std::string_view rtl_name;    // e.g. "pas::p_ord"
-	Type* (*build_type)();        // signature; called once at registration
 	// Constant-folder; nullable when a row has no folding rule (see also the
 	// TODO next to kBuiltins in builtins.cc).
 	std::optional<uint64_t> (*const_fold)(Frame*, Node* args);
