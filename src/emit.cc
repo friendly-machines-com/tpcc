@@ -265,7 +265,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(out, "\t}\n");
 
 			fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
-			fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(this, s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
+			fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
 			fprintf(out, "\t}\n");
 
 			fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
