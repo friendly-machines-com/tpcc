@@ -159,13 +159,20 @@ struct Parameter {
           default_value(default_value) {}
 };
 
-class RoutineType : public Type {
+enum RoutineKind {
+	CONSTRUCTOR,
+	DESTRUCTOR,
+	METHOD,
+	ROUTINE,
+};
+
+class RoutineType : public Type { // FIXME: is it a constructor, destructor; those are DEFINITELY not compatible with regular routines
 public:
 	std::vector<Parameter> formals;
 	Type* return_type;
-	bool is_method; // true for "of object"
+	RoutineKind kind;
 
-	RoutineType(std::vector<Parameter> formals, Type* return_type, bool is_method);
+	RoutineType(std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
 };
 
 // Result type of an arithmetic/bitwise binary op given operand types. Handles

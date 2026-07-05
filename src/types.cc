@@ -44,10 +44,10 @@ BoundedCardinalType::BoundedCardinalType(uint64_t lower_bound, uint64_t higher_b
 	assert(higher_bound >= lower_bound);
 }
 
-RoutineType::RoutineType(std::vector<Parameter> formals, Type* return_type, bool is_method) {
+RoutineType::RoutineType(std::vector<Parameter> formals, Type* return_type, RoutineKind kind) {
 	this->formals = std::move(formals);
 	this->return_type = return_type;
-	this->is_method = is_method;
+	this->kind = kind;
 }
 
 // Integer widening rank; -1 for non-integer types.

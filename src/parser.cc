@@ -1237,8 +1237,8 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			parse_const_block();
 		} else if (peek_keyword("var")) {
 			parse_var_block();
-		} else if (peek_keyword("procedure") || peek_keyword("function")) {
-			parse_method_prototype(body, owner_class, peek_keyword("function"));
+		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
+			parse_method_prototype(body, owner_class, peek_keyword("function"), peek_keyword("destructor"), peek_keyword("constructor"));
 			continue; // parse_method_prototype consumes its terminating ';'
 		} else if (peek_keyword("case")) {
 			auto rt = dynamic_cast<RecordType*>(owner_class);
@@ -1830,7 +1830,7 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 	return result;
 }
 
-RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_object) {
+RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_object, RoutineKind kind) {
 	std::vector<Parameter> formals;
 	if (input_token == "(") {
 		formals = parse_proc_formal_parameters();
@@ -1840,36 +1840,49 @@ RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_obj
 		parse_colon();
 		ret_ty = parse_type_expression(false);
 	}
-	bool is_method = false;
 	if (allow_of_object && peek_keyword("of")) {
 		parse_keyword("of");
 		parse_keyword("object");
-		is_method = true;
+		if (kind == CONSTRUCTOR || kind == DESTRUCTOR) {
+			raise_type_parse_error("expected method");
+		}
+		kind = METHOD;
+	} else {
+		if (kind != ROUTINE) {
+			raise_type_parse_error("expected routine");
+		}
+		kind = ROUTINE;
 	}
-	return new RoutineType(std::move(formals), ret_ty, is_method);
+	return new RoutineType(std::move(formals), ret_ty, kind);
 }
 
 Type* Parser::parse_procedure_type() {
 	parse_keyword("procedure");
-	return parse_routine_signature(false, true);
+	return parse_routine_signature(false, true, METHOD);
 }
 
 Type* Parser::parse_function_type() {
 	parse_keyword("function");
-	return parse_routine_signature(true, true);
+	return parse_routine_signature(true, true, METHOD);
 }
 
 Type* Parser::parse_operator_type() {
 	parse_keyword("operator");
 	// For now this is very similar to function.  Note: even parse_routine_signature uses parse_identifier() instead of parse_operator(), sigh.
-	return parse_routine_signature(true, true);
+	return parse_routine_signature(true, true, METHOD);
 }
 
 // Class Member Prototype Registration (Value Level)
-void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function) {
-	parse_keyword(is_function ? "function" : "procedure");
+void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function, bool is_destructor, bool is_constructor) {
+	if (is_constructor) {
+		parse_keyword("constructor");
+	} else if (is_destructor) {
+		parse_keyword("destructor");
+	} else {
+		parse_keyword(is_function ? "function" : "procedure");
+	}
 	std::string pas_name = parse_identifier();
-	RoutineType* sig = parse_routine_signature(is_function, false);
+	RoutineType* sig = parse_routine_signature(is_function, false, is_destructor ? DESTRUCTOR : is_constructor ? CONSTRUCTOR : METHOD);
 	parse_semicolon();
 	bool has_overload = false;
 	Method::VirtualKind vk = Method::VirtualKind::None;
@@ -1892,7 +1905,13 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		} else
 			break;
 	}
-	auto m = new Method(cxx_value_name(pas_name), sig, has_overload, owner_class, vk);
+	std::string cxx_name = cxx_value_name(pas_name);
+	if (is_destructor) {
+		if (ClassType* class_type = dynamic_cast<ClassType*>(owner_class)) {
+			cxx_name = "~" + class_type->cxx_name;
+		}
+	}
+	auto m = new Method(cxx_name, sig, has_overload, owner_class, vk);
 	m->ty = sig; // The node's type IS the prototype.
 	if (!body->register_callable(pas_name, m)) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
@@ -2037,6 +2056,8 @@ Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
 void Parser::parse_procedure_or_function(bool is_function) {
 	bool has_overload = false;
 	std::string first_name;
+	bool is_destructor = false;
+	bool is_constructor = false;
 	if (peek_keyword("operator")) {
 		if (!is_function) {
 			raise_parse_error("custom operator should have a return value");
@@ -2046,6 +2067,12 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		first_name = input_token; // TODO: well, parse_operator();
 		consume();
 		has_overload = true; // I think those should be implicitly "overload;"
+	} else if (maybe_parse_keyword("destructor")) {
+		is_destructor = true;
+		first_name = parse_identifier();
+	} else if (maybe_parse_keyword("constructor")) {
+		is_constructor = true;
+		first_name = parse_identifier();
 	} else {
 		parse_keyword(is_function ? "function" : "procedure");
 		first_name = parse_identifier();
@@ -2058,11 +2085,16 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		Frame* owner_frame = get_type_body_frame(owner_ty);
 		if (!owner_frame)
 			raise_parse_error("'" + first_name + "' is not a class/record/object");
+		if (is_destructor) {
+			if (auto class_type = dynamic_cast<ClassType*>(owner_ty)) {
+				method_name = "~" + class_type->cxx_name;
+			}
+		}
 		Node* hit = owner_frame->lookup_value(method_name);
 		auto m = dynamic_cast<Method*>(hit);
 		if (!m)
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
-		RoutineType* sig = parse_routine_signature(is_function, false);
+		RoutineType* sig = parse_routine_signature(is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD);
 		parse_semicolon();
 		if (m->has_body)
 			raise_parse_error("duplicate implementation of '" + method_name + "'");
@@ -2072,9 +2104,9 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		}
 		parse_routine_body(m, owner_frame);
 		return;
-	} else { // Standalone Routine or method prototype
+	} else { // Standalone Routine
 		bool had_paren = (input_token == "(");
-		RoutineType* sig = parse_routine_signature(is_function, false);
+		RoutineType* sig = parse_routine_signature(is_function, false, ROUTINE);
 		parse_semicolon();
 		while (maybe_parse_keyword("overload")) {
 			has_overload = true;
@@ -2109,30 +2141,6 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			parse_routine_body(target, nullptr);
 		}
 	}
-}
-
-void Parser::parse_constructor_prototype() {
-	parse_keyword("constructor");
-	auto id = parse_identifier();
-	auto formal_parameters = parse_proc_formal_parameters();
-	maybe_parse_proc_attributes();
-}
-
-void Parser::parse_constructor() {
-	parse_constructor_prototype();
-	parse_block();
-}
-
-void Parser::parse_destructor_prototype() {
-	parse_keyword("destructor");
-	auto id = parse_identifier();
-	auto formal_parameters = parse_proc_formal_parameters();
-	maybe_parse_proc_attributes();
-}
-
-void Parser::parse_destructor() {
-	parse_destructor_prototype();
-	parse_block();
 }
 
 // Per-argument conversion costs for a candidate. Returns empty vector when
