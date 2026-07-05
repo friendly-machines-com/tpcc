@@ -109,6 +109,7 @@ static const std::array<BuiltinDesc, 30> k_builtins{{
     //{"pas::p_not_equal", nullptr}, // delphi doesnt have it
     {"pas::p_greaterthan", nullptr},
     {"pas::p_greaterthanorequal", nullptr},
+    {"pas::p_supports", nullptr},
 
 }};
 

@@ -1151,6 +1151,13 @@ Node* Parser::parse_product() {
 			auto n = new Coerce(result, rhs);
 			n->ty = rhs->ty;
 			result = n;
+		} else if (maybe_parse_keyword("is")) {
+			// `x as T`: b is the parsed type-position expression whose ty is
+			// the target. Result type is that target.
+			auto rhs = parse_power();
+			auto n = new CoerceCheck(result, rhs);
+			n->ty = boolean_type();
+			result = n;
 		} else if (maybe_parse_less_less()) {
 			result = mk_arith("shl", result, parse_power());
 		} else if (maybe_parse_greater_greater()) {

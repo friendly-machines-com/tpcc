@@ -134,6 +134,11 @@ public:
 	Coerce(Node* a, Node* b);
 };
 
+class CoerceCheck: public BinaryOperation {
+public:
+	CoerceCheck(Node* a, Node* b);
+};
+
 class AddrOf: public UnaryOperation {
 public:
 	AddrOf(Node* a);

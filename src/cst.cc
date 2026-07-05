@@ -33,6 +33,7 @@ Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
 Index::Index(Node* a, Node* b) : BinaryOperation(a, b) {}
 Coerce::Coerce(Node* a, Node* b) : BinaryOperation(a, b) {}
+CoerceCheck::CoerceCheck(Node* a, Node* b) : BinaryOperation(a, b) {}
 
 Dereference::Dereference(Node* a) : UnaryOperation(a) {}
 Return::Return(Node* a) : UnaryOperation(a) {}
