@@ -1128,9 +1128,6 @@ Node* Parser::parse_product() {
 		if (maybe_parse_star()) {
 			result = mk_arith("*", result, parse_power());
 		} else if (maybe_parse_slash()) {
-			// TODO: Pascal `/` returns Real regardless of operand types; needs
-			// a Real intrinsic before we can set ty correctly. Using
-			// common_arith_type as a placeholder.
 			result = mk_arith("/", result, parse_power());
 		} else if (maybe_parse_keyword("div")) {
 			result = mk_arith("div", result, parse_power());
