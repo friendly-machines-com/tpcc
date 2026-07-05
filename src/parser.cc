@@ -1063,8 +1063,8 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 		args.push_back(a);
 		args.push_back(b);
 	} else {
-		args.push_back(a->ty != common_ty ? cast(a, common_ty) : a);
-		args.push_back(b->ty != common_ty ? cast(b, common_ty) : b);
+		args.push_back(cast(a, common_ty));
+		args.push_back(cast(b, common_ty));
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
@@ -1091,8 +1091,8 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 		args.push_back(a);
 		args.push_back(b);
 	} else {
-		args.push_back(common_ty != a->ty ? cast(a, common_ty) : a);
-		args.push_back(common_ty != b->ty ? cast(b, common_ty) : b);
+		args.push_back(cast(a, common_ty));
+		args.push_back(cast(b, common_ty));
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
@@ -2207,7 +2207,9 @@ static bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
-	if (target_ty == unknown_type()) { // this target is void* but the formal parameter is more like a reference
+	if (a->ty == target_ty) {
+		return a;
+	} else if (target_ty == unknown_type()) { // this target is void* but the formal parameter is more like a reference
 		return new Cast(new AddrOf(a), target_ty);
 	} else {
 		return new Cast(a, target_ty);
@@ -2272,9 +2274,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* t = rty->formals[i].ty;
-		if (args[i]->ty != t) {
-			args[i] = cast(args[i], t);
-		}
+		args[i] = cast(args[i], t);
 	}
 	return FinalizedCall{receiver, chosen};
 }
