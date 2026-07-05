@@ -1897,6 +1897,7 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 	return result;
 }
 
+// is_class is whether there was a "class" prefix token
 RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner) {
  	std::vector<Parameter> formals;
 	if (input_token == "(") {
@@ -1922,10 +1923,13 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		}
 		kind = METHOD;
 	} else {
-		if (kind != ROUTINE) {
-			raise_type_parse_error("expected routine");
+		if (auto ty = dynamic_cast<ClassType*>(owner)) {
+		} else {
+			if (kind != ROUTINE) {
+				raise_type_parse_error("expected routine");
+			}
+			kind = ROUTINE;
 		}
-		kind = ROUTINE;
 	}
 	return new RoutineType(std::move(formals), ret_ty, kind);
 }
