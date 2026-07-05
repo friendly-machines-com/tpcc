@@ -293,7 +293,7 @@ protected:
 	void push_with_scope(const Frame* scope, Node* unwrap_via);
 	void pop_scope();
 	void maybe_parse_proc_attributes();
-	RoutineType* parse_routine_signature(bool is_function, bool allow_of_object, RoutineKind kind);
+	RoutineType* parse_routine_signature(bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);
 	Procedure* match_or_create_procedure(const std::string& pas_name, RoutineType* sig, bool had_paren, bool has_overload);
 	/** Parse `procedure NAME(...);` (is_function=false) or

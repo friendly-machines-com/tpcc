@@ -359,9 +359,12 @@ void Emitter::emit_type_alias(std::string cxx_name, std::string aliased_cxx_name
 	fprintf(out, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
 }
 
-void Emitter::emit_procedure_close() {
+void Emitter::emit_procedure_close(bool constructor) {
 	if (!out)
 		return;
+	if (constructor) {
+		fprintf(out, "\treturn this;\n");
+	}
 	fprintf(out, "}\n");
 }
 
@@ -436,16 +439,31 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
 		if (pc->receiver) {
+			auto receiver = pc->receiver;
+			bool done = false;
+			if (auto ty = dynamic_cast<RoutineType*>(pc->callee->ty)) {
+				if (ty->kind == CONSTRUCTOR) {
+					if (auto receiver_ty = dynamic_cast<ClassType*>(receiver->ty)) {
+						fprintf(out, "(new %s", receiver_ty->cxx_name.c_str()); // FIXME: escape
+						fprintf(out, ")->");
+						done = true;
+					} else {
+						unhandled_type("constructor receiver", receiver->ty);
+					}
+				}
+			}
+
 			// Same `->` conditions as MemberAccess: explicit Dereference of a
 			// pointer, or a pointer-typed receiver (method `this` slot).
-			if (auto d = dynamic_cast<Dereference*>(pc->receiver)) {
+			if (done) {
+			} else if (auto d = dynamic_cast<Dereference*>(receiver)) {
 				emit_expression(d->a);
 				fprintf(out, "->");
-			} else if (pc->receiver->ty && dynamic_cast<PointerType*>(pc->receiver->ty)) {
-				emit_expression(pc->receiver);
+			} else if (receiver->ty && dynamic_cast<PointerType*>(receiver->ty)) {
+				emit_expression(receiver);
 				fprintf(out, "->");
 			} else {
-				emit_expression(pc->receiver);
+				emit_expression(receiver);
 				fprintf(out, ".");
 			}
 		}

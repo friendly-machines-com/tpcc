@@ -1830,13 +1830,19 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 	return result;
 }
 
-RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_object, RoutineKind kind) {
+RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_object, RoutineKind kind, Type* owner) {
 	std::vector<Parameter> formals;
 	if (input_token == "(") {
 		formals = parse_proc_formal_parameters();
 	}
 	Type* ret_ty = &unit_type();
-	if (is_function) {
+	if (kind == CONSTRUCTOR) {
+		if (auto ty = dynamic_cast<ClassType*>(owner)) {
+			ret_ty = ty;
+		} else {
+			raise_type_parse_error("expected class as owner");
+		}
+	} else if (is_function) {
 		parse_colon();
 		ret_ty = parse_type_expression(false);
 	}
@@ -1882,7 +1888,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		parse_keyword(is_function ? "function" : "procedure");
 	}
 	std::string pas_name = parse_identifier();
-	RoutineType* sig = parse_routine_signature(is_function, false, is_destructor ? DESTRUCTOR : is_constructor ? CONSTRUCTOR : METHOD);
+	RoutineType* sig = parse_routine_signature(is_function, false, is_destructor ? DESTRUCTOR : is_constructor ? CONSTRUCTOR : METHOD, owner_class);
 	parse_semicolon();
 	bool has_overload = false;
 	Method::VirtualKind vk = Method::VirtualKind::None;
@@ -2016,8 +2022,17 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	target->has_body = true;
 	parse_keyword("end");
 	parse_semicolon();
-	if (emitter)
-		emitter->emit_procedure_close();
+	if (emitter) {
+		bool constructor = false;
+		if (auto m = dynamic_cast<Method*>(target)) {
+			if (auto ty = dynamic_cast<RoutineType*>(m)) {
+				if (ty->kind == CONSTRUCTOR) {
+					constructor = true;
+				}
+			}
+		}
+		emitter->emit_procedure_close(constructor);
+	}
 	for (size_t i = 0; i < pushed; i++)
 		pop_scope();
 	if (self_slot)
@@ -2094,11 +2109,11 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		auto m = dynamic_cast<Method*>(hit);
 		if (!m)
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
-		RoutineType* sig = parse_routine_signature(is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD);
+		RoutineType* sig = parse_routine_signature(is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD, owner_ty);
 		parse_semicolon();
 		if (m->has_body)
 			raise_parse_error("duplicate implementation of '" + method_name + "'");
-		// If provided, update formal names for local body scope
+		// If provided, update formal names for local body scope; FIXME: check count, types etc
 		if (sig->formals.size() > 0) {
 			static_cast<RoutineType*>(m->ty)->formals = sig->formals;
 		}

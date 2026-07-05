@@ -68,7 +68,7 @@ public:
 	// C++ signature plus opening brace; body statements emit between; then
 	// emit_procedure_close writes the closing brace.
 	void emit_procedure_open(Callable* c);
-	void emit_procedure_close();
+	void emit_procedure_close(bool constructor);
 
 	void emit_expression(Node* expr);
 	void emit_type_ref(Type* ty);
