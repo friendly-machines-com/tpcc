@@ -348,16 +348,16 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			}
 			fprintf(out, ")");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (m->virtual_kind == Method::VirtualKind::Override)
-					fprintf(out, " override");
-				if (m->virtual_kind == Method::VirtualKind::Abstract)
-					fprintf(out, " = 0");
 				if (call->ty->kind == CLASS_METHOD) {
-					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method
+					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method.
 					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
-					fprintf(out, "{ static_cast<%s*>(p_classtype())->%s(FIXME); }",
+					fprintf(out, "{ return static_cast<%s*>(p_classtype())->%s(FIXME); }",
 					        "m_meta",
 					        call->cxx_name.c_str()); // TODO: escape
+				} else if (m->virtual_kind == Method::VirtualKind::Override) {
+					fprintf(out, " override");
+				} else if (m->virtual_kind == Method::VirtualKind::Abstract) {
+					fprintf(out, " = 0");
 				}
 			}
 			fprintf(out, ";\n");
