@@ -26,7 +26,11 @@ using t_integer  = int32_t;
 using t_longint  = int64_t; // FIXME: what?
 using t_int64 = int64_t;
 using t_qword = uint64_t;
-using t_boolean  = bool;
+enum t_boolean {
+	p_false,
+	p_true,
+};
+
 using t_char     = char;
 
 struct t_shortstring {
