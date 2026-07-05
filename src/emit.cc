@@ -347,7 +347,7 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		// the surrounding scope (where the type is declared) so a use like
 		// `c := Red` resolves without qualification. C++ models this with
 		// an unscoped `enum` (not `enum class`): members inject into the
-		// enclosing namespace, exactly matching Pascal's semantics.
+		// enclosing namespace.
 		fprintf(out, "\n");
 		emit_enum_decl(e);
 		fprintf(out, ";\n");
