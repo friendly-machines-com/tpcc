@@ -7,7 +7,7 @@
 //
 // Naming convention:
 //   t_<name>  - a Pascal-visible TYPE
-//   p_<name>  - a Pascal-visible procedure, function, or value
+//   p_<name>  - a Pascal-visible value (including procedure or function or operation)
 // Anything else in this namespace is implementation detail and not reachable
 // from Pascal source.
 #pragma once
