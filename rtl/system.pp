@@ -20,11 +20,10 @@ type
   TObject = class
   public
     destructor Destroy; virtual;
-
-    // Compiler generates (for any class): virtual m_tobject* pas::m_tobject::p_classtype() { return meta; }
-    // Those class functions will be generated as regular functions in m_tobject--if anywhere.
     
-    class function ClassType: TClass; virtual; external nil name 'p_classtype';
+    // Compiler generates (for any class): static inline m_meta* m_meta::p_classtype() { return &meta; }
+    // Those "class function"s will be generated as regular functions in m_tobject--if anywhere.
+    class function ClassType: TClass; virtual; external nil name 'p_classtype'; // compiler-generated impl each time
     class function ClassName: shortstring; virtual;
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;

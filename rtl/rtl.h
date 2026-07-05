@@ -158,7 +158,7 @@ template<typename T> inline void p_dec(T& x, t_integer n = 1) { x = p_subtract(x
 // It would be possible to declare an interface and use that for defining t_tclass--but that's terrible since we would implement a magical private interface for no reason, and only for the metaclass.
 // Worse, the interface methods then would have the exact same problem: How to refer to the actual metaclass--since we very much DO have class vars stored in the latter eventually.
 struct m_iobject;
-struct t_tobject {
+struct t_tobject: public m_iobject {
 	struct m_meta: public m_iobject { // = t_tclass maybe
 		virtual ~m_meta() = default;
 		virtual m_iobject* classtype() {
