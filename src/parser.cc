@@ -1893,6 +1893,12 @@ size_t Parser::parse_decl_blocks() {
 		} else if (peek_keyword("function")) {
 			parse_procedure_or_function(is_class, true);
 			is_class = false;
+		} else if (peek_keyword("constructor")) {
+			parse_procedure_or_function(is_class, false);
+			is_class = false;
+		} else if (peek_keyword("destructor")) {
+			parse_procedure_or_function(is_class, false);
+			is_class = false;
 		} else if (peek_keyword("operator")) {
 			if (is_class) {
 				raise_parse_error("'class operator' is not supported");
