@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <memory>
 
 namespace pas {
 
@@ -152,30 +153,83 @@ inline t_boolean p_assigned(const void* p) {
 template<typename T> inline void p_inc(T& x, t_integer n = 1) { x = p_add(x, static_cast<T>(n)); }
 template<typename T> inline void p_dec(T& x, t_integer n = 1) { x = p_subtract(x, static_cast<T>(n)); }
 
-struct m_tclass {
+struct m_tclass { // = t_tclass maybe
+	private inline static m_tclass meta{};
 	virtual ~m_tclass() = default;
-};
-
-struct m_tobject: m_tclass {
-	virtual ~m_tobject() = default;
-	virtual t_shortstring p_classname() {
-		return tpcc_shortstring_from_c("tobject");
+	virtual m_tclass* classtype() {
+		return &meta;
 	}
-	virtual bool p_inheritsfrom(struct m_tobject* s) {
+	virtual t_shortstring p_classname() {
+		return tpcc_shortstring_from_c("tclass");
+	}
+	virtual bool p_inheritsfrom(struct m_tclass* s) {
 		return s == this;
 	}
 };
 
-struct t_tobject {
+struct m_tobject: public m_tclass {
+	//private inline static std::unique_ptr<m_tobject> meta = std::make_unique<m_tobject>();
 	private inline static m_tobject meta{};
-	virtual ~t_tobject() = default;
+	virtual ~m_tobject() = default;
 	virtual t_shortstring p_classname() {
-		return meta.p_classname();
+		return tpcc_shortstring_from_c("tobject");
 	}
-	virtual bool p_inheritsfrom(struct m_tobject* s) {
-		return meta.p_inheritsfrom(s);
+	virtual bool p_inheritsfrom(struct m_tclass* s) {
+		return s == this; // not: || m_tclass::p_inheritsfrom(s, this);
+	}
+	inline static m_tclass* p_classtype() {
+		return &meta;
+	}
+	virtual m_tclass* p_classparent() { // FIXME: class method
+		return nullptr; // not: m_tclass::p_classtype()
 	}
 };
+
+struct t_tobject {
+	//private inline static m_tobject meta{};
+	//std::unique_ptr<m_tobject> meta = std::make_unique<m_tobject>();
+	virtual ~t_tobject() = default;
+	virtual m_tclass* p_classtype() {
+		return m_tobject::p_classtype();
+	}
+	virtual t_shortstring p_classname() {
+		return p_classtype()->p_classname();
+	}
+	virtual bool p_inheritsfrom(struct m_tobject* s) {
+		return p_classtype()->p_inheritsfrom(s->classtype());
+	}
+	virtual m_tclass* p_classparent() { // TODO: Alternative: emitter could automatically detour to p_classtype()-> for class methods; alternatively, just "TFoo." could detour to m_tfoo::p_classtype() [the rest being covered by the dummy methods like t_tobject::p_inheritsfrom].
+		return p_classtype()->p_classparent();
+	}
+};
+
+/*
+
+struct m_tfoo: public m_tobject {
+    private inline static m_tfoo meta{};
+    virtual t_shortstring p_classname() {
+        return tpcc_shortstring_from_c("tfoo");
+    }
+    virtual bool p_inheritsfrom(struct m_tclass* s) {
+        return s == this || m_tobject::p_inheritsfrom(s, this);
+    }
+    inline static m_tclass* p_classtype() {
+        return &meta;
+    }
+    virtual m_tclass* p_classparent() { // FIXME: class method
+        return m_tobject::p_classtype();
+    }
+	// class methods of t_tfoo here--AND in t_tfoo as proxies
+};
+
+struct t_tfoo {
+	virtual m_tclass* p_classtype() {
+		return m_tfoo::p_classtype();
+	}
+};
+
+*/
+
 
 //#define class_instance_new(X) (new X)
 
