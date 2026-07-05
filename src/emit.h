@@ -87,5 +87,5 @@ public:
 	// branch (inline at use site, e.g. `var x: record ... end;`). A named
 	// reference to an already-defined type does NOT go through here -- it just
 	// spells the cxx name.
-	void emit_aggregate_decl(std::string cxx_name, Type* ty);
+	void emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta = false);
 };

@@ -221,40 +221,8 @@ void Emitter::emit_procedure_open(Callable* c) {
 	fprintf(out, ") {\n");
 }
 
-/* FIXME: autogenerate m_tfoo nested metaclass:
-struct m_tfoo {
-    public:
-    inline static m_tobject* p_classtype() {
-        private inline static m_tfoo meta{};
-        return &meta;
-    }
-    virtual inline t_shortstring p_classname() {
-        return tpcc_shortstring_from_c("tfoo");
-    }
-    virtual inline bool p_inheritsfrom(struct m_tobject* s) {
-        return s == this || m_tobject my parent::p_inheritsfrom(s, this);
-    }
-    virtual inline m_tobject* p_classparent() {
-        return m_tobject::p_classtype()
-    }
-};
-*/
-
-//FIXME: autogenerate proxies in t_tfoo:
-//    /*not virtual*/ m_tobject* p_classtype() {
-//        return m_tobject::p_classtype();
-//    }
-//    /*not virtual*/ t_shortstring p_classname() {
-//        return p_classtype()->p_classname();
-//    }
-//    /*not virtual*/ bool p_inheritsfrom(struct m_tobject* s) {
-//        return p_classtype()->p_inheritsfrom(s->classtype());
-//    }
-//    /*not virtual*/ m_tobject* p_classparent() {
-//        return p_classtype()->p_classparent();
-//    }
-
-void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
+void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) {
+	bool is_class = false;
 	if (!out)
 		return;
 	Frame* body = nullptr;
@@ -265,6 +233,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 		rec = r;
 		kw = "struct";
 	} else if (auto c = dynamic_cast<ClassType*>(ty)) {
+		is_class = true;
 		body = c->children;
 		kw = "struct";
 	} else if (auto o = dynamic_cast<ObjectType*>(ty)) {
@@ -280,6 +249,50 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 	if (!cxx_name.empty())
 		fprintf(out, " %s", cxx_name.c_str());
 	fprintf(out, " {\n");
+	if (is_class && in_meta) {
+		if (auto c = dynamic_cast<ClassType*>(ty)) {
+			std::string class_name = c->cxx_name; // FIXME: terrible.
+			std::string parent_class_cxx_name = "tobject"; // FIXME: wrong
+			fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
+			// This will basically NEVER be possible in Pascal.
+			// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
+			fprintf(out, "\t\tinline static %s meta{};\n", cxx_name.c_str());
+			fprintf(out, "\t\treturn &meta;\n");
+			fprintf(out, "\t}\n");
+
+			fprintf(out, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
+			fprintf(out, "\t\treturn tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
+			fprintf(out, "\t}\n");
+
+			fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
+			fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s, this);\n", parent_class_cxx_name.c_str()); // FIXME: escape
+			fprintf(out, "\t}\n");
+
+			fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
+			fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
+			fprintf(out, "\t}\n");
+			// fallthrough
+		} else {
+			unhandled_type("emit_aggregate_decl", ty);
+		}
+	} else if (is_class && !in_meta) {
+		emit_aggregate_decl("m_meta", ty, true);
+		fprintf(out, ";\n");
+		// Generate wrapper proxies in the regular class.
+		fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
+		fprintf(out, "\t\treturn m_meta::p_classtype();\n");
+		fprintf(out, "\t}\n");
+		fprintf(out, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
+		fprintf(out, "\t\treturn p_classtype()->p_classname();\n");
+		fprintf(out, "\t}\n");
+		fprintf(out, "\tpublic: inline static bool p_inheritsfrom(::pas::t_tclass* s) {\n");
+		fprintf(out, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
+		fprintf(out, "\t}\n");
+		fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classparent() {\n");
+		fprintf(out, "\t\treturn p_classtype()->p_classparent();\n");
+		fprintf(out, "\t}\n");
+		// fallthrough
+	}
 	// Variant-record emission strategy:
 	//
 	//   Pascal: a record is one flat namespace. Fixed fields, the optional
@@ -300,8 +313,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 		for (auto& arm : rec->arms)
 			for (auto& f : arm.fields)
 				variant_slots.insert(f.slot);
-	// TODO: Frame's std::map iterates alphabetically; Pascal semantics require
-	// source order for layout. Preserve insertion order in a later pass.
+	// FIXME: Frame's std::map iterates alphabetically; Pascal semantics require
+	// source order for layout.
 	for (auto& kv : body->values()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
@@ -313,7 +326,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
 			fprintf(out, "\t");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic) {
+				if (call->ty->kind == CLASS_METHOD) {
+					// autogenerate proxies in regular class
+					fprintf(out, "inline static");
+				} else if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic/*FIXME*/) {
 					fprintf(out, "virtual ");
 				}
 			}
@@ -336,6 +352,13 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 					fprintf(out, " override");
 				if (m->virtual_kind == Method::VirtualKind::Abstract)
 					fprintf(out, " = 0");
+				if (call->ty->kind == CLASS_METHOD) {
+					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method
+					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
+					fprintf(out, "{ static_cast<%s*>(p_classtype())->%s(FIXME); }",
+					        "m_meta",
+					        call->cxx_name.c_str()); // TODO: escape
+				}
 			}
 			fprintf(out, ";\n");
 		}
