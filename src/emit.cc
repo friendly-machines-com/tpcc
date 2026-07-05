@@ -195,8 +195,6 @@ void Emitter::emit_repeat_prologue() {
 void Emitter::emit_repeat_epilogue(Node* condition) {
 	if (!out)
 		return;
-	// Pascal `repeat S until C` repeats while C is false; the C++ equivalent
-	// is `do S while(!(C));`.
 	fprintf(out, "\t} while(!(");
 	emit_expression(condition);
 	fprintf(out, "));\n");
@@ -274,17 +272,12 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 	//
 	//   C++ mapping: fixed fields and the optional selector both become
 	//   ordinary struct members; the arms become ONE anonymous union whose
-	//   members all alias (matching Pascal's overlap semantics). Anonymous
-	//   unions are standard C++11; a nested anonymous struct would do the
-	//   same job but isn't ISO C++ (only GCC/Clang accept it), so we keep flat
-	//   layout with anon-union for portability.
+	//   members all alias (matching Pascal's overlap semantics).
 	//
 	//   Slot identity: variant slots are registered in the SAME Frame as
 	//   fixed slots (so name lookup via body_frame_of sees them) AND in
 	//   RecordType::arms (for source-order grouping). We skip them in the
-	//   main walk by StorageSlot* identity -- not by name -- so name
-	//   collisions elsewhere can't cause a fixed field to be silently
-	//   omitted.
+	//   main walk by StorageSlot* identity.
 	std::set<StorageSlot*> variant_slots;
 	if (rec)
 		for (auto& arm : rec->arms)
@@ -363,10 +356,6 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		// `c := Red` resolves without qualification. C++ models this with
 		// an unscoped `enum` (not `enum class`): members inject into the
 		// enclosing namespace, exactly matching Pascal's semantics.
-		//
-		// `enum class` plus per-member `constexpr` aliases would be more
-		// C++-idiomatic but emits two decls per member for the same
-		// behavior we get free from a plain `enum`.
 		fprintf(out, "\n");
 		emit_enum_decl(e);
 		fprintf(out, ";\n");
