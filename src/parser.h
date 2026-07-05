@@ -145,6 +145,7 @@ private:
 	Node* mk_compare(std::string id, Node* a, Node* b);
 	Node* mk_unary_same(std::string id, Node* x);
 	Node* mk_assign(Node* a, Node* b);
+	Node* cast(Node* a, Type* target_ty);
 
 protected:
 	std::string input_token;
