@@ -18,7 +18,7 @@
 #include "frame.h"
 
 struct BuiltinDesc {
-	std::string_view rtl_name;    // e.g. "pas::p_ord"
+	std::string_view cxx_name;    // e.g. "pas::p_ord"
 	// Constant-folder; nullable when a row has no folding rule (see also the
 	// TODO next to kBuiltins in builtins.cc).
 	std::optional<uint64_t> (*const_fold)(Frame*, Node* args);
@@ -26,7 +26,7 @@ struct BuiltinDesc {
 
 struct IntrinsicTypeDesc {
 	std::string_view pas_name;    // lowercase
-	std::string_view rtl_name;    // e.g. "pas::t_integer"
+	std::string_view cxx_name;    // e.g. "pas::t_integer"
 };
 
 class IntrinsicType: public Type {

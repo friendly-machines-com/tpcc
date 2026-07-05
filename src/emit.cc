@@ -403,7 +403,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto b = dynamic_cast<Builtin*>(expr)) {
-		fprintf(out, "%.*s", (int)b->desc->rtl_name.size(), b->desc->rtl_name.data());
+		fprintf(out, "%.*s", (int)b->desc->cxx_name.size(), b->desc->cxx_name.data());
 		return;
 	}
 	if (auto c = dynamic_cast<Callable*>(expr)) {

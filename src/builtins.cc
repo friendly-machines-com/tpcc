@@ -115,7 +115,7 @@ IntrinsicType* lookup_builtin_type(std::string cxx_name) {
 
 Builtin* create_builtin_value(std::string cxx_name) {
 	for (auto& b : k_builtins) {
-		if (b.rtl_name == cxx_name) {
+		if (b.cxx_name == cxx_name) {
 			auto bi = new Builtin(&b);
 			return bi;
 		}

@@ -2089,7 +2089,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 				if (auto qbuiltin = dynamic_cast<Builtin*>(builtin)) { // used
 					// These Builtins are all polymorphic and C++ overloads will just have to adjust to us.
 					auto desc = qbuiltin->desc;
-					target->cxx_name = desc->rtl_name;
+					target->cxx_name = desc->cxx_name;
 				} else {
 					raise_parse_error("unknown intrinsic via external '" + cxx_name + "'");
 				}
