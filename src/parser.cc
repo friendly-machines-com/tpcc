@@ -1872,10 +1872,6 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	}
 }
 
-// -------------------------------------------------------------------------
-// 4. Standalone Routine Parsing (The dismantled god function)
-// -------------------------------------------------------------------------
-
 // Helper to handle overload matching and short-form implementation resolution
 Procedure* Parser::match_or_create_procedure(const std::string& pas_name, RoutineType* sig, bool had_paren, bool has_overload) {
 	Frame* enclosing = const_cast<Frame*>(this->scopes.back().frame);
