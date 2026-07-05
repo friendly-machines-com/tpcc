@@ -1073,14 +1073,18 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 }
 
 Node* Parser::mk_assign(Node* a, Node* b) {
-	// That's mostly a cast.
-	auto fn = resolve_value(":=");
-	std::vector<Node*> args;
-	args.push_back(b);
-	auto fc = finalize_call(fn, args, /*name for error*/ "");
-	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = fc.callee ? fc.callee->ty : nullptr;
-	return new Assign(a, call);
+	// That's mostly a cast.  FIXME: Maybe move to ::cast
+	if (a->ty == b->ty) {
+		return new Assign(a, b);
+	} else {
+		auto fn = resolve_value(":=");
+		std::vector<Node*> args;
+		args.push_back(b);
+		auto fc = finalize_call(fn, args, /*name for error*/ "");
+		auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+		call->ty = fc.callee ? fc.callee->ty : nullptr;
+		return new Assign(a, cast(call));
+	}
 }
 
 Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
