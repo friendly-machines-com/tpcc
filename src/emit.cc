@@ -291,8 +291,11 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	fprintf(out, " {\n");
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
-			std::string class_name = c->cxx_name; // FIXME: terrible.
-			std::string parent_class_cxx_name = "tobject"; // FIXME: wrong
+			std::string class_name = c->cxx_name; // FIXME: terrible name.
+			std::string parent_class_cxx_name = c->super ? c->super->cxx_name : ""; // FIXME: terrible name
+			if (c->super && parent_class_cxx_name.empty()) {
+				unhandled_type("parent class name unknown", c);
+			}
 			if (!body->lookup_value_local("classtype")) {
 				fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
 				// This will basically NEVER be possible in Pascal.
@@ -308,12 +311,20 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			}
 			if (!body->lookup_value_local("inheritsfrom")) {
 				fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
-				fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
+				if (parent_class_cxx_name.empty()) {
+					fprintf(out, "\t\treturn s == this;\n");
+				} else {
+					fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
+				}
 				fprintf(out, "\t}\n");
 			}
 			if (!body->lookup_value_local("classparent")) {
 				fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
-				fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
+				if (parent_class_cxx_name.empty()) {
+					fprintf(out, "\t\treturn nullptr;\n");
+				} else {
+					fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
+				}
 				fprintf(out, "\t}\n");
 			}
 			// TODO: maybe even add constructor wrappers here in the metaclass; they would do the (new X()).Create() and synth the result
