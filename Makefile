@@ -9,7 +9,7 @@ all: mp
 mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types.o src/evaluator.o src/builtins.o src/units.o src/emit.o
 	$(CXX) -o $@ $^
 
-src/main.o: src/main.cc src/parser.h src/units.h src/emit.h
+src/main.o: src/main.cc src/parser.h src/types.h src/units.h src/emit.h
 src/parser.o: src/parser.cc src/parser.h src/cst.h src/directive_expr.h src/frame.h src/types.h src/evaluator.h src/units.h src/emit.h
 src/cst.o: src/cst.cc src/cst.h
 src/directive_expr.o: src/directive_expr.cc src/directive_expr.h
