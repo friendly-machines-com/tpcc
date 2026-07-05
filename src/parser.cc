@@ -19,56 +19,56 @@
 #include <unordered_set>
 
 static std::unordered_set<std::string> keywords = {
-	"abstract",
-	"and", // operator
-	"array",
-	"as",
-	"begin",
-	"case",
-	"class",
-	"const",
-	"constructor",
-	"destructor",
-	"div", //operator
-	"do",
-	"dynamic", // FIXME
-	"else",
-	"end",
-	"forward", // FIXME directive ?
-	"function",
-	"if",
-	"implementation",
-	"inherited",
-	"interface",
-	"mod", //operator
-	"nil",
-	"not", //operator
-	"object",
-	"of",
-	"operator",
-	"or", //operator
-	"out", // FIXME directive ?
-	"overload",
-	"override",
-	"packed",
-	"procedure",
-	"program",
-	"record",
-	"repeat",
-	"set",
-	"shl", //operator
-	"shr", //operator
-	"string",
-	"then",
-	"type",
-	"unit",
-	"until",
-	"uses",
-	"var",
-	"virtual", // FIXME directive ?
-	"while",
-	"with",
-	"xor", //operator
+    "abstract",
+    "and", // operator
+    "array",
+    "as",
+    "begin",
+    "case",
+    "class",
+    "const",
+    "constructor",
+    "destructor",
+    "div", // operator
+    "do",
+    "dynamic", // FIXME
+    "else",
+    "end",
+    "forward", // FIXME directive ?
+    "function",
+    "if",
+    "implementation",
+    "inherited",
+    "interface",
+    "mod", // operator
+    "nil",
+    "not", // operator
+    "object",
+    "of",
+    "operator",
+    "or",  // operator
+    "out", // FIXME directive ?
+    "overload",
+    "override",
+    "packed",
+    "procedure",
+    "program",
+    "record",
+    "repeat",
+    "set",
+    "shl", // operator
+    "shr", // operator
+    "string",
+    "then",
+    "type",
+    "unit",
+    "until",
+    "uses",
+    "var",
+    "virtual", // FIXME directive ?
+    "while",
+    "with",
+    "xor", // operator
 };
 
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options)
@@ -1997,7 +1997,6 @@ Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
 	}
 }
 
-
 void Parser::parse_procedure_or_function(bool is_function) {
 	bool has_overload = false;
 	std::string first_name;
@@ -2045,7 +2044,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 			parse_semicolon();
 		}
 		bool body_follows = peek_keyword("begin") || peek_keyword("var") ||
-		   peek_keyword("const") || peek_keyword("type");
+				    peek_keyword("const") || peek_keyword("type");
 		if (maybe_parse_keyword("forward")) {
 			parse_semicolon();
 			body_follows = false;
@@ -2066,7 +2065,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 					auto desc = qbuiltin->desc;
 					target->cxx_name = desc->rtl_name;
 				} else {
-					raise_parse_error("unknown intrinsic via external '" +  cxx_name + "'");
+					raise_parse_error("unknown intrinsic via external '" + cxx_name + "'");
 				}
 			}
 		} else if (body_follows) {

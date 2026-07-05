@@ -61,7 +61,7 @@ Type* shortstring_type() { return &k_shortstring; }
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
 static const std::array<BuiltinDesc, 24> k_builtins{{
-	// Note: constant folder would be polymorphic.
+    // Note: constant folder would be polymorphic.
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
