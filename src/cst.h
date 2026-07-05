@@ -100,17 +100,10 @@ public:
 };
 
 struct StorageSlot: public Node {
-	// Identifier as it will appear in the emitted C++ output. The ctor applies
-	// the `p_` prefix to the Pascal source name; callers pass Pascal.
 	std::string cxx_name;
 	StorageSlot(std::string cxx_name, Type* ty);
 };
 
-/** Reference to a named member of an EnumType. Distinct from Integer/StorageSlot
- *  because we emit the member's C++ identifier verbatim (the C++ enum
- *  constant) -- not its integer value, and not a runtime slot. `ty` holds the
- *  EnumType; `value` is the member's ordinal for constant-folding. The ctor
- *  applies the `p_` prefix to the Pascal member name. */
 struct EnumMemberRef: public Node {
 	std::string cxx_name;
 	int64_t value;
