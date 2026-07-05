@@ -48,7 +48,7 @@ template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>
 	inline T p_intdivide(T a, T b) { return a / b; } \
 	inline T p_modulus(T a, T b) { return a % b; } \
 	inline T p_leftshift(T a, T b) { return a << b; } /* FIXME: b smaller */ \
-	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */
+	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */ \
 	inline t_boolean p_lessthan(T a, T b) { return a < b; } \
 	inline t_boolean p_lessthanorequal(T a, T b) { return a <= b; } \
 	inline t_boolean p_equal(T a, T b) { return a == b; } \
