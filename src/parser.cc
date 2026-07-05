@@ -935,6 +935,17 @@ bool Parser::maybe_parse_greater_equal() {
 	}
 }
 
+// Result type of calling CALLEE. For a Callable, that's its RoutineType's
+// return_type; for anything else (Builtin, opaque) we return nullptr so
+// callers fall back to whatever they used before. This is the difference
+// between "the type of the function value" (Callable::ty, a RoutineType)
+// and "the type of what the call evaluates to" (the return type).
+static Type* call_result_type(Node* callee) {
+	if (auto c = dynamic_cast<Callable*>(callee))
+		return static_cast<RoutineType*>(c->ty)->return_type;
+	return nullptr;
+}
+
 // Small helper: is NODE a bare callable reference (Callable, OverloadSet, or
 // a MemberAccess whose member is either)? Used both for the auto-call check
 // and to decide whether to peel a MemberAccess in finalize_call.
@@ -959,7 +970,7 @@ Node* Parser::maybe_auto_call(Node* n) {
 	std::vector<Node*> args;
 	auto fc = finalize_call(n, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = fc.callee ? fc.callee->ty : nullptr;
+	call->ty = call_result_type(fc.callee);
 	return call;
 }
 
@@ -1015,7 +1026,7 @@ Node* Parser::parse_designator() {
 			parse_closing_paren();
 			auto fc = finalize_call(result, args, /*name for error*/ "");
 			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-			call->ty = fc.callee ? fc.callee->ty : nullptr;
+			call->ty = call_result_type(fc.callee);
 			result = call;
 		} else if (maybe_parse_opening_bracket()) {
 			// Bracketed: RHS is a single expression. Auto-call bare callable
@@ -1076,7 +1087,7 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = fc.callee ? fc.callee->ty : nullptr;
+	call->ty = call_result_type(fc.callee);
 	return call;
 }
 
@@ -1097,7 +1108,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = fc.callee ? fc.callee->ty : nullptr;
+	call->ty = call_result_type(fc.callee);
 /*	if (call->ty->return_type != boolean_type()) {
 		raise_parse_error("Custom comparison operator '" + id + "' return type should be Boolean but isn't");
 	} FIXME */
@@ -1110,7 +1121,7 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 	args.push_back(x);
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = fc.callee ? fc.callee->ty : nullptr;
+	call->ty = call_result_type(fc.callee);
 /*	if (call->ty->return_type != x->ty) {
 		raise_parse_error("Custom comparison operator '" + id + "' return type should be the same as arg type but isn't");
 	} FIXME */
@@ -2389,7 +2400,7 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		args.push_back(a);
 		auto fc = finalize_call(fn, args, /*name for error*/ "");
 		auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-		call->ty = fc.callee ? fc.callee->ty : nullptr;
+		call->ty = call_result_type(fc.callee);
 		return call;
 
 		//return new Cast(a, target_ty); // FIXME.
