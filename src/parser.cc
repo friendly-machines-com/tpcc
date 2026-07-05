@@ -1261,6 +1261,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			is_class = true;
 			consume();
 			if (dynamic_cast<ClassType*>(owner_class) != nullptr) {
+				continue;
 			} else {
 				raise_parse_error("expected a class container");
 			}
@@ -1989,8 +1990,19 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			cxx_name = "~" + class_type->cxx_name;
 		}
 	}
+	bool external = false;
+	if (maybe_parse_keyword("external")) {
+		parse_keyword("nil");
+		parse_directive("name");
+		cxx_name = parse_string_literal();
+		parse_semicolon();
+		external = true;
+	}
 	auto m = new Method(cxx_name, sig, has_overload, owner_class, vk);
 	m->ty = sig; // The node's type IS the prototype.
+	if (external) {
+		m->has_body = true;
+	}
 	if (!body->register_callable(pas_name, m)) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 	}
