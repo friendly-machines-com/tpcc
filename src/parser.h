@@ -222,7 +222,7 @@ protected:
 	/** Parse a method prototype inside a class/record/object body. Registers
 	 *  the Method in BODY under its Pascal name (via register_callable, so
 	 *  overload directives interact the same way as for standalone callables). */
-	void parse_method_prototype(Frame* body, Type* owner_class, bool is_function, bool is_destructor, bool is_constructor);
+	void parse_method_prototype(Frame* body, Type* owner_class, bool is_function, bool is_destructor, bool is_constructor, bool is_class);
 	bool maybe_parse_semicolon();
 	bool maybe_parse_opening_paren();
 	void parse_opening_paren();
@@ -294,7 +294,7 @@ protected:
 	void push_with_scope(const Frame* scope, Node* unwrap_via);
 	void pop_scope();
 	void maybe_parse_proc_attributes();
-	RoutineType* parse_routine_signature(bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
+	RoutineType* parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);
 	Procedure* match_or_create_procedure(const std::string& pas_name, RoutineType* sig, bool had_paren, bool has_overload);
 	/** Parse `procedure NAME(...);` (is_function=false) or
@@ -303,7 +303,7 @@ protected:
 	 *  it into a fresh body_frame; if followed by `forward;`, leaves body
 	 *  null. Registers the resulting Procedure in the current scope and emits
 	 *  the signature/body when an emitter is attached. */
-	void parse_procedure_or_function(bool is_function);
+	void parse_procedure_or_function(bool is_class, bool is_function);
 	std::vector<Parameter> parse_proc_formal_parameters();
 
 	[[noreturn]] void raise_parse_error(std::string message);

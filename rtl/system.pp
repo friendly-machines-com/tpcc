@@ -15,7 +15,23 @@ type
   Boolean = (False, True);
   Char = external nil name 'pas::t_char';
   Double = external nil name 'pas::t_double';
+  TClass = class of TObject; external nil name 'pas::m_iobject';
+  TObject = class
+  private
+    // Compiler generates (for any class): inline static std::unique_ptr<m_tobject> pas::m_tobject::meta = std::make_unique<m_tobject>();
+    // that is: class var $meta: TClass := new;
+  public
+    destructor Destroy; virtual;
 
+    // Compiler generates (for any class): virtual m_tobject* pas::m_tobject::p_classtype() { return meta; }
+    // Those class functions will be generated as regular functions in m_tobject--if anywhere.
+    
+    class function ClassType: TClass; virtual; external nil name 'pas::m_tobject::p_classtype';
+    class function ClassName: shortstring; virtual;
+    class function InheritsFrom(klass: TClass): Boolean; virtual;
+    class function ClassParent: TClass; virtual;
+  end;
+  
 operator and(a, b: Boolean): Boolean; external nil name 'pas::p_logicaland';
 operator or(a, b: Boolean): Boolean; external nil name 'pas::p_logicalor';
 operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
@@ -68,6 +84,25 @@ function ord(const x): Cardinal; external nil name 'pas::p_ord';
 procedure inc(var x); external nil name 'pas::p_inc';
 procedure dec(var x); external nil name 'pas::p_dec';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
+
+destructor TObject.Destroy;
+begin
+end;
+
+class function TObject.ClassName: shortstring;
+begin
+  Result := ClassType.ClassName
+end;
+
+class function TObject.InheritsFrom(klass: TClass): Boolean;
+begin
+  Result := ClassType.InheritsFrom(klass)
+end;
+
+class function TObject.ClassParent: TClass;
+begin
+  Result := ClassType.ClassParent
+end;
 
 implementation
 

@@ -221,6 +221,39 @@ void Emitter::emit_procedure_open(Callable* c) {
 	fprintf(out, ") {\n");
 }
 
+/* FIXME: autogenerate m_tfoo nested metaclass:
+struct m_tfoo {
+    public:
+    inline static m_tobject* p_classtype() {
+        private inline static m_tfoo meta{};
+        return &meta;
+    }
+    virtual inline t_shortstring p_classname() {
+        return tpcc_shortstring_from_c("tfoo");
+    }
+    virtual inline bool p_inheritsfrom(struct m_tobject* s) {
+        return s == this || m_tobject my parent::p_inheritsfrom(s, this);
+    }
+    virtual inline m_tobject* p_classparent() {
+        return m_tobject::p_classtype()
+    }
+};
+*/
+
+//FIXME: autogenerate proxies in t_tfoo:
+//    /*not virtual*/ m_tobject* p_classtype() {
+//        return m_tobject::p_classtype();
+//    }
+//    /*not virtual*/ t_shortstring p_classname() {
+//        return p_classtype()->p_classname();
+//    }
+//    /*not virtual*/ bool p_inheritsfrom(struct m_tobject* s) {
+//        return p_classtype()->p_inheritsfrom(s->classtype());
+//    }
+//    /*not virtual*/ m_tobject* p_classparent() {
+//        return p_classtype()->p_classparent();
+//    }
+
 void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty) {
 	if (!out)
 		return;

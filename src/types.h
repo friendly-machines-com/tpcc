@@ -164,9 +164,10 @@ enum RoutineKind {
 	DESTRUCTOR,
 	METHOD,
 	ROUTINE,
+	CLASS_METHOD,
 };
 
-class RoutineType : public Type { // FIXME: is it a constructor, destructor; those are DEFINITELY not compatible with regular routines
+class RoutineType : public Type {
 public:
 	std::vector<Parameter> formals;
 	Type* return_type;

@@ -1217,6 +1217,7 @@ Node* Parser::parse_expression() {
  *  procedure/function declarations inside are parsed as method prototypes
  *  and registered with owner_class as their owner. */
 Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
+	bool is_class = false; // "class method" etc.
 	Frame* body = new Frame(nullptr);
 	push_scope(body);
 	std::string visibility = "published";
@@ -1232,21 +1233,51 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 		} else if (maybe_parse_directive("private")) {
 			visibility = "private";
 		} else if (peek_keyword("type")) {
+			if (is_class) {
+				raise_parse_error("class type unsupported");
+			}
 			parse_type_block(true);
+			is_class = false;
 		} else if (peek_keyword("const")) {
+			if (is_class) {
+				raise_parse_error("class const unsupported");
+			}
 			parse_const_block();
+			is_class = false;
 		} else if (peek_keyword("var")) {
+			if (is_class) {
+				raise_parse_error("class var unsupported");
+			}
 			parse_var_block();
+			is_class = false;
+		} else if (peek_keyword("class")) {
+			if (is_class) {
+				raise_parse_error("internal error: someone forgot to consume 'class'");
+			}
+			is_class = true;
+			consume();
+			if (dynamic_cast<ClassType*>(owner_class) != nullptr) {
+			} else {
+				raise_parse_error("expected a class container");
+			}
 		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
-			parse_method_prototype(body, owner_class, peek_keyword("function"), peek_keyword("destructor"), peek_keyword("constructor"));
+			parse_method_prototype(body, owner_class, peek_keyword("function"), peek_keyword("destructor"), peek_keyword("constructor"), is_class);
+			is_class = false;
 			continue; // parse_method_prototype consumes its terminating ';'
 		} else if (peek_keyword("case")) {
 			auto rt = dynamic_cast<RecordType*>(owner_class);
+			if (is_class) {
+				raise_parse_error("variant part only valid in a record, not in a metaclass");
+			}
 			if (!rt)
 				raise_parse_error("variant part only valid in a record");
 			parse_record_variant(rt, body);
 			break; // variant part must come last; do not require a trailing ';'
 		} else {
+			if (is_class) {
+				raise_parse_error("class var unsupported");
+			}
+			// parse_var_block inlined
 			auto member_name = parse_identifier();
 			parse_colon();
 			auto ty = parse_type_expression(false);
@@ -1261,6 +1292,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 		}
 	} while (true);
 	pop_scope();
+	if (is_class) {
+		raise_parse_error("internal error: someone forgot to consume 'class'");
+	}
 	return body;
 }
 
@@ -1761,24 +1795,48 @@ void Parser::parse_equals() {
 
 size_t Parser::parse_decl_blocks() {
 	size_t pushed = 0;
+	bool is_class = false;
 	while (true) {
 		if (peek_keyword("type")) {
+			if (is_class) {
+				raise_parse_error("'class type' is not supported");
+			}
 			parse_type_block(false);
 			// parse_type_block no longer pushes a sub-frame: it registers into
 			// the enclosing decl scope. No push, no pop to account for.
+		} else if (maybe_parse_keyword("class")) {
+			if (is_class) {
+				raise_parse_error("'class' prefix wasn't consumed");
+			}
+			is_class = true;
 		} else if (peek_keyword("const")) {
+			if (is_class) {
+				raise_parse_error("'class const' is not supported");
+			}
 			parse_const_block();
 		} else if (peek_keyword("var")) {
+			if (is_class) {
+				raise_parse_error("'class var' is not supported");
+			}
 			parse_var_block();
 		} else if (peek_keyword("procedure")) {
-			parse_procedure_or_function(false);
+			parse_procedure_or_function(is_class, false);
+			is_class = false;
 		} else if (peek_keyword("function")) {
-			parse_procedure_or_function(true);
+			parse_procedure_or_function(is_class, true);
+			is_class = false;
 		} else if (peek_keyword("operator")) {
-			parse_procedure_or_function(true);
+			if (is_class) {
+				raise_parse_error("'class operator' is not supported");
+			}
+			parse_procedure_or_function(is_class, true);
+			is_class = false;
 		} else {
 			break;
 		}
+	}
+	if (is_class) {
+		raise_type_parse_error("'class' prefix wasn't consumed");
 	}
 	return pushed;
 }
@@ -1830,8 +1888,8 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 	return result;
 }
 
-RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_object, RoutineKind kind, Type* owner) {
-	std::vector<Parameter> formals;
+RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner) {
+ 	std::vector<Parameter> formals;
 	if (input_token == "(") {
 		formals = parse_proc_formal_parameters();
 	}
@@ -1849,7 +1907,7 @@ RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_obj
 	if (allow_of_object && peek_keyword("of")) {
 		parse_keyword("of");
 		parse_keyword("object");
-		if (kind == CONSTRUCTOR || kind == DESTRUCTOR) {
+		if (kind != METHOD) { // definitely not: CONSTRUCTOR, DESTRUCTOR, CLASS_METHOD
 			raise_type_parse_error("expected method");
 		}
 		kind = METHOD;
@@ -1864,22 +1922,22 @@ RoutineType* Parser::parse_routine_signature(bool is_function, bool allow_of_obj
 
 Type* Parser::parse_procedure_type() {
 	parse_keyword("procedure");
-	return parse_routine_signature(false, true, METHOD);
+	return parse_routine_signature(false, false, true, METHOD);
 }
 
 Type* Parser::parse_function_type() {
 	parse_keyword("function");
-	return parse_routine_signature(true, true, METHOD);
+	return parse_routine_signature(false, true, true, METHOD);
 }
 
 Type* Parser::parse_operator_type() {
 	parse_keyword("operator");
 	// For now this is very similar to function.  Note: even parse_routine_signature uses parse_identifier() instead of parse_operator(), sigh.
-	return parse_routine_signature(true, true, METHOD);
+	return parse_routine_signature(false, true, true, METHOD);
 }
 
 // Class Member Prototype Registration (Value Level)
-void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function, bool is_destructor, bool is_constructor) {
+void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_function, bool is_destructor, bool is_constructor, bool is_class) {
 	if (is_constructor) {
 		parse_keyword("constructor");
 	} else if (is_destructor) {
@@ -1888,7 +1946,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		parse_keyword(is_function ? "function" : "procedure");
 	}
 	std::string pas_name = parse_identifier();
-	RoutineType* sig = parse_routine_signature(is_function, false, is_destructor ? DESTRUCTOR : is_constructor ? CONSTRUCTOR : METHOD, owner_class);
+	RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_destructor ? DESTRUCTOR : is_constructor ? CONSTRUCTOR : METHOD, owner_class);
 	parse_semicolon();
 	bool has_overload = false;
 	Method::VirtualKind vk = Method::VirtualKind::None;
@@ -2068,7 +2126,7 @@ Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
 	}
 }
 
-void Parser::parse_procedure_or_function(bool is_function) {
+void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 	bool has_overload = false;
 	std::string first_name;
 	bool is_destructor = false;
@@ -2109,7 +2167,7 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		auto m = dynamic_cast<Method*>(hit);
 		if (!m)
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
-		RoutineType* sig = parse_routine_signature(is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD, owner_ty);
+		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD, owner_ty);
 		parse_semicolon();
 		if (m->has_body)
 			raise_parse_error("duplicate implementation of '" + method_name + "'");
@@ -2121,7 +2179,10 @@ void Parser::parse_procedure_or_function(bool is_function) {
 		return;
 	} else { // Standalone Routine
 		bool had_paren = (input_token == "(");
-		RoutineType* sig = parse_routine_signature(is_function, false, ROUTINE);
+		if (is_class) {
+		    raise_parse_error("expected class method, not class routine");
+		}
+		RoutineType* sig = parse_routine_signature(is_class, is_function, false, ROUTINE);
 		parse_semicolon();
 		while (maybe_parse_keyword("overload")) {
 			has_overload = true;
