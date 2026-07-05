@@ -53,6 +53,38 @@ inline t_shortstring p_add(t_shortstring&& a, t_shortstring&& b) {
 	return a + b;
 }
 
+inline int stringcmp(t_shortstring&& a, t_shortstring&& b) {
+	int r = memcmp(a.data, b.data, min(a.length, b.length));
+	if (r == 0) {
+		return (int) b.length - (int) a.length;
+	}
+	return r;
+}
+
+inline t_boolean p_lessthan(t_shortstring&& a, t_shortstring&& b) {
+	return stringcmp(a, b) < 0;
+}
+
+inline t_boolean p_lessthanorequal(t_shortstring&& a, t_shortstring&& b) {
+	return stringcmp(a, b) <= 0;
+}
+
+inline t_boolean p_equal(t_shortstring&& a, t_shortstring&& b) {
+	return stringcmp(a, b) == 0;
+}
+
+inline t_boolean p_notequal(t_shortstring&& a, t_shortstring&& b) {
+	return stringcmp(a, b) != 0;
+}
+
+inline t_boolean p_greaterthan(t_shortstring&& a, t_shortstring&& b) {
+	return stringcmp(a, b) > 0;
+}
+
+inline t_boolean p_greaterthanorequal(t_shortstring&& a, t_shortstring&& b) {
+	return stringcmp(a, b) >= 0;
+}
+
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
 
 #define DEFINE_OPERATIONS(T) \
