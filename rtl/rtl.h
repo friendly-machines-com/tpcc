@@ -23,7 +23,7 @@ using t_word     = uint16_t;
 using t_smallint = int16_t;
 using t_cardinal = uint32_t;
 using t_integer  = int32_t;
-using t_longint  = int64_t; // FIXME: what?
+using t_longint  = int32_t;
 using t_int64 = int64_t;
 using t_qword = uint64_t;
 enum t_boolean {
