@@ -46,6 +46,8 @@ template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>
 	inline T p_bitwisexor(T a, T b) { return a ^ b; } \
 	inline T p_add(T a, T b) { return a + b; } \
 	inline T p_subtract(T a, T b) { return a - b; } \
+	inline T p_positive(T b) { return +b; } \
+	inline T p_negative(T b) { return -b; } \
 	inline T p_multiply(T a, T b) { return a * b; } \
 	inline double p_divide(T a, T b) { return (double) a / (double) b; } \
 	inline T p_assign(T& target, T source) { target = source; return target; } \

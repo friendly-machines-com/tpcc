@@ -60,7 +60,7 @@ Type* shortstring_type() { return &k_shortstring; }
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 24> k_builtins{{
+static const std::array<BuiltinDesc, 26> k_builtins{{
     // Note: constant folder would be polymorphic.
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
@@ -78,6 +78,8 @@ static const std::array<BuiltinDesc, 24> k_builtins{{
 
     {"pas::p_add", nullptr},
     {"pas::p_subtract", nullptr},
+    {"pas::p_positive", nullptr},
+    {"pas::p_negative", nullptr},
     {"pas::p_multiply", nullptr},
     {"pas::p_divide", nullptr},
     {"pas::p_intdivide", nullptr},
