@@ -34,8 +34,6 @@ struct t_shortstring {
 	char data[255];
 };
 
-template<typename T> inline void p_inc(T& x, t_integer n = 1) { x += static_cast<T>(n); }
-template<typename T> inline void p_dec(T& x, t_integer n = 1) { x -= static_cast<T>(n); }
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
 
 #define DEFINE_OPERATIONS(T) \
@@ -56,7 +54,9 @@ template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>
 	inline t_boolean p_equal(T a, T b) { return a == b; } \
 	inline t_boolean p_notequal(T a, T b) { return !(p_equal(a, b)); } \
 	inline t_boolean p_greaterthan(T a, T b) { return a > b; } \
-	inline t_boolean p_greaterthanorequal(T a, T b) { return a >= b; }
+	inline t_boolean p_greaterthanorequal(T a, T b) { return a >= b; } \
+	inline void p_inc(T& x, t_integer n = 1) { x += static_cast<T>(n); } \
+	inline void p_dec(T& x, t_integer n = 1) { x -= static_cast<T>(n); }
 
 DEFINE_OPERATIONS(t_byte)
 DEFINE_OPERATIONS(t_shortint)
