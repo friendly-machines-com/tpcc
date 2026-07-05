@@ -33,6 +33,12 @@ InterfaceType::InterfaceType(Frame* children, std::vector<InterfaceType*> super_
 	this->super_interfaces = super_interfaces;
 }
 
+InterfaceType::InterfaceType(std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces) {
+	this->cxx_name = cxx_name;
+	this->children = children;
+	this->super_interfaces = super_interfaces;
+}
+
 ObjectType::ObjectType(Frame* children, ObjectType* super) {
 	this->children = children;
 	this->super = super;

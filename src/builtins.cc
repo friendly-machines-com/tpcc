@@ -31,9 +31,11 @@ IntrinsicType k_ptruint("pas::t_ptruint", {});
 IntrinsicType k_sizeint("pas::t_sizeint", {});
 IntrinsicType k_sizeuint("pas::t_sizeuint", {});
 IntrinsicType k_unknown("pas::unknown_type", {});
-IntrinsicType k_m_iobject("pas::m_iobject", {});
+// Note: I don't think it's useful to have actual user-visible interfaces implemented on the metaclass.
+// The non-presence of member entries here should help a little to not do that.
+InterfaceType k_m_iobject("pas::m_iobject", new Frame(nullptr), std::vector<InterfaceType*>());
 
-IntrinsicType* const k_all_intrinsics[] = {
+Type* const k_all_intrinsics[] = {
     &k_byte,
     &k_shortint,
     &k_word,
@@ -115,10 +117,16 @@ static const std::array<BuiltinDesc, 30> k_builtins{{
 
 }};
 
-IntrinsicType* lookup_builtin_type(std::string cxx_name) {
-	for (IntrinsicType* t : k_all_intrinsics) {
-		if (t->cxx_name == cxx_name) {
-			return t;
+Type* lookup_builtin_type(std::string cxx_name) {
+	for (auto t : k_all_intrinsics) {
+		if (auto q = dynamic_cast<IntrinsicType*>(t)) {
+			if (q->cxx_name == cxx_name) {
+				return t;
+			}
+		} else if (auto q = dynamic_cast<InterfaceType*>(t)) {
+			if (q->cxx_name == cxx_name) {
+				return q;
+			}
 		}
 	}
 	return nullptr;

@@ -18,6 +18,9 @@ Type* Frame::lookup_type(std::string name) const {
 	auto iter = type_items.find(name);
 	if (iter != type_items.end()) {
 		auto result = iter->second;
+		if (result == nullptr) {
+			fprintf(stderr, "error: %s\n", name.c_str());
+		}
 		assert(result);
 		return result;
 	} else if (parent) {

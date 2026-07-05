@@ -64,5 +64,5 @@ Type* char_type();
 Type* shortstring_type();
 Type* unknown_type();
 
-IntrinsicType* lookup_builtin_type(std::string cxx_name);
+Type* lookup_builtin_type(std::string cxx_name);
 Builtin* create_builtin_value(std::string cxx_name);

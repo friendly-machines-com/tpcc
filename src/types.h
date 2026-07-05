@@ -101,6 +101,7 @@ struct InterfaceType: public Type {
 	std::string cxx_name;
 	std::vector<InterfaceType*> super_interfaces; // FIXME: not transitive ?
 	InterfaceType(Frame* children, std::vector<InterfaceType*> super_interfaces);
+	InterfaceType(std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
 };
 
 struct ClassType: public Type {
