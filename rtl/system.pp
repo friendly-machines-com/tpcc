@@ -54,8 +54,7 @@ operator/(a, b: Integer): Double; external nil name 'pas::p_divide';
 operator/(a, b: QWord): Double; external nil name 'pas::p_divide';
 operator/(a, b: Int64): Double; external nil name 'pas::p_divide';
 
-// FIXME: Well, I decided all CUSTOM operators have a return type, so also this one.
-operator :=(out a: Cardinal; b: Cardinal): {out} Cardinal; external nil name 'pas::p_assign';
+operator :=(a: Cardinal): Cardinal; external nil name 'pas::p_assign';
 
 operator <(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthan';
 operator <=(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthanorequal';

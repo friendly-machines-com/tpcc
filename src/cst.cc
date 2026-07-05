@@ -29,6 +29,7 @@ BinaryOperation::BinaryOperation(Node* a, Node* b) {
 
 ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
     : receiver(receiver), callee(callee), args(std::move(args)) {}
+Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
 Index::Index(Node* a, Node* b) : BinaryOperation(a, b) {}
 Coerce::Coerce(Node* a, Node* b) : BinaryOperation(a, b) {}

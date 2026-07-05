@@ -63,6 +63,11 @@ public:
 	Dereference(Node* a);
 };
 
+class Assign: public BinaryOperation {
+public:
+	Assign(Node* a, Node* b);
+};
+
 /** container.member. `a` is the container (usually a StorageSlot for the
  *  record variable or with-alias) and `b` is the member (usually the field's
  *  StorageSlot). Produced by resolve_value/resolve_lvalue when a name hits

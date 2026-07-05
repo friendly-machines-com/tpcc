@@ -103,6 +103,14 @@ void Emitter::emit_main_epilogue() {
 void Emitter::emit_statement(Node* stmt) {
 	if (!out)
 		return;
+	if (auto a = dynamic_cast<Assign*>(stmt)) {
+		fprintf(out, "\t");
+		emit_expression(a->a);
+		fprintf(out, " = ");
+		emit_expression(a->b);
+		fprintf(out, ";\n");
+		return;
+	}
 	if (auto pc = dynamic_cast<ProcCall*>(stmt)) {
 		fprintf(out, "\t");
 		emit_expression(pc);

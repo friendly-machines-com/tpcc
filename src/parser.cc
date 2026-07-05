@@ -1073,18 +1073,7 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 }
 
 Node* Parser::mk_assign(Node* a, Node* b) {
-	// That's mostly a cast.  FIXME: Maybe move to ::cast
-	if (a->ty == b->ty) {
-		return new Assign(a, b);
-	} else {
-		auto fn = resolve_value(":=");
-		std::vector<Node*> args;
-		args.push_back(b);
-		auto fc = finalize_call(fn, args, /*name for error*/ "");
-		auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-		call->ty = fc.callee ? fc.callee->ty : nullptr;
-		return new Assign(a, cast(call));
-	}
+	return new Assign(a, cast(b, a->ty));
 }
 
 Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
@@ -2303,7 +2292,15 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	} else if (target_ty == unknown_type()) { // this target is void* but the formal parameter is more like a reference
 		return new Cast(new AddrOf(a), target_ty);
 	} else {
-		return new Cast(a, target_ty);
+		auto fn = resolve_value(":=");
+		std::vector<Node*> args;
+		args.push_back(a);
+		auto fc = finalize_call(fn, args, /*name for error*/ "");
+		auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+		call->ty = fc.callee ? fc.callee->ty : nullptr;
+		return call;
+
+		//return new Cast(a, target_ty); // FIXME.
 	}
 }
 
