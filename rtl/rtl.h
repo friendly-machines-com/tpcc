@@ -42,15 +42,24 @@ struct t_shortstring {
 	char data[255];
 };
 
+inline t_shortstring tpcc_shortstring_from_c(const char* s) {
+	t_shortstring result{};
+	result.length = min(strlen(s), 254);
+	memcpy(result.data, s, result.length);
+	result.data[result.length] = 0;
+	return result;
+}
+
 inline t_shortstring p_add(t_shortstring&& a, t_shortstring&& b) {
 	uint16_t l = (uint16_t) a.length + (uint16_t) b.length;
-	if (l > 255) {
-		l = 255;
+	if (l > 254) {
+		l = 254;
 	}
 	t_shortstring result {};
 	result.length = l;
 	memcpy(result.data, a.data, a.length);
 	memcpy(&result.data[a.length], b.data, b.length);
+	result.data[result.length] = 0;
 	return a + b;
 }
 
@@ -143,8 +152,26 @@ inline t_boolean p_assigned(const void* p) {
 template<typename T> inline void p_inc(T& x, t_integer n = 1) { x = p_add(x, static_cast<T>(n)); }
 template<typename T> inline void p_dec(T& x, t_integer n = 1) { x = p_subtract(x, static_cast<T>(n)); }
 
-struct t_tobject {
-	virtual ~t_tobject() = default;
+struct m_tobject {
+	t_shortstring p_classname() {
+		return tpcc_shortstring_from_c("tobject");
+	}
+	bool p_inheritsfrom(struct m_tobject* s) {
+		return s == this;
+	}
 };
+
+struct t_tobject {
+	private inline static m_tobject meta{};
+	virtual ~t_tobject() = default;
+	t_shortstring p_classname() {
+		return meta.p_classname();
+	}
+	bool p_inheritsfrom(struct m_tobject* s) {
+		return meta.p_inheritsfrom(s);
+	}
+};
+
+//#define class_instance_new(X) (new X)
 
 } // namespace pas
