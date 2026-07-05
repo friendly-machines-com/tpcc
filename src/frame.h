@@ -40,6 +40,7 @@ public:
     Frame(Frame* parent);
     Type* lookup_type(std::string name) const; /* TODO: or maybe a lookup with flags whether type and/or value is okay */
     Node* lookup_value(std::string name) const; /* result: usually a StorageSlot */
+    Node* lookup_value_local(std::string name) const; /* result: usually a StorageSlot */
     bool register_type(std::string name, Type* ty);
     /** Replace an existing type binding (used when patching a placeholder with
      *  its real Type* at type-block-end). No-op-safe for a fresh name. */

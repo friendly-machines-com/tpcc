@@ -234,7 +234,6 @@ void Emitter::emit_procedure_open(Callable* c) {
 void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) {
 	bool is_class = false;
 	bool is_interface = false;
-	bool is_tobject = cxx_name == "pas::t_tobject" || cxx_name == "::pas::t_tobject";
 	if (!out)
 		return;
 	Frame* body = nullptr;
@@ -294,27 +293,29 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			std::string class_name = c->cxx_name; // FIXME: terrible.
 			std::string parent_class_cxx_name = "tobject"; // FIXME: wrong
-			fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
-			// This will basically NEVER be possible in Pascal.
-			// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
-			fprintf(out, "\t\tinline static %s meta{};\n", cxx_name.c_str());
-			fprintf(out, "\t\treturn &meta;\n");
-			fprintf(out, "\t}\n");
-
-			if (!is_tobject) {
+			if (!body->lookup_value_local("classtype")) {
+				fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
+				// This will basically NEVER be possible in Pascal.
+				// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
+				fprintf(out, "\t\tinline static %s meta{};\n", cxx_name.c_str());
+				fprintf(out, "\t\treturn &meta;\n");
+				fprintf(out, "\t}\n");
+			}
+			if (!body->lookup_value_local("classname")) {
 				fprintf(out, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
 				fprintf(out, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
 				fprintf(out, "\t}\n");
-
+			}
+			if (!body->lookup_value_local("inheritsfrom")) {
 				fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
 				fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				fprintf(out, "\t}\n");
-
+			}
+			if (!body->lookup_value_local("classparent")) {
 				fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
 				fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				fprintf(out, "\t}\n");
 			}
-
 			// TODO: maybe even add constructor wrappers here in the metaclass; they would do the (new X()).Create() and synth the result
 			// fallthrough
 		} else {
@@ -323,17 +324,23 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	} else if (is_class && !in_meta) {
 		emit_aggregate_decl("m_meta", ty, true);
 		fprintf(out, ";\n");
-		// Generate wrapper proxies in the regular class.
-		fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
-		fprintf(out, "\t\treturn m_meta::p_classtype();\n");
-		fprintf(out, "\t}\n");
-		if (!is_tobject) {
+		// Generate wrapper proxies in the regular class.  Those all have to be generated each time since they are static.
+		if (!body->lookup_value_local("classtype")) {
+			fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
+			fprintf(out, "\t\treturn m_meta::p_classtype();\n");
+			fprintf(out, "\t}\n");
+		}
+		if (!body->lookup_value_local("classname")) {
 			fprintf(out, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
 			fprintf(out, "\t\treturn p_classtype()->p_classname();\n");
 			fprintf(out, "\t}\n");
+		}
+		if (!body->lookup_value_local("inheritsfrom")) {
 			fprintf(out, "\tpublic: inline static bool p_inheritsfrom(::pas::t_tclass* s) {\n");
 			fprintf(out, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
 			fprintf(out, "\t}\n");
+		}
+		if (!body->lookup_value_local("classparent")) {
 			fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classparent() {\n");
 			fprintf(out, "\t\treturn p_classtype()->p_classparent();\n");
 			fprintf(out, "\t}\n");
@@ -377,9 +384,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
 			fprintf(out, "\t");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				if (is_tobject && m->cxx_name == "p_classtype") { // prevent emitting a duplicate.
-					continue;
-				}
+				//if (is_tobject && m->cxx_name == "p_classtype") { // prevent emitting a duplicate.
+				//	continue;
+				//}
 				if (is_interface) {
 					fprintf(out, "virtual ");
 				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {

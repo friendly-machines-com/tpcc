@@ -26,6 +26,16 @@ Type* Frame::lookup_type(std::string name) const {
 		return nullptr;
 	}
 }
+Node* Frame::lookup_value_local(std::string name) const {
+	auto iter = value_items.find(name);
+	if (iter != value_items.end()) {
+		auto result = iter->second.value;
+		assert(result);
+		return result;
+	} else {
+		return nullptr;
+	}
+}
 Node* Frame::lookup_value(std::string name) const {
 	auto iter = value_items.find(name);
 	if (iter != value_items.end()) {
