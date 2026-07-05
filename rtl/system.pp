@@ -17,16 +17,13 @@ type
   Double = external nil name 'pas::t_double';
   TClass = class of TObject; external nil name 'pas::m_iobject';
   TObject = class
-  private
-    // Compiler generates (for any class): inline static std::unique_ptr<m_tobject> pas::m_tobject::meta = std::make_unique<m_tobject>();
-    // that is: class var $meta: TClass := new;
   public
     destructor Destroy; virtual;
 
     // Compiler generates (for any class): virtual m_tobject* pas::m_tobject::p_classtype() { return meta; }
     // Those class functions will be generated as regular functions in m_tobject--if anywhere.
     
-    class function ClassType: TClass; virtual; external nil name 'pas::m_tobject::p_classtype';
+    class function ClassType: TClass; virtual; external nil name 'm_meta::p_classtype';
     class function ClassName: shortstring; virtual;
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;
