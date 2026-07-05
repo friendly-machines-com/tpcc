@@ -203,7 +203,7 @@ struct t_tobject {
 
 using t_tclass = m_iobject;
 
-// TODO: Terrible.
+// FIXME: Terrible.  Since I think class(SUPER, IA, IB, IC) ONLY implements IA IB and IC and its supers, regardless of what SUPER implemented.
 #define p_supports(instance, target_interface) (dynamic_cast<(target_interface)*>((instance)) != nullptr)
 
 //#define class_instance_new(X) (new X)

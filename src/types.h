@@ -96,22 +96,26 @@ struct RecordType: public Type {
 	RecordType(Frame* children, bool packed);
 };
 
-struct ClassType: public Type {
-	Frame* children;
-	std::string cxx_name;
-	ClassType(Frame* children);
-};
-
 struct InterfaceType: public Type {
 	Frame* children;
 	std::string cxx_name;
-	InterfaceType(Frame* children);
+	std::vector<InterfaceType*> super_interfaces; // FIXME: not transitive ?
+	InterfaceType(Frame* children, std::vector<InterfaceType*> super_interfaces);
+};
+
+struct ClassType: public Type {
+	Frame* children;
+	std::string cxx_name;
+	std::vector<InterfaceType*> implemented_interfaces; // FIXME: not transitive ?
+	ClassType* super;
+	ClassType(Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
 };
 
 struct ObjectType: public Type {
 	Frame* children;
 	std::string cxx_name;
-	ObjectType(Frame* children);
+	ObjectType* super;
+	ObjectType(Frame* children, ObjectType* super);
 };
 
 struct PointerType: public Type {

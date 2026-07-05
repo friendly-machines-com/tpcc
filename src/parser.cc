@@ -1369,10 +1369,25 @@ Type* Parser::parse_class_type() {
 		return lookup_builtin_type("pas::m_iobject");
 		//return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
 	}
+	ClassType* super_ty = nullptr; // FIXME: TObject--but how?
+	std::vector<InterfaceType*> implemented_interfaces;
 	if (maybe_parse_opening_paren()) {
-		return raise_type_parse_error("class inheritance (class(Parent)) not implemented yet");
+		auto s_ty = parse_type_expression(false);
+		super_ty = dynamic_cast<ClassType*>(s_ty);
+		if (super_ty == nullptr) {
+			raise_type_parse_error("parse_class_type: superclass is not a class");
+		}
+		while (maybe_parse_comma()) {
+			auto i_ty = parse_type_expression(false);
+			if (auto interface_ty = dynamic_cast<InterfaceType*>(i_ty)) {
+				implemented_interfaces.push_back(interface_ty);
+			} else {
+				raise_type_parse_error("parse_class_type: type is not an interface");
+			}
+		}
+		parse_closing_paren();
 	}
-	auto ct = new ClassType(nullptr);
+	auto ct = new ClassType(nullptr, implemented_interfaces, super_ty);
 	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
 	return ct;
@@ -1380,10 +1395,19 @@ Type* Parser::parse_class_type() {
 
 Type* Parser::parse_interface_type() {
 	parse_keyword("interface");
+	std::vector<InterfaceType*> implemented_interfaces;
 	if (maybe_parse_opening_paren()) {
-		return raise_type_parse_error("interface inheritance (interface(Parent)) not implemented yet");
+		do {
+			auto i_ty = parse_type_expression(false);
+			if (auto interface_ty = dynamic_cast<InterfaceType*>(i_ty)) {
+				implemented_interfaces.push_back(interface_ty);
+			} else {
+				raise_type_parse_error("parse_interface_type: type is not an interface");
+			}
+		} while (maybe_parse_comma());
+		parse_closing_paren();
 	}
-	auto ct = new InterfaceType(nullptr);
+	auto ct = new InterfaceType(nullptr, implemented_interfaces);
 	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
 	return ct;
@@ -1406,10 +1430,16 @@ Type* Parser::parse_record_type() {
 
 Type* Parser::parse_object_type() {
 	parse_keyword("object");
+	ObjectType* super_ty = nullptr;
 	if (maybe_parse_opening_paren()) {
-		return raise_type_parse_error("object with parenthesized header not implemented yet");
+		auto s_ty = parse_type_expression(false);
+		super_ty = dynamic_cast<ObjectType*>(s_ty);
+		if (super_ty == nullptr) {
+			raise_type_parse_error("parse_object_type: super is not an object");
+		}
+		parse_closing_paren();
 	}
-	auto ot = new ObjectType(nullptr);
+	auto ot = new ObjectType(nullptr, super_ty);
 	ot->children = parse_aggregate_type_body(ot);
 	parse_keyword("end");
 	return ot;

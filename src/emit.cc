@@ -264,6 +264,31 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	fprintf(out, "%s%s", attributes, kw);
 	if (!cxx_name.empty())
 		fprintf(out, " %s", cxx_name.c_str());
+
+	if (auto c = dynamic_cast<ClassType*>(ty)) {
+		fprintf(out, "public ");
+		emit_type_ref(c->super);
+		for (auto interface_type : c->implemented_interfaces) {
+			fprintf(out, ", ");
+			fprintf(out, "public ");
+			emit_type_ref(interface_type);
+		}
+	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
+		bool first = true;
+		for (auto interface_type : c->super_interfaces) {
+			if (!first) {
+				fprintf(out, ", ");
+			} else {
+				first = false;
+			}
+			fprintf(out, "public ");
+			emit_type_ref(interface_type);
+		}
+	} else if (auto c = dynamic_cast<ObjectType*>(ty)) {
+		fprintf(out, "public ");
+		emit_type_ref(c->super);
+	}
+
 	fprintf(out, " {\n");
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {

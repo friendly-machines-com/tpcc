@@ -22,16 +22,20 @@ RecordType::RecordType(Frame* children, bool packed) {
 	this->packed = packed;
 }
 
-ClassType::ClassType(Frame* children) {
+ClassType::ClassType(Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super) {
 	this->children = children;
+	this->implemented_interfaces = implemented_interfaces;
+	this->super = super;
 }
 
-InterfaceType::InterfaceType(Frame* children) {
+InterfaceType::InterfaceType(Frame* children, std::vector<InterfaceType*> super_interfaces) {
 	this->children = children;
+	this->super_interfaces = super_interfaces;
 }
 
-ObjectType::ObjectType(Frame* children) {
+ObjectType::ObjectType(Frame* children, ObjectType* super) {
 	this->children = children;
+	this->super = super;
 }
 
 ModuleType::ModuleType(Frame* interface_children, Frame* implementation_children) {
