@@ -223,6 +223,7 @@ void Emitter::emit_procedure_open(Callable* c) {
 
 void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) {
 	bool is_class = false;
+	bool is_tobject = cxx_name == "pas::t_tobject" || cxx_name == "::pas::t_tobject";
 	if (!out)
 		return;
 	Frame* body = nullptr;
@@ -260,17 +261,19 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(out, "\t\treturn &meta;\n");
 			fprintf(out, "\t}\n");
 
-			fprintf(out, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
-			fprintf(out, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
-			fprintf(out, "\t}\n");
+			if (!is_tobject) {
+				fprintf(out, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
+				fprintf(out, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
+				fprintf(out, "\t}\n");
 
-			fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
-			fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
-			fprintf(out, "\t}\n");
+				fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
+				fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
+				fprintf(out, "\t}\n");
 
-			fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
-			fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
-			fprintf(out, "\t}\n");
+				fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
+				fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
+				fprintf(out, "\t}\n");
+			}
 
 			// TODO: maybe even add constructor wrappers here in the metaclass; they would do the (new X()).Create() and synth the result
 			// fallthrough
@@ -284,15 +287,17 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
 		fprintf(out, "\t\treturn m_meta::p_classtype();\n");
 		fprintf(out, "\t}\n");
-		fprintf(out, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
-		fprintf(out, "\t\treturn p_classtype()->p_classname();\n");
-		fprintf(out, "\t}\n");
-		fprintf(out, "\tpublic: inline static bool p_inheritsfrom(::pas::t_tclass* s) {\n");
-		fprintf(out, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
-		fprintf(out, "\t}\n");
-		fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classparent() {\n");
-		fprintf(out, "\t\treturn p_classtype()->p_classparent();\n");
-		fprintf(out, "\t}\n");
+		if (!is_tobject) {
+			fprintf(out, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
+			fprintf(out, "\t\treturn p_classtype()->p_classname();\n");
+			fprintf(out, "\t}\n");
+			fprintf(out, "\tpublic: inline static bool p_inheritsfrom(::pas::t_tclass* s) {\n");
+			fprintf(out, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
+			fprintf(out, "\t}\n");
+			fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classparent() {\n");
+			fprintf(out, "\t\treturn p_classtype()->p_classparent();\n");
+			fprintf(out, "\t}\n");
+		}
 		// fallthrough
 	}
 	// Variant-record emission strategy:
