@@ -135,7 +135,7 @@ inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
 	return (a != 0) ^ (b != 0);
 }
 
-inline t_boolean p_assigned(const char* p) {
+inline t_boolean p_assigned(const void* p) {
 	return (p != nullptr);
 }
 
