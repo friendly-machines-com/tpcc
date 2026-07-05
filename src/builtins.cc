@@ -113,7 +113,11 @@ Builtin* create_builtin_value(std::string cxx_name) {
 			return bi;
 		}
 	}
-	return nullptr;
+	// Fallback to anything, we will get a linker error anyway.
+	fprintf(stderr, "warning: builtin '%s' doesn't have a registration.  Allowing it--but it won't constant-fold.\n", cxx_name.c_str());
+	auto bs = BuiltinDesc {cxx_name, nullptr};
+	auto bi = new Builtin(&bs);
+	return bi;
 }
 
 const Frame& root_frame() {
