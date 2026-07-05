@@ -44,20 +44,12 @@ void Emitter::emit_enum_decl(EnumType* e) {
 	fprintf(out, " }");
 }
 
-// Apply the `p_` prefix to a Pascal value identifier. Used at sites that
-// construct a cxx identifier without going through a value-node ctor (rare):
-// e.g. naming the slot for a record variant selector, naming an enum member
-// at parse time, etc. The prefix stays clear of C++ reserved words that are
-// legal Pascal identifiers (`new`, `class`, `false`, ...).
+// Apply the `p_` prefix to a Pascal value identifier.
 std::string cxx_value_name(std::string pas_name) {
 	return "p_" + pas_name;
 }
 
-// Apply the `t_` prefix to a Pascal type identifier. Used at the
-// `type X = ...` alias site (parse_type_block) where the canonical cxx name
-// is assigned to a Type -- types don't take their name in their ctor (a Type
-// is nameless; names are Frame bindings, plural/optional), so the prefix
-// can't be applied inside the Type ctor the way it can for value nodes.
+// Apply the `t_` prefix to a Pascal type identifier.
 std::string cxx_type_name(std::string pas_name) {
 	return "t_" + pas_name;
 }
