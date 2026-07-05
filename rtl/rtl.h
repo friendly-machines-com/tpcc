@@ -37,8 +37,8 @@ struct t_shortstring {
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
 
 #define DEFINE_OPERATIONS(T) \
-	inline T p_bitwiseand(T a, T b) { return a && b; } \
-	inline T p_bitwiseor(T a, T b) { return a || b; } \
+	inline T p_bitwiseand(T a, T b) { return a & b; } \
+	inline T p_bitwiseor(T a, T b) { return a | b; } \
 	inline T p_bitwisexor(T a, T b) { return a ^ b; } \
 	inline T p_add(T a, T b) { return a + b; } \
 	inline T p_subtract(T a, T b) { return a - b; } \
