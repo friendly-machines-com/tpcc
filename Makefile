@@ -14,7 +14,7 @@ src/parser.o: src/parser.cc src/parser.h src/cst.h src/directive_expr.h src/fram
 src/cst.o: src/cst.cc src/cst.h
 src/directive_expr.o: src/directive_expr.cc src/directive_expr.h
 src/frame.o: src/frame.cc src/frame.h src/types.h src/cst.h
-src/types.o: src/types.cc src/types.h
+src/types.o: src/types.cc src/types.h src/builtins.h
 src/evaluator.o: src/evaluator.cc src/evaluator.h src/cst.h src/frame.h src/types.h
 src/builtins.o: src/builtins.cc src/builtins.h src/cst.h
 src/units.o: src/units.cc src/units.h src/frame.h
