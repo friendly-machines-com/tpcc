@@ -23,7 +23,9 @@ using t_word     = uint16_t;
 using t_smallint = int16_t;
 using t_cardinal = uint32_t;
 using t_integer  = int32_t;
-using t_longint  = int64_t;
+using t_longint  = int64_t; // FIXME: what?
+using t_int64 = int64_t;
+using t_qword = uint64_t;
 using t_boolean  = bool;
 using t_char     = char;
 
@@ -36,90 +38,50 @@ template<typename T> inline void p_inc(T& x, t_integer n = 1) { x += static_cast
 template<typename T> inline void p_dec(T& x, t_integer n = 1) { x -= static_cast<T>(n); }
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
 
-inline t_boolean p_and(t_boolean a, t_boolean b) {
+#define DEFINE_OPERATIONS(T) \
+	inline T p_bitwiseand(T a, T b) { return a && b; } \
+	inline T p_bitwiseor(T a, T b) { return a || b; } \
+	inline T p_bitwisexor(T a, T b) { return a ^ b; } \
+	inline T p_add(T a, T b) { return a + b; } \
+	inline T p_subtract(T a, T b) { return a - b; } \
+	inline T p_multiply(T a, T b) { return a * b; } \
+	inline double p_divide(T a, T b) { return (double) a / (double) b; } \
+	inline T p_assign(T& target, T source) { target = source; return target; } \
+	inline T p_intdivide(T a, T b) { return a / b; } \
+	inline T p_modulus(T a, T b) { return a % b; } \
+	inline T p_leftshift(T a, T b) { return a << b; } /* FIXME: b smaller */ \
+	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */
+	inline t_boolean p_lessthan(T a, T b) { return a < b; } \
+	inline t_boolean p_lessthanorequal(T a, T b) { return a <= b; } \
+	inline t_boolean p_equal(T a, T b) { return a == b; } \
+	inline t_boolean p_notequal(T a, T b) { return !(p_equal(a, b)); } \
+	inline t_boolean p_greaterthan(T a, T b) { return a > b; } \
+	inline t_boolean p_greaterthanorequal(T a, T b) { return a >= b; }
+
+DEFINE_OPERATIONS(t_byte)
+DEFINE_OPERATIONS(t_shortint)
+DEFINE_OPERATIONS(t_word)
+DEFINE_OPERATIONS(t_smallint)
+DEFINE_OPERATIONS(t_cardinal)
+DEFINE_OPERATIONS(t_integer)
+DEFINE_OPERATIONS(t_longint)
+DEFINE_OPERATIONS(t_int64)
+DEFINE_OPERATIONS(t_qword)
+
+inline t_boolean p_logicaland(t_boolean a, t_boolean b) {
 	return a && b;
 }
 
-inline t_boolean p_or(t_boolean a, t_boolean b) {
+inline t_boolean p_logicalor(t_boolean a, t_boolean b) {
 	return a || b;
 }
 
-inline t_boolean p_not(t_boolean a) {
+inline t_boolean p_logicalnot(t_boolean a) {
 	return !a;
 }
 
-inline t_boolean p_xor(t_boolean a, t_boolean b) {
+inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
 	return (a != 0) ^ (b != 0);
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_add(T a, T b) {
-	return a + b;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_subtract(T a, T b) {
-	return a - b;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_multiply(T a, T b) {
-	return a * b;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline double p_divide(T a, T b) {
-	return (double) a / (double) b;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_assign(T& target, T source) {
-	target = source;
-	return target;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_div(T a, T b) {
-    return a / b;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_mod(T a, T b) {
-    return a % b;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_shl(T a, T b) {
-    return a << b;
-}
-
-// FIXME: limit to integral types
-template<typename T> inline T p_shr(T a, T b) {
-    return a >> b;
-}
-
-template<typename T> inline t_boolean p_less(T a, T b) {
-	return a < b;
-}
-
-template<typename T> inline t_boolean p_less_equal(T a, T b) {
-	return a <= b;
-}
-
-template<typename T> inline t_boolean p_equal(T a, T b) {
-	return a == b;
-}
-
-template<typename T> inline t_boolean p_not_equal(T a, T b) {
-	return a != b;
-}
-
-template<typename T> inline t_boolean p_greater(T a, T b) {
-	return a > b;
-}
-
-template<typename T> inline t_boolean p_greater_equal(T a, T b) {
-	return a >= b;
 }
 
 } // namespace pas

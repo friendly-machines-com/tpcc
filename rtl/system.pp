@@ -16,9 +16,9 @@ type
   Char = external nil name 'pas::t_char';
   Double = external nil name 'pas::t_double';
 
-operator and(a, b: Boolean): Boolean; external nil name 'pas::p_and';
-operator or(a, b: Boolean): Boolean; external nil name 'pas::p_or';
-operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_xor';
+operator and(a, b: Boolean): Boolean; external nil name 'pas::p_logicaland';
+operator or(a, b: Boolean): Boolean; external nil name 'pas::p_logicalor';
+operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
 
 operator+(a, b: Cardinal): Cardinal; external nil name 'pas::p_add';
 operator+(a, b: Integer): Integer; external nil name 'pas::p_add';
@@ -43,17 +43,23 @@ operator/(a, b: Int64): Double; external nil name 'pas::p_divide';
 // Well, I decided all CUSTOM operators have a return type, so also this one.
 operator :=(out a: Cardinal; b: Cardinal): {out} Cardinal; external nil name 'pas::p_assign';
 
-operator <(a, b: Cardinal): Boolean; external nil name 'pas::p_less';
-operator <=(a, b: Cardinal): Boolean; external nil name 'pas::p_less_equal';
+operator <(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthan';
+operator <=(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthanorequal';
 operator =(a, b: Cardinal): Boolean; external nil name 'pas::p_equal';
-operator >(a, b: Cardinal): Boolean; external nil name 'pas::p_greater';
-operator >=(a, b: Cardinal): Boolean; external nil name 'pas::p_greater_equal';
-operator <>(a, b: Cardinal): Boolean; external nil name 'pas::p_not_equal';
-operator and(a, b: Cardinal): Cardinal; external nil name 'pas::p_and';
-operator div(a, b: Cardinal): Cardinal; external nil name 'pas::p_div';
-operator mod(a, b: Cardinal): Cardinal; external nil name 'pas::p_mod';
-operator or(a, b: Cardinal): Cardinal; external nil name 'pas::p_or';
-operator xor(a, b: Cardinal): Cardinal; external nil name 'pas::p_xor';
+operator >(a, b: Cardinal): Boolean; external nil name 'pas::p_greaterthan';
+operator >=(a, b: Cardinal): Boolean; external nil name 'pas::p_greaterthanorequal';
+//operator <>(a, b: Cardinal): Boolean; external nil name 'pas::p_notequal';
+operator div(a, b: Cardinal): Cardinal; external nil name 'pas::p_intdivide';
+operator mod(a, b: Cardinal): Cardinal; external nil name 'pas::p_modulus';
+
+operator and(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwiseand';
+operator or(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwiseor';
+operator xor(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwisexor';
+
+operator and(a, b: Boolean): Boolean; external nil name 'pas::p_logicaland';
+operator or(a, b: Boolean): Boolean; external nil name 'pas::p_logicalor';
+operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
+operator not(a: Boolean): Boolean; external nil name 'pas::p_logicalnot';
 
 operator shl(a, b: Cardinal): Cardinal; external nil name 'pas::p_shl';
 operator shr(a, b: Cardinal): Cardinal; external nil name 'pas::p_shr'; // FIXME is shl shr operand 2 a byte ?
