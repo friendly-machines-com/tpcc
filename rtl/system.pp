@@ -80,6 +80,8 @@ function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned
 operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
 operator not(a: Boolean): Boolean; external nil name 'pas::p_logicalnot';
 
+implementation
+
 destructor TObject.Destroy;
 begin
 end;
@@ -98,7 +100,5 @@ class function TObject.ClassParent: TClass;
 begin
   Result := ClassType.ClassParent
 end;
-
-implementation
 
 end.
