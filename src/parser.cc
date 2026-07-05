@@ -1355,6 +1355,11 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 
 Type* Parser::parse_class_type() {
 	parse_keyword("class");
+	if (maybe_parse_keyword("of")) {
+		auto target_ty = parse_type_expression(true);
+		return lookup_builtin_type("pas::m_iobject");
+		//return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
+	}
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("class inheritance (class(Parent)) not implemented yet");
 	}

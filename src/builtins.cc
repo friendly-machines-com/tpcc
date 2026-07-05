@@ -30,6 +30,7 @@ IntrinsicType k_ptrint("pas::t_ptrint", {});
 IntrinsicType k_ptruint("pas::t_ptruint", {});
 IntrinsicType k_unknown("pas::unknown_type", {});
 IntrinsicType k_tobject("pas::t_tobject", {});
+IntrinsicType k_m_iobject("pas::m_iobject", {});
 
 IntrinsicType* const k_all_intrinsics[] = {
     &k_byte,
@@ -50,6 +51,7 @@ IntrinsicType* const k_all_intrinsics[] = {
     &k_ptruint,
     &k_unknown,
     &k_tobject,
+    &k_m_iobject,
 };
 } // namespace
 
