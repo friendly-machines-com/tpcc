@@ -196,7 +196,7 @@ struct t_tobject {
 /*interface*/ struct m_iobject {
 	virtual m_iobject* p_classtype() = 0;
 	virtual t_shortstring p_classname() = 0;
-	virtual bool p_inheritsfrom(struct m_iobject* s) = 0;
+	virtual bool p_inheritsfrom(m_iobject* s) = 0;
 	virtual m_iobject* p_classparent() = 0;
 };
 #endif
