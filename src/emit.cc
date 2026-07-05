@@ -103,14 +103,6 @@ void Emitter::emit_main_epilogue() {
 void Emitter::emit_statement(Node* stmt) {
 	if (!out)
 		return;
-	if (auto a = dynamic_cast<Assign*>(stmt)) {
-		fprintf(out, "\t");
-		emit_expression(a->a);
-		fprintf(out, " = ");
-		emit_expression(a->b);
-		fprintf(out, ";\n");
-		return;
-	}
 	if (auto pc = dynamic_cast<ProcCall*>(stmt)) {
 		fprintf(out, "\t");
 		emit_expression(pc);
@@ -373,54 +365,7 @@ void Emitter::emit_procedure_close() {
 	fprintf(out, "}\n");
 }
 
-// Result-type of the whole expression drives the choice between bitwise and
-// short-circuit for `and`/`or`; other ops have a unique mapping.
-static const char* cxx_binary_operator(BinaryOperation* op) {
-	bool booleans = op->ty == boolean_type();
-	if (dynamic_cast<Add*>(op))
-		return "+";
-	if (dynamic_cast<Subtract*>(op))
-		return "-";
-	if (dynamic_cast<Multiply*>(op))
-		return "*";
-	if (dynamic_cast<Divide*>(op))
-		return "/";
-	if (dynamic_cast<Div*>(op))
-		return "/";
-	if (dynamic_cast<Mod*>(op))
-		return "%";
-	if (dynamic_cast<And*>(op))
-		return booleans ? "&&" : "&";
-	if (dynamic_cast<Or*>(op))
-		return booleans ? "||" : "|";
-	if (dynamic_cast<Xor*>(op))
-		return "^";
-	if (dynamic_cast<ShiftLeft*>(op))
-		return "<<";
-	if (dynamic_cast<ShiftRight*>(op))
-		return ">>";
-	if (dynamic_cast<Equal*>(op))
-		return "==";
-	if (dynamic_cast<NotEqual*>(op))
-		return "!=";
-	if (dynamic_cast<Less*>(op))
-		return "<";
-	if (dynamic_cast<Greater*>(op))
-		return ">";
-	if (dynamic_cast<LessOrEqual*>(op))
-		return "<=";
-	if (dynamic_cast<GreaterOrEqual*>(op))
-		return ">=";
-	return nullptr;
-}
-
 static const char* cxx_unary_operator(UnaryOperation* op) {
-	if (dynamic_cast<Not*>(op))
-		return "!";
-	if (dynamic_cast<Negate*>(op))
-		return "-";
-	if (dynamic_cast<Positivize*>(op))
-		return "+";
 	if (dynamic_cast<AddrOf*>(op))
 		return "&";
 	if (dynamic_cast<Dereference*>(op))
@@ -534,16 +479,6 @@ void Emitter::emit_expression(Node* expr) {
 		if (const char* op = cxx_unary_operator(u)) {
 			fprintf(out, "%s", op);
 			emit_expression(u->a);
-			return;
-		}
-	}
-	if (auto bin = dynamic_cast<BinaryOperation*>(expr)) {
-		if (const char* op = cxx_binary_operator(bin)) {
-			fprintf(out, "(");
-			emit_expression(bin->a);
-			fprintf(out, " %s ", op);
-			emit_expression(bin->b);
-			fprintf(out, ")");
 			return;
 		}
 	}

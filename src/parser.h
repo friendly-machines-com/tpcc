@@ -141,6 +141,11 @@ private:
 	bool eval_directive_expr(const std::string& expr);
 	Builtin* lookup_external_value(const char* lib, std::string cxx_name);
 	Type* lookup_external_type(const char* lib, std::string cxx_name);
+	Node* mk_arith(std::string id, Node* a, Node* b);
+	Node* mk_compare(std::string id, Node* a, Node* b);
+	Node* mk_unary_same(std::string id, Node* x);
+	Node* mk_assign(Node* a, Node* b);
+
 protected:
 	std::string input_token;
 	void parse_block_body();

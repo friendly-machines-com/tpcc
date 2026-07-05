@@ -655,7 +655,7 @@ void Parser::maybe_parse_statement() {
 				raise_parse_error("LHS of ':=' is not assignable");
 			}
 			Node* rhs = parse_expression();
-			auto assign = new Assign(lhs, rhs);
+			auto assign = mk_assign(lhs, rhs);
 			if (emitter)
 				emitter->emit_statement(assign);
 			return;
@@ -929,26 +929,6 @@ bool Parser::maybe_parse_greater_equal() {
 	}
 }
 
-// Helpers that construct a Node and set its result type in one expression.
-template <typename T>
-static Node* mk_arith(Node* a, Node* b) {
-	auto n = new T(a, b);
-	n->ty = common_arith_type(a->ty, b->ty);
-	return n;
-}
-template <typename T>
-static Node* mk_compare(Node* a, Node* b) {
-	auto n = new T(a, b);
-	n->ty = boolean_type();
-	return n;
-}
-template <typename T>
-static Node* mk_unary_same(Node* x) {
-	auto n = new T(x);
-	n->ty = x->ty;
-	return n;
-}
-
 // Small helper: is NODE a bare callable reference (Callable, OverloadSet, or
 // a MemberAccess whose member is either)? Used both for the auto-call check
 // and to decide whether to peel a MemberAccess in finalize_call.
@@ -1075,19 +1055,68 @@ bool Parser::is_assignable(Node* n) {
 	return false;
 }
 
+Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
+    auto fn = resolve_value(id);
+	std::vector<Node*> args;
+	args.push_back(a);
+	args.push_back(b);
+	auto fc = finalize_call(fn, args, /*name for error*/ "");
+	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+	call->ty = fc.callee ? fc.callee->ty : nullptr;
+	return call;
+}
+
+Node* Parser::mk_assign(Node* a, Node* b) {
+    auto fn = resolve_value(":=");
+	std::vector<Node*> args;
+	args.push_back(a);
+	args.push_back(b);
+	auto fc = finalize_call(fn, args, /*name for error*/ "");
+	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+	call->ty = fc.callee ? fc.callee->ty : nullptr;
+	return call;
+}
+
+Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
+    auto fn = resolve_value(id);
+	std::vector<Node*> args;
+	args.push_back(a);
+	args.push_back(b);
+	auto fc = finalize_call(fn, args, /*name for error*/ "");
+	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+	call->ty = fc.callee ? fc.callee->ty : nullptr;
+/*	if (call->ty->return_type != boolean_type()) {
+		raise_parse_error("Custom comparison operator '" + id + "' return type should be Boolean but isn't");
+	} FIXME */
+	return call;
+}
+
+Node* Parser::mk_unary_same(std::string id, Node* x) {
+    auto fn = resolve_value(id);
+	std::vector<Node*> args;
+	args.push_back(x);
+	auto fc = finalize_call(fn, args, /*name for error*/ "");
+	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+	call->ty = fc.callee ? fc.callee->ty : nullptr;
+/*	if (call->ty->return_type != x->ty) {
+		raise_parse_error("Custom comparison operator '" + id + "' return type should be the same as arg type but isn't");
+	} FIXME */
+	return call;
+}
+
 Node* Parser::parse_power() {
 	// FIXME **
 	if (maybe_parse_keyword("not")) {
-		return mk_unary_same<Not>(maybe_auto_call(parse_designator()));
+		return mk_unary_same("not", maybe_auto_call(parse_designator()));
 	} else if (maybe_parse_at()) {
 		auto x = parse_designator(); // @ takes a designator, not the auto-called value
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(x->ty)) : nullptr;
 		return n;
 	} else if (maybe_parse_minus()) {
-		return mk_unary_same<Negate>(maybe_auto_call(parse_designator()));
+		return mk_unary_same("-", maybe_auto_call(parse_designator()));
 	} else if (maybe_parse_plus()) {
-		return mk_unary_same<Positivize>(maybe_auto_call(parse_designator()));
+		return mk_unary_same("+", maybe_auto_call(parse_designator()));
 	} else {
 		return maybe_auto_call(parse_designator());
 	}
@@ -1097,22 +1126,22 @@ Node* Parser::parse_product() {
 	auto result = parse_power();
 	while (true) {
 		if (maybe_parse_star()) {
-			result = mk_arith<Multiply>(result, parse_power());
+			result = mk_arith("*", result, parse_power());
 		} else if (maybe_parse_slash()) {
 			// TODO: Pascal `/` returns Real regardless of operand types; needs
 			// a Real intrinsic before we can set ty correctly. Using
 			// common_arith_type as a placeholder.
-			result = mk_arith<Divide>(result, parse_power());
+			result = mk_arith("/", result, parse_power());
 		} else if (maybe_parse_keyword("div")) {
-			result = mk_arith<Div>(result, parse_power());
+			result = mk_arith("div", result, parse_power());
 		} else if (maybe_parse_keyword("mod")) {
-			result = mk_arith<Mod>(result, parse_power());
+			result = mk_arith("mod", result, parse_power());
 		} else if (maybe_parse_keyword("and")) {
-			result = mk_arith<And>(result, parse_power());
+			result = mk_arith("and", result, parse_power());
 		} else if (maybe_parse_keyword("shl")) {
-			result = mk_arith<ShiftLeft>(result, parse_power());
+			result = mk_arith("shl", result, parse_power());
 		} else if (maybe_parse_keyword("shr")) {
-			result = mk_arith<ShiftRight>(result, parse_power());
+			result = mk_arith("shr", result, parse_power());
 		} else if (maybe_parse_keyword("as")) {
 			// `x as T`: b is the parsed type-position expression whose ty is
 			// the target. Result type is that target.
@@ -1121,9 +1150,9 @@ Node* Parser::parse_product() {
 			n->ty = rhs->ty;
 			result = n;
 		} else if (maybe_parse_less_less()) {
-			result = mk_arith<ShiftLeft>(result, parse_power());
+			result = mk_arith("shl", result, parse_power());
 		} else if (maybe_parse_greater_greater()) {
-			result = mk_arith<ShiftRight>(result, parse_power());
+			result = mk_arith("shr", result, parse_power());
 		} else {
 			break;
 		}
@@ -1135,13 +1164,13 @@ Node* Parser::parse_sum() {
 	auto result = parse_product();
 	while (true) {
 		if (maybe_parse_plus()) {
-			result = mk_arith<Add>(result, parse_product());
+			result = mk_arith("+", result, parse_product());
 		} else if (maybe_parse_minus()) {
-			result = mk_arith<Subtract>(result, parse_product());
+			result = mk_arith("-", result, parse_product());
 		} else if (maybe_parse_keyword("or")) {
-			result = mk_arith<Or>(result, parse_product());
+			result = mk_arith("or", result, parse_product());
 		} else if (maybe_parse_keyword("xor")) {
-			result = mk_arith<Xor>(result, parse_product());
+			result = mk_arith("xor", result, parse_product());
 		} else {
 			break;
 		}
@@ -1153,17 +1182,17 @@ Node* Parser::parse_comparison() {
 	auto result = parse_sum();
 	while (true) {
 		if (maybe_parse_equal()) {
-			result = mk_compare<Equal>(result, parse_sum());
+			result = mk_compare("=", result, parse_sum());
 		} else if (maybe_parse_less_greater()) {
-			result = mk_compare<NotEqual>(result, parse_sum());
+			result = mk_compare("<>", result, parse_sum());
 		} else if (maybe_parse_less()) {
-			result = mk_compare<Less>(result, parse_sum());
+			result = mk_compare("<", result, parse_sum());
 		} else if (maybe_parse_greater()) {
-			result = mk_compare<Greater>(result, parse_sum());
+			result = mk_compare(">", result, parse_sum());
 		} else if (maybe_parse_less_equal()) {
-			result = mk_compare<LessOrEqual>(result, parse_sum());
+			result = mk_compare("<=", result, parse_sum());
 		} else if (maybe_parse_greater_equal()) {
-			result = mk_compare<GreaterOrEqual>(result, parse_sum());
+			result = mk_compare(">=", result, parse_sum());
 		} else {
 			break;
 		}

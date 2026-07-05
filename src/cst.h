@@ -34,55 +34,15 @@ public:
 
 class UnaryOperation: public Node {
 public:
-	Node* a;
-	UnaryOperation(Node* a);
+       Node* a;
+       UnaryOperation(Node* a);
 };
 
 class BinaryOperation: public Node {
 public:
-	Node* a;
-	Node* b;
-	BinaryOperation(Node* a, Node* b);
-};
-
-class Add: public BinaryOperation {
-public:
-	Add(Node* a, Node* b);
-};
-
-class Subtract: public BinaryOperation {
-public:
-	Subtract(Node* a, Node* b);
-};
-
-class Multiply: public BinaryOperation {
-public:
-	Multiply(Node* a, Node* b);
-};
-
-class Divide: public BinaryOperation {
-public:
-	Divide(Node* a, Node* b);
-};
-
-class Xor: public BinaryOperation {
-public:
-	Xor(Node* a, Node* b);
-};
-
-class And: public BinaryOperation {
-public:
-	And(Node* a, Node* b);
-};
-
-class Or: public BinaryOperation {
-public:
-	Or(Node* a, Node* b);
-};
-
-class Not: public UnaryOperation {
-public:
-	Not(Node* a);
+       Node* a;
+       Node* b;
+       BinaryOperation(Node* a, Node* b);
 };
 
 class ProcCall: public Node {
@@ -126,21 +86,6 @@ public:
 	Return(Node* a);
 };
 
-class Assign: public BinaryOperation {
-public:
-	Assign(Node* a, Node* b);
-};
-
-class Negate: public UnaryOperation {
-public:
-	Negate(Node* a);
-};
-
-class Positivize: public UnaryOperation {
-public:
-	Positivize(Node* a);
-};
-
 /** Compiler-inserted implicit type conversion. Distinct from Coerce (which
  *  represents the user-written `x as T`). Target type held on Node::ty; the
  *  wrapped value is `a`. Emits as `static_cast<target>(a)`. */
@@ -179,26 +124,6 @@ public:
 	String(std::string value, Type* ty);
 };
 
-class ShiftLeft: public BinaryOperation {
-public:
-	ShiftLeft(Node* a, Node* b);
-};
-
-class ShiftRight: public BinaryOperation {
-public:
-	ShiftRight(Node* a, Node* b);
-};
-
-class Div: public BinaryOperation {
-public:
-	Div(Node* a, Node* b);
-};
-
-class Mod: public BinaryOperation {
-public:
-	Mod(Node* a, Node* b);
-};
-
 class Coerce: public BinaryOperation {
 public:
 	Coerce(Node* a, Node* b);
@@ -207,31 +132,6 @@ public:
 class AddrOf: public UnaryOperation {
 public:
 	AddrOf(Node* a);
-};
-
-class Equal: public BinaryOperation {
-public:
-	Equal(Node* a, Node* b);
-};
-class NotEqual: public BinaryOperation {
-public:
-	NotEqual(Node* a, Node* b);
-};
-class Less: public BinaryOperation {
-public:
-	Less(Node* a, Node* b);
-};
-class LessOrEqual: public BinaryOperation {
-public:
-	LessOrEqual(Node* a, Node* b);
-};
-class Greater: public BinaryOperation {
-public:
-	Greater(Node* a, Node* b);
-};
-class GreaterOrEqual: public BinaryOperation {
-public:
-	GreaterOrEqual(Node* a, Node* b);
 };
 
 /** Shared base of standalone procedures/functions and methods. Holds
