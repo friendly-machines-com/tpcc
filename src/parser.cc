@@ -2248,11 +2248,11 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 		Frame* owner_frame = get_type_body_frame(owner_ty);
 		if (!owner_frame)
 			raise_parse_error("'" + first_name + "' is not a class/record/object");
-		if (is_destructor) {
-			if (auto class_type = dynamic_cast<ClassType*>(owner_ty)) {
-				method_name = "~" + class_type->cxx_name;
-			}
-		}
+		//if (is_destructor) {
+		//	if (auto class_type = dynamic_cast<ClassType*>(owner_ty)) {
+		//		method_name = "~" + class_type->cxx_name;
+		//	}
+		//}
 		Node* hit = owner_frame->lookup_value(method_name);
 		auto m = dynamic_cast<Method*>(hit);
 		if (!m)
