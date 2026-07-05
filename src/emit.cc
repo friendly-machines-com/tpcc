@@ -261,7 +261,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(out, "\t}\n");
 
 			fprintf(out, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
-			fprintf(out, "\t\treturn tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
+			fprintf(out, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
 			fprintf(out, "\t}\n");
 
 			fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
