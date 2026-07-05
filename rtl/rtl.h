@@ -143,4 +143,8 @@ inline t_boolean p_assigned(const void* p) {
 template<typename T> inline void p_inc(T& x, t_integer n = 1) { x = p_add(x, static_cast<T>(n)); }
 template<typename T> inline void p_dec(T& x, t_integer n = 1) { x = p_subtract(x, static_cast<T>(n)); }
 
+struct t_tobject {
+	virtual ~t_tobject() = default;
+};
+
 } // namespace pas
