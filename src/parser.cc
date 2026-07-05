@@ -1063,8 +1063,8 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 		args.push_back(a);
 		args.push_back(b);
 	} else {
-		args.push_back(new Cast(a, common_ty));
-		args.push_back(new Cast(b, common_ty));
+		args.push_back(a->ty != common_ty ? new Cast(a, common_ty) : a);
+		args.push_back(b->ty != common_ty ? new Cast(b, common_ty) : b);
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
@@ -1091,8 +1091,8 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 		args.push_back(a);
 		args.push_back(b);
 	} else {
-		args.push_back(new Cast(a, common_ty));
-		args.push_back(new Cast(b, common_ty));
+		args.push_back(common_ty != a->ty ? new Cast(a, common_ty) : a);
+		args.push_back(common_ty != b->ty ? new Cast(b, common_ty) : b);
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "");
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
