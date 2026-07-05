@@ -60,6 +60,7 @@ UntypedIntegerType& untyped_integer_type() {
 }
 
 Type* boolean_type() { return &k_boolean; }
+Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
 
 // Pascal-visible builtin procedures/functions. To add one: append a row

@@ -60,6 +60,7 @@ UntypedIntegerType& untyped_integer_type();
 
 // Cached lookups of frequently-referenced intrinsics from root_frame().
 Type* boolean_type();
+Type* char_type();
 Type* shortstring_type();
 
 IntrinsicType* lookup_builtin_type(std::string cxx_name);

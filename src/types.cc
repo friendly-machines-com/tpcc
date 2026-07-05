@@ -65,6 +65,11 @@ Type* common_arith_type(Type* a, Type* b) {
 		return nullptr;
 	if (a == b)
 		return a;
+	if (a == shortstring_type() && b == char_type()) {
+		return shortstring_type();
+	} else if (a == char_type() && b == shortstring_type()) {
+		return shortstring_type();
+	}
 	if (a == &untyped_integer_type())
 		return b;
 	if (b == &untyped_integer_type())
