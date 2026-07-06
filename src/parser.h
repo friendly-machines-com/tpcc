@@ -38,6 +38,12 @@ struct CompilerOptions {
 	std::vector<std::string> unit_search_paths;
 	// -Fi<path> entries. Used by {$i <file>} include-file resolution.
 	std::vector<std::string> include_search_paths;
+	// Directory where per-unit .h/.cc outputs land. Set by main from the
+	// program's output path dirname. Empty means CWD.
+	std::string output_dir;
+	// Output path for the program's .cc when the top-level source is a
+	// `program`. Set by main from -o or derived from the source path.
+	std::string program_output_path;
 };
 
 class ParserInputFile {
@@ -244,17 +250,18 @@ protected:
 	 *  have been consumed by the caller). Loads each named unit if not already
 	 *  in the registry, checks the phase rules (interface-position use of an
 	 *  InterfaceInProgress unit is a circular-dep error), and pushes each
-	 *  loaded unit's interface_frame onto the scope stack. Returns the count
-	 *  pushed so the caller can pop the same number at section end. */
-	size_t parse_uses_clause(bool in_interface, std::string current_name);
+	 *  loaded unit's interface_frame onto the scope stack. Returns the loaded
+	 *  Units (in source order) so the caller can both pop the same number of
+	 *  scopes at section end and emit `#include "<name>.h"` for each. */
+	std::vector<Unit*> parse_uses_clause(bool in_interface, std::string current_name);
 	/** Implicitly load and push the `system` unit's interface frame at the
 	 *  front of the uses list so built-in identifiers (Boolean, True, False,
 	 *  etc.) resolve in every program and unit. USER_NAME is the unit/program
 	 *  being parsed; if it case-insensitively equals "system" we're parsing
 	 *  system itself and must not recurse into another load. Returns the
-	 *  count of scopes pushed (0 or 1). The push happens BEFORE any
-	 *  user-written `uses` clause so user-named units can shadow system. */
-	size_t implicit_uses(std::string user_name);
+	 *  loaded Unit (nullptr if user_name == "system"). The push happens BEFORE
+	 *  any user-written `uses` clause so user-named units can shadow system. */
+	Unit* implicit_uses(std::string user_name);
 	/** Return the Unit for NAME, loading its source from disk if it isn't
 	 *  already registered. Search order for the file: directory of the current
 	 *  input file, then CWD. */

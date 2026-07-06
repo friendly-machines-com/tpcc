@@ -2484,20 +2484,25 @@ Unit* Parser::load_or_get_unit(std::string name) {
 	}
 	if (!f)
 		raise_parse_error("cannot find unit file for: " + name);
-	// Nested Parser so the sub-load has its own token/scope state; the shared
+	// Per-unit Emitter writes <output_dir>/<name>.h and .cc. The nested Parser
+	// gets its own token/scope state plus this emitter; the shared
 	// unit_registry is what lets circular-dep detection work across the two.
-	Parser sub(unit_registry, nullptr, options);
+	std::string dir = options ? options->output_dir : "";
+	Emitter unit_emitter;
+	unit_emitter.open_for_unit(name, dir);
+	Parser sub(unit_registry, &unit_emitter, options);
 	sub.push_input_file(f, opened, 1);
 	sub.start();
 	sub.parse_program_or_unit();
+	unit_emitter.close();
 	Unit* loaded = unit_registry->lookup(name);
 	if (!loaded)
 		raise_parse_error("file '" + opened + "' did not declare 'unit " + name + ";'");
 	return loaded;
 }
 
-size_t Parser::parse_uses_clause(bool in_interface, std::string current_name) {
-	size_t pushed = 0;
+std::vector<Unit*> Parser::parse_uses_clause(bool in_interface, std::string current_name) {
+	std::vector<Unit*> loaded;
 	do {
 		std::string name = parse_identifier();
 		Unit* used = load_or_get_unit(name);
@@ -2505,24 +2510,30 @@ size_t Parser::parse_uses_clause(bool in_interface, std::string current_name) {
 			raise_parse_error("circular interface dependency between '" + current_name + "' and '" + name + "'");
 		}
 		push_scope(used->interface_frame);
-		pushed++;
+		loaded.push_back(used);
 		if (!maybe_parse_comma())
 			break;
 	} while (true);
-	return pushed;
+	return loaded;
 }
 
-size_t Parser::implicit_uses(std::string user_name) {
+Unit* Parser::implicit_uses(std::string user_name) {
 	if (strcasecmp(user_name.c_str(), "system") == 0)
-		return 0;
+		return nullptr;
 	Unit* sys = load_or_get_unit("system");
 	push_scope(sys->interface_frame);
-	return 1;
+	return sys;
 }
 
 void Parser::parse_unit_body() {
 	std::string name = parse_identifier();
 	parse_semicolon();
+	// Top-level invocation: open the emitter for the unit shape (.h + .cc).
+	// Sub-parsers spawned by load_or_get_unit arrive with an already-open
+	// unit emitter; only the top-level parser (main -> parse_program_or_unit
+	// -> "unit" branch) hits this path with an unopened emitter.
+	if (emitter && !emitter->is_open())
+		emitter->open_for_unit(name, options ? options->output_dir : "");
 	Frame* iface = new Frame(nullptr);
 	// Implementation frame's structural parent is the interface frame, so
 	// impl can transparently see interface decls via the parent chain.
@@ -2535,10 +2546,21 @@ void Parser::parse_unit_body() {
 	// Implicit `system` first, so built-ins (Boolean, True, False, ...) resolve
 	// in every unit's interface section. Stays on the scope stack through the
 	// implementation section too (interface-side uses pop only at unit end).
-	size_t iface_uses = implicit_uses(name);
+	std::vector<Unit*> iface_units;
+	if (Unit* sys = implicit_uses(name))
+		iface_units.push_back(sys);
 	if (maybe_parse_keyword("uses")) {
-		iface_uses += parse_uses_clause(true, name);
+		auto used = parse_uses_clause(true, name);
+		for (Unit* u : used)
+			iface_units.push_back(u);
 		parse_semicolon();
+	}
+	if (emitter) {
+		emitter->set_section(Emitter::Section::Header);
+		std::vector<std::string> h_files;
+		for (Unit* u : iface_units)
+			h_files.push_back(u->name + ".h");
+		emitter->emit_unit_interface_prologue(h_files);
 	}
 	// Interface section: parse_decl_blocks handles type/const/var/proc/func.
 	// Procedures parsed here fall out as prototypes because
@@ -2550,10 +2572,17 @@ void Parser::parse_unit_body() {
 	parse_keyword("implementation");
 	push_scope(impl);
 	unit->phase = UnitPhase::ImplementationInProgress;
-	size_t impl_uses = 0;
+	std::vector<Unit*> impl_units;
 	if (maybe_parse_keyword("uses")) {
-		impl_uses = parse_uses_clause(false, name);
+		impl_units = parse_uses_clause(false, name);
 		parse_semicolon();
+	}
+	if (emitter) {
+		emitter->set_section(Emitter::Section::Implementation);
+		std::vector<std::string> h_files;
+		for (Unit* u : impl_units)
+			h_files.push_back(u->name + ".h");
+		emitter->emit_unit_implementation_prologue(name + ".h", h_files);
 	}
 	// Implementation section: same dispatcher; procedures with bodies attach
 	// to the interface prototypes via the lookup-then-adopt path in
@@ -2567,12 +2596,12 @@ void Parser::parse_unit_body() {
 	// impl frame, iface-side decl blocks, iface-side uses, iface frame.
 	for (size_t i = 0; i < impl_decls; i++)
 		pop_scope();
-	for (size_t i = 0; i < impl_uses; i++)
+	for (size_t i = 0; i < impl_units.size(); i++)
 		pop_scope();
 	pop_scope(); // impl
 	for (size_t i = 0; i < iface_decls; i++)
 		pop_scope();
-	for (size_t i = 0; i < iface_uses; i++)
+	for (size_t i = 0; i < iface_units.size(); i++)
 		pop_scope();
 	pop_scope(); // iface
 
@@ -2583,6 +2612,11 @@ void Parser::parse_program_or_unit() {
 	if (maybe_parse_keyword("program")) {
 		auto name = parse_identifier();
 		parse_semicolon();
+		// Top-level invocation: open the emitter for the program shape (one
+		// .cc, no header). Sub-parsers spawned by load_or_get_unit always
+		// parse units and arrive with an already-open unit emitter.
+		if (emitter && !emitter->is_open())
+			emitter->open_for_program(options ? options->program_output_path : "");
 		Frame* impl = new Frame(nullptr);
 		Unit* unit = unit_registry->register_new(name, nullptr, impl);
 		unit->phase = UnitPhase::InterfaceInProgress;
@@ -2592,13 +2626,21 @@ void Parser::parse_program_or_unit() {
 		// interface_frame gets pushed so its exports are visible to the
 		// program body. Implicit `system` goes first so built-ins resolve
 		// even with no `uses` clause.
-		size_t prog_uses = implicit_uses(name);
+		std::vector<Unit*> prog_units;
+		if (Unit* sys = implicit_uses(name))
+			prog_units.push_back(sys);
 		if (maybe_parse_keyword("uses")) {
-			prog_uses += parse_uses_clause(false, name);
+			auto used = parse_uses_clause(false, name);
+			for (Unit* u : used)
+				prog_units.push_back(u);
 			parse_semicolon();
 		}
-		if (emitter)
-			emitter->emit_program_prologue(name);
+		if (emitter) {
+			std::vector<std::string> h_files;
+			for (Unit* u : prog_units)
+				h_files.push_back(u->name + ".h");
+			emitter->emit_program_prologue(h_files);
+		}
 		// Inlined equivalent of parse_block; we need to bracket the body-block
 		// with main() emission hooks, which parse_block itself doesn't know
 		// about (it's also called from procedure bodies).
@@ -2612,7 +2654,7 @@ void Parser::parse_program_or_unit() {
 			emitter->emit_main_epilogue();
 		for (size_t i = 0; i < pushed; i++)
 			pop_scope();
-		for (size_t i = 0; i < prog_uses; i++)
+		for (size_t i = 0; i < prog_units.size(); i++)
 			pop_scope();
 		parse_period();
 		pop_scope();

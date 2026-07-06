@@ -93,9 +93,14 @@ int main(int argc, char* argv[]) {
 	if (output_path.empty())
 		output_path = derive_output_path(source_path);
 
+	auto slash = output_path.find_last_of('/');
+	options.output_dir = (slash == std::string::npos) ? "" : output_path.substr(0, slash);
+
 	UnitRegistry registry;
 	Emitter emitter;
-	emitter.open_for_program(output_path);
+	// Don't open the emitter here -- parse_program_or_unit opens it for the
+	// right shape (program .cc vs unit .h+.cc) based on the first keyword.
+	options.program_output_path = output_path;
 	Parser p(&registry, &emitter, &options);
 	FILE* input_file = fopen(source_path.c_str(), "r");
 	if (!input_file) {

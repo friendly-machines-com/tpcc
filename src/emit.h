@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdio>
 #include <string>
+#include <vector>
 
 class Node;
 class Type;
@@ -23,21 +24,46 @@ std::string cxx_value_name(std::string pas_name);
 std::string cxx_type_name(std::string pas_name);
 
 class Emitter {
+public:
+	// Which output target subsequent emit_* calls land in. Programs only ever
+	// use Implementation (their single .cc); units flip to Header while
+	// emitting the interface section and back to Implementation for the
+	// implementation section.
+	enum class Section { Header, Implementation };
+
 private:
-	FILE* out;
+	FILE* out_h;       // null for programs
+	FILE* out_cc;
+	FILE* active;      // points at out_h or out_cc; null until a section is set
 	int fresh_counter;
+
 public:
 	Emitter();
 	~Emitter();
+	// Open just <output_path> for a program (single .cc, no header). Sets
+	// active to the .cc stream so subsequent emit_* calls land there.
 	void open_for_program(std::string output_path);
+	// Open <output_dir>/<unit_name>.h and .cc. Sets active to the .h stream
+	// (units start their parse in the interface section).
+	void open_for_unit(std::string unit_name, std::string output_dir);
 	void close();
+	bool is_open() const { return out_cc != nullptr; }
+	void set_section(Section s);
 
 	/** Generate a fresh identifier of the form `<prefix>_N`, unique per
 	 *  Emitter. Callers pick a prefix that stays clear of C++'s reserved
 	 *  name rules (i.e. no leading underscore); `pas_` is the convention. */
 	std::string next_fresh_cxx_name(std::string prefix);
 
-	void emit_program_prologue(std::string program_name);
+	void emit_program_prologue(std::vector<std::string> used_unit_h_files);
+	// Emit a per-unit .h prologue: #include "rtl.h" plus an #include per
+	// interface-section `uses`d unit, so consumers of this header see the
+	// transitive types referenced by the interface declarations.
+	void emit_unit_interface_prologue(std::vector<std::string> used_unit_h_files);
+	// Emit a per-unit .cc prologue: #include "<this_unit>.h" (the unit's own
+	// interface section) plus #include "rtl.h" and per-impl-`uses`d-unit
+	// #includes.
+	void emit_unit_implementation_prologue(std::string this_unit_h_file, std::vector<std::string> impl_used_unit_h_files);
 	// Emit a C++ struct/class definition for a named record/class/object
 	// type. Fields and method prototypes go inside; method bodies are still
 	// emitted separately (outside the class) by emit_procedure_open.

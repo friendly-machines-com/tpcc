@@ -30,18 +30,18 @@
 }
 
 void Emitter::emit_enum_decl(EnumType* e) {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "enum ");
+	fprintf(active, "enum ");
 	if (!e->cxx_name.empty())
-		fprintf(out, "%s ", e->cxx_name.c_str());
-	fprintf(out, "{ ");
+		fprintf(active, "%s ", e->cxx_name.c_str());
+	fprintf(active, "{ ");
 	for (size_t i = 0; i < e->members.size(); i++) {
 		if (i)
-			fprintf(out, ", ");
-		fprintf(out, "%s", e->members[i].cxx_name.c_str());
+			fprintf(active, ", ");
+		fprintf(active, "%s", e->members[i].cxx_name.c_str());
 	}
-	fprintf(out, " }");
+	fprintf(active, " }");
 }
 
 // Apply the `p_` prefix to a Pascal value identifier.
@@ -54,7 +54,7 @@ std::string cxx_type_name(std::string pas_name) {
 	return "t_" + pas_name;
 }
 
-Emitter::Emitter() : out(nullptr), fresh_counter(0) {}
+Emitter::Emitter() : out_h(nullptr), out_cc(nullptr), active(nullptr), fresh_counter(0) {}
 
 std::string Emitter::next_fresh_cxx_name(std::string prefix) {
 	return prefix + "_" + std::to_string(++fresh_counter);
@@ -65,131 +65,171 @@ Emitter::~Emitter() {
 }
 
 void Emitter::open_for_program(std::string output_path) {
-	out = fopen(output_path.c_str(), "w");
+	out_cc = fopen(output_path.c_str(), "w");
+	active = out_cc;
+}
+
+void Emitter::open_for_unit(std::string unit_name, std::string output_dir) {
+	std::string base = output_dir.empty() ? (unit_name + ".") : (output_dir + "/" + unit_name + ".");
+	out_h = fopen((base + "h").c_str(), "w");
+	out_cc = fopen((base + "cc").c_str(), "w");
+	// Units start parsing at the interface section.
+	active = out_h;
+}
+
+void Emitter::set_section(Section s) {
+	active = (s == Section::Header) ? out_h : out_cc;
 }
 
 void Emitter::close() {
-	if (out) {
-		fclose(out);
-		out = nullptr;
+	if (out_h) {
+		fclose(out_h);
+		out_h = nullptr;
 	}
+	if (out_cc) {
+		fclose(out_cc);
+		out_cc = nullptr;
+	}
+	active = nullptr;
 }
 
-void Emitter::emit_program_prologue(std::string program_name) {
-	if (!out)
+void Emitter::emit_program_prologue(std::vector<std::string> used_unit_h_files) {
+	if (!active)
 		return;
-	fprintf(out, "#include \"rtl.h\"\n\n");
+	fprintf(active, "#include \"rtl.h\"\n");
+	for (auto& h : used_unit_h_files)
+		fprintf(active, "#include \"%s\"\n", h.c_str());
+	fprintf(active, "\n");
+}
+
+void Emitter::emit_unit_interface_prologue(std::vector<std::string> used_unit_h_files) {
+	if (!active)
+		return;
+	fprintf(active, "#include \"rtl.h\"\n");
+	for (auto& h : used_unit_h_files)
+		fprintf(active, "#include \"%s\"\n", h.c_str());
+	fprintf(active, "\n");
+}
+
+void Emitter::emit_unit_implementation_prologue(std::string this_unit_h_file, std::vector<std::string> impl_used_unit_h_files) {
+	if (!active)
+		return;
+	fprintf(active, "#include \"%s\"\n", this_unit_h_file.c_str());
+	fprintf(active, "#include \"rtl.h\"\n");
+	for (auto& h : impl_used_unit_h_files)
+		fprintf(active, "#include \"%s\"\n", h.c_str());
+	fprintf(active, "\n");
 }
 
 void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
-	if (!out)
+	if (!active)
 		return;
 	emit_type_ref(ty);
-	fprintf(out, " %s;\n", cxx_name.c_str());
+	fprintf(active, " %s;\n", cxx_name.c_str());
 }
 
 void Emitter::emit_main_prologue() {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\nint main() {\n");
+	fprintf(active, "\nint main() {\n");
 }
 
 void Emitter::emit_main_epilogue() {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\treturn 0;\n}\n");
+	fprintf(active, "\treturn 0;\n}\n");
 }
 
 void Emitter::emit_statement(Node* stmt) {
-	if (!out)
+	if (!active)
 		return;
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
-		fprintf(out, "\t");
+		fprintf(active, "\t");
 		emit_expression(a->a);
-		fprintf(out, " = ");
+		fprintf(active, " = ");
 		emit_expression(a->b);
-		fprintf(out, ";\n");
+		fprintf(active, ";\n");
 		return;
 	}
 	if (auto pc = dynamic_cast<ProcCall*>(stmt)) {
-		fprintf(out, "\t");
+		fprintf(active, "\t");
 		emit_expression(pc);
-		fprintf(out, ";\n");
+		fprintf(active, ";\n");
 		return;
 	}
 	if (auto r = dynamic_cast<Return*>(stmt)) {
-		fprintf(out, "\treturn ");
+		fprintf(active, "\treturn ");
 		emit_expression(r->a);
-		fprintf(out, ";\n");
+		fprintf(active, ";\n");
 		return;
 	}
 	unhandled_node("emit_statement", stmt);
 }
 
 void Emitter::emit_with_prologue(std::string alias_cxx_name, Node* target) {
-	if (!out)
+	if (!active)
 		return;
 	// `auto&&` binds an lvalue target as a reference and lifetime-extends an
 	// rvalue target (e.g. a function call returning a record by value), so the
 	// with-body sees a single evaluation of the target expression regardless
 	// of value category.
-	fprintf(out, "\t{ auto&& %s = ", alias_cxx_name.c_str());
+	fprintf(active, "\t{ auto&& %s = ", alias_cxx_name.c_str());
 	emit_expression(target);
-	fprintf(out, ";\n");
+	fprintf(active, ";\n");
 }
 
 void Emitter::emit_with_epilogue() {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\t}\n");
+	fprintf(active, "\t}\n");
 }
 
 void Emitter::emit_if_prologue(Node* condition) {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\tif (");
+	fprintf(active, "\tif (");
 	emit_expression(condition);
-	fprintf(out, ") {\n");
+	fprintf(active, ") {\n");
 }
 
 void Emitter::emit_if_else() {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\t} else {\n");
+	fprintf(active, "\t} else {\n");
 }
 
 void Emitter::emit_if_epilogue() {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\t}\n");
+	fprintf(active, "\t}\n");
 }
 
 void Emitter::emit_while_prologue(Node* condition) {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\twhile (");
+	fprintf(active, "\twhile (");
 	emit_expression(condition);
-	fprintf(out, ") {\n");
+	fprintf(active, ") {\n");
 }
 
 void Emitter::emit_while_epilogue() {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\t}\n");
+	fprintf(active, "\t}\n");
 }
 
 void Emitter::emit_repeat_prologue() {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\tdo {\n");
+	fprintf(active, "\tdo {\n");
 }
 
 void Emitter::emit_repeat_epilogue(Node* condition) {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\t} while(!(");
+	fprintf(active, "\t} while(!(");
 	emit_expression(condition);
-	fprintf(out, "));\n");
+	fprintf(active, "));\n");
 }
 
 // The cxx_name of the type that owns a Method, or empty if none.
@@ -206,36 +246,36 @@ static std::string owner_cxx_name(Type* owner) {
 }
 
 void Emitter::emit_procedure_open(Callable* c) {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "\n");
+	fprintf(active, "\n");
 	emit_type_ref(c->ty->return_type);
-	fprintf(out, " ");
+	fprintf(active, " ");
 	if (auto m = dynamic_cast<Method*>(c)) {
 		std::string owner = owner_cxx_name(m->owner_class);
 		if (!owner.empty())
-			fprintf(out, "%s::", owner.c_str());
+			fprintf(active, "%s::", owner.c_str());
 	}
-	fprintf(out, "%s(", c->cxx_name.c_str());
+	fprintf(active, "%s(", c->cxx_name.c_str());
 	for (size_t i = 0; i < c->ty->formals.size(); i++) {
 		if (i > 0)
-			fprintf(out, ", ");
+			fprintf(active, ", ");
 		auto& f = c->ty->formals[i];
 		if (f.mode == ParamMode::Const)
-			fprintf(out, "const ");
+			fprintf(active, "const ");
 		emit_type_ref(f.ty);
 		if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
-			fprintf(out, "&");
-		fprintf(out, " %s", f.cxx_name.c_str());
+			fprintf(active, "&");
+		fprintf(active, " %s", f.cxx_name.c_str());
 	}
-	fprintf(out, ") {\n");
+	fprintf(active, ") {\n");
 	if (c->ty->return_type != &unit_type()) { // function
-		fprintf(out, "\tauto p_result;\n");
+		fprintf(active, "\tauto p_result;\n");
 	}
 }
 
 void Emitter::emit_procedure_close(Callable* target) {
-	if (!out)
+	if (!active)
 		return;
 
 	bool constructor = false;
@@ -250,17 +290,17 @@ void Emitter::emit_procedure_close(Callable* target) {
 		}
 	}
 	if (constructor) {
-		fprintf(out, "\treturn this;\n");
+		fprintf(active, "\treturn this;\n");
 	} else if (function) {
-		fprintf(out, "\treturn p_result;\n");
+		fprintf(active, "\treturn p_result;\n");
 	}
-	fprintf(out, "}\n");
+	fprintf(active, "}\n");
 }
 
 void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) {
 	bool is_class = false;
 	bool is_interface = false;
-	if (!out)
+	if (!active)
 		return;
 	Frame* body = nullptr;
 	const char* kw = "struct";
@@ -286,9 +326,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	const char* attributes = "";
 	if (rec && rec->packed)
 		attributes = "[[gnu::packed]] ";
-	fprintf(out, "%s%s", attributes, kw);
+	fprintf(active, "%s%s", attributes, kw);
 	if (!cxx_name.empty())
-		fprintf(out, " %s", cxx_name.c_str());
+		fprintf(active, " %s", cxx_name.c_str());
 
 	// Base-class list emits LAYOUT names (the struct, not the storage pointer
 	// form `t_foo*` that emit_type_ref would produce under the new model).
@@ -297,27 +337,27 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
 		bool first = true;
 		if (c->super) {
-			fprintf(out, "public %s", c->super->cxx_name.c_str());
+			fprintf(active, "public %s", c->super->cxx_name.c_str());
 			first = false;
 		}
 		for (auto interface_type : c->implemented_interfaces) {
-			fprintf(out, first ? "public %s" : ", public %s",
+			fprintf(active, first ? "public %s" : ", public %s",
 				interface_type->cxx_name.c_str());
 			first = false;
 		}
 	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		bool first = true;
 		for (auto interface_type : c->super_interfaces) {
-			fprintf(out, first ? "public %s" : ", public %s",
+			fprintf(active, first ? "public %s" : ", public %s",
 				interface_type->cxx_name.c_str());
 			first = false;
 		}
 	} else if (auto c = dynamic_cast<ObjectType*>(ty)) {
 		if (c->super)
-			fprintf(out, "public %s", c->super->cxx_name.c_str());
+			fprintf(active, "public %s", c->super->cxx_name.c_str());
 	}
 
-	fprintf(out, " {\n");
+	fprintf(active, " {\n");
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			std::string class_name = c->cxx_name; // FIXME: terrible name.
@@ -326,37 +366,37 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				unhandled_type("parent class name unknown", c);
 			}
 			if (!body->lookup_value_local("classtype")) {
-				fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
+				fprintf(active, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
 				// This will basically NEVER be possible in Pascal.
 				// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
-				fprintf(out, "\t\tinline static %s meta{};\n", cxx_name.c_str());
-				fprintf(out, "\t\treturn &meta;\n");
-				fprintf(out, "\t}\n");
+				fprintf(active, "\t\tinline static %s meta{};\n", cxx_name.c_str());
+				fprintf(active, "\t\treturn &meta;\n");
+				fprintf(active, "\t}\n");
 			} else {
 				unhandled_type("parent 'classtype' duplicate", c);
 			}
 			if (!body->lookup_value_local("classname")) {
-				fprintf(out, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
-				fprintf(out, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
-				fprintf(out, "\t}\n");
+				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
+				fprintf(active, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
+				fprintf(active, "\t}\n");
 			}
 			if (!body->lookup_value_local("inheritsfrom")) {
-				fprintf(out, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
+				fprintf(active, "\tpublic: virtual inline bool p_inheritsfrom(::pas::t_tclass* s) {\n");
 				if (parent_class_cxx_name.empty()) {
-					fprintf(out, "\t\treturn s == this;\n");
+					fprintf(active, "\t\treturn s == this;\n");
 				} else {
-					fprintf(out, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn s == this || %s::p_inheritsfrom(s);\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
-				fprintf(out, "\t}\n");
+				fprintf(active, "\t}\n");
 			}
 			if (!body->lookup_value_local("classparent")) {
-				fprintf(out, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
+				fprintf(active, "\tpublic: virtual inline ::pas::t_tclass* p_classparent() {\n");
 				if (parent_class_cxx_name.empty()) {
-					fprintf(out, "\t\treturn nullptr;\n");
+					fprintf(active, "\t\treturn nullptr;\n");
 				} else {
-					fprintf(out, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
-				fprintf(out, "\t}\n");
+				fprintf(active, "\t}\n");
 			}
 			// TODO: maybe even add constructor wrappers here in the metaclass; they would do the (new X()).Create() and synth the result
 			// fallthrough
@@ -365,27 +405,27 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		}
 	} else if (is_class && !in_meta) {
 		emit_aggregate_decl("m_meta", ty, true);
-		fprintf(out, ";\n");
+		fprintf(active, ";\n");
 		// Generate wrapper proxies in the regular class.  Those all have to be generated each time since they are static.
 		if (!body->lookup_value_local("classtype")) {
-			fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
-			fprintf(out, "\t\treturn m_meta::p_classtype();\n");
-			fprintf(out, "\t}\n");
+			fprintf(active, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
+			fprintf(active, "\t\treturn m_meta::p_classtype();\n");
+			fprintf(active, "\t}\n");
 		}
 		if (!body->lookup_value_local("classname")) {
-			fprintf(out, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
-			fprintf(out, "\t\treturn p_classtype()->p_classname();\n");
-			fprintf(out, "\t}\n");
+			fprintf(active, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
+			fprintf(active, "\t\treturn p_classtype()->p_classname();\n");
+			fprintf(active, "\t}\n");
 		}
 		if (!body->lookup_value_local("inheritsfrom")) {
-			fprintf(out, "\tpublic: inline static bool p_inheritsfrom(::pas::t_tclass* s) {\n");
-			fprintf(out, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
-			fprintf(out, "\t}\n");
+			fprintf(active, "\tpublic: inline static bool p_inheritsfrom(::pas::t_tclass* s) {\n");
+			fprintf(active, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
+			fprintf(active, "\t}\n");
 		}
 		if (!body->lookup_value_local("classparent")) {
-			fprintf(out, "\tpublic: inline static ::pas::t_tclass* p_classparent() {\n");
-			fprintf(out, "\t\treturn p_classtype()->p_classparent();\n");
-			fprintf(out, "\t}\n");
+			fprintf(active, "\tpublic: inline static ::pas::t_tclass* p_classparent() {\n");
+			fprintf(active, "\t\treturn p_classtype()->p_classparent();\n");
+			fprintf(active, "\t}\n");
 		}
 		// fallthrough
 	}
@@ -420,65 +460,65 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			}
 			if (variant_slots.count(slot))
 				continue;
-			fprintf(out, "\t");
+			fprintf(active, "\t");
 			emit_type_ref(kv.second.ty);
-			fprintf(out, " %s;\n", slot->cxx_name.c_str());
+			fprintf(active, " %s;\n", slot->cxx_name.c_str());
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
-			fprintf(out, "\t");
+			fprintf(active, "\t");
 			if (auto m = dynamic_cast<Method*>(call)) {
 				//if (is_tobject && m->cxx_name == "p_classtype") { // prevent emitting a duplicate.
 				//	continue;
 				//}
 				if (is_interface) {
-					fprintf(out, "virtual ");
+					fprintf(active, "virtual ");
 				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// autogenerate proxies in regular class
-					fprintf(out, "inline static");
+					fprintf(active, "inline static");
 				} else if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic/*FIXME*/) {
-					fprintf(out, "virtual ");
+					fprintf(active, "virtual ");
 				}
 			}
 			emit_type_ref(call->ty->return_type);
-			fprintf(out, " %s(", call->cxx_name.c_str());
+			fprintf(active, " %s(", call->cxx_name.c_str());
 			for (size_t i = 0; i < call->ty->formals.size(); i++) {
 				if (i > 0)
-					fprintf(out, ", ");
+					fprintf(active, ", ");
 				auto& f = call->ty->formals[i];
 				if (f.mode == ParamMode::Const)
-					fprintf(out, "const ");
+					fprintf(active, "const ");
 				emit_type_ref(f.ty);
 				if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
-					fprintf(out, "&");
-				fprintf(out, " %s", f.cxx_name.c_str());
+					fprintf(active, "&");
+				fprintf(active, " %s", f.cxx_name.c_str());
 			}
-			fprintf(out, ")");
+			fprintf(active, ")");
 			if (auto m = dynamic_cast<Method*>(call)) {
 				if (is_interface) {
-					fprintf(out, " = 0");
+					fprintf(active, " = 0");
 				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method.
 					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
-					fprintf(out, " {\n");
-					fprintf(out, "\t%s static_cast<%s*>(p_classtype())->%s(",
+					fprintf(active, " {\n");
+					fprintf(active, "\t%s static_cast<%s*>(p_classtype())->%s(",
 							call->ty->return_type == &unit_type() ? "" : "return",
 					        "m_meta",
 					        call->cxx_name.c_str()); // TODO: escape
 					for (size_t i = 0; i < call->ty->formals.size(); i++) {
 						auto& f = call->ty->formals[i];
 						if (i > 0) {
-							fprintf(out, ", ");
+							fprintf(active, ", ");
 						}
-						fprintf(out, " %s", f.cxx_name.c_str()); // TODO: escape
+						fprintf(active, " %s", f.cxx_name.c_str()); // TODO: escape
 					}
-					fprintf(out, "\t);\n");
-					fprintf(out, "}\n");
+					fprintf(active, "\t);\n");
+					fprintf(active, "}\n");
 				} else if (m->virtual_kind == Method::VirtualKind::Override) {
-					fprintf(out, " override");
+					fprintf(active, " override");
 				} else if (m->virtual_kind == Method::VirtualKind::Abstract) {
-					fprintf(out, " = 0");
+					fprintf(active, " = 0");
 				}
 			}
-			fprintf(out, ";\n");
+			fprintf(active, ";\n");
 		}
 	}
 	// Variant part: selector (if present) emits as a regular field; arms
@@ -486,27 +526,27 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	// above the body walk for the rationale.
 	if (rec) {
 		if (rec->has_selector) {
-			fprintf(out, "\t");
+			fprintf(active, "\t");
 			emit_type_ref(rec->selector_type);
-			fprintf(out, " %s;\n", rec->selector_cxx_name.c_str());
+			fprintf(active, " %s;\n", rec->selector_cxx_name.c_str());
 		}
 		if (!rec->arms.empty()) {
-			fprintf(out, "\tunion {\n");
+			fprintf(active, "\tunion {\n");
 			for (auto& arm : rec->arms) {
 				for (auto& f : arm.fields) {
-					fprintf(out, "\t\t");
+					fprintf(active, "\t\t");
 					emit_type_ref(f.ty);
-					fprintf(out, " %s;\n", f.slot->cxx_name.c_str());
+					fprintf(active, " %s;\n", f.slot->cxx_name.c_str());
 				}
 			}
-			fprintf(out, "\t};\n");
+			fprintf(active, "\t};\n");
 		}
 	}
-	fprintf(out, "}");
+	fprintf(active, "}");
 }
 
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
-	if (!out)
+	if (!active)
 		return;
 	if (auto e = dynamic_cast<EnumType*>(ty)) {
 		// Pascal default is UNSCOPED enums: member identifiers leak into
@@ -514,23 +554,23 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		// `c := Red` resolves without qualification. C++ models this with
 		// an unscoped `enum` (not `enum class`): members inject into the
 		// enclosing namespace.
-		fprintf(out, "\n");
+		fprintf(active, "\n");
 		emit_enum_decl(e);
-		fprintf(out, ";\n");
+		fprintf(active, ";\n");
 		return;
 	}
 	if (dynamic_cast<RecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<ObjectType*>(ty) || dynamic_cast<InterfaceType*>(ty)) {
-		fprintf(out, "\n");
+		fprintf(active, "\n");
 		emit_aggregate_decl(cxx_name, ty);
-		fprintf(out, ";\n");
+		fprintf(active, ";\n");
 		return;
 	}
 }
 
 void Emitter::emit_type_alias(std::string cxx_name, std::string aliased_cxx_name) {
-	if (!out)
+	if (!active)
 		return;
-	fprintf(out, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
+	fprintf(active, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
 }
 
 
@@ -543,44 +583,44 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 }
 
 void Emitter::emit_expression(Node* expr) {
-	if (!out)
+	if (!active)
 		return;
 	if (dynamic_cast<NilLiteral*>(expr)) {
-		fprintf(out, "nullptr");
+		fprintf(active, "nullptr");
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
-		fprintf(out, "%llu", (unsigned long long)c->value);
+		fprintf(active, "%llu", (unsigned long long)c->value);
 		return;
 	}
 	if (auto s = dynamic_cast<String*>(expr)) {
-		fputc('"', out);
+		fputc('"', active);
 		for (char ch : s->value) {
 			if (ch == '"' || ch == '\\')
-				fputc('\\', out);
+				fputc('\\', active);
 			if ((unsigned char)ch < 0x20) {
-				fprintf(out, "\\x%02x", (unsigned char)ch);
+				fprintf(active, "\\x%02x", (unsigned char)ch);
 			} else {
-				fputc(ch, out);
+				fputc(ch, active);
 			}
 		}
-		fputc('"', out);
+		fputc('"', active);
 		return;
 	}
 	if (auto s = dynamic_cast<StorageSlot*>(expr)) {
-		fprintf(out, "%s", s->cxx_name.c_str());
+		fprintf(active, "%s", s->cxx_name.c_str());
 		return;
 	}
 	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
-		fprintf(out, "%s", e->cxx_name.c_str());
+		fprintf(active, "%s", e->cxx_name.c_str());
 		return;
 	}
 	if (auto b = dynamic_cast<Builtin*>(expr)) {
-		fprintf(out, "%.*s", (int)b->desc->cxx_name.size(), b->desc->cxx_name.data());
+		fprintf(active, "%.*s", (int)b->desc->cxx_name.size(), b->desc->cxx_name.data());
 		return;
 	}
 	if (auto c = dynamic_cast<Callable*>(expr)) {
-		fprintf(out, "%s", c->cxx_name.c_str());
+		fprintf(active, "%s", c->cxx_name.c_str());
 		return;
 	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
@@ -589,40 +629,40 @@ void Emitter::emit_expression(Node* expr) {
 		// (Pascal `class`, `interface`, or `^T` -- all pointers in C++).
 		if (auto d = dynamic_cast<Dereference*>(m->a)) {
 			emit_expression(d->a);
-			fprintf(out, "->");
+			fprintf(active, "->");
 		} else if (m->a->ty && m->a->ty->is_reference_type()) {
 			emit_expression(m->a);
-			fprintf(out, "->");
+			fprintf(active, "->");
 		} else {
 			emit_expression(m->a);
-			fprintf(out, ".");
+			fprintf(active, ".");
 		}
 		emit_expression(m->b);
 		return;
 	}
 	if (auto o = dynamic_cast<ShortCircuitOperation*>(expr)) {
 		// TODO: support overloads, if any.
-		fprintf(out, "((");
+		fprintf(active, "((");
 		emit_expression(o->a);
 		switch (o->kind) {
 		case AND:
-			fprintf(out, ") && (");
+			fprintf(active, ") && (");
 			break;
 		case OR:
-			fprintf(out, ") || (");
+			fprintf(active, ") || (");
 			break;
 		default:
 			abort();
 		}
 		emit_expression(o->b);
-		fprintf(out, "))");
+		fprintf(active, "))");
 		return;
 	}
 	if (auto ix = dynamic_cast<Index*>(expr)) {
 		emit_expression(ix->a);
-		fprintf(out, "[");
+		fprintf(active, "[");
 		emit_expression(ix->b);
-		fprintf(out, "]");
+		fprintf(active, "]");
 		return;
 	}
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
@@ -632,8 +672,8 @@ void Emitter::emit_expression(Node* expr) {
 			if (auto ty = dynamic_cast<RoutineType*>(pc->callee->ty)) {
 				if (ty->kind == CONSTRUCTOR) {
 					if (auto receiver_ty = dynamic_cast<ClassType*>(receiver->ty)) {
-						fprintf(out, "(new %s", receiver_ty->cxx_name.c_str()); // FIXME: escape
-						fprintf(out, ")->");
+						fprintf(active, "(new %s", receiver_ty->cxx_name.c_str()); // FIXME: escape
+						fprintf(active, ")->");
 						done = true;
 					} else {
 						unhandled_type("constructor receiver", receiver->ty);
@@ -647,58 +687,58 @@ void Emitter::emit_expression(Node* expr) {
 			if (done) {
 			} else if (auto d = dynamic_cast<Dereference*>(receiver)) {
 				emit_expression(d->a);
-				fprintf(out, "->");
+				fprintf(active, "->");
 			} else if (receiver->ty && receiver->ty->is_reference_type()) {
 				emit_expression(receiver);
-				fprintf(out, "->");
+				fprintf(active, "->");
 			} else {
 				emit_expression(receiver);
-				fprintf(out, ".");
+				fprintf(active, ".");
 			}
 		}
 		emit_expression(pc->callee);
-		fprintf(out, "(");
+		fprintf(active, "(");
 		for (size_t i = 0; i < pc->args.size(); i++) {
 			if (i > 0)
-				fprintf(out, ", ");
+				fprintf(active, ", ");
 			emit_expression(pc->args[i]);
 		}
-		fprintf(out, ")");
+		fprintf(active, ")");
 		return;
 	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
-		fprintf(out, "static_cast<");
+		fprintf(active, "static_cast<");
 		emit_type_ref(ca->ty);
-		fprintf(out, ">(");
+		fprintf(active, ">(");
 		emit_expression(ca->a);
-		fprintf(out, ")");
+		fprintf(active, ")");
 		return;
 	}
 	if (auto co = dynamic_cast<Coerce*>(expr)) {
 		// FIXME: operator:= like ::cast ? I'm not sure what the difference between cast and coerce is in Pascal.
 		// FIXME: emit assert(p_supports(co->a, co->ty))
 		// FIXME: emit dynamic cast maybe ?
-		fprintf(out, "dynamic_cast<");
+		fprintf(active, "dynamic_cast<");
 		emit_type_ref(co->ty);
-		fprintf(out, ">(");
+		fprintf(active, ">(");
 		emit_expression(co->a);
-		fprintf(out, ")");
+		fprintf(active, ")");
 		return;
 	}
 	if (auto co = dynamic_cast<CoerceCheck*>(expr)) {
 		// FIXME: operator:= like ::cast ? I'm not sure what the difference between cast and coerce is in Pascal.
 		// FIXME: emit assert(p_supports(co->a, co->ty))
 		// FIXME: emit dynamic cast maybe ?
-		fprintf(out, "(dynamic_cast<");
+		fprintf(active, "(dynamic_cast<");
 		emit_type_ref(co->ty);
-		fprintf(out, ">(");
+		fprintf(active, ">(");
 		emit_expression(co->a);
-		fprintf(out, ") != nullptr)");
+		fprintf(active, ") != nullptr)");
 		return;
 	}
 	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
 		if (const char* op = cxx_unary_operator(u)) {
-			fprintf(out, "%s", op);
+			fprintf(active, "%s", op);
 			emit_expression(u->a);
 			return;
 		}
@@ -707,7 +747,7 @@ void Emitter::emit_expression(Node* expr) {
 }
 
 void Emitter::emit_type_ref(Type* ty) {
-	if (!out)
+	if (!active)
 		return;
 	// Follow IncompleteType placeholders through to the real underlying type.
 	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
@@ -716,41 +756,41 @@ void Emitter::emit_type_ref(Type* ty) {
 		ty = inc->resolved;
 	}
 	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
-		fprintf(out, "%.*s", (int)it->cxx_name.size(), it->cxx_name.data());
+		fprintf(active, "%.*s", (int)it->cxx_name.size(), it->cxx_name.data());
 		return;
 	}
 	if (dynamic_cast<UnitType*>(ty)) {
-		fprintf(out, "void");
+		fprintf(active, "void");
 		return;
 	}
 	if (auto r = dynamic_cast<RecordType*>(ty)) {
 		if (r->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(out, "%s", r->cxx_name.c_str());
+			fprintf(active, "%s", r->cxx_name.c_str());
 		return;
 	}
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
 		if (c->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(out, "%s", c->cxx_name.c_str());
-		fprintf(out, "*");
+			fprintf(active, "%s", c->cxx_name.c_str());
+		fprintf(active, "*");
 		return;
 	}
 	if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		if (c->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(out, "%s", c->cxx_name.c_str());
-		fprintf(out, "*");
+			fprintf(active, "%s", c->cxx_name.c_str());
+		fprintf(active, "*");
 		return;
 	}
 	if (auto o = dynamic_cast<ObjectType*>(ty)) {
 		if (o->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(out, "%s", o->cxx_name.c_str());
+			fprintf(active, "%s", o->cxx_name.c_str());
 		return;
 	}
 	if (auto e = dynamic_cast<EnumType*>(ty)) {
@@ -762,12 +802,12 @@ void Emitter::emit_type_ref(Type* ty) {
 		if (e->cxx_name.empty())
 			emit_enum_decl(e);
 		else
-			fprintf(out, "%s", e->cxx_name.c_str());
+			fprintf(active, "%s", e->cxx_name.c_str());
 		return;
 	}
 	if (auto p = dynamic_cast<PointerType*>(ty)) {
 		emit_type_ref(p->item_type);
-		fprintf(out, "*");
+		fprintf(active, "*");
 		return;
 	}
 	unhandled_type("emit_type_ref", ty);
