@@ -2066,6 +2066,9 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	std::string cxx_name = cxx_value_name(pas_name);
 	if (is_destructor) {
 		if (ClassType* class_type = dynamic_cast<ClassType*>(owner_class)) {
+			if (class_type->cxx_name.empty()) {
+				raise_type_parse_error("cannot spell destructor name without class name");
+			}
 			cxx_name = "~" + class_type->cxx_name;
 		}
 	}
@@ -2081,6 +2084,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	m->ty = sig; // The node's type IS the prototype.
 	if (external) {
 		m->has_body = true;
+		m->is_external = true;
 	}
 	if (!body->register_callable(pas_name, m)) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);

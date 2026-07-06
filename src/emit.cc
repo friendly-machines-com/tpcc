@@ -365,7 +365,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			if (c->super && parent_class_cxx_name.empty()) {
 				unhandled_type("parent class name unknown", c);
 			}
-			if (!body->lookup_value_local("classtype")) {
+			auto existing_classtype = body->lookup_value_local("classtype");
+			if (!existing_classtype || (dynamic_cast<Method*>(existing_classtype) && dynamic_cast<Method*>(existing_classtype)->is_external)) {
 				fprintf(active, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
 				// This will basically NEVER be possible in Pascal.
 				// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
@@ -373,7 +374,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				fprintf(active, "\t\treturn &meta;\n");
 				fprintf(active, "\t}\n");
 			} else {
-				unhandled_type("parent 'classtype' duplicate", c);
+				unhandled_node("parent 'classtype' duplicate", existing_classtype);
 			}
 			if (!body->lookup_value_local("classname")) {
 				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");

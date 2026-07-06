@@ -167,6 +167,7 @@ public:
 	std::string cxx_name;
 	RoutineType* ty;
 	bool has_overload_directive;
+	bool is_external = false;
 	bool has_body = false;
 	Frame* body_frame;
 	Callable(std::string cxx_name,
