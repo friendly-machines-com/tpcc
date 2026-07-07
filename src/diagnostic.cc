@@ -449,6 +449,11 @@ std::string ErrorLetContext::notes() {
 		indent(out, 2);
 		out << "type " << render_name(n.name) << " =\n";
 		indent(out, 3);
+		// The type-form head is emitted here, once, for every Type. This is a
+		// diagnostic format invariant, not a convention each Type subclass must
+		// remember. Type::print_diagnostic_definition/stub print only details after
+		// this head.
+		out << ty->diagnostic_kind();
 		if (n.truncated)
 			ty->print_diagnostic_stub(this, out, 3);
 		else

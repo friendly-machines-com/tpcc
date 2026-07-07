@@ -13,6 +13,9 @@ public:
 	virtual ~Type() = default;
 	virtual const char* diagnostic_kind() const = 0;
 	virtual void collect_diagnostic_edges(ErrorLetContext* ctx) const = 0;
+	// ErrorLetContext prints diagnostic_kind() as the type-definition head.
+	// These methods append only kind-specific details after that head; they must
+	// not repeat the head.
 	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const = 0;
 	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
 	// True iff a variable of this type is represented in C++ emission as a

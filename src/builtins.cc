@@ -199,10 +199,15 @@ const Frame& root_frame() {
 
 const char* IntrinsicType::diagnostic_kind() const { return "intrinsic"; }
 void IntrinsicType::collect_diagnostic_edges(ErrorLetContext*) const {}
-void IntrinsicType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream& out, unsigned) const {
-	out << cxx_name;
-	if (rank)
-		out << " rank " << *rank;
+void IntrinsicType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	// IntrinsicType is a compiler-provided Pascal-visible type. Do not print the
+	// C++ carrier name here, and do not infer a semantic family from the widening
+	// rank: the rank is only overload/conversion ordering metadata.
+	if (rank) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "widening_rank: " << *rank;
+	}
 }
 
 const char* Builtin::diagnostic_kind() const { return "builtin"; }
