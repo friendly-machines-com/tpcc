@@ -33,8 +33,8 @@ using t_ptruint = uintptr_t;
 using t_sizeint = ssize_t;
 using t_sizeuint = size_t;
 enum t_boolean {
-	p_false,
-	p_true,
+	p_false = false,
+	p_true = true,
 };
 
 using t_char     = char;
