@@ -281,13 +281,12 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 	if (!n.value_names.empty())
 		return NameBase{name_component(n.value_names.front(), n.kind.c_str()), ""};
 
+	// Derived expressions usually have no direct Frame entry. Give common
+	// selector/conversion intrinsics source-shaped diagnostic-local names from
+	// already-discovered operands. This is graph-local naming only: it neither
+	// mutates IR nor parses rendered output strings. Values are named in
+	// postorder, so operand names are normally assigned before their user.
 	if (auto ma = dynamic_cast<const MemberAccess*>(n.node)) {
-		// MemberAccess is a derived expression, so no Frame contains a direct name
-		// for it. Build one from already-discovered subexpression names instead of
-		// falling back to the unhelpful dynamic kind `member_access`. This remains
-		// diagnostic-local: it does not store names on IR nodes and it does not parse
-		// rendered strings. Values are named in postorder, so the receiver/member
-		// edges normally have assigned names before this node is named.
 		auto ait = value_nodes.find(ma->a);
 		auto bit = value_nodes.find(ma->b);
 		if (ait != value_nodes.end() && ait->second.name.assigned && bit != value_nodes.end()) {
@@ -301,6 +300,34 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 			if (!member.empty())
 				return NameBase{name_component(render_name_display(ait->second.name) + "." + member, n.kind.c_str()), ""};
 		}
+	}
+	if (auto ix = dynamic_cast<const Index*>(n.node)) {
+		auto ait = value_nodes.find(ix->a);
+		auto bit = value_nodes.find(ix->b);
+		if (ait != value_nodes.end() && ait->second.name.assigned &&
+		    bit != value_nodes.end() && bit->second.name.assigned) {
+			return NameBase{name_component(render_name_display(ait->second.name) + "[" +
+			                               render_name_display(bit->second.name) + "]", n.kind.c_str()), ""};
+		}
+	}
+	if (auto d = dynamic_cast<const Dereference*>(n.node)) {
+		auto ait = value_nodes.find(d->a);
+		if (ait != value_nodes.end() && ait->second.name.assigned)
+			return NameBase{name_component(render_name_display(ait->second.name) + "^", n.kind.c_str()), ""};
+	}
+	if (auto c = dynamic_cast<const Cast*>(n.node)) {
+		auto ait = value_nodes.find(c->a);
+		auto tit = type_nodes.find(c->ty);
+		if (ait != value_nodes.end() && ait->second.name.assigned &&
+		    tit != type_nodes.end() && tit->second.name.assigned) {
+			return NameBase{name_component(render_name_display(tit->second.name) + "(" +
+			                               render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
+		}
+	}
+	if (auto l = dynamic_cast<const Length*>(n.node)) {
+		auto ait = value_nodes.find(l->a);
+		if (ait != value_nodes.end() && ait->second.name.assigned)
+			return NameBase{name_component("length(" + render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
 	}
 
 	if (!n.member_names.empty())
