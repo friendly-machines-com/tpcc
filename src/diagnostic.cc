@@ -46,6 +46,9 @@ std::string ErrorLetContext::sanitize(std::string s, const char* fallback) {
 }
 
 ErrorLetContext::TypeNode& ErrorLetContext::ensure_type(const Type* ty) {
+	// NAME-EVIDENCE ONLY. Seeing a Type* in a scope/frame does not mean the
+	// diagnostic references it. Do not push type_order here; discover_type() is
+	// the only path that marks a Type* as printable.
 	TypeNode& n = type_nodes[ty];
 	if (!n.ty) {
 		n.ty = ty;
@@ -55,6 +58,9 @@ ErrorLetContext::TypeNode& ErrorLetContext::ensure_type(const Type* ty) {
 }
 
 ErrorLetContext::ValueNode& ErrorLetContext::ensure_value(const Node* node) {
+	// NAME-EVIDENCE ONLY. A scope/frame can contain huge unrelated values
+	// (builtins, overload sets, locals). Merely seeing one must not emit it.
+	// discover_value() is the only path that marks a Node* as printable.
 	ValueNode& n = value_nodes[node];
 	if (!n.node) {
 		n.node = node;
@@ -64,6 +70,8 @@ ErrorLetContext::ValueNode& ErrorLetContext::ensure_value(const Node* node) {
 }
 
 void ErrorLetContext::discover_type(const Type* ty, unsigned depth) {
+	// GRAPH DISCOVERY. This is a real edge/root in the diagnostic graph; only
+	// nodes that pass through here may get `let type ...` definitions.
 	if (!ty)
 		return;
 	TypeNode& n = ensure_type(ty);
@@ -88,6 +96,8 @@ void ErrorLetContext::discover_type(const Type* ty, unsigned depth) {
 }
 
 void ErrorLetContext::discover_value(const Node* node, unsigned depth) {
+	// GRAPH DISCOVERY. This is a real edge/root in the diagnostic graph; only
+	// nodes that pass through here may get `let value ...` definitions.
 	if (!node)
 		return;
 	ValueNode& n = ensure_value(node);
@@ -124,6 +134,11 @@ void ErrorLetContext::add_frame_edge(const Frame* frame, DiagnosticFrameUse use)
 }
 
 void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
+	// Invariant: frame indexing is NOT graph discovery. It is only how the
+	// diagnostic context learns nice names for Type*/Node* pointers. Do not call
+	// discover_type/discover_value here. Otherwise every visible value/member in
+	// a scope or aggregate frame (including overload sets and builtins) becomes a
+	// free-floating `let`, even when no printed type/value references it.
 	if (!frame)
 		return;
 	auto key = std::make_pair(frame, use);
@@ -164,8 +179,6 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 			// (including overload sets). Values become definitions only when a
 			// diagnostic explicitly references them via value_ref/add_value_edge.
 		}
-		if (entry.ty && use != DiagnosticFrameUse::NamingScope)
-			discover_type(entry.ty, current_depth + 1);
 	}
 
 	(void)use;
@@ -198,6 +211,9 @@ std::string ErrorLetContext::uniquify(std::string base) {
 }
 
 void ErrorLetContext::assign_names() {
+	// Only referenced nodes get names. Name-evidence-only entries intentionally
+	// remain unnamed and are skipped by notes().
+	//
 	// Names are diagnostic-local variable bindings. Once a referenced node has
 	// been named, keep that binding stable: callers may already have embedded
 	// the returned ref text in the main error message while later refs discover
