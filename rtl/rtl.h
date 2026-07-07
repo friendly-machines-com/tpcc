@@ -194,6 +194,8 @@ struct t_tobject: public m_iobject {
 	virtual m_iobject* p_classparent() = 0;
 };
 
+// Usage: class_of<t_foo> x;
+// Usage: class_of<t_tfoo> c{ t_tfoo::p_classtype() };
 template<class T>
 struct class_of
 {
@@ -206,7 +208,6 @@ struct class_of
 		return {ptr};
 	}
 };
-// Usage: class_of<t_foo> x;
 
 /*
 class_ref<t_tobject> c;
