@@ -164,10 +164,10 @@ const char* Cast::diagnostic_kind() const { return "cast"; }
 void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }
 
 const char* StorageSlot::diagnostic_kind() const { return "slot"; }
-void StorageSlot::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "slot " << cxx_name << " : " << ctx->known_type_ref(ty); }
+void StorageSlot::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "slot : " << ctx->known_type_ref(ty); }
 
 const char* EnumMemberRef::diagnostic_kind() const { return "enum_member"; }
-void EnumMemberRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "enum member " << cxx_name << " = " << value << " : " << ctx->known_type_ref(ty); }
+void EnumMemberRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "enum member = " << value << " : " << ctx->known_type_ref(ty); }
 
 const char* Integer::diagnostic_kind() const { return "integer"; }
 void Integer::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "integer " << value << " : " << ctx->known_type_ref(ty); }

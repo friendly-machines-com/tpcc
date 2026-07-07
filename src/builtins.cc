@@ -216,7 +216,10 @@ void Builtin::collect_diagnostic_edges(ErrorLetContext*) const {
 	// Pascal RoutineType. Do not add Node::ty here; it is intentionally null.
 }
 void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
-	out << "builtin " << desc->cxx_name << "\n";
+	// Builtin::desc names the C++ implementation hook. Diagnostics describe the
+	// source-visible value instead; the let binding carries the Pascal name when
+	// the builtin is referenced from a scope.
+	out << "builtin\n";
 	ctx->indent(out, indent + 1);
 	out << "signature: <builtin overload set>";
 }
