@@ -12,7 +12,7 @@ type
   LongInt = external nil name 'pas::t_longint';
   QWord = external nil name 'pas::t_qword';
   Int64 = external nil name 'pas::t_int64';
-  Boolean = (False, True);
+  Boolean = external nil name 'pas::t_boolean';
   Char = external nil name 'pas::t_char';
   Double = external nil name 'pas::t_double';
   Pointer = external nil name 'pas::t_pointer';

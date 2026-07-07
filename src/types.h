@@ -69,6 +69,8 @@ struct EnumType: public Type {
 	// Source order, not sorted -- the default value of member N is N, and
 	// emission preserves declaration order.
 	std::vector<Member> members;
+	EnumType(std::string cxx_name, std::string a, std::string b);
+	EnumType();
 };
 
 struct RecordType: public Type {

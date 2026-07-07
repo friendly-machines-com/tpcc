@@ -4,6 +4,20 @@
 
 IncompleteType::IncompleteType(std::string name) : name(name), resolved(nullptr) {}
 
+EnumType::EnumType() : cxx_name("") {
+}
+
+EnumType::EnumType(std::string p_cxx_name, std::string a, std::string b) : cxx_name(p_cxx_name) {
+	members.push_back(Member {
+		.cxx_name = a,
+		.value = 0,
+	});
+	members.push_back(Member {
+		.cxx_name = b,
+		.value = 1,
+	});
+}
+
 FixedArrayType::FixedArrayType(Type* bounds, Type* item_type) {
 	this->bounds = bounds;
 	this->item_type = item_type;

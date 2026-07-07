@@ -22,7 +22,7 @@ IntrinsicType k_longint("pas::t_longint", 6);
 IntrinsicType k_qword("pas::t_qword", 7);
 IntrinsicType k_int64("pas::t_int64", 8);
 IntrinsicType k_double("pas::t_double", {});
-IntrinsicType k_boolean("pas::t_boolean", {});
+EnumType k_boolean("pas::t_boolean", "p_false", "p_true");
 IntrinsicType k_char("pas::t_char", {});
 IntrinsicType k_shortstring("pas::t_shortstring", {});
 IntrinsicType k_pointer("pas::t_pointer", {});
@@ -109,7 +109,7 @@ Type* unknown_type() { return &k_unknown; }
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 30> k_builtins{{
+static const std::array<BuiltinDesc, 32> k_builtins{{
     // Note: constant folder would be polymorphic.
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
@@ -146,6 +146,8 @@ static const std::array<BuiltinDesc, 30> k_builtins{{
     {"pas::p_greaterthanorequal", nullptr},
     {"pas::p_supports", nullptr},
 
+    {"pas::t_boolean::p_true", nullptr},
+    {"pas::t_boolean::p_false", nullptr},
 }};
 
 Type* lookup_builtin_type(std::string cxx_name) {
@@ -155,6 +157,10 @@ Type* lookup_builtin_type(std::string cxx_name) {
 				return t;
 			}
 		} else if (auto q = dynamic_cast<InterfaceType*>(t)) {
+			if (q->cxx_name == cxx_name) {
+				return q;
+			}
+		} else if (auto q = dynamic_cast<EnumType*>(t)) {
 			if (q->cxx_name == cxx_name) {
 				return q;
 			}
@@ -180,6 +186,10 @@ Builtin* create_builtin_value(std::string cxx_name) {
 const Frame& root_frame() {
 	static const Frame f = []() {
 		Frame ff(nullptr);
+		auto p_false = new EnumMemberRef("pas::t_boolean::p_false", 0, &k_boolean);
+		ff.register_variable("false", p_false, &k_boolean);
+		auto p_true = new EnumMemberRef("pas::t_boolean::p_true", 1, &k_boolean);
+		ff.register_variable("true", p_true, &k_boolean);
 		return ff;
 	}();
 	return f;

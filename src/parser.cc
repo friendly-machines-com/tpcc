@@ -1476,6 +1476,9 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 		rt->has_selector = true;
 		rt->selector_cxx_name = cxx_value_name(first);
 		tag_type = parse_type_expression(false);
+
+		auto slot = new StorageSlot(rt->selector_cxx_name, tag_type);
+		body->register_variable(first, slot, tag_type);
 	} else {
 		tag_type = resolve_type(first, false);
 	}
@@ -2456,11 +2459,11 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD, owner_ty);
 		parse_semicolon();
-		if (maybe_parse_keyword("inline")) {
+		while (maybe_parse_keyword("inline")) {
 			// FIXME: use
 			parse_semicolon();
 		}
-		if (maybe_parse_keyword("noreturn")) {
+		while (maybe_parse_keyword("noreturn")) {
 			// FIXME: use
 			parse_semicolon();
 		}
@@ -2483,21 +2486,21 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 			has_overload = true;
 			parse_semicolon();
 		}
-		bool body_follows = peek_keyword("begin") || peek_keyword("var") ||
-				    peek_keyword("const") || peek_keyword("type");
-		if (maybe_parse_keyword("forward")) {
+		bool body_follows = true;
+		while (maybe_parse_keyword("forward")) {
 			parse_semicolon();
 			body_follows = false;
 		}
 		Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
-		if (maybe_parse_keyword("inline")) {
+		while (maybe_parse_keyword("inline")) {
 			// FIXME: use
 			parse_semicolon();
 		}
-		if (maybe_parse_keyword("noreturn")) {
+		while (maybe_parse_keyword("noreturn")) {
 			// FIXME: use
 			parse_semicolon();
 		}
+		body_follows = body_follows && (peek_keyword("begin") || peek_keyword("var") || peek_keyword("const") || peek_keyword("type"));
 		if (maybe_parse_directive("external")) {
 			parse_keyword("nil");
 			parse_directive("name");
@@ -2519,12 +2522,10 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 		} else if (body_follows) {
 			parse_routine_body(target, nullptr);
 		} else {
-			// Interface prototype or `forward` decl -- no body at this site,
-			// but the signature needs to emit so callers (unit consumers, or
-			// later routines in the same section for forward decls) can see
-			// it. Top-level prototypes get empty decorations (no virtual/
-			// override). The parser passes NO whitespace; emit_callable_
-			// prototype owns its own `\n` separator.
+			// Interface prototype or `forward` decl.
+			// No body at this site, but the signature needs to emit so callers can see it.
+			// Top-level prototypes get empty decorations (no virtual or override).
+			// The parser passes NO whitespace; emit_callable_prototype owns its own `\n` separator.
 			if (emitter)
 				emitter->emit_callable_prototype(target, "", "", "");
 		}
