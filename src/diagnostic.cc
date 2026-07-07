@@ -280,6 +280,29 @@ ErrorLetContext::NameBase ErrorLetContext::choose_type_base(const TypeNode& n) {
 ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n) const {
 	if (!n.value_names.empty())
 		return NameBase{name_component(n.value_names.front(), n.kind.c_str()), ""};
+
+	if (auto ma = dynamic_cast<const MemberAccess*>(n.node)) {
+		// MemberAccess is a derived expression, so no Frame contains a direct name
+		// for it. Build one from already-discovered subexpression names instead of
+		// falling back to the unhelpful dynamic kind `member_access`. This remains
+		// diagnostic-local: it does not store names on IR nodes and it does not parse
+		// rendered strings. Values are named in postorder, so the receiver/member
+		// edges normally have assigned names before this node is named.
+		auto ait = value_nodes.find(ma->a);
+		auto bit = value_nodes.find(ma->b);
+		if (ait != value_nodes.end() && ait->second.name.assigned && bit != value_nodes.end()) {
+			std::string member;
+			if (!bit->second.member_names.empty())
+				member = bit->second.member_names.front();
+			else if (!bit->second.value_names.empty())
+				member = bit->second.value_names.front();
+			else if (bit->second.name.assigned)
+				member = render_name_display(bit->second.name);
+			if (!member.empty())
+				return NameBase{name_component(render_name_display(ait->second.name) + "." + member, n.kind.c_str()), ""};
+		}
+	}
+
 	if (!n.member_names.empty())
 		return NameBase{name_component("member_" + n.member_names.front(), n.kind.c_str()), ""};
 	// Overload-set members are often not directly present as Frame::values_local()
