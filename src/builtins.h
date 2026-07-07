@@ -68,6 +68,7 @@ UntypedIntegerType& untyped_integer_type();
 Type* boolean_type();
 Type* char_type();
 Type* shortstring_type();
+Type* double_type();
 Type* unknown_type();
 
 Type* lookup_builtin_type(std::string cxx_name);

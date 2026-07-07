@@ -106,6 +106,10 @@ static int integer_widening_rank(Type* ty) {
 	return *(it->rank);
 }
 
+static bool is_real_intrinsic(Type* ty) {
+	return ty == double_type();
+}
+
 Type* common_arith_type(Type* a, Type* b) {
 	if (!a || !b)
 		return nullptr;
@@ -162,6 +166,11 @@ int conversion_cost(Type* from, Type* to) {
 	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
 	if (rfrom >= 0 && rto >= 0 && rto >= rfrom)
 		return 1;
+	// Pascal permits integer-to-real assignment/conversion. This can be lossy:
+	// large Int64/QWord values are not all exactly representable as double. Keep
+	// the rule explicit here instead of pretending it is another integer widening.
+	if (rfrom >= 0 && is_real_intrinsic(to))
+		return 2;
 	return -1;
 }
 
