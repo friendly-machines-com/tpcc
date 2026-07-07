@@ -45,25 +45,6 @@ static std::string diagnostic_name_token(std::string s, const char* fallback) {
 	return quote_diagnostic_name(s);
 }
 
-static std::string unquote_diagnostic_name_for_composition(const std::string& s) {
-	// When composing a larger diagnostic name (e.g. an operator name plus a
-	// routine signature), use the inner text of an Ada-quoted name so the final
-	// outer name is \:= : routine(...)\ rather than nested/doubled quoting.
-	if (s.size() >= 2 && s.front() == '\\' && s.back() == '\\') {
-		std::string r;
-		for (size_t i = 1; i + 1 < s.size(); ++i) {
-			if (s[i] == '\\' && i + 2 < s.size() && s[i + 1] == '\\') {
-				r.push_back('\\');
-				++i;
-			} else {
-				r.push_back(s[i]);
-			}
-		}
-		return r;
-	}
-	return s;
-}
-
 static const char* diagnostic_param_mode_text(ParamMode mode) {
 	switch (mode) {
 	case ParamMode::Value: return "";
@@ -72,6 +53,27 @@ static const char* diagnostic_param_mode_text(ParamMode mode) {
 	case ParamMode::Const: return "const ";
 	}
 	return "";
+}
+
+static std::string routine_signature_detail(ErrorLetContext* ctx, const RoutineType* rt) {
+	std::string r = "(";
+	for (size_t i = 0; i < rt->formals.size(); ++i) {
+		if (i)
+			r += "; ";
+		const auto& p = rt->formals[i];
+		r += diagnostic_param_mode_text(p.mode);
+		if (!p.pas_name.empty()) {
+			r += p.pas_name;
+			r += ": ";
+		}
+		r += ctx->known_type_ref(p.ty);
+	}
+	r += ")";
+	if (rt->return_type) {
+		r += ": ";
+		r += ctx->known_type_ref(rt->return_type);
+	}
+	return r;
 }
 
 ErrorLetContext::ErrorLetContext(const Frame* naming_frame, unsigned max_depth)
@@ -93,12 +95,13 @@ ErrorLetContext::ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned m
 	}
 }
 
-std::string ErrorLetContext::sanitize(std::string s, const char* fallback) {
-	// Diagnostic-let names are allowed to be quoted with Ada extended-identifier
-	// syntax instead of inventing lossy aliases for operators. Thus a Pascal
-	// operator named := becomes the diagnostic variable \:=\ rather than a
-	// made-up `assign`.
-	return diagnostic_name_token(std::move(s), fallback);
+std::string ErrorLetContext::name_component(std::string s, const char* fallback) {
+	// Internal diagnostic names are structured and unrendered. Preserve source
+	// spelling here (including operators like :=); Ada quoting happens only in
+	// render_name(), at the final output boundary.
+	if (s.empty())
+		return fallback;
+	return s;
 }
 
 ErrorLetContext::TypeNode& ErrorLetContext::ensure_type(const Type* ty) {
@@ -240,45 +243,28 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 	(void)use;
 }
 
-std::string ErrorLetContext::choose_type_base(const TypeNode& n) {
+ErrorLetContext::NameBase ErrorLetContext::choose_type_base(const TypeNode& n) {
 	if (!n.type_names.empty())
-		return sanitize(n.type_names.front(), n.kind.c_str());
+		return NameBase{name_component(n.type_names.front(), n.kind.c_str()), ""};
 	if (!n.value_names.empty())
-		return sanitize("typeof_" + n.value_names.front(), n.kind.c_str());
+		return NameBase{name_component("typeof_" + n.value_names.front(), n.kind.c_str()), ""};
 	if (!n.member_names.empty())
-		return sanitize("member_" + n.member_names.front(), n.kind.c_str());
+		return NameBase{name_component("member_" + n.member_names.front(), n.kind.c_str()), ""};
 	if (auto rt = dynamic_cast<const RoutineType*>(n.ty)) {
-		// Hard-coded inline special case: routine types are usually clearer as
-		// their signature than as routine#N. The signature still reuses the
-		// diagnostic let refs of parameter/result types, so recursive/sharing
-		// handling remains centralized in the graph context.
-		std::string r = "routine(";
-		for (size_t i = 0; i < rt->formals.size(); ++i) {
-			if (i)
-				r += "; ";
-			const auto& p = rt->formals[i];
-			r += diagnostic_param_mode_text(p.mode);
-			if (!p.pas_name.empty()) {
-				r += p.pas_name;
-				r += ": ";
-			}
-			r += unquote_diagnostic_name_for_composition(known_type_ref(p.ty));
-		}
-		r += ")";
-		if (rt->return_type) {
-			r += ": ";
-			r += unquote_diagnostic_name_for_composition(known_type_ref(rt->return_type));
-		}
-		return sanitize(r, n.kind.c_str());
+		// Hard-coded inline special case: routine type variables are named by
+		// their signature. Keep this structured as head + detail so uniqueness
+		// suffixes belong to the diagnostic variable head (`routine#2(...)`), not
+		// to an embedded parameter/result type ref.
+		return NameBase{name_component("routine", n.kind.c_str()), routine_signature_detail(this, rt)};
 	}
-	return sanitize(n.kind, "type");
+	return NameBase{name_component(n.kind, "type"), ""};
 }
 
-std::string ErrorLetContext::choose_value_base(const ValueNode& n) const {
+ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n) const {
 	if (!n.value_names.empty())
-		return sanitize(n.value_names.front(), n.kind.c_str());
+		return NameBase{name_component(n.value_names.front(), n.kind.c_str()), ""};
 	if (!n.member_names.empty())
-		return sanitize("member_" + n.member_names.front(), n.kind.c_str());
+		return NameBase{name_component("member_" + n.member_names.front(), n.kind.c_str()), ""};
 	// Overload-set members are often not directly present as Frame::values_local()
 	// entries: the frame stores the OverloadSet under the source name, while its
 	// Callable members only carry Callable::pas_name. Use that before falling
@@ -286,44 +272,49 @@ std::string ErrorLetContext::choose_value_base(const ValueNode& n) const {
 	// diagnostics say `value procedure =` for every operator candidate.
 	if (auto c = dynamic_cast<const Callable*>(n.node)) {
 		if (!c->pas_name.empty()) {
-			// Overloaded callables with the same Pascal name need better diagnostic
-			// variable names than just \:=\, \:=\#2, ... . By the time value names
-			// are assigned, assign_names() has already assigned all referenced Type*
-			// names, so include the RoutineType let-ref when available. This reuses
-			// the surrounding type graph instead of expanding the signature inline.
+			std::string detail;
 			if (c->ty) {
 				auto it = type_nodes.find(c->ty);
-				if (it != type_nodes.end() && !it->second.name.empty())
-					return sanitize(c->pas_name + " : " + unquote_diagnostic_name_for_composition(it->second.name), n.kind.c_str());
+				if (it != type_nodes.end() && !!it->second.name.assigned) {
+					detail = " : ";
+					detail += render_name(it->second.name);
+				}
 			}
-			return sanitize(c->pas_name, n.kind.c_str());
+			return NameBase{name_component(c->pas_name, n.kind.c_str()), detail};
 		}
 		if (!c->cxx_name.empty())
-			return sanitize(c->cxx_name, n.kind.c_str());
+			return NameBase{name_component(c->cxx_name, n.kind.c_str()), ""};
 	}
 	if (auto s = dynamic_cast<const StorageSlot*>(n.node)) {
 		if (!s->cxx_name.empty())
-			return sanitize(s->cxx_name, n.kind.c_str());
+			return NameBase{name_component(s->cxx_name, n.kind.c_str()), ""};
 	}
-	return sanitize(n.kind, "value");
+	return NameBase{name_component(n.kind, "value"), ""};
 }
 
-std::string ErrorLetContext::uniquify(std::string base) {
-	unsigned& count = used_names[base];
+ErrorLetContext::DiagnosticName ErrorLetContext::uniquify(NameBase base) {
+	std::string key = base.head;
+	key.push_back('\0');
+	key += base.detail;
+	unsigned& count = used_names[key];
 	count++;
-	if (count == 1)
-		return base;
 
-	std::string suffix = "#" + std::to_string(count);
-	// If the base is an Ada-quoted diagnostic name, keep the uniqueness suffix
-	// inside the quotes: \routine(...)#2\, not \routine(...)\#2. The latter
-	// is no longer one diagnostic variable name and composes badly when another
-	// quoted name embeds this ref.
-	if (base.size() >= 2 && base.front() == '\\' && base.back() == '\\') {
-		base.insert(base.end() - 1, suffix.begin(), suffix.end());
-		return base;
-	}
-	return base + suffix;
+	DiagnosticName name;
+	name.head = std::move(base.head);
+	name.detail = std::move(base.detail);
+	name.suffix = count == 1 ? 0 : count;
+	name.assigned = true;
+	return name;
+}
+
+std::string ErrorLetContext::render_name(const DiagnosticName& name) const {
+	if (!name.assigned)
+		return "<unnamed>";
+	std::string rendered = name.head;
+	if (name.suffix)
+		rendered += "#" + std::to_string(name.suffix);
+	rendered += name.detail;
+	return diagnostic_name_token(std::move(rendered), "value");
 }
 
 void ErrorLetContext::assign_names() {
@@ -338,7 +329,7 @@ void ErrorLetContext::assign_names() {
 		if (!ty || dynamic_cast<const RoutineType*>(ty))
 			continue;
 		TypeNode& n = type_nodes[ty];
-		if (!n.referenced || !n.name.empty())
+		if (!n.referenced || n.name.assigned)
 			continue;
 		n.name = uniquify(choose_type_base(n));
 	}
@@ -346,7 +337,7 @@ void ErrorLetContext::assign_names() {
 		if (!ty || !dynamic_cast<const RoutineType*>(ty))
 			continue;
 		TypeNode& n = type_nodes[ty];
-		if (!n.referenced || !n.name.empty())
+		if (!n.referenced || n.name.assigned)
 			continue;
 		n.name = uniquify(choose_type_base(n));
 	}
@@ -354,7 +345,7 @@ void ErrorLetContext::assign_names() {
 		if (!node)
 			continue;
 		ValueNode& n = value_nodes[node];
-		if (!n.referenced || !n.name.empty())
+		if (!n.referenced || n.name.assigned)
 			continue;
 		n.name = uniquify(choose_value_base(n));
 	}
@@ -385,18 +376,18 @@ std::string ErrorLetContext::known_type_ref(const Type* ty) const {
 	if (!ty)
 		return "<unknown type>";
 	auto it = type_nodes.find(ty);
-	if (it == type_nodes.end() || it->second.name.empty())
+	if (it == type_nodes.end() || !it->second.name.assigned)
 		return "<unregistered type>";
-	return it->second.name;
+	return render_name(it->second.name);
 }
 
 std::string ErrorLetContext::known_value_ref(const Node* node) const {
 	if (!node)
 		return "<null value>";
 	auto it = value_nodes.find(node);
-	if (it == value_nodes.end() || it->second.name.empty())
+	if (it == value_nodes.end() || !it->second.name.assigned)
 		return "<unregistered value>";
-	return it->second.name;
+	return render_name(it->second.name);
 }
 
 void ErrorLetContext::indent(std::ostringstream& out, unsigned level) const {
@@ -434,10 +425,10 @@ std::string ErrorLetContext::notes() {
 		if (!ty)
 			continue;
 		const TypeNode& n = type_nodes.at(ty);
-		if (!n.referenced || n.name.empty())
+		if (!n.referenced || !n.name.assigned)
 			continue;
 		indent(out, 2);
-		out << "type " << n.name << " =\n";
+		out << "type " << render_name(n.name) << " =\n";
 		indent(out, 3);
 		if (n.truncated)
 			ty->print_diagnostic_stub(this, out, 3);
@@ -450,10 +441,10 @@ std::string ErrorLetContext::notes() {
 		if (!node)
 			continue;
 		const ValueNode& n = value_nodes.at(node);
-		if (!n.referenced || n.name.empty())
+		if (!n.referenced || !n.name.assigned)
 			continue;
 		indent(out, 2);
-		out << "value " << n.name << " =\n";
+		out << "value " << render_name(n.name) << " =\n";
 		indent(out, 3);
 		if (n.truncated)
 			node->print_diagnostic_stub(this, out, 3);

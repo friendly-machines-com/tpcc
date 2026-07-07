@@ -57,9 +57,21 @@ public:
 	void print_frame_members(std::ostringstream& out, const Frame* frame, unsigned indent_level) const;
 
 private:
+	struct DiagnosticName {
+		std::string head;
+		std::string detail;
+		unsigned suffix = 0;
+		bool assigned = false;
+	};
+
+	struct NameBase {
+		std::string head;
+		std::string detail;
+	};
+
 	struct TypeNode {
 		const Type* ty = nullptr;
-		std::string name;
+		DiagnosticName name;
 		std::string kind;
 		bool referenced = false;
 		bool discovered = false;
@@ -73,7 +85,7 @@ private:
 
 	struct ValueNode {
 		const Node* node = nullptr;
-		std::string name;
+		DiagnosticName name;
 		std::string kind;
 		bool referenced = false;
 		bool discovered = false;
@@ -112,8 +124,9 @@ private:
 	void index_frame(const Frame* frame, DiagnosticFrameUse use);
 	void prepare();
 	void assign_names();
-	std::string choose_type_base(const TypeNode& n);
-	std::string choose_value_base(const ValueNode& n) const;
-	std::string uniquify(std::string base);
-	static std::string sanitize(std::string s, const char* fallback);
+	NameBase choose_type_base(const TypeNode& n);
+	NameBase choose_value_base(const ValueNode& n) const;
+	DiagnosticName uniquify(NameBase base);
+	std::string render_name(const DiagnosticName& name) const;
+	static std::string name_component(std::string s, const char* fallback);
 };
