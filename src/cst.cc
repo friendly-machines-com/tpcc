@@ -197,7 +197,6 @@ void Callable::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 }
 void Callable::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << diagnostic_kind() << " " << pas_name << "\n";
-	ctx->indent(out, indent + 1); out << "cxx: " << cxx_name << "\n";
 	ctx->indent(out, indent + 1); out << "type: " << ctx->known_type_ref(ty) << "\n";
 	ctx->indent(out, indent + 1); out << "external: " << (is_external ? "yes" : "no") << "\n";
 	ctx->indent(out, indent + 1); out << "has_body: " << (has_body ? "yes" : "no");
