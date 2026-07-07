@@ -180,7 +180,9 @@ protected:
 	Node* maybe_parse_numeral();
 	Node* parse_numeral();
 	Node* resolve_lvalue(std::string name);
+	Node* maybe_resolve_value(std::string name);
 	Node* resolve_value(std::string name);
+	Type* maybe_resolve_type(std::string name);
 	Type* resolve_type(std::string name, bool allow_forward);
     bool maybe_parse_directive(std::string directive);
 	void parse_directive(std::string s);

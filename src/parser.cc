@@ -894,8 +894,8 @@ Node* Parser::parse_numeral() {
 }
 
 /** Walk the scope stack top-down looking up a value-position name (variable,
- *  constant, procedure, function, builtin). Raise if not found. */
-Node* Parser::resolve_value(std::string name) {
+ *  constant, procedure, function, builtin). Return null if not found. */
+Node* Parser::maybe_resolve_value(std::string name) {
 	std::vector<Callable*> collected;
 	// Walk top-down. First hit shadows unless it's overload-marked; then
 	// keep walking to aggregate additional overload-marked hits from lower
@@ -934,13 +934,19 @@ Node* Parser::resolve_value(std::string name) {
 			break;
 		}
 	}
-	if (collected.empty()) {
-		raise_parse_error("unresolved value identifier: " + name);
+	if (collected.empty())
 		return nullptr;
-	}
 	if (collected.size() == 1)
 		return collected[0];
 	return new OverloadSet(std::move(collected));
+}
+
+/** Walk the scope stack top-down looking up a value-position name. Raise if not found. */
+Node* Parser::resolve_value(std::string name) {
+	if (Node* hit = maybe_resolve_value(name))
+		return hit;
+	raise_parse_error("unresolved value identifier: " + name);
+	return nullptr;
 }
 
 /** value that can be assigned to */
@@ -959,17 +965,22 @@ Node* Parser::resolve_lvalue(std::string name) {
 	return nullptr;
 }
 
+Type* Parser::maybe_resolve_type(std::string name) {
+	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+		if (Type* hit = it->frame->lookup_type(name))
+			return hit;
+	}
+	return nullptr;
+}
+
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
  *  IncompleteType under NAME in current_type_block and return it. This is how
  *  `^TFoo` before TFoo is declared gets a placeholder. If allow_forward is
  *  false, an unresolved name is a hard error. */
 Type* Parser::resolve_type(std::string name, bool allow_forward) {
-	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Type* hit = it->frame->lookup_type(name)) {
-			return hit;
-		}
-	}
+	if (Type* hit = maybe_resolve_type(name))
+		return hit;
 	if (allow_forward && current_type_block) {
 		auto inc = new IncompleteType(current_location(), name);
 		current_type_block->register_type(name, inc);
@@ -1032,7 +1043,22 @@ Node* Parser::parse_value() {
 	}
 	// FIXME: bool literals also belong here (need enum-member support).
 	auto id = parse_identifier();
-	return resolve_value(id);
+	if (Node* value = maybe_resolve_value(id))
+		return value;
+	if (input_token == "(") {
+		if (Type* target_ty = maybe_resolve_type(id)) {
+			parse_opening_paren();
+			Node* value = parse_expression();
+			parse_closing_paren();
+
+			// Pascal typecast syntax is `Type(expr)`. This is an explicit cast,
+			// not a value call and not the implicit-conversion helper `cast()`, so
+			// it must be parsed from the type namespace and represented directly.
+			return new Cast(value, target_ty);
+		}
+	}
+	raise_parse_error("unresolved value identifier: " + id);
+	return nullptr;
 }
 
 // `inherited Name[(args)]` or anonymous `inherited;`. Calls the parent
