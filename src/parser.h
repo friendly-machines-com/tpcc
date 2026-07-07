@@ -332,6 +332,13 @@ protected:
 	Type* raise_type_mismatch(std::string message, Type* expected, Type* got);
 	Type* raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
 	[[noreturn]] void raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
+	[[noreturn]] void raise_overload_resolution_error(std::string name,
+	                                                  Node* receiver,
+	                                                  const std::vector<Node*>& args,
+	                                                  const std::vector<Callable*>& candidates,
+	                                                  const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
+	                                                  const std::vector<Callable*>& non_dominated,
+	                                                  bool ambiguous);
 
 public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);

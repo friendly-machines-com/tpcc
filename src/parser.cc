@@ -222,6 +222,70 @@ Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected
 	return got; // future non-fatal diagnostics can continue with the parsed type
 }
 
+
+static void append_cost_vector(std::stringstream& sst, const std::vector<int>& costs) {
+	sst << "[";
+	for (size_t i = 0; i < costs.size(); ++i) {
+		if (i)
+			sst << ", ";
+		sst << costs[i];
+	}
+	sst << "]";
+}
+
+[[noreturn]] void Parser::raise_overload_resolution_error(std::string name,
+                                                          Node* receiver,
+                                                          const std::vector<Node*>& args,
+                                                          const std::vector<Callable*>& candidates,
+                                                          const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
+                                                          const std::vector<Callable*>& non_dominated,
+                                                          bool ambiguous) {
+	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
+	std::stringstream sst;
+	sst << (ambiguous ? "ambiguous overload" : "no matching overload") << " for '" << name << "'";
+
+	if (receiver) {
+		sst << "\n  receiver: " << ctx.value_ref(receiver) << " : " << ctx.type_ref(receiver->ty);
+	}
+	for (size_t i = 0; i < args.size(); ++i) {
+		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
+	}
+
+	sst << "\n  candidates:";
+	for (Callable* c : candidates) {
+		sst << "\n    " << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
+		bool is_viable = false;
+		for (const auto& v : viable) {
+			if (v.first == c) {
+				is_viable = true;
+				sst << " viable cost ";
+				append_cost_vector(sst, v.second);
+				break;
+			}
+		}
+		if (!is_viable) {
+			sst << " not viable";
+		}
+	}
+
+	if (ambiguous) {
+		sst << "\n  non-dominated viable candidates:";
+		for (Callable* c : non_dominated) {
+			sst << "\n    " << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
+			for (const auto& v : viable) {
+				if (v.first == c) {
+					sst << " cost ";
+					append_cost_vector(sst, v.second);
+					break;
+				}
+			}
+		}
+	}
+
+	sst << ctx.notes();
+	emit_parse_error(input_file_name, input_file_line_number, sst.str());
+}
+
 [[noreturn]] void Parser::raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
 	std::stringstream sst;
@@ -2225,14 +2289,14 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		parse_keyword("of");
 		parse_keyword("object");
 		if (kind != METHOD) { // definitely not: CONSTRUCTOR, DESTRUCTOR, CLASS_METHOD
-			raise_type_parse_error("expected method");
+			raise_type_kind_mismatch("expected method", "method", owner);
 		}
 		kind = METHOD;
 	} else {
 		if (auto ty = dynamic_cast<ClassType*>(owner)) {
 		} else {
 			if (kind != ROUTINE) {
-				raise_type_parse_error("expected routine");
+				raise_type_kind_mismatch("expected routine", "routine", owner);
 			}
 			kind = ROUTINE;
 		}
@@ -2656,8 +2720,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		}
 		chosen = c;
 	} else if (auto os = dynamic_cast<OverloadSet*>(target)) {
+		std::vector<Callable*> candidates = os->members;
 		std::vector<std::pair<Callable*, std::vector<int>>> viable;
-		for (auto* c : os->members) {
+		for (auto* c : candidates) {
 			if (name_for_error.empty() && !c->pas_name.empty()) {
 				name_for_error = c->pas_name;
 			}
@@ -2666,7 +2731,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 				viable.push_back({c, std::move(costs)});
 		}
 		if (viable.empty()) {
-			raise_no_matching_overload(name_for_error, receiver, args);
+			std::vector<Callable*> none;
+			raise_overload_resolution_error(name_for_error, receiver, args, candidates, viable, none, false);
 		}
 		std::vector<Callable*> non_dominated;
 		for (size_t i = 0; i < viable.size(); i++) {
@@ -2681,7 +2747,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 				non_dominated.push_back(viable[i].first);
 		}
 		if (non_dominated.size() != 1) {
-			raise_parse_error("ambiguous overload for '" + name_for_error + "'");
+			raise_overload_resolution_error(name_for_error, receiver, args, candidates, viable, non_dominated, true);
 		}
 		chosen = non_dominated[0];
 	} else {
