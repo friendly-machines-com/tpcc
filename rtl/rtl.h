@@ -102,6 +102,8 @@ inline t_boolean p_greaterthanorequal(t_shortstring&& a, t_shortstring&& b) {
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
 template<typename T> inline T p_low() { return std::numeric_limits<T>::lowest(); }
 template<typename T> inline T p_high() { return std::numeric_limits<T>::max(); }
+inline t_integer p_length(const t_shortstring& s) { return s.length; }
+template<typename T, size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
 
 #define DEFINE_OPERATIONS(T) \
 	inline T p_bitwiseand(T a, T b) { return a & b; } \

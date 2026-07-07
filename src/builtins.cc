@@ -109,13 +109,14 @@ Type* unknown_type() { return &k_unknown; }
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 34> k_builtins{{
+static const std::array<BuiltinDesc, 35> k_builtins{{
     // Note: constant folder would be polymorphic.
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
     {"pas::p_low", nullptr},
     {"pas::p_high", nullptr},
+    {"pas::p_length", nullptr},
     {"pas::p_assigned", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
@@ -199,6 +200,7 @@ const Frame& root_frame() {
 		// special-cases them when this root builtin is the resolved callee.
 		ff.register_variable("low", create_builtin_value("pas::p_low"), nullptr);
 		ff.register_variable("high", create_builtin_value("pas::p_high"), nullptr);
+		ff.register_variable("length", create_builtin_value("pas::p_length"), nullptr);
 		return ff;
 	}();
 	return f;

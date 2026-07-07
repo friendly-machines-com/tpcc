@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <set>
 #include <typeinfo>
+#include <cstdint>
 
 // NODE may be null; SITE names the caller for the error message.
 [[noreturn]] static void unhandled_node(const char* site, const Node* node) {
@@ -18,6 +19,29 @@
 	fflush(stderr);
 	exit(1);
 }
+
+static Type* emit_unwrap_incomplete(Type* ty) {
+	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
+		if (!inc->resolved)
+			break;
+		ty = inc->resolved;
+	}
+	return ty;
+}
+
+static bool fixed_array_length(Type* ty, uint64_t* out) {
+	ty = emit_unwrap_incomplete(ty);
+	auto arr = dynamic_cast<FixedArrayType*>(ty);
+	if (!arr)
+		return false;
+	Type* bounds_ty = emit_unwrap_incomplete(arr->bounds);
+	auto bounds = dynamic_cast<BoundedCardinalType*>(bounds_ty);
+	if (!bounds || bounds->higher_bound < bounds->lower_bound)
+		return false;
+	*out = bounds->higher_bound - bounds->lower_bound + 1;
+	return true;
+}
+
 [[noreturn]] static void unhandled_type(const char* site, const Type* ty) {
 	if (ty) {
 		fprintf(stderr, "internal compiler error: %s does not handle type kind '%s'\n",
@@ -802,6 +826,16 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(pc->args[i]);
 		}
 		fprintf(active, ")");
+		return;
+	}
+	if (auto len = dynamic_cast<Length*>(expr)) {
+		uint64_t array_len = 0;
+		if (fixed_array_length(len->a ? len->a->ty : nullptr, &array_len)) {
+			fprintf(active, "%llu", (unsigned long long)array_len);
+		} else {
+			emit_expression(len->a);
+			fprintf(active, ".length");
+		}
 		return;
 	}
 	if (auto tb = dynamic_cast<TypeBound*>(expr)) {

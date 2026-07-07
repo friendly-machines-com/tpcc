@@ -44,6 +44,7 @@ AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
     : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
+Length::Length(Node* value, Type* result_type) : UnaryOperation(value) { this->ty = result_type; }
 
 // Value-identifier ctors: take an OPTIONAL Pascal name. If non-empty, apply
 // the `p_` prefix so the cxx identifier stays clear of C++ reserved words
@@ -200,6 +201,11 @@ const char* TypeBound::diagnostic_kind() const { return kind == TypeBoundKind::L
 void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_type_edge(operand_type); }
 void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
+}
+
+const char* Length::diagnostic_kind() const { return "length"; }
+void Length::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
+	out << "length(" << ctx->known_value_ref(a) << ") : " << ctx->known_type_ref(ty);
 }
 
 const char* Coerce::diagnostic_kind() const { return "coerce"; }

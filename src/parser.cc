@@ -25,6 +25,7 @@
 // earlier in the file) reference these before their definitions.
 static Frame* body_frame_of(Type* ty);
 static Type* call_result_type(Node* callee);
+static Type* unwrap_incomplete(Type* ty);
 
 static ErrorLetContext make_error_let_context_from_scopes(const std::vector<ScopeEntry>& scopes, unsigned max_depth) {
 	std::vector<DiagnosticScope> diagnostic_scopes;
@@ -1046,8 +1047,8 @@ Node* Parser::parse_value() {
 		consume();
 		return new String(std::move(s), shortstring_type());
 	}
-	// Low/High are Pascal predefined intrinsics, not reserved words. In this
-	// parser's terminology they are directive-like: usable as ordinary
+	// Low/High/Length are Pascal predefined intrinsics, not reserved words. In
+	// this parser's terminology they are directive-like: usable as ordinary
 	// identifiers unless the visible binding is the root builtin and this exact
 	// syntactic form is present. Do not put them in the keyword table.
 	if (peek_directive("low") || peek_directive("high")) {
@@ -1059,6 +1060,20 @@ Node* Parser::parse_value() {
 			Type* target_ty = parse_type_expression(false);
 			parse_closing_paren();
 			return new TypeBound(directive == "low" ? TypeBoundKind::Low : TypeBoundKind::High, target_ty);
+		}
+	}
+	if (peek_directive("length")) {
+		Node* value = maybe_resolve_value("length");
+		if (is_builtin_cxx_name(value, "pas::p_length")) {
+			parse_directive("length");
+			parse_opening_paren();
+			Node* arg = parse_expression();
+			parse_closing_paren();
+
+			Type* arg_ty = unwrap_incomplete(arg ? arg->ty : nullptr);
+			if (arg_ty != shortstring_type() && !dynamic_cast<FixedArrayType*>(arg_ty))
+				raise_type_kind_mismatch("length() argument", "array or string", arg_ty);
+			return new Length(arg, lookup_builtin_type("pas::t_integer"));
 		}
 	}
 

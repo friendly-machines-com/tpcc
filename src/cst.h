@@ -220,6 +220,15 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Compiler intrinsic `Length(x)`. The operand is a value expression (array or
+ *  shortstring), unlike Low/High whose operand is a type. */
+class Length: public UnaryOperation {
+public:
+	Length(Node* value, Type* result_type);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 class Coerce: public BinaryOperation {
 public:
 	Coerce(Node* a, Node* b);
