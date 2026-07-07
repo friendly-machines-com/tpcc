@@ -53,6 +53,7 @@ public:
 	// Called by Type/Node implementations while printing definitions.
 	std::string known_type_ref(const Type* ty) const;
 	std::string known_value_ref(const Node* node) const;
+	std::string known_type_display(const Type* ty) const;
 	void indent(std::ostringstream& out, unsigned level) const;
 	void print_frame_members(std::ostringstream& out, const Frame* frame, unsigned indent_level) const;
 
@@ -128,5 +129,6 @@ private:
 	NameBase choose_value_base(const ValueNode& n) const;
 	DiagnosticName uniquify(NameBase base);
 	std::string render_name(const DiagnosticName& name) const;
+	std::string render_name_display(const DiagnosticName& name) const;
 	static std::string name_component(std::string s, const char* fallback);
 };

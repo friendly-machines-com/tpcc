@@ -66,12 +66,12 @@ static std::string routine_signature_detail(ErrorLetContext* ctx, const RoutineT
 			r += p.pas_name;
 			r += ": ";
 		}
-		r += ctx->known_type_ref(p.ty);
+		r += ctx->known_type_display(p.ty);
 	}
 	r += ")";
 	if (rt->return_type) {
 		r += ": ";
-		r += ctx->known_type_ref(rt->return_type);
+		r += ctx->known_type_display(rt->return_type);
 	}
 	return r;
 }
@@ -277,7 +277,7 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 				auto it = type_nodes.find(c->ty);
 				if (it != type_nodes.end() && !!it->second.name.assigned) {
 					detail = " : ";
-					detail += render_name(it->second.name);
+					detail += render_name_display(it->second.name);
 				}
 			}
 			return NameBase{name_component(c->pas_name, n.kind.c_str()), detail};
@@ -315,6 +315,16 @@ std::string ErrorLetContext::render_name(const DiagnosticName& name) const {
 		rendered += "#" + std::to_string(name.suffix);
 	rendered += name.detail;
 	return diagnostic_name_token(std::move(rendered), "value");
+}
+
+std::string ErrorLetContext::render_name_display(const DiagnosticName& name) const {
+	if (!name.assigned)
+		return "<unnamed>";
+	std::string rendered = name.head;
+	if (name.suffix)
+		rendered += "#" + std::to_string(name.suffix);
+	rendered += name.detail;
+	return rendered;
 }
 
 void ErrorLetContext::assign_names() {
@@ -379,6 +389,15 @@ std::string ErrorLetContext::known_type_ref(const Type* ty) const {
 	if (it == type_nodes.end() || !it->second.name.assigned)
 		return "<unregistered type>";
 	return render_name(it->second.name);
+}
+
+std::string ErrorLetContext::known_type_display(const Type* ty) const {
+	if (!ty)
+		return "<unknown type>";
+	auto it = type_nodes.find(ty);
+	if (it == type_nodes.end() || !it->second.name.assigned)
+		return "<unregistered type>";
+	return render_name_display(it->second.name);
 }
 
 std::string ErrorLetContext::known_value_ref(const Node* node) const {
