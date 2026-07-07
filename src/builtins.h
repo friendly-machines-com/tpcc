@@ -44,6 +44,7 @@ public:
 	const BuiltinDesc* desc;
 	Builtin(const BuiltinDesc* desc);
 	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 

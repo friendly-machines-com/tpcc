@@ -69,6 +69,10 @@ void ErrorLetContext::discover_type(const Type* ty, unsigned depth) {
 	if (!ty)
 		return;
 	TypeNode& n = ensure_type(ty);
+	if (!n.referenced) {
+		n.referenced = true;
+		type_order.push_back(ty);
+	}
 	n.min_depth = std::min(n.min_depth, depth);
 	if (depth >= max_depth) {
 		n.truncated = true;
@@ -89,6 +93,10 @@ void ErrorLetContext::discover_value(const Node* node, unsigned depth) {
 	if (!node)
 		return;
 	ValueNode& n = ensure_value(node);
+	if (!n.referenced) {
+		n.referenced = true;
+		value_order.push_back(node);
+	}
 	n.min_depth = std::min(n.min_depth, depth);
 	if (depth >= max_depth) {
 		n.truncated = true;
@@ -118,9 +126,12 @@ void ErrorLetContext::add_frame_edge(const Frame* frame, DiagnosticFrameUse use)
 }
 
 void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
-	if (!frame || indexed_frames.count(frame))
+	if (!frame)
 		return;
-	indexed_frames.insert(frame);
+	auto key = std::make_pair(frame, use);
+	if (indexed_frames.count(key))
+		return;
+	indexed_frames.insert(key);
 
 	for (const auto& item : frame->types_local()) {
 		const std::string& name = item.first;

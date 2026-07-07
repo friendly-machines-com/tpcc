@@ -53,6 +53,7 @@ private:
 		const Type* ty = nullptr;
 		std::string name;
 		std::string kind;
+		bool referenced = false;
 		bool discovered = false;
 		bool discovering = false;
 		bool truncated = false;
@@ -66,6 +67,7 @@ private:
 		const Node* node = nullptr;
 		std::string name;
 		std::string kind;
+		bool referenced = false;
 		bool discovered = false;
 		bool discovering = false;
 		bool truncated = false;
@@ -83,7 +85,7 @@ private:
 	std::map<const Node*, ValueNode> value_nodes;
 	std::vector<const Type*> type_order;
 	std::vector<const Node*> value_order;
-	std::set<const Frame*> indexed_frames;
+	std::set<std::pair<const Frame*, DiagnosticFrameUse>> indexed_frames;
 	std::map<std::string, unsigned> used_names;
 
 	TypeNode& ensure_type(const Type* ty);

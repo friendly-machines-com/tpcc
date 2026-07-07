@@ -206,6 +206,12 @@ void IntrinsicType::print_diagnostic_definition(ErrorLetContext*, std::ostringst
 }
 
 const char* Builtin::diagnostic_kind() const { return "builtin"; }
-void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "builtin " << desc->cxx_name << " : " << ctx->known_type_ref(ty);
+void Builtin::collect_diagnostic_edges(ErrorLetContext*) const {
+	// A Builtin denotes an opaque C++ overload set such as pas::p_dec, not one
+	// Pascal RoutineType. Do not add Node::ty here; it is intentionally null.
+}
+void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "builtin " << desc->cxx_name << "\n";
+	ctx->indent(out, indent + 1);
+	out << "signature: <builtin overload set>";
 }
