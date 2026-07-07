@@ -230,8 +230,7 @@ void Callable::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 void Callable::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << diagnostic_kind() << " " << diagnostic_pas_name(pas_name) << "\n";
 	ctx->indent(out, indent + 1); out << "type: " << ctx->known_type_ref(ty) << "\n";
-	ctx->indent(out, indent + 1); out << "external: " << (is_external ? "yes" : "no") << "\n";
-	ctx->indent(out, indent + 1); out << "has_body: " << (has_body ? "yes" : "no");
+	ctx->indent(out, indent + 1); out << "external: " << (is_external ? "yes" : "no");
 }
 const char* Procedure::diagnostic_kind() const { return "procedure"; }
 
@@ -241,6 +240,7 @@ void Method::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstrea
 	out << "method " << diagnostic_pas_name(pas_name) << "\n";
 	ctx->indent(out, indent + 1); out << "owner: " << ctx->known_type_ref(owner_class) << "\n";
 	ctx->indent(out, indent + 1); out << "type: " << ctx->known_type_ref(ty) << "\n";
+	ctx->indent(out, indent + 1); out << "external: " << (is_external ? "yes" : "no") << "\n";
 	ctx->indent(out, indent + 1); out << "virtual: ";
 	switch (virtual_kind) { case VirtualKind::None: out << "none"; break; case VirtualKind::Virtual: out << "virtual"; break; case VirtualKind::Override: out << "override"; break; case VirtualKind::Abstract: out << "abstract"; break; case VirtualKind::Dynamic: out << "dynamic"; break; }
 }
