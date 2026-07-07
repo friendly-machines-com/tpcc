@@ -45,8 +45,6 @@ operator+(a, b: Integer): Integer; external nil name 'pas::p_add';
 operator+(a, b: QWord): QWord; external nil name 'pas::p_add';
 operator+(a, b: Int64): Int64; external nil name 'pas::p_add';
 
-// Unary minus on unsigned intrinsics follows the C++/RTL operation here: the
-// result type remains unsigned and therefore wraps modulo that type's range.
 operator-(a: Cardinal): Cardinal; external nil name 'pas::p_negative';
 operator-(a: Integer): Integer; external nil name 'pas::p_negative';
 operator-(a: QWord): QWord; external nil name 'pas::p_negative';

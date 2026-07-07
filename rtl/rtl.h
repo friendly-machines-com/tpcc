@@ -112,6 +112,7 @@ template<typename T, size_t N> inline t_integer p_length(const T (&)[N]) { retur
 	inline T p_add(T a, T b) { return a + b; } \
 	inline T p_subtract(T a, T b) { return a - b; } \
 	inline T p_positive(T b) { return +b; } \
+	/* For unsigned T, unary minus wraps modulo T's range; this is intentional RTL behavior, not a widening or signed conversion. */ \
 	inline T p_negative(T b) { return -b; } \
 	inline T p_multiply(T a, T b) { return a * b; } \
 	inline double p_divide(T a, T b) { return (double) a / (double) b; } \
