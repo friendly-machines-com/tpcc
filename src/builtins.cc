@@ -109,11 +109,13 @@ Type* unknown_type() { return &k_unknown; }
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 // TODO: const_fold is nullptr for every row; wire compile-time folding
 // rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 32> k_builtins{{
+static const std::array<BuiltinDesc, 34> k_builtins{{
     // Note: constant folder would be polymorphic.
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
+    {"pas::p_low", nullptr},
+    {"pas::p_high", nullptr},
     {"pas::p_assigned", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
@@ -190,6 +192,13 @@ const Frame& root_frame() {
 		ff.register_variable("false", p_false, &k_boolean);
 		auto p_true = new EnumMemberRef("pas::t_boolean::p_true", 1, &k_boolean);
 		ff.register_variable("true", p_true, &k_boolean);
+
+		// Low/High are compiler intrinsics with a type argument (`High(Int64)`),
+		// not ordinary calls with a value argument. Registering them in the value
+		// namespace lets normal Pascal shadowing rules apply; the parser only
+		// special-cases them when this root builtin is the resolved callee.
+		ff.register_variable("low", create_builtin_value("pas::p_low"), nullptr);
+		ff.register_variable("high", create_builtin_value("pas::p_high"), nullptr);
 		return ff;
 	}();
 	return f;

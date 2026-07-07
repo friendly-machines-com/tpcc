@@ -56,6 +56,7 @@ operator/(a, b: QWord): Double; external nil name 'pas::p_divide';
 operator/(a, b: Int64): Double; external nil name 'pas::p_divide';
 
 operator :=(a: Cardinal): Cardinal; external nil name 'pas::p_assign';
+operator :=(a: Boolean): Boolean; external nil name 'pas::p_assign';
 
 operator <(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthan';
 operator <=(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthanorequal';
@@ -72,6 +73,22 @@ operator xor(a, b: Cardinal): Cardinal; external nil name 'pas::p_bitwisexor';
 
 operator shl(a, b: Cardinal): Cardinal; external nil name 'pas::p_leftshift';
 operator shr(a, b: Cardinal): Cardinal; external nil name 'pas::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
+
+operator <(a, b: Int64): Boolean; external nil name 'pas::p_lessthan';
+operator <=(a, b: Int64): Boolean; external nil name 'pas::p_lessthanorequal';
+operator =(a, b: Int64): Boolean; external nil name 'pas::p_equal';
+operator >(a, b: Int64): Boolean; external nil name 'pas::p_greaterthan';
+operator >=(a, b: Int64): Boolean; external nil name 'pas::p_greaterthanorequal';
+//operator <>(a, b: Int64): Boolean; external nil name 'pas::p_notequal';
+operator div(a, b: Int64): Cardinal; external nil name 'pas::p_intdivide';
+operator mod(a, b: Int64): Cardinal; external nil name 'pas::p_modulus';
+
+operator and(a, b: Int64): Cardinal; external nil name 'pas::p_bitwiseand';
+operator or(a, b: Int64): Cardinal; external nil name 'pas::p_bitwiseor';
+operator xor(a, b: Int64): Cardinal; external nil name 'pas::p_bitwisexor';
+
+operator shl(a, b: Int64): Cardinal; external nil name 'pas::p_leftshift';
+operator shr(a, b: Int64): Cardinal; external nil name 'pas::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
 
 function ord(const x): Cardinal; external nil name 'pas::p_ord';
 procedure inc(var x); external nil name 'pas::p_inc';

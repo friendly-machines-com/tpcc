@@ -10,6 +10,8 @@ class RoutineType;
 class Callable;
 class ErrorLetContext;
 
+enum class TypeBoundKind { Low, High };
+
 class Node {
 public:
 	virtual const char* diagnostic_kind() const;
@@ -201,6 +203,20 @@ class NilLiteral: public Node {
 public:
 	NilLiteral() = default;
 	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+/** Compiler intrinsic `Low(T)` / `High(T)`. The argument is a type, not a
+ *  value expression, so this is not a ProcCall. It carries both the queried
+ *  type (operand_type) and the expression result type (Node::ty), currently
+ *  the same Type*. */
+class TypeBound: public Node {
+public:
+	TypeBoundKind kind;
+	Type* operand_type;
+	TypeBound(TypeBoundKind kind, Type* operand_type);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 

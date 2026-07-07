@@ -42,6 +42,8 @@ Dereference::Dereference(Node* a) : UnaryOperation(a) {}
 Return::Return(Node* a) : UnaryOperation(a) {}
 AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
+    : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
 
 // Value-identifier ctors: take an OPTIONAL Pascal name. If non-empty, apply
 // the `p_` prefix so the cxx identifier stays clear of C++ reserved words
@@ -193,6 +195,13 @@ void String::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstrea
 
 const char* NilLiteral::diagnostic_kind() const { return "nil"; }
 void NilLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "nil : " << ctx->known_type_ref(ty); }
+
+const char* TypeBound::diagnostic_kind() const { return kind == TypeBoundKind::Low ? "low" : "high"; }
+void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_type_edge(operand_type); }
+void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
+	out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
+}
+
 const char* Coerce::diagnostic_kind() const { return "coerce"; }
 const char* CoerceCheck::diagnostic_kind() const { return "coerce_check"; }
 const char* AddrOf::diagnostic_kind() const { return "addr_of"; }

@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <limits>
 
 namespace pas {
 
@@ -99,6 +100,8 @@ inline t_boolean p_greaterthanorequal(t_shortstring&& a, t_shortstring&& b) {
 }
 
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
+template<typename T> inline T p_low() { return std::numeric_limits<T>::lowest(); }
+template<typename T> inline T p_high() { return std::numeric_limits<T>::max(); }
 
 #define DEFINE_OPERATIONS(T) \
 	inline T p_bitwiseand(T a, T b) { return a & b; } \
@@ -138,6 +141,10 @@ inline t_boolean p_logicalnot(t_boolean a) {
 
 inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
 	return ((a != 0) ^ (b != 0)) != 0;
+}
+
+inline t_boolean p_assign(t_boolean b) {
+	return b;
 }
 
 inline t_boolean p_assigned(const void* p) {

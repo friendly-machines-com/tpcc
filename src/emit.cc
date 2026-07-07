@@ -804,6 +804,12 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, ")");
 		return;
 	}
+	if (auto tb = dynamic_cast<TypeBound*>(expr)) {
+		fprintf(active, tb->kind == TypeBoundKind::Low ? "pas::p_low<" : "pas::p_high<");
+		emit_type_ref(tb->operand_type);
+		fprintf(active, ">()");
+		return;
+	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
 		fprintf(active, "static_cast<");
 		emit_type_ref(ca->ty);

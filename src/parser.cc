@@ -973,6 +973,11 @@ Type* Parser::maybe_resolve_type(std::string name) {
 	return nullptr;
 }
 
+static bool is_builtin_cxx_name(Node* n, std::string_view cxx_name) {
+	auto b = dynamic_cast<Builtin*>(n);
+	return b && b->desc && b->desc->cxx_name == cxx_name;
+}
+
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
  *  IncompleteType under NAME in current_type_block and return it. This is how
@@ -1041,6 +1046,22 @@ Node* Parser::parse_value() {
 		consume();
 		return new String(std::move(s), shortstring_type());
 	}
+	// Low/High are Pascal predefined intrinsics, not reserved words. In this
+	// parser's terminology they are directive-like: usable as ordinary
+	// identifiers unless the visible binding is the root builtin and this exact
+	// syntactic form is present. Do not put them in the keyword table.
+	if (peek_directive("low") || peek_directive("high")) {
+		std::string directive = input_token;
+		Node* value = maybe_resolve_value(directive);
+		if (is_builtin_cxx_name(value, "pas::p_low") || is_builtin_cxx_name(value, "pas::p_high")) {
+			parse_directive(directive);
+			parse_opening_paren();
+			Type* target_ty = parse_type_expression(false);
+			parse_closing_paren();
+			return new TypeBound(directive == "low" ? TypeBoundKind::Low : TypeBoundKind::High, target_ty);
+		}
+	}
+
 	// FIXME: bool literals also belong here (need enum-member support).
 	auto id = parse_identifier();
 	if (Node* value = maybe_resolve_value(id))
