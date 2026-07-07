@@ -342,6 +342,7 @@ protected:
 
 public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);
+	SourceLocation current_location() const;
 	// Push a source onto the input stack and make it current. Reads one
 	// byte from `input_file` into `input_char` so the tokenizer sees the
 	// new source's first character on its next consume_lowlevel call. If a

@@ -33,7 +33,7 @@ class IntrinsicType: public Type {
 public:
 	std::string cxx_name;
 	std::optional<int> rank;
-	IntrinsicType(std::string cxx_name, std::optional<int> rank);
+	IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

@@ -4,33 +4,33 @@
 #include "types.h"
 #include <string>
 
-IntrinsicType::IntrinsicType(std::string cxx_name, std::optional<int> rank)
-    : cxx_name(std::move(cxx_name)), rank(std::move(rank)) {}
+IntrinsicType::IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank)
+    : Type(std::move(source_location)), cxx_name(std::move(cxx_name)), rank(std::move(rank)) {}
 
 Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 
 // Integer rows are ordered narrowest -> widest; the ordering is what
 // common_arith_type and conversion_cost use to compute widening.
 namespace {
-IntrinsicType k_byte("pas::t_byte", 0);
-IntrinsicType k_shortint("pas::t_shortint", 1);
-IntrinsicType k_word("pas::t_word", 2);
-IntrinsicType k_smallint("pas::t_smallint", 3);
-IntrinsicType k_cardinal("pas::t_cardinal", 4);
-IntrinsicType k_integer("pas::t_integer", 5);
-IntrinsicType k_longint("pas::t_longint", 6);
-IntrinsicType k_qword("pas::t_qword", 7);
-IntrinsicType k_int64("pas::t_int64", 8);
-IntrinsicType k_double("pas::t_double", {});
-EnumType k_boolean("pas::t_boolean", "false", "true");
-IntrinsicType k_char("pas::t_char", {});
-IntrinsicType k_shortstring("pas::t_shortstring", {});
-IntrinsicType k_pointer("pas::t_pointer", {});
-IntrinsicType k_ptrint("pas::t_ptrint", {});
-IntrinsicType k_ptruint("pas::t_ptruint", {});
-IntrinsicType k_sizeint("pas::t_sizeint", {});
-IntrinsicType k_sizeuint("pas::t_sizeuint", {});
-IntrinsicType k_unknown("pas::unknown_type", {});
+IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0);
+IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1);
+IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2);
+IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3);
+IntrinsicType k_cardinal(SourceLocation::builtin(), "pas::t_cardinal", 4);
+IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5);
+IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6);
+IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7);
+IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8);
+IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {});
+EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
+IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {});
+IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {});
+IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {});
+IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", {});
+IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", {});
+IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", {});
+IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", {});
+IntrinsicType k_unknown(SourceLocation::builtin(), "pas::unknown_type", {});
 #if 0
 // Note: I don't think it's useful to have actual user-visible interfaces implemented on the metaclass.
 //InterfaceType k_m_iobject("pas::m_iobject", new Frame(nullptr), std::vector<InterfaceType*>());
@@ -50,7 +50,7 @@ IntrinsicType k_unknown("pas::unknown_type", {});
 const bool k_m_iobject_methods_initialized = []() {
 	auto add = [](const char* pas_name, const char* cxx_name,
 	              std::vector<Parameter> formals, Type* ret_ty) {
-		auto sig = new RoutineType(std::move(formals), ret_ty, ROUTINE);
+		auto sig = new RoutineType(SourceLocation::builtin(), std::move(formals), ret_ty, ROUTINE);
 		auto m = new Method(cxx_name, pas_name, sig, /*has_overload_directive=*/false,
 		                    &k_m_iobject, Method::VirtualKind::None);
 		m->ty = sig;
@@ -91,12 +91,12 @@ Type* const k_all_intrinsics[] = {
 } // namespace
 
 UnitType& unit_type() {
-	static UnitType t;
+	static UnitType t(SourceLocation::internal());
 	return t;
 }
 
 UntypedIntegerType& untyped_integer_type() {
-	static UntypedIntegerType t;
+	static UntypedIntegerType t(SourceLocation::internal());
 	return t;
 }
 

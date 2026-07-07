@@ -183,6 +183,11 @@ void Parser::pop_scope() {
 	this->scopes.pop_back();
 }
 
+
+SourceLocation Parser::current_location() const {
+	return SourceLocation(input_file_name, input_file_line_number);
+}
+
 [[noreturn]] static void emit_parse_error(const std::string& file, int line, const std::string& message) {
 	std::stringstream sst;
 	sst << file << '(' << line << ')' << ':' << ' ' << message << std::endl;
@@ -932,7 +937,7 @@ Type* Parser::resolve_type(std::string name, bool allow_forward) {
 		}
 	}
 	if (allow_forward && current_type_block) {
-		auto inc = new IncompleteType(name);
+		auto inc = new IncompleteType(current_location(), name);
 		current_type_block->register_type(name, inc);
 		return inc;
 	}
@@ -1372,7 +1377,7 @@ Node* Parser::parse_power() {
 	} else if (maybe_parse_at()) {
 		auto x = parse_power();
 		auto n = new AddrOf(x);
-		n->ty = x->ty ? static_cast<Type*>(new PointerType(x->ty)) : nullptr;
+		n->ty = x->ty ? static_cast<Type*>(new PointerType(current_location(), x->ty)) : nullptr;
 		return n;
 	} else if (maybe_parse_minus()) {
 		return mk_unary_same("-", parse_power());
@@ -1640,9 +1645,9 @@ Type* Parser::parse_class_type() {
 	if (maybe_parse_keyword("of")) {
 		auto target_ty = parse_type_expression(true);
 		if (auto target_class_ty = dynamic_cast<IncompleteType*>(target_ty)) {
-			return new ClassRefType(target_class_ty);
+			return new ClassRefType(current_location(), target_class_ty);
 		} else if (auto target_class_ty = dynamic_cast<ClassType*>(target_ty)) {
-			return new ClassRefType(target_class_ty);
+			return new ClassRefType(current_location(), target_class_ty);
 		} else {
 			return raise_type_kind_mismatch("parse_class_type: type after 'class of' is not a class", "class", target_ty);
 		}
@@ -1667,7 +1672,7 @@ Type* Parser::parse_class_type() {
 		}
 		parse_closing_paren();
 	}
-	auto ct = new ClassType(nullptr, implemented_interfaces, super_ty);
+	auto ct = new ClassType(current_location(), nullptr, std::move(implemented_interfaces), super_ty);
 	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
 	return ct;
@@ -1687,7 +1692,7 @@ Type* Parser::parse_interface_type() {
 		} while (maybe_parse_comma());
 		parse_closing_paren();
 	}
-	auto ct = new InterfaceType(nullptr, implemented_interfaces);
+	auto ct = new InterfaceType(current_location(), nullptr, std::move(implemented_interfaces));
 	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
 	return ct;
@@ -1702,7 +1707,7 @@ Type* Parser::parse_record_type() {
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("record with parenthesized header not implemented yet");
 	}
-	auto rt = new RecordType(nullptr, packed);
+	auto rt = new RecordType(current_location(), nullptr, packed);
 	rt->children = parse_aggregate_type_body(rt);
 	parse_keyword("end");
 	return rt;
@@ -1719,7 +1724,7 @@ Type* Parser::parse_object_type() {
 		}
 		parse_closing_paren();
 	}
-	auto ot = new ObjectType(nullptr, super_ty);
+	auto ot = new ObjectType(current_location(), nullptr, super_ty);
 	ot->children = parse_aggregate_type_body(ot);
 	parse_keyword("end");
 	return ot;
@@ -1732,13 +1737,13 @@ Type* Parser::parse_array_type() {
 	parse_closing_bracket();
 	parse_keyword("of");
 	auto item_type = parse_type_expression(false);
-	return new FixedArrayType(bounds_type, item_type);
+	return new FixedArrayType(current_location(), bounds_type, item_type);
 }
 
 Type* Parser::parse_enum_type() {
 	// Caller already consumed the `(` via maybe_parse_opening_paren in
 	// parse_type_expression.
-	auto et = new EnumType();
+	auto et = new EnumType(current_location());
 	int64_t next_value = 0;
 	do {
 		auto pas = parse_identifier();
@@ -1780,7 +1785,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 	if (maybe_parse_opening_paren()) {
 		return parse_enum_type();
 	} else if (maybe_parse_circumflex()) {
-		return new PointerType(parse_type_expression(true));
+		return new PointerType(current_location(), parse_type_expression(true));
 	} else if (peek_keyword("string")) {
 		parse_keyword("string");
 		parse_opening_bracket();
@@ -1790,7 +1795,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
-		return new FixedSetType(parse_type_expression(false));
+		return new FixedSetType(current_location(), parse_type_expression(false));
 	} else if (peek_keyword("array")) {
 		return parse_array_type();
 	} else if (peek_keyword("object")) {
@@ -1896,7 +1901,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 				raise_type_parse_error("duplicate type name: " + name);
 			}
 		} else {
-			lhs_placeholder = new IncompleteType(name);
+			lhs_placeholder = new IncompleteType(current_location(), name);
 			scope->register_type(name, lhs_placeholder);
 		}
 		block_incompletes.push_back({name, lhs_placeholder});
@@ -2305,7 +2310,7 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 			kind = ROUTINE;
 		}
 	}
-	return new RoutineType(std::move(formals), ret_ty, kind);
+	return new RoutineType(current_location(), std::move(formals), ret_ty, kind);
 }
 
 Type* Parser::parse_procedure_type() {
@@ -2469,7 +2474,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
 			self_ty = m->owner_class;
 		} else {
-			self_ty = new PointerType(m->owner_class);
+			self_ty = new PointerType(current_location(), m->owner_class);
 		}
 		self_slot = new StorageSlot("this", self_ty);
 		body_frame->register_variable("self", self_slot, self_ty);

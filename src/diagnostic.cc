@@ -431,6 +431,21 @@ void ErrorLetContext::indent(std::ostringstream& out, unsigned level) const {
 		out << "  ";
 }
 
+
+static void print_source_location(std::ostringstream& out, const SourceLocation& loc) {
+	std::string text = loc.file_name.empty() ? "<unknown>" : loc.file_name;
+	text += "(";
+	text += std::to_string(loc.line_number);
+	text += ")";
+	out << "'";
+	for (char ch : text) {
+		if (ch == '\'')
+			out << "''";
+		else
+			out << ch;
+	}
+	out << "'";
+}
 void ErrorLetContext::print_frame_members(std::ostringstream& out, const Frame* frame, unsigned indent_level) const {
 	if (!frame)
 		return;
@@ -470,7 +485,10 @@ std::string ErrorLetContext::notes() {
 		// diagnostic format invariant, not a convention each Type subclass must
 		// remember. Type::print_diagnostic_definition/stub print only details after
 		// this head.
-		out << ty->diagnostic_kind();
+		out << ty->diagnostic_kind() << "\n";
+		indent(out, 4);
+		out << "source: ";
+		print_source_location(out, ty->source_location);
 		if (n.truncated)
 			ty->print_diagnostic_stub(this, out, 3);
 		else

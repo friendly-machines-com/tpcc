@@ -3,13 +3,29 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <utility>
 
 class Frame;
 class StorageSlot;
 class ErrorLetContext;
 
+struct SourceLocation {
+	std::string file_name;
+	int line_number = 0;
+
+	SourceLocation() = default;
+	SourceLocation(std::string file_name, int line_number)
+	    : file_name(std::move(file_name)), line_number(line_number) {}
+
+	static SourceLocation builtin() { return SourceLocation("<builtin>", 0); }
+	static SourceLocation internal() { return SourceLocation("<internal>", 0); }
+};
+
 class Type {
 public:
+	SourceLocation source_location;
+
+	explicit Type(SourceLocation source_location);
 	virtual ~Type() = default;
 	virtual const char* diagnostic_kind() const = 0;
 	virtual void collect_diagnostic_edges(ErrorLetContext* ctx) const = 0;
@@ -35,7 +51,7 @@ public:
 struct IncompleteType: public Type {
 	std::string name;
 	Type* resolved;
-	IncompleteType(std::string name);
+	IncompleteType(SourceLocation source_location, std::string name);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -44,7 +60,7 @@ struct IncompleteType: public Type {
 struct BoundedCardinalType: public Type {
 	uint64_t lower_bound;
 	uint64_t higher_bound;
-	BoundedCardinalType(uint64_t lower_bound, uint64_t higher_bound);
+	BoundedCardinalType(SourceLocation source_location, uint64_t lower_bound, uint64_t higher_bound);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -54,7 +70,7 @@ struct BoundedCardinalType: public Type {
 struct FixedArrayType: public Type {
 	Type* bounds;
 	Type* item_type;
-	FixedArrayType(Type* bounds, Type* item_type);
+	FixedArrayType(SourceLocation source_location, Type* bounds, Type* item_type);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -63,7 +79,7 @@ struct FixedArrayType: public Type {
 
 struct FixedSetType: public Type {
 	Type* item_type;
-	FixedSetType(Type* item_type);
+	FixedSetType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -94,8 +110,8 @@ struct EnumType: public Type {
 	// Source order, not sorted -- the default value of member N is N, and
 	// emission preserves declaration order.
 	std::vector<Member> members;
-	EnumType(std::string cxx_name, std::string a, std::string b);
-	EnumType();
+	EnumType(SourceLocation source_location, std::string cxx_name, std::string a, std::string b);
+	EnumType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -129,7 +145,7 @@ struct RecordType: public Type {
 	Type* selector_type = nullptr;
 	std::vector<VariantArm> arms;
 
-	RecordType(Frame* children, bool packed);
+	RecordType(SourceLocation source_location, Frame* children, bool packed);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -140,8 +156,8 @@ struct InterfaceType: public Type {
 	Frame* children;
 	std::string cxx_name;
 	std::vector<InterfaceType*> super_interfaces; // FIXME: not transitive ?
-	InterfaceType(Frame* children, std::vector<InterfaceType*> super_interfaces);
-	InterfaceType(std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
+	InterfaceType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> super_interfaces);
+	InterfaceType(SourceLocation source_location, std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -154,7 +170,7 @@ struct ClassType: public Type {
 	std::string cxx_name;
 	std::vector<InterfaceType*> implemented_interfaces; // FIXME: not transitive ?
 	ClassType* super;
-	ClassType(Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
+	ClassType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -167,8 +183,8 @@ struct ClassRefType : public Type // metaclass
 	Type* target; // ClassType or IncompleteType
 	std::string cxx_name;
 
-	explicit ClassRefType(Type* c)
-	   : target(c) {
+	explicit ClassRefType(SourceLocation source_location, Type* c)
+	   : Type(std::move(source_location)), target(c) {
 	}
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -181,7 +197,7 @@ struct ObjectType: public Type {
 	Frame* children;
 	std::string cxx_name;
 	ObjectType* super;
-	ObjectType(Frame* children, ObjectType* super);
+	ObjectType(SourceLocation source_location, Frame* children, ObjectType* super);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -190,7 +206,7 @@ struct ObjectType: public Type {
 
 struct PointerType: public Type {
 	Type* item_type;
-	PointerType(Type* item_type);
+	PointerType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -203,7 +219,7 @@ struct PointerType: public Type {
 struct ModuleType: public Type {
 	Frame* interface_children;
 	Frame* implementation_children;
-	ModuleType(Frame* interface_children, Frame* implementation_children);
+	ModuleType(SourceLocation source_location, Frame* interface_children, Frame* implementation_children);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -215,7 +231,7 @@ struct ModuleType: public Type {
  *  value. Not a Pascal-visible type; a shared singleton instance is registered
  *  in the root frame under no Pascal name. Emitted as C++ `void`. */
 struct UnitType: public Type {
-	UnitType();
+	UnitType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -226,7 +242,7 @@ struct UnitType: public Type {
  *  literal value fits. Shared singleton in the root frame; not registered
  *  under any Pascal name. */
 struct UntypedIntegerType: public Type {
-	UntypedIntegerType();
+	UntypedIntegerType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -268,7 +284,7 @@ public:
 	Type* return_type;
 	RoutineKind kind;
 
-	RoutineType(std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
+	RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
