@@ -2357,11 +2357,10 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		self_slot = new StorageSlot("this", self_ty);
 		body_frame->register_variable("self", self_slot, self_ty);
 		push_with_scope(owner_frame, self_slot);
-
-		if (m->ty->return_type != &unit_type()) { // function
-			auto result_slot = new StorageSlot("p_result", m->ty->return_type);
-			body_frame->register_variable("result", result_slot, m->ty->return_type);
-		}
+	}
+	if (target->ty->return_type != &unit_type()) { // function
+		auto result_slot = new StorageSlot("p_result", target->ty->return_type);
+		body_frame->register_variable("result", result_slot, target->ty->return_type);
 	}
 	auto rty = static_cast<RoutineType*>(target->ty);
 	for (auto& p : rty->formals) {
