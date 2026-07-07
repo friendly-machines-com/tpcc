@@ -2191,18 +2191,18 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 
 Type* Parser::parse_procedure_type() {
 	parse_keyword("procedure");
-	return parse_routine_signature(false, false, true, METHOD);
+	return parse_routine_signature(false, false, true, ROUTINE);
 }
 
 Type* Parser::parse_function_type() {
 	parse_keyword("function");
-	return parse_routine_signature(false, true, true, METHOD);
+	return parse_routine_signature(false, true, true, ROUTINE);
 }
 
 Type* Parser::parse_operator_type() {
 	parse_keyword("operator");
 	// For now this is very similar to function.  Note: even parse_routine_signature uses parse_identifier() instead of parse_operator(), sigh.
-	return parse_routine_signature(false, true, true, METHOD);
+	return parse_routine_signature(false, true, true, ROUTINE);
 }
 
 // Class Member Prototype Registration (Value Level)
