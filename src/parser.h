@@ -165,6 +165,7 @@ protected:
 	void maybe_parse_type_block(bool delphi_auto_end);
 	void maybe_parse_var_block();
 	void parse_const_block();
+	void parse_label_block();
 	void parse_type_block(bool delphi_auto_end);
 	void parse_var_block();
 	/** Parse a sequence of top-of-block declarations in any order (Pascal
@@ -208,6 +209,7 @@ protected:
 	 *  auto-call is the caller's decision (value context yes, lvalue no)
 	 *  via maybe_auto_call. */
 	Node* parse_designator();
+	Node* parse_designator_tail(Node* result);
 	/** If NODE is a bare callable (Callable, OverloadSet, or MemberAccess
 	 *  whose member is either) AND at least one candidate can be invoked
 	 *  parameterlessly (no formals or all formals defaulted), wrap it in a

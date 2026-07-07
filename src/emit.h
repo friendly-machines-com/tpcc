@@ -86,6 +86,8 @@ public:
 	void emit_main_prologue();
 	void emit_main_epilogue();
 	void emit_statement(Node* stmt);
+	void emit_label(std::string cxx_label_name);
+	void emit_goto(std::string cxx_label_name);
 	void emit_with_prologue(std::string alias_cxx_name, Node* target);
 	void emit_with_epilogue();
 	// Control-flow framing. Each is parse-time emission: parser parses the

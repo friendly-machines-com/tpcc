@@ -54,6 +54,7 @@ static std::unordered_set<std::string> keywords = {
     "end",
     "forward", // FIXME directive ?
     "function",
+    "goto",
     "if",
     "in", // operator
     "inline",
@@ -61,6 +62,7 @@ static std::unordered_set<std::string> keywords = {
     "inherited",
     "interface",
     "is", // operator
+    "label",
     "mod", // operator
     "nil",
     "noreturn",
@@ -95,6 +97,10 @@ static std::unordered_set<std::string> keywords = {
 
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options)
     : unit_registry(unit_registry), emitter(emitter), options(options) {
+}
+
+static std::string cxx_label_name(std::string pas_name) {
+	return "pas_label_" + pas_name;
 }
 void Parser::pop_input_file() {
 	assert(!input_files.empty());
@@ -754,6 +760,11 @@ void Parser::maybe_parse_statement() {
 	if (peek_keyword("return")) { // FIXME Exit
 		consume();
 		parse_expression();
+	} else if (peek_keyword("goto")) {
+		parse_keyword("goto");
+		std::string label = parse_identifier();
+		if (emitter)
+			emitter->emit_goto(cxx_label_name(label));
 	} else if (peek_keyword("if")) {
 		parse_keyword("if");
 		auto condition = parse_expression();
@@ -815,10 +826,26 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_with_epilogue();
 	} else {
+		// A leading identifier followed by ':' is a Pascal label definition. It is
+		// emitted directly like other control-flow framing in this parser. If the
+		// colon is absent, keep the resolved identifier and parse the remaining
+		// designator tail normally; no token pushback is needed.
+		Node* lhs = nullptr;
+		if (!input_token.empty() && keywords.find(input_token) == keywords.end()) {
+			std::string first = parse_identifier();
+			if (maybe_parse_colon()) {
+				if (emitter)
+					emitter->emit_label(cxx_label_name(first));
+				parse_statement();
+				return;
+			}
+			lhs = parse_designator_tail(resolve_value(first));
+		} else {
+			lhs = parse_designator();
+		}
 		// A statement here is either an assignment (designator := expression)
 		// or a call (designator, possibly with auto-call). Parse the LHS as
 		// a raw designator so we don't auto-call in the assignment case.
-		Node* lhs = parse_designator();
 		if (maybe_parse_colon_equals()) {
 			if (!is_assignable(lhs)) {
 				raise_parse_error("LHS of ':=' is not assignable");
@@ -1335,7 +1362,10 @@ static Frame* body_frame_of(Type* ty) {
 }
 
 Node* Parser::parse_designator() {
-	Node* result = parse_value();
+	return parse_designator_tail(parse_value());
+}
+
+Node* Parser::parse_designator_tail(Node* result) {
 	while (true) {
 		if (maybe_parse_period()) {
 			// Binary infix: RHS is a single identifier token. Before applying,
@@ -1941,6 +1971,19 @@ void Parser::parse_block_body() {
 		}
 	}
 }
+void Parser::parse_label_block() {
+	parse_keyword("label");
+	do {
+		// Pascal label declarations introduce statement labels, not values. For
+		// now they are validation-light because C++ also has function-local labels;
+		// emission prefixes them separately from value identifiers.
+		(void)parse_identifier();
+		if (!maybe_parse_comma())
+			break;
+	} while (true);
+	parse_semicolon();
+}
+
 void Parser::parse_const_block() {
 	parse_keyword("const");
 	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
@@ -2278,7 +2321,10 @@ size_t Parser::parse_decl_blocks() {
 	size_t pushed = 0;
 	bool is_class = false;
 	while (true) {
-		if (peek_keyword("type")) {
+		if (peek_keyword("label")) {
+			parse_label_block();
+			is_class = false;
+		} else if (peek_keyword("type")) {
 			if (is_class) {
 				raise_parse_error("'class type' is not supported");
 			}

@@ -194,6 +194,18 @@ static std::string callable_cxx_name(Callable* c) {
 	return c->cxx_name;
 }
 
+void Emitter::emit_label(std::string cxx_label_name) {
+	if (!active)
+		return;
+	fprintf(active, "%s:\n", cxx_label_name.c_str());
+}
+
+void Emitter::emit_goto(std::string cxx_label_name) {
+	if (!active)
+		return;
+	fprintf(active, "\tgoto %s;\n", cxx_label_name.c_str());
+}
+
 void Emitter::emit_statement(Node* stmt) {
 	if (!active)
 		return;
