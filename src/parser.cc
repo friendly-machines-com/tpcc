@@ -2064,14 +2064,6 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			break;
 	}
 	std::string cxx_name = cxx_value_name(pas_name);
-	if (is_destructor) {
-		if (ClassType* class_type = dynamic_cast<ClassType*>(owner_class)) {
-			if (class_type->cxx_name.empty()) {
-				raise_type_parse_error("cannot spell destructor name without class name");
-			}
-			cxx_name = "~" + class_type->cxx_name;
-		}
-	}
 	bool external = false;
 	if (maybe_parse_keyword("external")) {
 		parse_keyword("nil");

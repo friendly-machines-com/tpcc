@@ -100,6 +100,15 @@ public:
 	void emit_type_ref(Type* ty);
 
     private:
+	// Whether emit_callable_signature is producing a prototype (in-class
+	// signature without body) or a definition (out-of-line signature with
+	// `Owner::` qualifier). The prototype proper is `return-type name(params)`;
+	// member-declaration decorations (`virtual`, `static`, `override`,
+	// `= 0`, proxy bodies) are NOT part of the prototype and stay at the
+	// call site. The Definition position adds the `Owner::` qualifier
+	// between return type and name (derived from the Method's owner_class).
+	enum class Position { Prototype, Definition };
+	void emit_callable_signature(Callable* c, Position pos);
 	// Emit a full enum declaration body: `enum [NAME] { a, b, c }` -- no
 	// leading newline, no trailing semicolon. Caller frames those. Used by
 	// emit_type_definition (named, at type-block scope) and emit_type_ref's

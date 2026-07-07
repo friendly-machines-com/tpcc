@@ -249,14 +249,26 @@ void Emitter::emit_procedure_open(Callable* c) {
 	if (!active)
 		return;
 	fprintf(active, "\n");
-	emit_type_ref(c->ty->return_type);
-	fprintf(active, " ");
-	if (auto m = dynamic_cast<Method*>(c)) {
-		std::string owner = owner_cxx_name(m->owner_class);
-		if (!owner.empty())
-			fprintf(active, "%s::", owner.c_str());
+	bool is_destructor = (c->ty->kind == DESTRUCTOR);
+	// C++ destructors have no return type and their name is `~<class>`,
+	// spelled with the owner class's cxx name (not the Method's cxx_name,
+	// which is just the value-name spelling like `p_destroy`).
+	if (!is_destructor) {
+		emit_type_ref(c->ty->return_type);
+		fprintf(active, " ");
+	} else {
+		if (c->ty->return_type != &unit_type()) {
+			unhandled_type("non-unit return type on destructor is not allowed", c->ty);
+		}
 	}
-	fprintf(active, "%s(", c->cxx_name.c_str());
+	std::string owner = owner_cxx_name(dynamic_cast<Method*>(c) ? dynamic_cast<Method*>(c)->owner_class : nullptr);
+	if (!owner.empty())
+		fprintf(active, "%s::", owner.c_str());
+	if (is_destructor) {
+		fprintf(active, "~%s(", owner.c_str());
+	} else {
+		fprintf(active, "%s(", c->cxx_name.c_str());
+	}
 	for (size_t i = 0; i < c->ty->formals.size(); i++) {
 		if (i > 0)
 			fprintf(active, ", ");
@@ -479,8 +491,15 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 					fprintf(active, "virtual ");
 				}
 			}
-			emit_type_ref(call->ty->return_type);
-			fprintf(active, " %s(", call->cxx_name.c_str());
+			bool is_destructor = (call->ty->kind == DESTRUCTOR);
+			if (is_destructor) {
+				if (call->ty->return_type != &unit_type())
+					unhandled_type("non-unit return type on destructor is not allowed", call->ty);
+				fprintf(active, "~%s(", cxx_name.c_str());
+			} else {
+				emit_type_ref(call->ty->return_type);
+				fprintf(active, " %s(", call->cxx_name.c_str());
+			}
 			for (size_t i = 0; i < call->ty->formals.size(); i++) {
 				if (i > 0)
 					fprintf(active, ", ");
