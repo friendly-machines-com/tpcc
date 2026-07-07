@@ -50,7 +50,6 @@ ErrorLetContext::TypeNode& ErrorLetContext::ensure_type(const Type* ty) {
 	if (!n.ty) {
 		n.ty = ty;
 		n.kind = ty ? ty->diagnostic_kind() : "type";
-		type_order.push_back(ty);
 	}
 	return n;
 }
@@ -60,7 +59,6 @@ ErrorLetContext::ValueNode& ErrorLetContext::ensure_value(const Node* node) {
 	if (!n.node) {
 		n.node = node;
 		n.kind = node ? node->diagnostic_kind() : "value";
-		value_order.push_back(node);
 	}
 	return n;
 }
@@ -161,8 +159,10 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 				vn.member_names.push_back(name);
 			else
 				vn.value_names.push_back(name);
-			if (use != DiagnosticFrameUse::NamingScope)
-				discover_value(entry.value, current_depth + 1);
+			// This is name evidence only. Do not discover every value in a frame:
+			// scope and aggregate frames can contain huge unrelated value graphs
+			// (including overload sets). Values become definitions only when a
+			// diagnostic explicitly references them via value_ref/add_value_edge.
 		}
 		if (entry.ty && use != DiagnosticFrameUse::NamingScope)
 			discover_type(entry.ty, current_depth + 1);
@@ -198,17 +198,24 @@ std::string ErrorLetContext::uniquify(std::string base) {
 }
 
 void ErrorLetContext::assign_names() {
-	used_names.clear();
+	// Names are diagnostic-local variable bindings. Once a referenced node has
+	// been named, keep that binding stable: callers may already have embedded
+	// the returned ref text in the main error message while later refs discover
+	// more graph nodes. Do not clear used_names and do not rename old nodes.
 	for (const Type* ty : type_order) {
 		if (!ty)
 			continue;
 		TypeNode& n = type_nodes[ty];
+		if (!n.referenced || !n.name.empty())
+			continue;
 		n.name = uniquify(choose_type_base(n));
 	}
 	for (const Node* node : value_order) {
 		if (!node)
 			continue;
 		ValueNode& n = value_nodes[node];
+		if (!n.referenced || !n.name.empty())
+			continue;
 		n.name = uniquify(choose_value_base(n));
 	}
 }
@@ -287,7 +294,7 @@ std::string ErrorLetContext::notes() {
 		if (!ty)
 			continue;
 		const TypeNode& n = type_nodes.at(ty);
-		if (n.name.empty())
+		if (!n.referenced || n.name.empty())
 			continue;
 		indent(out, 2);
 		out << "type " << n.name << " =\n";
@@ -303,7 +310,7 @@ std::string ErrorLetContext::notes() {
 		if (!node)
 			continue;
 		const ValueNode& n = value_nodes.at(node);
-		if (n.name.empty())
+		if (!n.referenced || n.name.empty())
 			continue;
 		indent(out, 2);
 		out << "value " << n.name << " =\n";

@@ -187,7 +187,14 @@ const char* CoerceCheck::diagnostic_kind() const { return "coerce_check"; }
 const char* AddrOf::diagnostic_kind() const { return "addr_of"; }
 
 const char* Callable::diagnostic_kind() const { return "callable"; }
-void Callable::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_type_edge(ty); ctx->add_frame_edge(body_frame, DiagnosticFrameUse::RoutineLocals); }
+void Callable::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(ty);
+	// Do not traverse body_frame here. A callable candidate is identified by its
+	// signature for overload/type diagnostics; walking routine locals would dump
+	// unrelated implementation-scope values (including overload sets) into the
+	// diagnostic graph.
+}
 void Callable::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << diagnostic_kind() << " " << pas_name << "\n";
 	ctx->indent(out, indent + 1); out << "cxx: " << cxx_name << "\n";
