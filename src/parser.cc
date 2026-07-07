@@ -44,12 +44,14 @@ static std::unordered_set<std::string> keywords = {
     "function",
     "if",
     "in", // operator
+    "inline",
     "implementation",
     "inherited",
     "interface",
     "is", // operator
     "mod", // operator
     "nil",
+    "noreturn",
     "not", // operator
     "object",
     "of",
@@ -2455,6 +2457,14 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD, owner_ty);
 		parse_semicolon();
+		if (maybe_parse_keyword("inline")) {
+			// FIXME: use
+			parse_semicolon();
+		}
+		if (maybe_parse_keyword("noreturn")) {
+			// FIXME: use
+			parse_semicolon();
+		}
 		if (m->has_body)
 			raise_parse_error("duplicate implementation of '" + method_name + "'");
 		// If provided, update formal names for local body scope; FIXME: check count, types etc
@@ -2481,6 +2491,14 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 			body_follows = false;
 		}
 		Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
+		if (maybe_parse_keyword("inline")) {
+			// FIXME: use
+			parse_semicolon();
+		}
+		if (maybe_parse_keyword("noreturn")) {
+			// FIXME: use
+			parse_semicolon();
+		}
 		if (maybe_parse_directive("external")) {
 			parse_keyword("nil");
 			parse_directive("name");
