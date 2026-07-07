@@ -1149,7 +1149,7 @@ Node* Parser::parse_designator() {
 					args.push_back(parse_expression());
 			}
 			parse_closing_paren();
-			auto fc = finalize_call(result, args, /*name for error*/ "");
+			auto fc = finalize_call(result, args, /*name_for_error*/ "");
 			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 			call->ty = call_result_type(fc.callee);
 			result = call;
@@ -2605,10 +2605,16 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	}
 	Callable* chosen = nullptr;
 	if (auto c = dynamic_cast<Callable*>(target)) {
+		if (name_for_error.empty() && !c->pas_name.empty()) {
+			name_for_error = c->pas_name;
+		}
 		chosen = c;
 	} else if (auto os = dynamic_cast<OverloadSet*>(target)) {
 		std::vector<std::pair<Callable*, std::vector<int>>> viable;
 		for (auto* c : os->members) {
+			if (name_for_error.empty() && !c->pas_name.empty()) {
+				name_for_error = c->pas_name;
+			}
 			auto costs = per_arg_costs(c, receiver, args);
 			if (!costs.empty())
 				viable.push_back({c, std::move(costs)});
