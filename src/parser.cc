@@ -2572,11 +2572,13 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 	};
 
 	Procedure* target = nullptr;
-	if (existing) {
-		if (auto ec = dynamic_cast<Callable*>(existing)) {
-			if (!had_paren || sig_matches(ec))
+	auto consider_existing = [&](Node* node) {
+		if (!node || target)
+			return;
+		if (auto ec = dynamic_cast<Callable*>(node)) {
+			if ((!had_paren || sig_matches(ec)) && !ec->has_body)
 				target = attach_to(ec);
-		} else if (auto os = dynamic_cast<OverloadSet*>(existing)) {
+		} else if (auto os = dynamic_cast<OverloadSet*>(node)) {
 			if (!had_paren) {
 				Callable* pick = nullptr;
 				for (auto* m : os->members) {
@@ -2586,12 +2588,11 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 						pick = m;
 					}
 				}
-				if (!pick)
-					raise_parse_error("no unimplemented prototype");
-				target = attach_to(pick);
+				if (pick)
+					target = attach_to(pick);
 			} else {
 				for (auto* m : os->members) {
-					if (sig_matches(m)) {
+					if (!m->has_body && sig_matches(m)) {
 						if (target)
 							raise_parse_error("ambiguous overload match");
 						target = attach_to(m);
@@ -2599,7 +2600,22 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 				}
 			}
 		}
+	};
+
+	consider_existing(existing);
+	if (!target) {
+		// Unit implementation frames can have local declarations while their
+		// interface prototypes live in an outer/parser scope (and also as the
+		// Frame::parent). Search the actual parser scope stack for an unimplemented
+		// matching prototype before creating a new callable, otherwise an
+		// implementation can become a second overload candidate instead of the body
+		// of its interface declaration. Use local lookup here to avoid seeing the
+		// same parent frame more than once through structural parents.
+		for (auto it = scopes.rbegin(); it != scopes.rend() && !target; ++it)
+			consider_existing(it->frame->lookup_value_local(pas_name));
 	}
+	if (!target && !had_paren && existing)
+		raise_parse_error("no unimplemented prototype");
 
 	if (!target) {
 		target = new Procedure(cxx_value_name(pas_name), pas_name, sig, has_overload);
