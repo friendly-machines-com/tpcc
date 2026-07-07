@@ -212,6 +212,7 @@ struct class_of
 		return {ptr};
 	}
 };
+// TODO: auto foo_class = class_ref<t_tfoo>(); // class_ref<t_tfoo>() would be class_of<t_tfoo>{ t_tfoo::p_classtype() };
 
 /*
 class_ref<t_tobject> c;
