@@ -2625,6 +2625,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 			if (builtin != nullptr) {
 				// This is basically making TARGET an ALIAS for BUILTIN.
 				target->has_body = true;
+				target->is_external = true;
 				if (auto qbuiltin = dynamic_cast<Builtin*>(builtin)) { // used
 					// These Builtins are all polymorphic and C++ overloads will just have to adjust to us.
 					auto desc = qbuiltin->desc;
