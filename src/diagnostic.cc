@@ -45,6 +45,35 @@ static std::string diagnostic_name_token(std::string s, const char* fallback) {
 	return quote_diagnostic_name(s);
 }
 
+static std::string unquote_diagnostic_name_for_composition(const std::string& s) {
+	// When composing a larger diagnostic name (e.g. an operator name plus a
+	// routine signature), use the inner text of an Ada-quoted name so the final
+	// outer name is \:= : routine(...)\ rather than nested/doubled quoting.
+	if (s.size() >= 2 && s.front() == '\\' && s.back() == '\\') {
+		std::string r;
+		for (size_t i = 1; i + 1 < s.size(); ++i) {
+			if (s[i] == '\\' && i + 2 < s.size() && s[i + 1] == '\\') {
+				r.push_back('\\');
+				++i;
+			} else {
+				r.push_back(s[i]);
+			}
+		}
+		return r;
+	}
+	return s;
+}
+
+static const char* diagnostic_param_mode_text(ParamMode mode) {
+	switch (mode) {
+	case ParamMode::Value: return "";
+	case ParamMode::Var: return "var ";
+	case ParamMode::Out: return "out ";
+	case ParamMode::Const: return "const ";
+	}
+	return "";
+}
+
 ErrorLetContext::ErrorLetContext(const Frame* naming_frame, unsigned max_depth)
     : ErrorLetContext(std::vector<DiagnosticScope>{{naming_frame, nullptr}}, max_depth) {}
 
@@ -211,13 +240,37 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 	(void)use;
 }
 
-std::string ErrorLetContext::choose_type_base(const TypeNode& n) const {
+std::string ErrorLetContext::choose_type_base(const TypeNode& n) {
 	if (!n.type_names.empty())
 		return sanitize(n.type_names.front(), n.kind.c_str());
 	if (!n.value_names.empty())
 		return sanitize("typeof_" + n.value_names.front(), n.kind.c_str());
 	if (!n.member_names.empty())
 		return sanitize("member_" + n.member_names.front(), n.kind.c_str());
+	if (auto rt = dynamic_cast<const RoutineType*>(n.ty)) {
+		// Hard-coded inline special case: routine types are usually clearer as
+		// their signature than as routine#N. The signature still reuses the
+		// diagnostic let refs of parameter/result types, so recursive/sharing
+		// handling remains centralized in the graph context.
+		std::string r = "routine(";
+		for (size_t i = 0; i < rt->formals.size(); ++i) {
+			if (i)
+				r += "; ";
+			const auto& p = rt->formals[i];
+			r += diagnostic_param_mode_text(p.mode);
+			if (!p.pas_name.empty()) {
+				r += p.pas_name;
+				r += ": ";
+			}
+			r += unquote_diagnostic_name_for_composition(known_type_ref(p.ty));
+		}
+		r += ")";
+		if (rt->return_type) {
+			r += ": ";
+			r += unquote_diagnostic_name_for_composition(known_type_ref(rt->return_type));
+		}
+		return sanitize(r, n.kind.c_str());
+	}
 	return sanitize(n.kind, "type");
 }
 
@@ -232,8 +285,19 @@ std::string ErrorLetContext::choose_value_base(const ValueNode& n) const {
 	// back to the bland dynamic kind ("procedure", "method", ...), otherwise
 	// diagnostics say `value procedure =` for every operator candidate.
 	if (auto c = dynamic_cast<const Callable*>(n.node)) {
-		if (!c->pas_name.empty())
+		if (!c->pas_name.empty()) {
+			// Overloaded callables with the same Pascal name need better diagnostic
+			// variable names than just \:=\, \:=\#2, ... . By the time value names
+			// are assigned, assign_names() has already assigned all referenced Type*
+			// names, so include the RoutineType let-ref when available. This reuses
+			// the surrounding type graph instead of expanding the signature inline.
+			if (c->ty) {
+				auto it = type_nodes.find(c->ty);
+				if (it != type_nodes.end() && !it->second.name.empty())
+					return sanitize(c->pas_name + " : " + unquote_diagnostic_name_for_composition(it->second.name), n.kind.c_str());
+			}
 			return sanitize(c->pas_name, n.kind.c_str());
+		}
 		if (!c->cxx_name.empty())
 			return sanitize(c->cxx_name, n.kind.c_str());
 	}
@@ -249,7 +313,17 @@ std::string ErrorLetContext::uniquify(std::string base) {
 	count++;
 	if (count == 1)
 		return base;
-	return base + "#" + std::to_string(count);
+
+	std::string suffix = "#" + std::to_string(count);
+	// If the base is an Ada-quoted diagnostic name, keep the uniqueness suffix
+	// inside the quotes: \routine(...)#2\, not \routine(...)\#2. The latter
+	// is no longer one diagnostic variable name and composes badly when another
+	// quoted name embeds this ref.
+	if (base.size() >= 2 && base.front() == '\\' && base.back() == '\\') {
+		base.insert(base.end() - 1, suffix.begin(), suffix.end());
+		return base;
+	}
+	return base + suffix;
 }
 
 void ErrorLetContext::assign_names() {
@@ -261,7 +335,15 @@ void ErrorLetContext::assign_names() {
 	// the returned ref text in the main error message while later refs discover
 	// more graph nodes. Do not clear used_names and do not rename old nodes.
 	for (const Type* ty : type_order) {
-		if (!ty)
+		if (!ty || dynamic_cast<const RoutineType*>(ty))
+			continue;
+		TypeNode& n = type_nodes[ty];
+		if (!n.referenced || !n.name.empty())
+			continue;
+		n.name = uniquify(choose_type_base(n));
+	}
+	for (const Type* ty : type_order) {
+		if (!ty || !dynamic_cast<const RoutineType*>(ty))
 			continue;
 		TypeNode& n = type_nodes[ty];
 		if (!n.referenced || !n.name.empty())

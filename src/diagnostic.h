@@ -112,7 +112,7 @@ private:
 	void index_frame(const Frame* frame, DiagnosticFrameUse use);
 	void prepare();
 	void assign_names();
-	std::string choose_type_base(const TypeNode& n) const;
+	std::string choose_type_base(const TypeNode& n);
 	std::string choose_value_base(const ValueNode& n) const;
 	std::string uniquify(std::string base);
 	static std::string sanitize(std::string s, const char* fallback);
