@@ -234,7 +234,23 @@ void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	ctx->print_frame_members(out, children, indent + 1);
 	if (has_selector) {
 		ctx->indent(out, indent + 1);
-		out << "case " << selector_cxx_name << ": " << ctx->known_type_ref(selector_type) << " of ...\n";
+		out << "case " << selector_cxx_name << ": " << ctx->known_type_ref(selector_type) << " of\n";
+		// Variant labels are parsed for layout/selection but not retained in
+		// VariantArm yet; the diagnostic can still show the important structural
+		// information: which overlapping fields exist in each arm and their types.
+		// Use numbered arms until VariantArm stores source labels.
+		for (size_t i = 0; i < arms.size(); ++i) {
+			ctx->indent(out, indent + 2);
+			out << "arm " << (i + 1) << ":\n";
+			for (const auto& field : arms[i].fields) {
+				ctx->indent(out, indent + 3);
+				if (field.slot)
+					out << field.slot->cxx_name;
+				else
+					out << "<field>";
+				out << ": " << ctx->known_type_ref(field.ty) << ";\n";
+			}
+		}
 	}
 	ctx->indent(out, indent);
 	out << "end";

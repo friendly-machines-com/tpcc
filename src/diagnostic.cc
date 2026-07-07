@@ -8,6 +8,43 @@
 #include <cctype>
 #include <cstdio>
 
+
+
+static bool diagnostic_ident_char(char ch) {
+	unsigned char c = static_cast<unsigned char>(ch);
+	return std::isalnum(c) || ch == '_';
+}
+
+static std::string quote_diagnostic_name(std::string s) {
+	// Ada extended identifiers use backslash delimiters, e.g. \:=\. Use that
+	// here so symbolic Pascal names can be diagnostic variables without lossy
+	// renaming. Double any embedded backslash so the delimiter remains clear.
+	std::string r = "\\";
+	for (char ch : s) {
+		if (ch == '\\')
+			r += "\\\\";
+		else
+			r.push_back(ch);
+	}
+	r.push_back('\\');
+	return r;
+}
+
+static std::string diagnostic_name_token(std::string s, const char* fallback) {
+	if (s.empty())
+		return fallback;
+	bool identish = true;
+	for (char ch : s) {
+		if (!diagnostic_ident_char(ch)) {
+			identish = false;
+			break;
+		}
+	}
+	if (identish && !std::isdigit(static_cast<unsigned char>(s.front())))
+		return s;
+	return quote_diagnostic_name(s);
+}
+
 ErrorLetContext::ErrorLetContext(const Frame* naming_frame, unsigned max_depth)
     : ErrorLetContext(std::vector<DiagnosticScope>{{naming_frame, nullptr}}, max_depth) {}
 
@@ -28,21 +65,11 @@ ErrorLetContext::ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned m
 }
 
 std::string ErrorLetContext::sanitize(std::string s, const char* fallback) {
-	std::string r;
-	for (char ch : s) {
-		unsigned char c = static_cast<unsigned char>(ch);
-		if (std::isalnum(c) || ch == '_')
-			r.push_back(ch);
-		else
-			r.push_back('_');
-	}
-	while (!r.empty() && r.front() == '_')
-		r.erase(r.begin());
-	if (r.empty())
-		r = fallback;
-	if (std::isdigit(static_cast<unsigned char>(r.front())))
-		r = std::string(fallback) + "_" + r;
-	return r;
+	// Diagnostic-let names are allowed to be quoted with Ada extended-identifier
+	// syntax instead of inventing lossy aliases for operators. Thus a Pascal
+	// operator named := becomes the diagnostic variable \:=\ rather than a
+	// made-up `assign`.
+	return diagnostic_name_token(std::move(s), fallback);
 }
 
 ErrorLetContext::TypeNode& ErrorLetContext::ensure_type(const Type* ty) {
@@ -199,6 +226,21 @@ std::string ErrorLetContext::choose_value_base(const ValueNode& n) const {
 		return sanitize(n.value_names.front(), n.kind.c_str());
 	if (!n.member_names.empty())
 		return sanitize("member_" + n.member_names.front(), n.kind.c_str());
+	// Overload-set members are often not directly present as Frame::values_local()
+	// entries: the frame stores the OverloadSet under the source name, while its
+	// Callable members only carry Callable::pas_name. Use that before falling
+	// back to the bland dynamic kind ("procedure", "method", ...), otherwise
+	// diagnostics say `value procedure =` for every operator candidate.
+	if (auto c = dynamic_cast<const Callable*>(n.node)) {
+		if (!c->pas_name.empty())
+			return sanitize(c->pas_name, n.kind.c_str());
+		if (!c->cxx_name.empty())
+			return sanitize(c->cxx_name, n.kind.c_str());
+	}
+	if (auto s = dynamic_cast<const StorageSlot*>(n.node)) {
+		if (!s->cxx_name.empty())
+			return sanitize(s->cxx_name, n.kind.c_str());
+	}
 	return sanitize(n.kind, "value");
 }
 
