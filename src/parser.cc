@@ -251,7 +251,24 @@ static void append_cost_vector(std::stringstream& sst, const std::vector<int>& c
 		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
 
-	sst << "\n  candidates:";
+	if (ambiguous) {
+		// Ambiguity is decided by the viable candidates that are not dominated by
+		// any other viable candidate. Dominated candidates cannot be selected, so
+		// they are only listed later with the complete candidate set.
+		sst << "\n  viable candidates:";
+		for (Callable* c : non_dominated) {
+			sst << "\n    " << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
+			for (const auto& v : viable) {
+				if (v.first == c) {
+					sst << " cost ";
+					append_cost_vector(sst, v.second);
+					break;
+				}
+			}
+		}
+	}
+
+	sst << "\n  all candidates:";
 	for (Callable* c : candidates) {
 		sst << "\n    " << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
 		bool is_viable = false;
@@ -265,20 +282,6 @@ static void append_cost_vector(std::stringstream& sst, const std::vector<int>& c
 		}
 		if (!is_viable) {
 			sst << " not viable";
-		}
-	}
-
-	if (ambiguous) {
-		sst << "\n  non-dominated viable candidates:";
-		for (Callable* c : non_dominated) {
-			sst << "\n    " << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
-			for (const auto& v : viable) {
-				if (v.first == c) {
-					sst << " cost ";
-					append_cost_vector(sst, v.second);
-					break;
-				}
-			}
 		}
 	}
 
