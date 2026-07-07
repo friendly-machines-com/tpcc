@@ -186,6 +186,38 @@ const char* Coerce::diagnostic_kind() const { return "coerce"; }
 const char* CoerceCheck::diagnostic_kind() const { return "coerce_check"; }
 const char* AddrOf::diagnostic_kind() const { return "addr_of"; }
 
+
+static bool diagnostic_pas_ident_char(char ch) {
+	unsigned char c = static_cast<unsigned char>(ch);
+	return std::isalnum(c) || ch == '_';
+}
+
+static std::string diagnostic_pas_name(std::string name) {
+	if (name.empty())
+		return "<anonymous>";
+	bool ident = !std::isdigit(static_cast<unsigned char>(name.front()));
+	for (char ch : name) {
+		if (!diagnostic_pas_ident_char(ch)) {
+			ident = false;
+			break;
+		}
+	}
+	if (ident)
+		return name;
+	// This is a displayed Pascal source name, not a diagnostic variable.
+	// Use Pascal string quoting for symbolic names such as := so the
+	// diagnostic says procedure ':=' rather than inventing a rename or using
+	// C/C++ double-quoted spelling.
+	std::string r = "'";
+	for (char ch : name) {
+		if (ch == '\'')
+			r.push_back('\'');
+		r.push_back(ch);
+	}
+	r.push_back('\'');
+	return r;
+}
+
 const char* Callable::diagnostic_kind() const { return "callable"; }
 void Callable::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
@@ -196,7 +228,7 @@ void Callable::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	// diagnostic graph.
 }
 void Callable::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
-	out << diagnostic_kind() << " " << pas_name << "\n";
+	out << diagnostic_kind() << " " << diagnostic_pas_name(pas_name) << "\n";
 	ctx->indent(out, indent + 1); out << "type: " << ctx->known_type_ref(ty) << "\n";
 	ctx->indent(out, indent + 1); out << "external: " << (is_external ? "yes" : "no") << "\n";
 	ctx->indent(out, indent + 1); out << "has_body: " << (has_body ? "yes" : "no");
@@ -206,7 +238,7 @@ const char* Procedure::diagnostic_kind() const { return "procedure"; }
 const char* Method::diagnostic_kind() const { return "method"; }
 void Method::collect_diagnostic_edges(ErrorLetContext* ctx) const { Callable::collect_diagnostic_edges(ctx); ctx->add_type_edge(owner_class); }
 void Method::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
-	out << "method " << pas_name << "\n";
+	out << "method " << diagnostic_pas_name(pas_name) << "\n";
 	ctx->indent(out, indent + 1); out << "owner: " << ctx->known_type_ref(owner_class) << "\n";
 	ctx->indent(out, indent + 1); out << "type: " << ctx->known_type_ref(ty) << "\n";
 	ctx->indent(out, indent + 1); out << "virtual: ";
