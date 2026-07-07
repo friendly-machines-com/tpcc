@@ -146,3 +146,18 @@ int conversion_cost(Type* from, Type* to) {
 		return 1;
 	return -1;
 }
+
+// A dominates B iff A's cost is <= B's on every position AND strictly < on
+// at least one. Different-length vectors don't compare (ambiguity later).
+bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
+    if (a.size() != b.size())
+        return false;
+    bool strict = false;
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i] > b[i])
+            return false;
+        if (a[i] < b[i])
+            strict = true;
+    }
+    return strict;
+}

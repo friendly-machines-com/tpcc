@@ -217,3 +217,7 @@ Type* common_arith_type(Type* a, Type* b);
 // -1 = no implicit conversion. Used by both call-site coercion and overload
 // ranking.
 int conversion_cost(Type* from, Type* to);
+
+// A dominates B iff A's cost is <= B's on every position AND strictly < on
+// at least one. Different-length vectors don't compare (ambiguity later).
+bool dominates(const std::vector<int>& a, const std::vector<int>& b);

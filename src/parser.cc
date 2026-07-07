@@ -2565,21 +2565,6 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 	return costs;
 }
 
-// A dominates B iff A's cost is <= B's on every position AND strictly < on
-// at least one. Different-length vectors don't compare (ambiguity later).
-static bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
-	if (a.size() != b.size())
-		return false;
-	bool strict = false;
-	for (size_t i = 0; i < a.size(); i++) {
-		if (a[i] > b[i])
-			return false;
-		if (a[i] < b[i])
-			strict = true;
-	}
-	return strict;
-}
-
 Node* Parser::cast(Node* a, Type* target_ty) {
 	// `nil` literal: legal in any reference-type position (class/interface/^T).
 	// Adopt the surrounding target's type so emission and downstream checks
