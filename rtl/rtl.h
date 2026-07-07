@@ -194,32 +194,6 @@ struct t_tobject: public m_iobject {
 	virtual m_iobject* p_classparent() = 0;
 };
 
-// Usage: class_of<t_foo> x;
-// Usage: class_of<t_tfoo> c{ t_tfoo::p_classtype() };
-// Usage: c.ptr->Hello();
-template<class T>
-struct class_of
-{
-	using meta_type = typename T::m_meta;
-	meta_type* ptr;
-	meta_type* operator->() const {
-		return ptr;
-	}
-
-	template<class B>
-	requires std::is_base_of_v<B, T>
-	operator class_of<B>() const {
-		return {ptr};
-	}
-};
-// TODO: auto foo_class = class_ref<t_tfoo>(); // class_ref<t_tfoo>() would be class_of<t_tfoo>{ t_tfoo::p_classtype() };
-
-/*
-class_ref<t_tobject> c;
-class_ref<t_tfoo> f;
-c = f;  // should work
-*/
-
 #endif
 
 using t_tclass = m_iobject;
