@@ -54,6 +54,6 @@ public:
      *  duplicate identifier. Returns true on success, false on a duplicate /
      *  overload-mismatch error (caller reports the diagnostic with location). */
     bool register_callable(std::string name, Callable* c);
-    const std::map<std::string, Type*>& types() const { return type_items; }
-    const std::map<std::string, FrameValueEntry>& values() const { return value_items; }
+    const std::map<std::string, Type*>& types_local() const { return type_items; }
+    const std::map<std::string, FrameValueEntry>& values_local() const { return value_items; }
 };

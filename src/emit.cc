@@ -532,7 +532,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				variant_slots.insert(f.slot);
 	// FIXME: Frame's std::map iterates alphabetically; Pascal semantics require
 	// source order for layout.
-	for (auto& kv : body->values()) {
+	for (auto& kv : body->values_local()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
 			if (is_interface) {

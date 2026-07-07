@@ -107,3 +107,109 @@ Method::Method(std::string cxx_name,
 
 OverloadSet::OverloadSet(std::vector<Callable*> members)
     : members(std::move(members)) {}
+
+#include "diagnostic.h"
+#include "frame.h"
+#include "types.h"
+#include <algorithm>
+
+const char* Node::diagnostic_kind() const { return "value"; }
+void Node::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(ty); }
+void Node::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " : " << ctx->known_type_ref(ty); }
+void Node::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << "value ..."; }
+
+const char* Block::diagnostic_kind() const { return "block"; }
+void Block::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); for (auto* s : statements) ctx->add_value_edge(s); }
+void Block::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "block";
+	for (auto* s : statements) { out << "\n"; ctx->indent(out, indent + 1); out << ctx->known_value_ref(s); }
+	out << "\n"; ctx->indent(out, indent); out << "end";
+}
+
+const char* Symbol::diagnostic_kind() const { return "symbol"; }
+void Symbol::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "symbol " << str() << " : " << ctx->known_type_ref(ty); }
+
+void UnaryOperation::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_value_edge(a); }
+void UnaryOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " " << ctx->known_value_ref(a) << " : " << ctx->known_type_ref(ty); }
+
+void BinaryOperation::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_value_edge(a); ctx->add_value_edge(b); }
+void BinaryOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " " << ctx->known_value_ref(a) << ", " << ctx->known_value_ref(b) << " : " << ctx->known_type_ref(ty); }
+
+const char* ProcCall::diagnostic_kind() const { return "call"; }
+void ProcCall::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_value_edge(receiver); ctx->add_value_edge(callee); for (auto* a : args) ctx->add_value_edge(a); }
+void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "call\n"; ctx->indent(out, indent + 1); out << "callee: " << ctx->known_value_ref(callee) << "\n";
+	if (receiver) { ctx->indent(out, indent + 1); out << "receiver: " << ctx->known_value_ref(receiver) << "\n"; }
+	for (auto* a : args) { ctx->indent(out, indent + 1); out << "arg: " << ctx->known_value_ref(a) << "\n"; }
+	ctx->indent(out, indent + 1); out << "returns: " << ctx->known_type_ref(ty);
+}
+
+const char* InheritedCall::diagnostic_kind() const { return "inherited_call"; }
+void InheritedCall::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_value_edge(resolved); for (auto* a : args) ctx->add_value_edge(a); }
+void InheritedCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "inherited call\n"; ctx->indent(out, indent + 1); out << "resolved: " << ctx->known_value_ref(resolved);
+	for (auto* a : args) { out << "\n"; ctx->indent(out, indent + 1); out << "arg: " << ctx->known_value_ref(a); }
+}
+
+const char* Dereference::diagnostic_kind() const { return "deref"; }
+void Dereference::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "deref " << ctx->known_value_ref(a) << " : " << ctx->known_type_ref(ty); }
+const char* Assign::diagnostic_kind() const { return "assign"; }
+const char* ShortCircuitOperation::diagnostic_kind() const { return kind == AND ? "and" : "or"; }
+void ShortCircuitOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { BinaryOperation::print_diagnostic_definition(ctx, out, 0); }
+const char* MemberAccess::diagnostic_kind() const { return "member_access"; }
+const char* Index::diagnostic_kind() const { return "index"; }
+const char* Return::diagnostic_kind() const { return "return"; }
+
+const char* Cast::diagnostic_kind() const { return "cast"; }
+void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }
+
+const char* StorageSlot::diagnostic_kind() const { return "slot"; }
+void StorageSlot::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "slot " << cxx_name << " : " << ctx->known_type_ref(ty); }
+
+const char* EnumMemberRef::diagnostic_kind() const { return "enum_member"; }
+void EnumMemberRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "enum member " << cxx_name << " = " << value << " : " << ctx->known_type_ref(ty); }
+
+const char* Integer::diagnostic_kind() const { return "integer"; }
+void Integer::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "integer " << value << " : " << ctx->known_type_ref(ty); }
+
+const char* String::diagnostic_kind() const { return "string"; }
+void String::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
+	out << "string \"";
+	for (size_t i = 0; i < std::min<size_t>(value.size(), 40); i++) out << value[i];
+	if (value.size() > 40) out << "...";
+	out << "\" : " << ctx->known_type_ref(ty);
+}
+
+const char* NilLiteral::diagnostic_kind() const { return "nil"; }
+void NilLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "nil : " << ctx->known_type_ref(ty); }
+const char* Coerce::diagnostic_kind() const { return "coerce"; }
+const char* CoerceCheck::diagnostic_kind() const { return "coerce_check"; }
+const char* AddrOf::diagnostic_kind() const { return "addr_of"; }
+
+const char* Callable::diagnostic_kind() const { return "callable"; }
+void Callable::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_type_edge(ty); ctx->add_frame_edge(body_frame, DiagnosticFrameUse::RoutineLocals); }
+void Callable::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << diagnostic_kind() << " " << pas_name << "\n";
+	ctx->indent(out, indent + 1); out << "cxx: " << cxx_name << "\n";
+	ctx->indent(out, indent + 1); out << "type: " << ctx->known_type_ref(ty) << "\n";
+	ctx->indent(out, indent + 1); out << "external: " << (is_external ? "yes" : "no") << "\n";
+	ctx->indent(out, indent + 1); out << "has_body: " << (has_body ? "yes" : "no");
+}
+const char* Procedure::diagnostic_kind() const { return "procedure"; }
+
+const char* Method::diagnostic_kind() const { return "method"; }
+void Method::collect_diagnostic_edges(ErrorLetContext* ctx) const { Callable::collect_diagnostic_edges(ctx); ctx->add_type_edge(owner_class); }
+void Method::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "method " << pas_name << "\n";
+	ctx->indent(out, indent + 1); out << "owner: " << ctx->known_type_ref(owner_class) << "\n";
+	ctx->indent(out, indent + 1); out << "type: " << ctx->known_type_ref(ty) << "\n";
+	ctx->indent(out, indent + 1); out << "virtual: ";
+	switch (virtual_kind) { case VirtualKind::None: out << "none"; break; case VirtualKind::Virtual: out << "virtual"; break; case VirtualKind::Override: out << "override"; break; case VirtualKind::Abstract: out << "abstract"; break; case VirtualKind::Dynamic: out << "dynamic"; break; }
+}
+
+const char* OverloadSet::diagnostic_kind() const { return "overload_set"; }
+void OverloadSet::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); for (auto* m : members) ctx->add_value_edge(m); }
+void OverloadSet::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "overload set";
+	for (auto* m : members) { out << "\n"; ctx->indent(out, indent + 1); out << "member: " << ctx->known_value_ref(m); }
+}

@@ -329,6 +329,9 @@ protected:
 
 	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
+	Type* raise_type_mismatch(std::string message, Type* expected, Type* got);
+	Type* raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
+	[[noreturn]] void raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
 
 public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);

@@ -2,14 +2,20 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <sstream>
 
 class Type;
 class Frame;
 class RoutineType;
 class Callable;
+class ErrorLetContext;
 
 class Node {
 public:
+	virtual const char* diagnostic_kind() const;
+	virtual void collect_diagnostic_edges(ErrorLetContext* ctx) const;
+	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
+	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
 	// Result type of the value this node produces. Filled by the Parser at
 	// construction time; readers (emit, checker, evaluator) treat it as the
 	// single source of truth. Null on statement nodes (Block, Assign,
@@ -23,6 +29,9 @@ class Block: public Node {
 public:
 	std::vector<Node*> statements;
 	void add(Node* stmt);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class Symbol: public Node {
@@ -31,12 +40,16 @@ private:
 public:
 	Symbol(std::string text);
 	std::string str() const;
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class UnaryOperation: public Node {
 public:
        Node* a;
        UnaryOperation(Node* a);
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class BinaryOperation: public Node {
@@ -44,6 +57,8 @@ public:
        Node* a;
        Node* b;
        BinaryOperation(Node* a, Node* b);
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class ProcCall: public Node {
@@ -57,6 +72,9 @@ public:
 	Node* callee;
 	std::vector<Node*> args;
 	ProcCall(Node* receiver, Node* callee, std::vector<Node*> args);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** `inherited Name(args)`. Calls the parent-type method the parser resolved
@@ -77,16 +95,22 @@ public:
 	Callable* resolved = nullptr;
 	std::vector<Node*> args;
 	bool dropped = false;
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class Dereference: public UnaryOperation {
 public:
 	Dereference(Node* a);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class Assign: public BinaryOperation {
 public:
 	Assign(Node* a, Node* b);
+	const char* diagnostic_kind() const override;
 };
 
 enum ShortCircuitOperationKind {
@@ -99,6 +123,8 @@ public:
 	enum ShortCircuitOperationKind kind;
 public:
 	ShortCircuitOperation(enum ShortCircuitOperationKind kind, Node* a, Node* b);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** container.member. `a` is the container (usually a StorageSlot for the
@@ -109,6 +135,7 @@ public:
 class MemberAccess: public BinaryOperation {
 public:
 	MemberAccess(Node* a, Node* b);
+	const char* diagnostic_kind() const override;
 };
 
 /** array[index]. `a` is the array value; `b` is the index expression.
@@ -117,11 +144,13 @@ public:
 class Index: public BinaryOperation {
 public:
 	Index(Node* a, Node* b);
+	const char* diagnostic_kind() const override;
 };
 
 class Return: public UnaryOperation {
 public:
 	Return(Node* a);
+	const char* diagnostic_kind() const override;
 };
 
 /** Compiler-inserted implicit type conversion. Distinct from Coerce (which
@@ -130,29 +159,39 @@ public:
 class Cast: public UnaryOperation {
 public:
 	Cast(Node* value, Type* target);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct StorageSlot: public Node {
 	std::string cxx_name;
 	StorageSlot(std::string cxx_name, Type* ty);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct EnumMemberRef: public Node {
 	std::string cxx_name;
 	int64_t value;
 	EnumMemberRef(std::string cxx_name, int64_t value, Type* ty);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class Integer: public Node {
 public:
 	uint64_t value;
 	Integer(uint64_t value, Type* ty);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class String: public Node {
 public:
 	std::string value;
 	String(std::string value, Type* ty);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** Pascal `nil`. Constructed without a type: its type is fixed up by cast()
@@ -161,21 +200,26 @@ public:
 class NilLiteral: public Node {
 public:
 	NilLiteral() = default;
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class Coerce: public BinaryOperation {
 public:
 	Coerce(Node* a, Node* b);
+	const char* diagnostic_kind() const override;
 };
 
 class CoerceCheck: public BinaryOperation {
 public:
 	CoerceCheck(Node* a, Node* b);
+	const char* diagnostic_kind() const override;
 };
 
 class AddrOf: public UnaryOperation {
 public:
 	AddrOf(Node* a);
+	const char* diagnostic_kind() const override;
 };
 
 /** Shared base of standalone procedures/functions and methods. Holds
@@ -200,6 +244,9 @@ public:
 	         std::string pas_name,
 	         RoutineType* ty,
 	         bool has_overload_directive);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** Standalone procedure or function (Pascal `procedure`/`function` at
@@ -212,6 +259,7 @@ public:
 	          std::string pas_name,
 	          RoutineType* ty,
 	          bool has_overload_directive);
+	const char* diagnostic_kind() const override;
 };
 
 /** Method of a class/object/record. `owner_class` is the type it belongs to
@@ -229,6 +277,9 @@ public:
 	       bool has_overload_directive,
 	       Type* owner_class,
 	       VirtualKind virtual_kind);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** Overload set: multiple Callables (Procedures or Methods) sharing one Pascal
@@ -240,4 +291,7 @@ class OverloadSet: public Node {
 public:
 	std::vector<Callable*> members;
 	OverloadSet(std::vector<Callable*> members);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

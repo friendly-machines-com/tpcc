@@ -2,13 +2,19 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <sstream>
 
 class Frame;
 class StorageSlot;
+class ErrorLetContext;
 
 class Type {
 public:
 	virtual ~Type() = default;
+	virtual const char* diagnostic_kind() const = 0;
+	virtual void collect_diagnostic_edges(ErrorLetContext* ctx) const = 0;
+	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const = 0;
+	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
 	// True iff a variable of this type is represented in C++ emission as a
 	// pointer (i.e. emission in storage position is `t_foo*`, member access
 	// uses `->`, `nil` is a legal value). Pascal `class` and `interface` are
@@ -27,23 +33,37 @@ struct IncompleteType: public Type {
 	std::string name;
 	Type* resolved;
 	IncompleteType(std::string name);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct BoundedCardinalType: public Type {
 	uint64_t lower_bound;
 	uint64_t higher_bound;
 	BoundedCardinalType(uint64_t lower_bound, uint64_t higher_bound);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct FixedArrayType: public Type {
 	Type* bounds;
 	Type* item_type;
 	FixedArrayType(Type* bounds, Type* item_type);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct FixedSetType: public Type {
 	Type* item_type;
 	FixedSetType(Type* item_type);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct VariantArm {
@@ -71,6 +91,9 @@ struct EnumType: public Type {
 	std::vector<Member> members;
 	EnumType(std::string cxx_name, std::string a, std::string b);
 	EnumType();
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct RecordType: public Type {
@@ -101,6 +124,10 @@ struct RecordType: public Type {
 	std::vector<VariantArm> arms;
 
 	RecordType(Frame* children, bool packed);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct InterfaceType: public Type {
@@ -109,6 +136,10 @@ struct InterfaceType: public Type {
 	std::vector<InterfaceType*> super_interfaces; // FIXME: not transitive ?
 	InterfaceType(Frame* children, std::vector<InterfaceType*> super_interfaces);
 	InterfaceType(std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	bool is_reference_type() const override { return true; }
 };
 
@@ -118,6 +149,10 @@ struct ClassType: public Type {
 	std::vector<InterfaceType*> implemented_interfaces; // FIXME: not transitive ?
 	ClassType* super;
 	ClassType(Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	bool is_reference_type() const override { return true; }
 };
 
@@ -129,6 +164,10 @@ struct ClassRefType : public Type // metaclass
 	explicit ClassRefType(Type* c)
 	   : target(c) {
 	}
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	bool is_reference_type() const override { return true; }
 };
 
@@ -137,11 +176,19 @@ struct ObjectType: public Type {
 	std::string cxx_name;
 	ObjectType* super;
 	ObjectType(Frame* children, ObjectType* super);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 struct PointerType: public Type {
 	Type* item_type;
 	PointerType(Type* item_type);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	bool is_reference_type() const override { return true; }
 };
 
@@ -151,6 +198,10 @@ struct ModuleType: public Type {
 	Frame* interface_children;
 	Frame* implementation_children;
 	ModuleType(Frame* interface_children, Frame* implementation_children);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** The type-theoretic Unit (one inhabitant). Represents the "return type" of
@@ -159,6 +210,9 @@ struct ModuleType: public Type {
  *  in the root frame under no Pascal name. Emitted as C++ `void`. */
 struct UnitType: public Type {
 	UnitType();
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** The type of a numeric literal before context pins it to a specific integer
@@ -167,6 +221,9 @@ struct UnitType: public Type {
  *  under any Pascal name. */
 struct UntypedIntegerType: public Type {
 	UntypedIntegerType();
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 enum class ParamMode { Value, Var, Out, Const };
@@ -206,6 +263,10 @@ public:
 	RoutineKind kind;
 
 	RoutineType(std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 // Result type of an arithmetic/bitwise binary op given operand types. Handles

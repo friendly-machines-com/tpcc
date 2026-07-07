@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "builtins.h"
 #include "cst.h"
+#include "diagnostic.h"
 #include "directive_expr.h"
 #include "emit.h"
 #include "evaluator.h"
@@ -23,6 +24,15 @@
 // earlier in the file) reference these before their definitions.
 static Frame* body_frame_of(Type* ty);
 static Type* call_result_type(Node* callee);
+
+static ErrorLetContext make_error_let_context_from_scopes(const std::vector<ScopeEntry>& scopes, unsigned max_depth) {
+	std::vector<DiagnosticScope> diagnostic_scopes;
+	diagnostic_scopes.reserve(scopes.size());
+	for (const ScopeEntry& scope : scopes) {
+		diagnostic_scopes.push_back(DiagnosticScope{scope.frame, scope.unwrap_via});
+	}
+	return ErrorLetContext(std::move(diagnostic_scopes), max_depth);
+}
 
 static std::unordered_set<std::string> keywords = {
     "abstract",
@@ -188,6 +198,42 @@ void Parser::pop_scope() {
 
 [[noreturn]] Type* Parser::raise_type_parse_error(std::string message) {
 	emit_parse_error(input_file_name, input_file_line_number, message);
+}
+
+Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got) {
+	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
+	std::string expected_ref = ctx.type_ref(expected);
+	std::string got_ref = ctx.type_ref(got);
+	std::stringstream sst;
+	sst << message << ": expected type " << expected_ref << " but got type " << got_ref;
+	sst << ctx.notes();
+	emit_parse_error(input_file_name, input_file_line_number, sst.str());
+	return expected; // future non-fatal diagnostics can continue with the expected type
+}
+
+
+Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got) {
+	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
+	std::string got_ref = ctx.type_ref(got);
+	std::stringstream sst;
+	sst << message << ": expected " << expected_kind << " type but got " << got_ref;
+	sst << ctx.notes();
+	emit_parse_error(input_file_name, input_file_line_number, sst.str());
+	return got; // future non-fatal diagnostics can continue with the parsed type
+}
+
+[[noreturn]] void Parser::raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args) {
+	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
+	std::stringstream sst;
+	sst << "no matching overload for '" << name << "'";
+	if (receiver) {
+		sst << "\n  receiver: " << ctx.value_ref(receiver) << " : " << ctx.type_ref(receiver->ty);
+	}
+	for (size_t i = 0; i < args.size(); ++i) {
+		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
+	}
+	sst << ctx.notes();
+	emit_parse_error(input_file_name, input_file_line_number, sst.str());
 }
 
 bool Parser::is_defined(const std::string& sym) const {
@@ -1235,7 +1281,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
 /*	if (call->ty->return_type != boolean_type()) {
-		raise_parse_error("Custom comparison operator '" + id + "' return type should be Boolean but isn't");
+		raise_type_mismatch("custom comparison operator '" + id + "' has wrong return type", boolean_type(), call->ty);
 	} FIXME */
 	return call;
 }
@@ -1248,7 +1294,7 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
 /*	if (call->ty->return_type != x->ty) {
-		raise_parse_error("Custom comparison operator '" + id + "' return type should be the same as arg type but isn't");
+		raise_type_mismatch("custom unary operator '" + id + "' has wrong return type", x->ty, call->ty);
 	} FIXME */
 	return call;
 }
@@ -1530,7 +1576,7 @@ Type* Parser::parse_class_type() {
 		} else if (auto target_class_ty = dynamic_cast<ClassType*>(target_ty)) {
 			return new ClassRefType(target_class_ty);
 		} else {
-			return raise_type_parse_error("parse_class_type: type after 'class of' is not a class");
+			return raise_type_kind_mismatch("parse_class_type: type after 'class of' is not a class", "class", target_ty);
 		}
 		// FIXME: return lookup_builtin_type("pas::m_iobject");
 		//return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
@@ -1541,14 +1587,14 @@ Type* Parser::parse_class_type() {
 		auto s_ty = parse_type_expression(false);
 		super_ty = dynamic_cast<ClassType*>(s_ty);
 		if (super_ty == nullptr) {
-			raise_type_parse_error("parse_class_type: superclass is not a class");
+			raise_type_kind_mismatch("parse_class_type: superclass is not a class", "class", s_ty);
 		}
 		while (maybe_parse_comma()) {
 			auto i_ty = parse_type_expression(false);
 			if (auto interface_ty = dynamic_cast<InterfaceType*>(i_ty)) {
 				implemented_interfaces.push_back(interface_ty);
 			} else {
-				raise_type_parse_error("parse_class_type: type is not an interface");
+				raise_type_kind_mismatch("parse_class_type: type is not an interface", "interface", i_ty);
 			}
 		}
 		parse_closing_paren();
@@ -1568,7 +1614,7 @@ Type* Parser::parse_interface_type() {
 			if (auto interface_ty = dynamic_cast<InterfaceType*>(i_ty)) {
 				implemented_interfaces.push_back(interface_ty);
 			} else {
-				raise_type_parse_error("parse_interface_type: type is not an interface");
+				raise_type_kind_mismatch("parse_interface_type: type is not an interface", "interface", i_ty);
 			}
 		} while (maybe_parse_comma());
 		parse_closing_paren();
@@ -1601,7 +1647,7 @@ Type* Parser::parse_object_type() {
 		auto s_ty = parse_type_expression(false);
 		super_ty = dynamic_cast<ObjectType*>(s_ty);
 		if (super_ty == nullptr) {
-			raise_type_parse_error("parse_object_type: super is not an object");
+			raise_type_kind_mismatch("parse_object_type: super is not an object", "object", s_ty);
 		}
 		parse_closing_paren();
 	}
@@ -2169,7 +2215,7 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 			// That's so we can emit "(new X())->Create()".
 			ret_ty = ty;
 		} else {
-			raise_type_parse_error("expected class as owner");
+			raise_type_kind_mismatch("expected class as owner", "class", owner);
 		}
 	} else if (is_function) {
 		parse_colon();
@@ -2620,7 +2666,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 				viable.push_back({c, std::move(costs)});
 		}
 		if (viable.empty()) {
-			raise_parse_error("no matching overload for '" + name_for_error + "'");
+			raise_no_matching_overload(name_for_error, receiver, args);
 		}
 		std::vector<Callable*> non_dominated;
 		for (size_t i = 0; i < viable.size(); i++) {

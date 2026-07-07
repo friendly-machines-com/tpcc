@@ -194,3 +194,18 @@ const Frame& root_frame() {
 	}();
 	return f;
 }
+
+#include "diagnostic.h"
+
+const char* IntrinsicType::diagnostic_kind() const { return "intrinsic"; }
+void IntrinsicType::collect_diagnostic_edges(ErrorLetContext*) const {}
+void IntrinsicType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << cxx_name;
+	if (rank)
+		out << " rank " << *rank;
+}
+
+const char* Builtin::diagnostic_kind() const { return "builtin"; }
+void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
+	out << "builtin " << desc->cxx_name << " : " << ctx->known_type_ref(ty);
+}

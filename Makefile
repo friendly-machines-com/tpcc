@@ -6,7 +6,7 @@ all: mp
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -o $@ -c $<
 
-mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types.o src/evaluator.o src/builtins.o src/units.o src/emit.o
+mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types.o src/evaluator.o src/builtins.o src/units.o src/emit.o src/diagnostic.o
 	$(CXX) -o $@ $^
 
 src/main.o: src/main.cc src/parser.h src/types.h src/units.h src/emit.h
@@ -19,6 +19,7 @@ src/evaluator.o: src/evaluator.cc src/evaluator.h src/cst.h src/frame.h src/type
 src/builtins.o: src/builtins.cc src/builtins.h src/cst.h
 src/units.o: src/units.cc src/units.h src/frame.h
 src/emit.o: src/emit.cc src/emit.h src/cst.h src/types.h src/builtins.h
+src/diagnostic.o: src/diagnostic.cc src/diagnostic.h src/types.h src/cst.h src/frame.h src/builtins.h
 
 clean:
 	rm -f src/*.o
