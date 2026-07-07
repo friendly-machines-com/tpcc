@@ -1518,7 +1518,12 @@ Type* Parser::parse_class_type() {
 	parse_keyword("class");
 	if (maybe_parse_keyword("of")) {
 		auto target_ty = parse_type_expression(true);
-		return lookup_builtin_type("pas::m_iobject");
+		if (auto target_class_ty = dynamic_cast<ClassType*>(target_ty)) {
+			return new ClassRefType(target_class_ty);
+		} else {
+			return raise_type_parse_error("parse_class_type: type after 'class of' is not a class");
+		}
+		// FIXME: return lookup_builtin_type("pas::m_iobject");
 		//return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
 	}
 	ClassType* super_ty = nullptr; // FIXME: TObject--but how?

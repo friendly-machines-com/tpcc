@@ -113,6 +113,17 @@ int conversion_cost(Type* from, Type* to) {
 		for (ObjectType* cur = dynamic_cast<ObjectType*>(from); cur; cur = cur->super, ++depth)
 			if (cur->super == to)
 				return depth + 1;
+		// METAclass references: class of Derived -> class of Base
+		if (auto from_classref = dynamic_cast<ClassRefType*>(from)) {
+			if (auto to_classref = dynamic_cast<ClassRefType*>(to)) {
+				int depth = 0;
+				for (ClassType* cur = from_classref->target; cur; cur = cur->super, ++depth) {
+					if (cur == to_classref->target)
+						return depth;
+				}
+				return -1;
+			}
+		}
 		return -1;
 	}
 	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);

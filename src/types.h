@@ -119,6 +119,16 @@ struct ClassType: public Type {
 	bool is_reference_type() const override { return true; }
 };
 
+struct ClassRefType : public Type // metaclass
+{
+	ClassType* target;
+
+	explicit ClassRefType(ClassType* c)
+	   : target(c) {
+	}
+	bool is_reference_type() const override { return true; }
+};
+
 struct ObjectType: public Type {
 	Frame* children;
 	std::string cxx_name;

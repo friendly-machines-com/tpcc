@@ -31,8 +31,9 @@ IntrinsicType k_ptruint("pas::t_ptruint", {});
 IntrinsicType k_sizeint("pas::t_sizeint", {});
 IntrinsicType k_sizeuint("pas::t_sizeuint", {});
 IntrinsicType k_unknown("pas::unknown_type", {});
+#if 0
 // Note: I don't think it's useful to have actual user-visible interfaces implemented on the metaclass.
-InterfaceType k_m_iobject("pas::m_iobject", new Frame(nullptr), std::vector<InterfaceType*>());
+//InterfaceType k_m_iobject("pas::m_iobject", new Frame(nullptr), std::vector<InterfaceType*>());
 
 // Populate m_iobject's frame with the metaclass methods Pascal code can
 // dispatch through a TClass value (e.g. `someTClassValue.ClassName`). Each
@@ -63,6 +64,7 @@ const bool k_m_iobject_methods_initialized = []() {
 	add("classparent", "p_classparent", {}, &k_m_iobject);
 	return true;
 }();
+#endif
 
 Type* const k_all_intrinsics[] = {
     &k_byte,
@@ -84,7 +86,7 @@ Type* const k_all_intrinsics[] = {
     &k_sizeint,
     &k_sizeuint,
     &k_unknown,
-    &k_m_iobject,
+//    &k_m_iobject,
 };
 } // namespace
 
