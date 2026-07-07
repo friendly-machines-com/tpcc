@@ -221,5 +221,5 @@ void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstre
 	// the builtin is referenced from a scope.
 	out << "builtin\n";
 	ctx->indent(out, indent + 1);
-	out << "signature: <builtin overload set>";
+	out << "signature: '<builtin overload set>'";
 }

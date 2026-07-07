@@ -185,6 +185,17 @@ bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
 #include "cst.h"
 #include <cstdio>
 
+
+static std::string diagnostic_string_literal(const std::string& text) {
+	std::string r = "'";
+	for (char ch : text) {
+		if (ch == '\'')
+			r.push_back('\'');
+		r.push_back(ch);
+	}
+	r.push_back('\'');
+	return r;
+}
 // Aggregate frames are indexed for member names by add_frame_edge(), but
 // indexing frames is deliberately name-evidence-only. Aggregate type bodies
 // print member type refs, so the owning aggregate Type explicitly contributes
@@ -209,7 +220,7 @@ void IncompleteType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx-
 void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "name: " << name;
+	out << "name: " << diagnostic_string_literal(name);
 	if (resolved) {
 		out << "\n";
 		ctx->indent(out, indent + 1);

@@ -113,6 +113,17 @@ OverloadSet::OverloadSet(std::vector<Callable*> members)
 #include "types.h"
 #include <algorithm>
 
+
+static std::string diagnostic_string_literal(const std::string& text) {
+	std::string r = "'";
+	for (char ch : text) {
+		if (ch == '\'')
+			r.push_back('\'');
+		r.push_back(ch);
+	}
+	r.push_back('\'');
+	return r;
+}
 const char* Node::diagnostic_kind() const { return "value"; }
 void Node::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(ty); }
 void Node::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " : " << ctx->known_type_ref(ty); }
@@ -127,7 +138,7 @@ void Block::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream
 }
 
 const char* Symbol::diagnostic_kind() const { return "symbol"; }
-void Symbol::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "symbol " << str() << " : " << ctx->known_type_ref(ty); }
+void Symbol::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "symbol " << diagnostic_string_literal(str()) << " : " << ctx->known_type_ref(ty); }
 
 void UnaryOperation::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_value_edge(a); }
 void UnaryOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " " << ctx->known_value_ref(a) << " : " << ctx->known_type_ref(ty); }
@@ -174,10 +185,10 @@ void Integer::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstre
 
 const char* String::diagnostic_kind() const { return "string"; }
 void String::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "string \"";
-	for (size_t i = 0; i < std::min<size_t>(value.size(), 40); i++) out << value[i];
-	if (value.size() > 40) out << "...";
-	out << "\" : " << ctx->known_type_ref(ty);
+	std::string text = value.substr(0, std::min<size_t>(value.size(), 40));
+	if (value.size() > 40)
+		text += "...";
+	out << "string " << diagnostic_string_literal(text) << " : " << ctx->known_type_ref(ty);
 }
 
 const char* NilLiteral::diagnostic_kind() const { return "nil"; }
