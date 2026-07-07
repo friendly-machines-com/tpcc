@@ -105,6 +105,11 @@ private:
 	// is declared); those must land in the enclosing type block's scope, not
 	// in whatever inner scope (record/class body) happens to be on top.
 	Frame* current_type_block = nullptr;
+	// The Callable whose body is currently being parsed, or nullptr outside
+	// any routine body. Set in parse_routine_body; used by parse_value's
+	// `inherited` branch to walk the parent type's method table and to decide
+	// the destructor-auto-chain drop.
+	Callable* current_routine = nullptr;
 	UnitRegistry* unit_registry;
 	// May be null. When non-null, emission hooks in the parser call into it
 	// as declarations and statements are parsed. Null is used only by
@@ -181,6 +186,10 @@ protected:
 	void parse_directive(std::string s);
 	void parse_operator(std::string s);
 	Node* parse_value();
+	// Parse `inherited Name[(args)]` or anonymous `inherited;`. Returns an
+	// InheritedCall node. The enclosing routine must be a Method on a
+	// composite type with a parent (else: parse error).
+	Node* parse_inherited();
 	/** Designator: value followed by zero-or-more selectors.
 	 *  Selectors:
 	 *    `.` identifier                 - MemberAccess (binary, RHS = ident)

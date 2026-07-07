@@ -97,6 +97,7 @@ void Emitter::emit_program_prologue(std::vector<std::string> used_unit_h_files) 
 	if (!active)
 		return;
 	fprintf(active, "#include \"rtl.h\"\n");
+	fprintf(active, "#include <functional>\n");
 	for (auto& h : used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
 	fprintf(active, "\n");
@@ -106,6 +107,7 @@ void Emitter::emit_unit_interface_prologue(std::vector<std::string> used_unit_h_
 	if (!active)
 		return;
 	fprintf(active, "#include \"rtl.h\"\n");
+	fprintf(active, "#include <functional>\n");
 	for (auto& h : used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
 	fprintf(active, "\n");
@@ -116,6 +118,7 @@ void Emitter::emit_unit_implementation_prologue(std::string this_unit_h_file, st
 		return;
 	fprintf(active, "#include \"%s\"\n", this_unit_h_file.c_str());
 	fprintf(active, "#include \"rtl.h\"\n");
+	fprintf(active, "#include <functional>\n");
 	for (auto& h : impl_used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
 	fprintf(active, "\n");
@@ -138,6 +141,33 @@ void Emitter::emit_main_epilogue() {
 	if (!active)
 		return;
 	fprintf(active, "\treturn 0;\n}\n");
+}
+
+// The cxx_name of the type that owns a Method, or empty if none.
+static std::string owner_cxx_name(Type* owner) {
+	if (auto r = dynamic_cast<RecordType*>(owner))
+		return r->cxx_name;
+	if (auto c = dynamic_cast<ClassType*>(owner))
+		return c->cxx_name;
+	if (auto i = dynamic_cast<InterfaceType*>(owner))
+		return i->cxx_name;
+	if (auto o = dynamic_cast<ObjectType*>(owner))
+		return o->cxx_name;
+	return "";
+}
+
+// Spelling of a Callable's C++ name token at any emit site. For destructors
+// this is `~ClassName` so the token composes with `->` at the call site
+// (obj->~Class()) and with `Owner::` for qualified destructor calls. Standard
+// citations: [expr.prim.id.dtor] for the spelling, [expr.ref] for member
+// access composition, [class.dtor]/15 for "A destructor can be called
+// explicitly." For non-destructors, the value cxx name as-is.
+static std::string callable_cxx_name(Callable* c) {
+	if (c->ty->kind == DESTRUCTOR) {
+		auto m = dynamic_cast<Method*>(c);
+		return m && m->owner_class ? "~" + owner_cxx_name(m->owner_class) : "~";
+	}
+	return c->cxx_name;
 }
 
 void Emitter::emit_statement(Node* stmt) {
@@ -163,7 +193,31 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(active, ";\n");
 		return;
 	}
-	unhandled_node("emit_statement", stmt);
+	if (auto ic = dynamic_cast<InheritedCall*>(stmt)) {
+		// `dropped` is set by the parser when the call would be redundant in
+		// C++ (destructor-in-destructor auto-chains). Emit nothing.
+		if (ic->dropped)
+			return;
+		auto m = dynamic_cast<Method*>(ic->resolved);
+		if (!m || !m->owner_class)
+			unhandled_node("inherited target is not a method", stmt);
+		// Qualified-id `Parent::X(args)` -- C++ implicit-this injection makes
+		// this a member call on `this`. See InheritedCall's docstring in cst.h.
+		fprintf(active, "\t%s::%s(",
+			owner_cxx_name(m->owner_class).c_str(),
+			callable_cxx_name(ic->resolved).c_str());
+		for (size_t i = 0; i < ic->args.size(); i++) {
+			if (i > 0)
+				fprintf(active, ", ");
+			emit_expression(ic->args[i]);
+		}
+		fprintf(active, ");\n");
+		return;
+	}
+	// Any other expression: evaluate and discard.
+	fprintf(active, "\t");
+	emit_expression(stmt);
+	fprintf(active, ";\n");
 }
 
 void Emitter::emit_with_prologue(std::string alias_cxx_name, Node* target) {
@@ -232,47 +286,37 @@ void Emitter::emit_repeat_epilogue(Node* condition) {
 	fprintf(active, "));\n");
 }
 
-// The cxx_name of the type that owns a Method, or empty if none.
-static std::string owner_cxx_name(Type* owner) {
-	if (auto r = dynamic_cast<RecordType*>(owner))
-		return r->cxx_name;
-	if (auto c = dynamic_cast<ClassType*>(owner))
-		return c->cxx_name;
-	if (auto i = dynamic_cast<InterfaceType*>(owner))
-		return i->cxx_name;
-	if (auto o = dynamic_cast<ObjectType*>(owner))
-		return o->cxx_name;
-	return "";
-}
-
-void Emitter::emit_procedure_open(Callable* c) {
+void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Position pos, std::string owner_qualifier) {
 	if (!active)
 		return;
-	fprintf(active, "\n");
-	bool is_destructor = (c->ty->kind == DESTRUCTOR);
-	// C++ destructors have no return type and their name is `~<class>`,
-	// spelled with the owner class's cxx name (not the Method's cxx_name,
-	// which is just the value-name spelling like `p_destroy`).
-	if (!is_destructor) {
-		emit_type_ref(c->ty->return_type);
-		fprintf(active, " ");
-	} else {
-		if (c->ty->return_type != &unit_type()) {
-			unhandled_type("non-unit return type on destructor is not allowed", c->ty);
+	if (pos == Position::DeclarationFormalsOnly) {
+		fprintf(active, "(");
+		for (size_t i = 0; i < ty->formals.size(); i++) {
+			if (i > 0)
+				fprintf(active, ", ");
+			auto& f = ty->formals[i];
+			if (f.mode == ParamMode::Const)
+				fprintf(active, "const ");
+			emit_type_ref(f.ty);
+			if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
+				fprintf(active, "&");
+			fprintf(active, " %s", f.cxx_name.c_str());
 		}
+		fprintf(active, ")");
+		return;
 	}
-	std::string owner = owner_cxx_name(dynamic_cast<Method*>(c) ? dynamic_cast<Method*>(c)->owner_class : nullptr);
-	if (!owner.empty())
-		fprintf(active, "%s::", owner.c_str());
-	if (is_destructor) {
-		fprintf(active, "~%s(", owner.c_str());
-	} else {
-		fprintf(active, "%s(", c->cxx_name.c_str());
+	bool is_destructor = (ty->kind == DESTRUCTOR);
+	if (!is_destructor) {
+		emit_type_ref(ty->return_type);
+		fprintf(active, " ");
+	} else if (ty->return_type != &unit_type()) {
+		unhandled_type("non-unit return type on destructor is not allowed", ty);
 	}
-	for (size_t i = 0; i < c->ty->formals.size(); i++) {
+	fprintf(active, "%s%s(", owner_qualifier.c_str(), cxx_text.c_str());
+	for (size_t i = 0; i < ty->formals.size(); i++) {
 		if (i > 0)
 			fprintf(active, ", ");
-		auto& f = c->ty->formals[i];
+		auto& f = ty->formals[i];
 		if (f.mode == ParamMode::Const)
 			fprintf(active, "const ");
 		emit_type_ref(f.ty);
@@ -280,33 +324,49 @@ void Emitter::emit_procedure_open(Callable* c) {
 			fprintf(active, "&");
 		fprintf(active, " %s", f.cxx_name.c_str());
 	}
-	fprintf(active, ") {\n");
+	fprintf(active, ")");
+}
+
+void Emitter::emit_callable_signature(Callable* c, Position pos, std::string owner_qualifier) {
+	emit_routine_signature(c->ty, callable_cxx_name(c), pos, owner_qualifier);
+}
+
+void Emitter::emit_procedure_open(Callable* c) {
+	if (!active)
+		return;
+	fprintf(active, "\n");
+	std::string qualifier;
+	if (auto m = dynamic_cast<Method*>(c)) {
+		if (m->owner_class)
+			qualifier = owner_cxx_name(m->owner_class) + "::";
+	}
+	emit_callable_signature(c, Position::Definition, qualifier);
+	fprintf(active, " {\n");
 	if (c->ty->return_type != &unit_type()) { // function
-		fprintf(active, "\tauto p_result;\n");
+		fprintf(active, "\t");
+		emit_type_ref(c->ty->return_type);
+		fprintf(active, " p_result;\n");
 	}
 }
 
 void Emitter::emit_procedure_close(Callable* target) {
 	if (!active)
 		return;
-
-	bool constructor = false;
-	bool function = false;
-	if (auto m = dynamic_cast<Method*>(target)) {
-		if (auto ty = dynamic_cast<RoutineType*>(m)) {
-			if (ty->kind == CONSTRUCTOR) {
-				constructor = true;
-			} else if (ty->return_type != &unit_type()) {
-				function = true;
-			}
-		}
-	}
-	if (constructor) {
+	auto ty = target->ty;
+	if (ty->kind == CONSTRUCTOR) {
 		fprintf(active, "\treturn this;\n");
-	} else if (function) {
+	} else if (ty->return_type != &unit_type()) {
 		fprintf(active, "\treturn p_result;\n");
 	}
 	fprintf(active, "}\n");
+}
+
+void Emitter::emit_callable_prototype(Callable* c, std::string owner_qualifier, std::string prefix, std::string suffix) {
+	if (!active)
+		return;
+	fprintf(active, "%s", prefix.c_str());
+	emit_callable_signature(c, Position::Declaration, owner_qualifier);
+	fprintf(active, "%s;\n", suffix.c_str());
 }
 
 void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) {
@@ -491,27 +551,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 					fprintf(active, "virtual ");
 				}
 			}
-			bool is_destructor = (call->ty->kind == DESTRUCTOR);
-			if (is_destructor) {
-				if (call->ty->return_type != &unit_type())
-					unhandled_type("non-unit return type on destructor is not allowed", call->ty);
-				fprintf(active, "~%s(", cxx_name.c_str());
-			} else {
-				emit_type_ref(call->ty->return_type);
-				fprintf(active, " %s(", call->cxx_name.c_str());
-			}
-			for (size_t i = 0; i < call->ty->formals.size(); i++) {
-				if (i > 0)
-					fprintf(active, ", ");
-				auto& f = call->ty->formals[i];
-				if (f.mode == ParamMode::Const)
-					fprintf(active, "const ");
-				emit_type_ref(f.ty);
-				if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
-					fprintf(active, "&");
-				fprintf(active, " %s", f.cxx_name.c_str());
-			}
-			fprintf(active, ")");
+			emit_callable_signature(call, Position::Declaration, "");
 			if (auto m = dynamic_cast<Method*>(call)) {
 				if (is_interface) {
 					fprintf(active, " = 0");
@@ -591,6 +631,32 @@ void Emitter::emit_type_alias(std::string cxx_name, std::string aliased_cxx_name
 	if (!active)
 		return;
 	fprintf(active, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
+}
+
+void Emitter::emit_method_pointer_lambda(Node* obj_expr, Method* method) {
+	auto rt = method->ty;
+	// Reject ObjectType receivers. Class-type Self passes by pointer
+	// (t_foo*), so by-value capture stores the pointer -- matches Pascal
+	// TMethod.Data. ObjectType is value-typed; by-value capture would copy
+	// the object, diverging from TMethod (which stores an address). Raise
+	// rather than emit wrong code silently.
+	if (obj_expr->ty && dynamic_cast<ObjectType*>(obj_expr->ty))
+		unhandled_node("method-pointer capture of ObjectType receiver not supported (use a class type)", obj_expr);
+	fprintf(active, "[");
+	emit_expression(obj_expr);
+	fprintf(active, "]");
+	emit_routine_signature(rt, "", Position::DeclarationFormalsOnly, "");
+	fprintf(active, " mutable { ");
+	if (rt->return_type != &unit_type())
+		fprintf(active, "return ");
+	emit_expression(obj_expr);
+	fprintf(active, "->%s(", callable_cxx_name(method).c_str());
+	for (size_t i = 0; i < rt->formals.size(); i++) {
+		if (i > 0)
+			fprintf(active, ", ");
+		fprintf(active, "%s", rt->formals[i].cxx_name.c_str());
+	}
+	fprintf(active, "); }");
 }
 
 
@@ -716,8 +782,12 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, ".");
 			}
 		}
-		emit_expression(pc->callee);
-		fprintf(active, "(");
+		if (auto c = dynamic_cast<Callable*>(pc->callee)) {
+			fprintf(active, "%s(", callable_cxx_name(c).c_str());
+		} else {
+			emit_expression(pc->callee);
+			fprintf(active, "(");
+		}
 		for (size_t i = 0; i < pc->args.size(); i++) {
 			if (i > 0)
 				fprintf(active, ", ");
@@ -757,11 +827,41 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
+		// `@obj.method` for a `procedure of object`-typed LHS: render as a
+		// lambda capturing obj by value and dispatching to the method. The
+		// lambda converts implicitly to std::function<Ret(Args)> at the
+		// assignment site. Plain `&expr` (function pointers, address-of a
+		// standalone Callable) falls through to cxx_unary_operator.
+		if (auto ao = dynamic_cast<AddrOf*>(u)) {
+			if (auto ma = dynamic_cast<MemberAccess*>(ao->a)) {
+				if (auto method = dynamic_cast<Method*>(ma->b)) {
+					emit_method_pointer_lambda(ma->a, method);
+					return;
+				}
+			}
+		}
 		if (const char* op = cxx_unary_operator(u)) {
 			fprintf(active, "%s", op);
 			emit_expression(u->a);
 			return;
 		}
+	}
+	if (auto ic = dynamic_cast<InheritedCall*>(expr)) {
+		if (ic->dropped)
+			unhandled_node("dropped inherited in expression context (destructor has no value)", expr);
+		auto m = dynamic_cast<Method*>(ic->resolved);
+		if (!m || !m->owner_class)
+			unhandled_node("inherited target is not a method", expr);
+		fprintf(active, "%s::%s(",
+			owner_cxx_name(m->owner_class).c_str(),
+			callable_cxx_name(ic->resolved).c_str());
+		for (size_t i = 0; i < ic->args.size(); i++) {
+			if (i > 0)
+				fprintf(active, ", ");
+			emit_expression(ic->args[i]);
+		}
+		fprintf(active, ")");
+		return;
 	}
 	unhandled_node("emit_expression", expr);
 }
@@ -828,6 +928,25 @@ void Emitter::emit_type_ref(Type* ty) {
 	if (auto p = dynamic_cast<PointerType*>(ty)) {
 		emit_type_ref(p->item_type);
 		fprintf(active, "*");
+		return;
+	}
+	if (auto rt = dynamic_cast<RoutineType*>(ty)) {
+		// `procedure of object` (kind=METHOD): Pascal TMethod is a (Code, Data)
+		// pair. std::function<Ret(Args)> type-erases that pair into a callable;
+		// call site is uniform `m(args)` with function pointers. Wrapper emits
+		// `std::function<` ... `>` around emit_routine_signature(name=""),
+		// which produces `Ret (formals)`.
+		//
+		// Function pointer (kind=ROUTINE): `Ret (*)(Args)`. The `(*)` is the
+		// pointer decoration, analogous to ClassType emitting as `t_foo*`.
+		// Pass name="(*)" so emit_routine_signature emits `Ret (*)(formals)`.
+		if (rt->kind == METHOD) {
+			fprintf(active, "std::function<");
+			emit_routine_signature(rt, "", Position::Declaration, "");
+			fprintf(active, ">");
+		} else {
+			emit_routine_signature(rt, "(*)", Position::Declaration, "");
+		}
 		return;
 	}
 	unhandled_type("emit_type_ref", ty);

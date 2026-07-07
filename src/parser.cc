@@ -18,6 +18,12 @@
 #include <sstream>
 #include <unordered_set>
 
+// Forward declarations of file-static helpers defined further down.
+// Needed because lookup_method_in_ancestors and parse_inherited (defined
+// earlier in the file) reference these before their definitions.
+static Frame* body_frame_of(Type* ty);
+static Type* call_result_type(Node* callee);
+
 static std::unordered_set<std::string> keywords = {
     "abstract",
     "and", // operator
@@ -595,7 +601,7 @@ void Parser::maybe_parse_statement() {
 	}
 	if (peek_keyword("return")) { // FIXME Exit
 		consume();
-		(void)parse_expression();
+		parse_expression();
 	} else if (peek_keyword("if")) {
 		parse_keyword("if");
 		auto condition = parse_expression();
@@ -671,12 +677,11 @@ void Parser::maybe_parse_statement() {
 				emitter->emit_statement(assign);
 			return;
 		}
-		// Call statement: parse_designator already built the ProcCall for
-		// explicit `foo(x)`; for bare `foo`, apply auto-call now.
+		// Any expression may stand in statement position (evaluate, discard).
+		// parse_designator already built the ProcCall for explicit `foo(x)`;
+		// for bare `foo`, maybe_auto_call wraps it; an InheritedCall or other
+		// expression flows through unchanged.
 		Node* call = maybe_auto_call(lhs);
-		if (!dynamic_cast<ProcCall*>(call)) {
-			raise_parse_error("statement is neither an assignment nor a call");
-		}
 		if (emitter)
 			emitter->emit_statement(call);
 	}
@@ -694,7 +699,7 @@ std::optional<std::string> Parser::maybe_parse_identifier() {
 std::string Parser::parse_identifier() {
 	auto result = maybe_parse_identifier();
 	if (!result) {
-		(void)raise_parse_error("expected identifier");
+		raise_parse_error("expected identifier");
 	}
 	return *result;
 }
@@ -820,7 +825,36 @@ Type* Parser::resolve_type(std::string name, bool allow_forward) {
 	return nullptr;
 }
 
+// Parent of a composite type with single-inheritance, or nullptr. ClassType
+// and ObjectType each carry a `super` of their own type; no shared base, so
+// two dynamic_casts. InterfaceType is excluded -- interfaces use
+// super_interfaces (a vector), not a single parent.
+static Type* parent_of(Type* ty) {
+	if (auto c = dynamic_cast<ClassType*>(ty))
+		return c->super;
+	if (auto o = dynamic_cast<ObjectType*>(ty))
+		return o->super;
+	return nullptr;
+}
+
+// Walk the parent chain from STARTING_AT, looking up NAME in each level's
+// body Frame. Returns the first hit as Node* (Callable* or OverloadSet*),
+// or nullptr if not found. Caller (parse_inherited) routes the result
+// through finalize_call, which ranks overload sets by argument cost.
+static Node* lookup_method_in_ancestors(std::string name, Type* starting_at) {
+	for (Type* t = starting_at; t; t = parent_of(t)) {
+		Frame* body = body_frame_of(t);
+		if (!body)
+			continue;
+		if (Node* hit = body->lookup_value_local(name))
+			return hit;
+	}
+	return nullptr;
+}
+
 Node* Parser::parse_value() {
+	if (peek_keyword("inherited"))
+		return parse_inherited();
 	if (maybe_parse_opening_paren()) { // grouping paren
 		auto result = parse_expression();
 		parse_closing_paren();
@@ -845,6 +879,84 @@ Node* Parser::parse_value() {
 	// FIXME: bool literals also belong here (need enum-member support).
 	auto id = parse_identifier();
 	return resolve_value(id);
+}
+
+// `inherited Name[(args)]` or anonymous `inherited;`. Calls the parent
+// type's method. The parser resolves the target at parse time by walking
+// current_routine's owner_class parent chain. The enclosing routine must be
+// a Method on a composite type with a parent (else: parse error). For
+// destructor-from-destructor the call is redundant in C++ (destructors
+// auto-chain); we mark the node `dropped` and emit produces nothing.
+// Statement and expression context both flow through here.
+Node* Parser::parse_inherited() {
+	consume();  // `inherited`
+
+	std::string name;
+	auto opt = maybe_parse_identifier();
+	if (opt) {
+		name = *opt;
+	} else if (current_routine) {
+		name = current_routine->pas_name;
+	} else {
+		raise_parse_error("inherited requires an enclosing method");
+	}
+
+	if (!current_routine)
+		raise_parse_error("inherited requires an enclosing method");
+	auto cur_method = dynamic_cast<Method*>(current_routine);
+	if (!cur_method || !cur_method->owner_class)
+		raise_parse_error("inherited requires an enclosing method on a class/object");
+	Type* parent = parent_of(cur_method->owner_class);
+	if (!parent)
+		raise_parse_error("inherited: enclosing type has no parent");
+
+	// lookup returns Node* (Callable* OR OverloadSet*). For the parens form,
+	// finalize_call ranks overload sets by argument cost -- same path direct
+	// calls take. For the no-parens form, we require an unambiguous single
+	// candidate.
+	Node* hit = lookup_method_in_ancestors(name, parent);
+	if (!hit)
+		raise_parse_error("inherited: '" + name + "' not found in parent chain");
+
+	Callable* resolved = nullptr;
+	std::vector<Node*> args;
+	if (maybe_parse_opening_paren()) {
+		if (input_token != ")") {
+			args.push_back(parse_expression());
+			while (maybe_parse_comma())
+				args.push_back(parse_expression());
+		}
+		parse_closing_paren();
+		auto fc = finalize_call(hit, args, name);
+		// fc.receiver stays unused -- InheritedCall uses qualified-id syntax
+		// (Parent::X(args)), not member-access.
+		resolved = dynamic_cast<Callable*>(fc.callee);
+		if (!resolved)
+			raise_parse_error("inherited: overload resolution failed");
+	} else {
+		// No-parens form: must be a single Callable, not a multi-member
+		// overload set.
+		resolved = dynamic_cast<Callable*>(hit);
+		if (!resolved) {
+			if (auto os = dynamic_cast<OverloadSet*>(hit)) {
+				if (os->members.size() == 1)
+					resolved = os->members.front();
+				else
+					raise_parse_error("inherited: '" + name +
+						"' is overloaded; supply an argument list to disambiguate");
+			}
+		}
+		if (!resolved)
+			raise_parse_error("inherited: '" + name + "' did not resolve to a method");
+	}
+
+	auto n = new InheritedCall();
+	n->resolved = resolved;
+	n->args = std::move(args);
+	n->ty = call_result_type(resolved);
+	if (current_routine->ty->kind == DESTRUCTOR && resolved->ty->kind == DESTRUCTOR)
+		n->dropped = true;
+	return n;
 }
 
 bool Parser::maybe_parse_at() {
@@ -2122,7 +2234,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		parse_semicolon();
 		external = true;
 	}
-	auto m = new Method(cxx_name, sig, has_overload, owner_class, vk);
+	auto m = new Method(cxx_name, pas_name, sig, has_overload, owner_class, vk);
 	m->ty = sig; // The node's type IS the prototype.
 	if (external) {
 		m->has_body = true;
@@ -2198,7 +2310,7 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 	}
 
 	if (!target) {
-		target = new Procedure(cxx_value_name(pas_name), sig, has_overload);
+		target = new Procedure(cxx_value_name(pas_name), pas_name, sig, has_overload);
 		target->ty = sig;
 		if (!enclosing->register_callable(pas_name, target)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
@@ -2211,6 +2323,8 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	Frame* enclosing = owner_frame ? owner_frame : const_cast<Frame*>(this->scopes.back().frame);
 	Frame* body_frame = new Frame(enclosing);
 	target->body_frame = body_frame;
+	Callable* saved_routine = current_routine;
+	current_routine = target;
 	push_scope(body_frame);
 	StorageSlot* self_slot = nullptr;
 	if (auto m = dynamic_cast<Method*>(target)) {
@@ -2254,6 +2368,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	if (self_slot)
 		pop_scope(); // pop the with_scope
 	pop_scope();	     // pop body_frame
+	current_routine = saved_routine;
 }
 
 Type* Parser::lookup_external_type(const char* lib, std::string cxx_name) {
@@ -2373,6 +2488,15 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 			}
 		} else if (body_follows) {
 			parse_routine_body(target, nullptr);
+		} else {
+			// Interface prototype or `forward` decl -- no body at this site,
+			// but the signature needs to emit so callers (unit consumers, or
+			// later routines in the same section for forward decls) can see
+			// it. Top-level prototypes get empty decorations (no virtual/
+			// override). The parser passes NO whitespace; emit_callable_
+			// prototype owns its own `\n` separator.
+			if (emitter)
+				emitter->emit_callable_prototype(target, "", "", "");
 		}
 	}
 }

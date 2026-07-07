@@ -6,6 +6,7 @@
 class Type;
 class Frame;
 class RoutineType;
+class Callable;
 
 class Node {
 public:
@@ -56,6 +57,26 @@ public:
 	Node* callee;
 	std::vector<Node*> args;
 	ProcCall(Node* receiver, Node* callee, std::vector<Node*> args);
+};
+
+/** `inherited Name(args)`. Calls the parent-type method the parser resolved
+ *  at parse time (single-pass compiler -- emit doesn't re-resolve).
+ *
+ *  No `receiver` field, unlike ProcCall. Pascal `inherited X` carries
+ *  implicit Self, but C++ emits this as a qualified-id `ParentClass::X(args)`
+ *  -- not member-access `this->X(args)` or `receiver->X(args)`. Qualified-id
+ *  member-call syntax in C++ implicitly uses `this`, so there's no receiver
+ *  expression to spell. The parent class name is recovered at emit time from
+ *  `resolved` (a Method*) -> `owner_class` -> `owner_cxx_name(...)`.
+ *
+ *  `dropped` is set when the enclosing routine is a destructor AND `resolved`
+ *  is a destructor -- C++ destructors auto-chain (base destructors run
+ *  automatically after derived body), so emit produces nothing. */
+class InheritedCall: public Node {
+public:
+	Callable* resolved = nullptr;
+	std::vector<Node*> args;
+	bool dropped = false;
 };
 
 class Dereference: public UnaryOperation {
@@ -165,12 +186,18 @@ public:
 class Callable: public Node {
 public:
 	std::string cxx_name;
+	// Pascal spelling of the routine name. cxx_name is the C++ identifier
+	// (`p_foo`, `~t_foo`); pas_name is the original Pascal spelling (`Foo`).
+	// Used by `parse_inherited`'s anonymous path (`inherited;` resolves to
+	// the parent method of the same Pascal name as the enclosing routine).
+	std::string pas_name;
 	RoutineType* ty;
 	bool has_overload_directive;
 	bool is_external = false;
 	bool has_body = false;
 	Frame* body_frame;
 	Callable(std::string cxx_name,
+	         std::string pas_name,
 	         RoutineType* ty,
 	         bool has_overload_directive);
 };
@@ -181,7 +208,8 @@ public:
  *  pointer types. */
 class Procedure: public Callable {
 public:
-	Procedure(std::string pas_name,
+	Procedure(std::string cxx_name,
+	          std::string pas_name,
 	          RoutineType* ty,
 	          bool has_overload_directive);
 };
@@ -195,7 +223,8 @@ public:
 	Type* owner_class;
 	VirtualKind virtual_kind;
 	int vtable_slot;   // -1 = unassigned; populated at class-layout time
-	Method(std::string pas_name,
+	Method(std::string cxx_name,
+	       std::string pas_name,
 	       RoutineType* ty,
 	       bool has_overload_directive,
 	       Type* owner_class,

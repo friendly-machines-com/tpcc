@@ -70,29 +70,35 @@ String::String(std::string value, Type* ty) {
 }
 
 Callable::Callable(std::string cxx_name,
+		   std::string pas_name,
 		   RoutineType* ty,
 		   bool has_overload_directive)
     : cxx_name(std::move(cxx_name)),
+      pas_name(std::move(pas_name)),
       ty(ty),
       has_overload_directive(has_overload_directive),
       has_body(false),
       body_frame(nullptr) {
 }
 
-Procedure::Procedure(std::string pas_name,
+Procedure::Procedure(std::string cxx_name,
+		     std::string pas_name,
 		     RoutineType* ty,
 		     bool has_overload_directive)
-    : Callable(std::move(pas_name), // FIXME: Remove
+    : Callable(std::move(cxx_name),
+	       std::move(pas_name),
 	       ty,
 	       has_overload_directive) {
 }
 
-Method::Method(std::string pas_name,
+Method::Method(std::string cxx_name,
+	       std::string pas_name,
 	       RoutineType* ty,
 	       bool has_overload_directive,
 	       Type* owner_class,
 	       VirtualKind virtual_kind)
-    : Callable(std::move(pas_name), // FIXME: Remove
+    : Callable(std::move(cxx_name),
+	       std::move(pas_name),
 	       ty,
 	       has_overload_directive),
       owner_class(owner_class),

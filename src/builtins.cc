@@ -50,7 +50,7 @@ const bool k_m_iobject_methods_initialized = []() {
 	auto add = [](const char* pas_name, const char* cxx_name,
 	              std::vector<Parameter> formals, Type* ret_ty) {
 		auto sig = new RoutineType(std::move(formals), ret_ty, ROUTINE);
-		auto m = new Method(cxx_name, sig, /*has_overload_directive=*/false,
+		auto m = new Method(cxx_name, pas_name, sig, /*has_overload_directive=*/false,
 		                    &k_m_iobject, Method::VirtualKind::None);
 		m->ty = sig;
 		m->has_body = true;

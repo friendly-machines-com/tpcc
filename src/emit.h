@@ -7,6 +7,8 @@ class Node;
 class Type;
 class EnumType;
 class Callable;
+class Method;
+class RoutineType;
 
 /** No public name-mangling entry point. Prefixing (`t_` for type identifiers,
  *  `p_` for value identifiers) is applied inside Type / Node constructors
@@ -30,6 +32,14 @@ public:
 	// emitting the interface section and back to Implementation for the
 	// implementation section.
 	enum class Section { Header, Implementation };
+
+	// Whether emit_routine_signature is emitting a prototype (Declaration),
+	// a body-opener signature (Definition), or just `(formals)`
+	// (DeclarationFormalsOnly -- used by lambda parameter lists). Required
+	// at every call site so the call site documents its intent;
+	// DeclarationFormalsOnly short-circuits before any return-type/name/
+	// qualifier emission.
+	enum class Position { Declaration, Definition, DeclarationFormalsOnly };
 
 private:
 	FILE* out_h;       // null for programs
@@ -96,19 +106,37 @@ public:
 	void emit_procedure_open(Callable* c);
 	void emit_procedure_close(Callable* c);
 
+	// emit_routine_signature is THE primitive emitter for a routine
+	// signature. Emits `Ret [qual]cxx_text(formals)` (or just `(formals)`
+	// when pos == DeclarationFormalsOnly). No leading whitespace, no
+	// terminator, no decorations. The formals loop lives here and nowhere
+	// else.
+	//
+	// cxx_text carries the C++ spelling of the token that sits between
+	// return-type and `(formals)`: a real cxx_name like `p_foo` or `~t_foo`
+	// for callable cases, `(*)` for function-pointer type aliases, empty
+	// for std::function-wrapped method-pointer aliases and for
+	// DeclarationFormalsOnly.
+	// owner_qualifier is `Foo::` or empty (namespace only -- orthogonal to
+	// prototype-vs-definition, which is expressed at the function level via
+	// which wrapper the caller invokes).
+	void emit_routine_signature(RoutineType* ty, std::string cxx_text, Position pos, std::string owner_qualifier);
+	// emit_callable_signature is a thin wrapper for callers that hold a
+	// Callable*. Forwards (c->ty, callable_cxx_name(c), pos, owner_qualifier)
+	// to emit_routine_signature.
+	void emit_callable_signature(Callable* c, Position position, std::string owner_qualifier);
+	// emit_callable_prototype emits `<prefix><sig><suffix>;\n`. THE prototype
+	// emitter for every case: standalone procedure prototypes, in-class method
+	// prototypes, interface prototypes, m_meta prototypes. Caller passes any
+	// leading whitespace as part of `prefix` ("\n" for top-level, "\t" for
+	// in-class, optionally combined with `virtual ` etc.); the parser never
+	// touches the emitter's `active` directly.
+	void emit_callable_prototype(Callable* c, std::string owner_qualifier, std::string prefix, std::string suffix);
+
 	void emit_expression(Node* expr);
 	void emit_type_ref(Type* ty);
 
     private:
-	// Whether emit_callable_signature is producing a prototype (in-class
-	// signature without body) or a definition (out-of-line signature with
-	// `Owner::` qualifier). The prototype proper is `return-type name(params)`;
-	// member-declaration decorations (`virtual`, `static`, `override`,
-	// `= 0`, proxy bodies) are NOT part of the prototype and stay at the
-	// call site. The Definition position adds the `Owner::` qualifier
-	// between return type and name (derived from the Method's owner_class).
-	enum class Position { Prototype, Definition };
-	void emit_callable_signature(Callable* c, Position pos);
 	// Emit a full enum declaration body: `enum [NAME] { a, b, c }` -- no
 	// leading newline, no trailing semicolon. Caller frames those. Used by
 	// emit_type_definition (named, at type-block scope) and emit_type_ref's
@@ -123,4 +151,11 @@ public:
 	// reference to an already-defined type does NOT go through here -- it just
 	// spells the cxx name.
 	void emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta = false);
+
+	// emit_method_pointer_lambda renders `cb := @obj.method` as a lambda
+	// capturing obj by value, dispatching to the method. The lambda converts
+	// implicitly to std::function<Ret(Args)> at the assignment site. Rejects
+	// ObjectType receivers (by-value capture would copy a value-typed object,
+	// diverging from Pascal TMethod's pointer-to-instance semantics).
+	void emit_method_pointer_lambda(Node* obj_expr, Method* method);
 };
