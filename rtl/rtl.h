@@ -160,7 +160,7 @@ struct t_tobject: public m_iobject {
 			return &meta;
 		}
 		virtual t_shortstring p_classname() {
-			return tpcc_shortstring_from_c("tclass");
+			return tpcc_shortstring_from_c("tobject");
 		}
 		virtual bool p_inheritsfrom(struct m_iobject* s) {
 			return s == this;
@@ -193,12 +193,31 @@ struct t_tobject: public m_iobject {
 	virtual bool p_inheritsfrom(m_iobject* s) = 0;
 	virtual m_iobject* p_classparent() = 0;
 };
+
+template<class T>
+struct class_of
+{
+	static_assert(std::is_base_of_v<t_tobject, T>);
+	m_iobject* ptr;
+	//T* create(); // analogous to Delphi's ClassType.Create
+};
+// Usage: class_of<t_foo> x;
+
+/*
+class_ref<t_tobject> c;
+class_ref<t_tfoo> f;
+c = f;  // should work
+*/
+
 #endif
 
 using t_tclass = m_iobject;
 
 // FIXME: Terrible.  Since I think class(SUPER, IA, IB, IC) ONLY implements IA IB and IC and its supers, regardless of what SUPER implemented.
+// FIXME: at least make sure target_interface is actually an interface, for example by missing ::m_meta, or other ways
 #define p_supports(instance, target_interface) (dynamic_cast<(target_interface)*>((instance)) != nullptr)
+
+// TODO: Supports(Instance, InterfaceType, InterfaceVar) that assigns InterfaceVar on success (and returns True then)
 
 //#define class_instance_new(X) (new X)
 
