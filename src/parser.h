@@ -287,7 +287,7 @@ protected:
 	 *  to extract a receiver, run overload ranking if the target is a set,
 	 *  materialize defaults, and insert Cast coercions where needed. Errors
 	 *  on no-match, ambiguous overload, or bad args. */
-	FinalizedCall finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error);
+	FinalizedCall finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error, SourceLocation error_location);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();
@@ -327,12 +327,14 @@ protected:
 	void parse_procedure_or_function(bool is_class, bool is_function);
 	std::vector<Parameter> parse_proc_formal_parameters();
 
+	[[noreturn]] void emit_parse_error_at(SourceLocation loc, std::string message);
 	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 	Type* raise_type_mismatch(std::string message, Type* expected, Type* got);
 	Type* raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
 	[[noreturn]] void raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
-	[[noreturn]] void raise_overload_resolution_error(std::string name,
+	[[noreturn]] void raise_overload_resolution_error(SourceLocation error_location,
+	                                                  std::string name,
 	                                                  Node* receiver,
 	                                                  const std::vector<Node*>& args,
 	                                                  const std::vector<Callable*>& candidates,

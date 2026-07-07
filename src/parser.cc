@@ -189,21 +189,31 @@ SourceLocation Parser::current_location() const {
 	return SourceLocation(input_file_name, input_file_line_number);
 }
 
-[[noreturn]] static void emit_parse_error(const std::string& file, int line, const std::string& message) {
+[[noreturn]] static void emit_parse_error_at(const SourceLocation& loc, const std::string& message) {
 	std::stringstream sst;
-	sst << file << '(' << line << ")" << ": error: " << message << std::endl;
+	if (!loc.file_name.empty()) {
+		sst << loc.file_name;
+		if (loc.line_number != 0)
+			sst << '(' << loc.line_number << ')';
+		sst << ": ";
+	}
+	sst << "error: " << message << std::endl;
 	std::string r = sst.str();
 	fprintf(stderr, "%s\n", r.c_str());
 	fflush(stderr);
 	exit(1);
 }
 
+[[noreturn]] void Parser::emit_parse_error_at(SourceLocation loc, std::string message) {
+	::emit_parse_error_at(loc, message);
+}
+
 [[noreturn]] void Parser::raise_parse_error(std::string message) {
-	emit_parse_error(input_file_name, input_file_line_number, message);
+	emit_parse_error_at(current_location(), message);
 }
 
 [[noreturn]] Type* Parser::raise_type_parse_error(std::string message) {
-	emit_parse_error(input_file_name, input_file_line_number, message);
+	emit_parse_error_at(current_location(), message);
 }
 
 Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got) {
@@ -213,7 +223,7 @@ Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got
 	std::stringstream sst;
 	sst << message << ": expected type " << expected_ref << " but got type " << got_ref;
 	sst << ctx.notes();
-	emit_parse_error(input_file_name, input_file_line_number, sst.str());
+	emit_parse_error_at(current_location(), sst.str());
 	return expected; // future non-fatal diagnostics can continue with the expected type
 }
 
@@ -224,7 +234,7 @@ Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected
 	std::stringstream sst;
 	sst << message << ": expected " << expected_kind << " type but got " << got_ref;
 	sst << ctx.notes();
-	emit_parse_error(input_file_name, input_file_line_number, sst.str());
+	emit_parse_error_at(current_location(), sst.str());
 	return got; // future non-fatal diagnostics can continue with the parsed type
 }
 
@@ -266,7 +276,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 		sst << ": ";
 }
 
-[[noreturn]] void Parser::raise_overload_resolution_error(std::string name,
+[[noreturn]] void Parser::raise_overload_resolution_error(SourceLocation error_location,
+                                                          std::string name,
                                                           Node* receiver,
                                                           const std::vector<Node*>& args,
                                                           const std::vector<Callable*>& candidates,
@@ -311,7 +322,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	}
 
 	sst << ctx.notes();
-	emit_parse_error(input_file_name, input_file_line_number, sst.str());
+	emit_parse_error_at(error_location, sst.str());
 }
 
 [[noreturn]] void Parser::raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args) {
@@ -325,7 +336,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
 	sst << ctx.notes();
-	emit_parse_error(input_file_name, input_file_line_number, sst.str());
+	emit_parse_error_at(current_location(), sst.str());
 }
 
 bool Parser::is_defined(const std::string& sym) const {
@@ -1070,7 +1081,7 @@ Node* Parser::parse_inherited() {
 				args.push_back(parse_expression());
 		}
 		parse_closing_paren();
-		auto fc = finalize_call(hit, args, name);
+		auto fc = finalize_call(hit, args, name, current_location());
 		// fc.receiver stays unused -- InheritedCall uses qualified-id syntax
 		// (Parent::X(args)), not member-access.
 		resolved = dynamic_cast<Callable*>(fc.callee);
@@ -1232,7 +1243,7 @@ Node* Parser::maybe_auto_call(Node* n) {
 	// for an OverloadSet it runs ranking and picks the parameterless winner.
 	// A candidate that requires args will fail there with a clear error.
 	std::vector<Node*> args;
-	auto fc = finalize_call(n, args, /*name for error*/ "");
+	auto fc = finalize_call(n, args, /*name for error*/ "", current_location());
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
 	return call;
@@ -1280,7 +1291,9 @@ Node* Parser::parse_designator() {
 			auto ma = new MemberAccess(result, member);
 			ma->ty = member->ty;
 			result = ma;
-		} else if (maybe_parse_opening_paren()) {
+		} else if (input_token == "(") {
+			SourceLocation call_location = current_location();
+			parse_opening_paren();
 			// Bracketed n-ary: RHS is a comma-separated list of expressions.
 			// No auto-call before `(` -- this `(` IS the call.
 			std::vector<Node*> args;
@@ -1290,10 +1303,11 @@ Node* Parser::parse_designator() {
 					args.push_back(parse_expression());
 			}
 			parse_closing_paren();
-			auto fc = finalize_call(result, args, /*name_for_error*/ "");
+			auto fc = finalize_call(result, args, /*name_for_error*/ "", call_location);
 			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 			call->ty = call_result_type(fc.callee);
 			result = call;
+			continue;
 		} else if (maybe_parse_opening_bracket()) {
 			// Bracketed: RHS is a single expression. Auto-call bare callable
 			// LHS first (indexing into a callable reference is nonsense).
@@ -1351,7 +1365,7 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 		args.push_back(cast(a, common_ty));
 		args.push_back(cast(b, common_ty));
 	}
-	auto fc = finalize_call(fn, args, /*name for error*/ "");
+	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
 	return call;
@@ -1372,7 +1386,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 		args.push_back(cast(a, common_ty));
 		args.push_back(cast(b, common_ty));
 	}
-	auto fc = finalize_call(fn, args, /*name for error*/ "");
+	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
 /*	if (call->ty->return_type != boolean_type()) {
@@ -1385,7 +1399,7 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
     auto fn = resolve_value(id);
 	std::vector<Node*> args;
 	args.push_back(x);
-	auto fc = finalize_call(fn, args, /*name for error*/ "");
+	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
 /*	if (call->ty->return_type != x->ty) {
@@ -2735,7 +2749,7 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		auto fn = resolve_value(":=");
 		std::vector<Node*> args;
 		args.push_back(a);
-		auto fc = finalize_call(fn, args, /*name for error*/ "");
+		auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 		auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 		call->ty = call_result_type(fc.callee);
 		return call;
@@ -2744,7 +2758,7 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	}
 }
 
-Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error) {
+Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error, SourceLocation error_location) {
 	// Peel MemberAccess: if the member is callable, its container is the
 	// receiver and the member is the effective callee.
 	Node* receiver = nullptr;
@@ -2773,7 +2787,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		}
 		if (viable.empty()) {
 			std::vector<Callable*> none;
-			raise_overload_resolution_error(name_for_error, receiver, args, candidates, viable, none, false);
+			raise_overload_resolution_error(error_location, name_for_error, receiver, args, candidates, viable, none, false);
 		}
 		std::vector<Callable*> non_dominated;
 		for (size_t i = 0; i < viable.size(); i++) {
@@ -2788,7 +2802,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 				non_dominated.push_back(viable[i].first);
 		}
 		if (non_dominated.size() != 1) {
-			raise_overload_resolution_error(name_for_error, receiver, args, candidates, viable, non_dominated, true);
+			raise_overload_resolution_error(error_location, name_for_error, receiver, args, candidates, viable, non_dominated, true);
 		}
 		chosen = non_dominated[0];
 	} else {
@@ -2800,12 +2814,12 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	while (args.size() < rty->formals.size()) {
 		auto& p = rty->formals[args.size()];
 		if (!p.default_value) {
-			raise_parse_error("missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
+			emit_parse_error_at(error_location, "missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
 		}
 		args.push_back(p.default_value);
 	}
 	if (args.size() > rty->formals.size()) {
-		raise_parse_error("too many arguments to '" + name_for_error + "'");
+		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
 	}
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
