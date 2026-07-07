@@ -191,7 +191,7 @@ SourceLocation Parser::current_location() const {
 
 [[noreturn]] static void emit_parse_error(const std::string& file, int line, const std::string& message) {
 	std::stringstream sst;
-	sst << file << '(' << line << ')' << ':' << ' ' << message << std::endl;
+	sst << file << '(' << line << ")" << ": error: " << message << std::endl;
 	std::string r = sst.str();
 	fprintf(stderr, "%s\n", r.c_str());
 	fflush(stderr);
