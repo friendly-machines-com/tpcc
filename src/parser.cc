@@ -2798,13 +2798,18 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	if (a->ty == target_ty) {
 		return a;
 	}
-	// Untyped integer literals adapt to their contextual target type directly.
-	// Do not route that through visible operator := overload resolution: every
-	// integer-like assignment operator would otherwise be an equally good match
-	// for the still-untyped literal, producing spurious ambiguities.
-	if (a->ty == &untyped_integer_type() && target_ty && conversion_cost(a->ty, target_ty) >= 0) {
-		a->ty = target_ty;
-		return a;
+	// Built-in implicit conversions are already described by conversion_cost().
+	// Do not route them through user-visible operator := overloads: those overloads
+	// are ordinary Pascal conversion operators with their own result type, while a
+	// contextual cast has already chosen TARGET_TY. Sending e.g. qword -> int64
+	// through the global := overload set lets unrelated qword -> Tconstexprint
+	// operators compete and produces bogus ambiguities.
+	if (target_ty && conversion_cost(a->ty, target_ty) >= 0) {
+		if (a->ty == &untyped_integer_type()) {
+			a->ty = target_ty;
+			return a;
+		}
+		return new Cast(a, target_ty);
 	} else if (target_ty == unknown_type()) { // this target is void* but the formal parameter is more like a reference
 		return new Cast(new AddrOf(a), target_ty);
 	} else {
