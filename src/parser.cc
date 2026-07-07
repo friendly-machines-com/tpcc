@@ -1536,8 +1536,13 @@ Node* Parser::parse_product() {
 			result = mk_arith("mod", result, parse_power());
 		} else if (maybe_parse_keyword("and") || maybe_parse_ampersand()) {
 			auto b = parse_power();
-			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(AND, ...) instead;
-			result = mk_arith("and", result, b);
+			if (result->ty == boolean_type() && b->ty == boolean_type()) {
+				auto n = new ShortCircuitOperation(AND, result, b);
+				n->ty = boolean_type();
+				result = n;
+			} else {
+				result = mk_arith("and", result, b);
+			}
 		} else if (maybe_parse_keyword("shl")) {
 			result = mk_arith("shl", result, parse_power());
 		} else if (maybe_parse_keyword("shr")) {
@@ -1579,8 +1584,13 @@ Node* Parser::parse_sum() {
 			result = mk_arith("-", result, parse_product());
 		} else if (maybe_parse_keyword("or") || maybe_parse_pipe()) {
 			auto b = parse_product();
-			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(OR, ...) instead;
-			result = mk_arith("or", result, b);
+			if (result->ty == boolean_type() && b->ty == boolean_type()) {
+				auto n = new ShortCircuitOperation(OR, result, b);
+				n->ty = boolean_type();
+				result = n;
+			} else {
+				result = mk_arith("or", result, b);
+			}
 		} else if (maybe_parse_keyword("xor")) {
 			auto b = parse_product();
 			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(XOR, ...) instead;
