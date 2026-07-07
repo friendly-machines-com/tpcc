@@ -760,6 +760,27 @@ void Parser::maybe_parse_statement() {
 	if (peek_keyword("return")) { // FIXME Exit
 		consume();
 		parse_expression();
+	} else if (peek_directive("exit")) {
+		parse_directive("exit");
+		if (!current_routine)
+			raise_parse_error("exit outside routine");
+		Type* ret_ty = current_routine->ty->return_type;
+		Node* value = nullptr;
+		if (maybe_parse_opening_paren()) {
+			if (input_token != ")")
+				value = parse_expression();
+			parse_closing_paren();
+			if (ret_ty == &unit_type()) {
+				if (value)
+					raise_parse_error("exit(value) in procedure");
+			} else {
+				value = value ? cast(value, ret_ty) : resolve_value("result");
+			}
+		} else if (ret_ty != &unit_type()) {
+			value = resolve_value("result");
+		}
+		if (emitter)
+			emitter->emit_statement(new Return(value));
 	} else if (peek_keyword("goto")) {
 		parse_keyword("goto");
 		std::string label = parse_identifier();

@@ -224,8 +224,11 @@ void Emitter::emit_statement(Node* stmt) {
 		return;
 	}
 	if (auto r = dynamic_cast<Return*>(stmt)) {
-		fprintf(active, "\treturn ");
-		emit_expression(r->a);
+		fprintf(active, "\treturn");
+		if (r->a) {
+			fprintf(active, " ");
+			emit_expression(r->a);
+		}
 		fprintf(active, ";\n");
 		return;
 	}

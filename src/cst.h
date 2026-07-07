@@ -151,6 +151,7 @@ public:
 
 class Return: public UnaryOperation {
 public:
+	// `a == nullptr` means a void/procedure return.
 	Return(Node* a);
 	const char* diagnostic_kind() const override;
 };
