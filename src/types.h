@@ -17,6 +17,12 @@ struct SourceLocation {
 	SourceLocation(std::string file_name, int line_number)
 	    : file_name(std::move(file_name)), line_number(line_number) {}
 
+	bool operator<(const SourceLocation& other) const {
+		if (file_name != other.file_name)
+			return file_name < other.file_name;
+		return line_number < other.line_number;
+	}
+
 	static SourceLocation builtin() { return SourceLocation("<builtin>", 0); }
 	static SourceLocation internal() { return SourceLocation("<internal>", 0); }
 };

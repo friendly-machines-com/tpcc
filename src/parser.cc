@@ -7,6 +7,7 @@
 #include "evaluator.h"
 #include "frame.h"
 #include "units.h"
+#include <algorithm>
 #include <cassert>
 #include <charconv>
 #include <chrono>
@@ -238,10 +239,25 @@ static void append_cost_vector(std::stringstream& sst, const std::vector<int>& c
 	sst << "]";
 }
 
-static void append_callable_source_prefix(std::stringstream& sst, Callable* c) {
+static const SourceLocation& callable_source_location(Callable* c) {
+	static const SourceLocation unknown;
 	if (!c || !c->ty)
-		return;
-	const SourceLocation& loc = c->ty->source_location;
+		return unknown;
+	return c->ty->source_location;
+}
+
+static bool callable_source_less(Callable* a, Callable* b) {
+	const SourceLocation& la = callable_source_location(a);
+	const SourceLocation& lb = callable_source_location(b);
+	if (la < lb)
+		return true;
+	if (lb < la)
+		return false;
+	return false;
+}
+
+static void append_callable_source_prefix(std::stringstream& sst, Callable* c) {
+	const SourceLocation& loc = callable_source_location(c);
 	if (loc.file_name.empty())
 		return;
 	sst << loc.file_name << "(" << loc.line_number << "): ";
@@ -265,12 +281,17 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c) {
 		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
 
+	std::vector<Callable*> sorted_candidates = candidates;
+	std::stable_sort(sorted_candidates.begin(), sorted_candidates.end(), callable_source_less);
+	std::vector<Callable*> sorted_non_dominated = non_dominated;
+	std::stable_sort(sorted_non_dominated.begin(), sorted_non_dominated.end(), callable_source_less);
+
 	if (ambiguous) {
 		// Ambiguity is decided by the viable candidates that are not dominated by
 		// any other viable candidate. Dominated candidates cannot be selected, so
 		// they are only listed later with the complete candidate set.
 		sst << "\n  viable candidates:";
-		for (Callable* c : non_dominated) {
+		for (Callable* c : sorted_non_dominated) {
 			sst << "\n    ";
 			append_callable_source_prefix(sst, c);
 			sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
@@ -285,7 +306,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c) {
 	}
 
 	sst << "\n  all candidates:";
-	for (Callable* c : candidates) {
+	for (Callable* c : sorted_candidates) {
 		sst << "\n    ";
 		append_callable_source_prefix(sst, c);
 		sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
