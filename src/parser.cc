@@ -1518,7 +1518,9 @@ Type* Parser::parse_class_type() {
 	parse_keyword("class");
 	if (maybe_parse_keyword("of")) {
 		auto target_ty = parse_type_expression(true);
-		if (auto target_class_ty = dynamic_cast<ClassType*>(target_ty)) {
+		if (auto target_class_ty = dynamic_cast<IncompleteType*>(target_ty)) {
+			return new ClassRefType(target_class_ty);
+		} else if (auto target_class_ty = dynamic_cast<ClassType*>(target_ty)) {
 			return new ClassRefType(target_class_ty);
 		} else {
 			return raise_type_parse_error("parse_class_type: type after 'class of' is not a class");

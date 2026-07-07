@@ -906,6 +906,24 @@ void Emitter::emit_type_ref(Type* ty) {
 		fprintf(active, "*");
 		return;
 	}
+	if (auto r = dynamic_cast<ClassRefType*>(ty)) {
+		ty = r->target;
+		// Follow IncompleteType placeholders through to the real underlying type.
+		while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
+			if (!inc->resolved)
+				break;
+			ty = inc->resolved;
+		}
+		if (auto c = dynamic_cast<ClassType*>(ty)) {
+			if (c->cxx_name.empty())
+				emit_aggregate_decl("", ty);
+			else
+				fprintf(active, "%s", c->cxx_name.c_str());
+			fprintf(active, "::m_meta");
+			fprintf(active, "*");
+		}
+		return;
+	}
 	if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		if (c->cxx_name.empty())
 			emit_aggregate_decl("", ty);
