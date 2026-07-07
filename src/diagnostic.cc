@@ -329,6 +329,33 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 		if (ait != value_nodes.end() && ait->second.name.assigned)
 			return NameBase{name_component("length(" + render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
 	}
+	if (auto pc = dynamic_cast<const ProcCall*>(n.node)) {
+		auto callee_it = value_nodes.find(pc->callee);
+		if (callee_it != value_nodes.end() && callee_it->second.name.assigned) {
+			std::string rendered;
+			if (pc->receiver) {
+				auto receiver_it = value_nodes.find(pc->receiver);
+				if (receiver_it == value_nodes.end() || !receiver_it->second.name.assigned)
+					goto no_proc_call_name;
+				rendered = render_name_display(receiver_it->second.name);
+				rendered += ".";
+			}
+			rendered += render_name_display(callee_it->second.name);
+			rendered += "(";
+			for (size_t i = 0; i < pc->args.size(); ++i) {
+				if (i)
+					rendered += ", ";
+				auto arg_it = value_nodes.find(pc->args[i]);
+				if (arg_it != value_nodes.end() && arg_it->second.name.assigned)
+					rendered += render_name_display(arg_it->second.name);
+				else
+					rendered += "...";
+			}
+			rendered += ")";
+			return NameBase{name_component(rendered, n.kind.c_str()), ""};
+		}
+	}
+no_proc_call_name:
 
 	if (!n.member_names.empty())
 		return NameBase{name_component("member_" + n.member_names.front(), n.kind.c_str()), ""};
