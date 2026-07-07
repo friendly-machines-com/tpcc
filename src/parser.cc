@@ -238,6 +238,15 @@ static void append_cost_vector(std::stringstream& sst, const std::vector<int>& c
 	sst << "]";
 }
 
+static void append_callable_source_prefix(std::stringstream& sst, Callable* c) {
+	if (!c || !c->ty)
+		return;
+	const SourceLocation& loc = c->ty->source_location;
+	if (loc.file_name.empty())
+		return;
+	sst << loc.file_name << "(" << loc.line_number << "): ";
+}
+
 [[noreturn]] void Parser::raise_overload_resolution_error(std::string name,
                                                           Node* receiver,
                                                           const std::vector<Node*>& args,
@@ -262,7 +271,9 @@ static void append_cost_vector(std::stringstream& sst, const std::vector<int>& c
 		// they are only listed later with the complete candidate set.
 		sst << "\n  viable candidates:";
 		for (Callable* c : non_dominated) {
-			sst << "\n    " << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
+			sst << "\n    ";
+			append_callable_source_prefix(sst, c);
+			sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
 			for (const auto& v : viable) {
 				if (v.first == c) {
 					sst << " cost ";
@@ -275,7 +286,9 @@ static void append_cost_vector(std::stringstream& sst, const std::vector<int>& c
 
 	sst << "\n  all candidates:";
 	for (Callable* c : candidates) {
-		sst << "\n    " << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
+		sst << "\n    ";
+		append_callable_source_prefix(sst, c);
+		sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
 		bool is_viable = false;
 		for (const auto& v : viable) {
 			if (v.first == c) {
