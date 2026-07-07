@@ -37,9 +37,11 @@ static std::unordered_set<std::string> keywords = {
     "forward", // FIXME directive ?
     "function",
     "if",
+    "in", // operator
     "implementation",
     "inherited",
     "interface",
+    "is", // operator
     "mod", // operator
     "nil",
     "not", // operator
@@ -431,7 +433,14 @@ std::string Parser::consume() {
 				raise_parse_error("missing newline");
 			}
 		}
-	} else if (input_char != EOF && strchr("=;,[]()@*+-^", input_char)) {
+	} else if (input_char == '*') {
+		sst << (char)input_char;
+		consume_lowlevel();
+		if (input_char == '*') {
+			sst << (char)input_char;
+			consume_lowlevel();
+		}
+	} else if (input_char != EOF && strchr("=;,[]()@+-^|&", input_char)) {
 		sst << (char)input_char;
 		consume_lowlevel();
 	} else if (input_char == '\'') {
@@ -1129,22 +1138,26 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 }
 
 Node* Parser::parse_power() {
-	// FIXME **
 	if (maybe_parse_keyword("not")) {
-		auto b = maybe_auto_call(parse_designator());
-		return mk_unary_same("not", b);
+		return mk_unary_same("not", parse_power());
 	} else if (maybe_parse_at()) {
-		auto x = parse_designator(); // @ takes a designator, not the auto-called value
+		auto x = parse_power();
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(x->ty)) : nullptr;
 		return n;
 	} else if (maybe_parse_minus()) {
-		return mk_unary_same("-", maybe_auto_call(parse_designator()));
+		return mk_unary_same("-", parse_power());
 	} else if (maybe_parse_plus()) {
-		return mk_unary_same("+", maybe_auto_call(parse_designator()));
-	} else {
-		return maybe_auto_call(parse_designator());
+		return mk_unary_same("+", parse_power());
 	}
+
+    // Mirror FPC's quirk. `-1 ** 4` parses as `-(1 ** 4)`, not `(-1) ** 4`.
+    // FIXME: Fix it later.
+	Node* result = maybe_auto_call(parse_designator());
+	while (maybe_parse_star_star()) {
+		result = mk_arith("**", result, parse_power());
+	}
+	return result;
 }
 
 Node* Parser::parse_product() {
@@ -1158,7 +1171,7 @@ Node* Parser::parse_product() {
 			result = mk_arith("div", result, parse_power());
 		} else if (maybe_parse_keyword("mod")) {
 			result = mk_arith("mod", result, parse_power());
-		} else if (maybe_parse_keyword("and")) {
+		} else if (maybe_parse_keyword("and") || maybe_parse_ampersand()) {
 			auto b = parse_power();
 			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(AND, ...) instead;
 			result = mk_arith("and", result, b);
@@ -1174,8 +1187,9 @@ Node* Parser::parse_product() {
 			n->ty = rhs->ty;
 			result = n;
 		} else if (maybe_parse_keyword("is")) {
-			// `x as T`: b is the parsed type-position expression whose ty is
-			// the target. Result type is that target.
+			// FPC RELEASED BUG: `_OP_IS` sits in opmultiply in FPC 3.x,
+			// making `is` bind tighter than `+` (a Delphi-compatibility bug,
+			// fixed in FPC trunk). Match FPC 3.2.x behavior here for parity.
 			auto rhs = parse_power();
 			auto n = new CoerceCheck(result, rhs);
 			n->ty = boolean_type();
@@ -1184,6 +1198,8 @@ Node* Parser::parse_product() {
 			result = mk_arith("shl", result, parse_power());
 		} else if (maybe_parse_greater_greater()) {
 			result = mk_arith("shr", result, parse_power());
+		} else if (maybe_parse_symdiff()) {
+			result = mk_arith("><", result, parse_power());
 		} else {
 			break;
 		}
@@ -1198,7 +1214,7 @@ Node* Parser::parse_sum() {
 			result = mk_arith("+", result, parse_product());
 		} else if (maybe_parse_minus()) {
 			result = mk_arith("-", result, parse_product());
-		} else if (maybe_parse_keyword("or")) {
+		} else if (maybe_parse_keyword("or") || maybe_parse_pipe()) {
 			auto b = parse_product();
 			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(OR, ...) instead;
 			result = mk_arith("or", result, b);
@@ -1228,6 +1244,8 @@ Node* Parser::parse_comparison() {
 			result = mk_compare("<=", result, parse_sum());
 		} else if (maybe_parse_greater_equal()) {
 			result = mk_compare(">=", result, parse_sum());
+		} else if (maybe_parse_keyword("in")) {
+			result = mk_compare("in", result, parse_sum());
 		} else {
 			break;
 		}
@@ -1769,6 +1787,38 @@ bool Parser::maybe_parse_minus() {
 }
 bool Parser::maybe_parse_star() {
 	if (input_token == "*") {
+		consume();
+		return true;
+	} else {
+		return false;
+	}
+}
+bool Parser::maybe_parse_star_star() {
+	if (input_token == "**") {
+		consume();
+		return true;
+	} else {
+		return false;
+	}
+}
+bool Parser::maybe_parse_ampersand() {
+	if (input_token == "&") {
+		consume();
+		return true;
+	} else {
+		return false;
+	}
+}
+bool Parser::maybe_parse_pipe() {
+	if (input_token == "|") {
+		consume();
+		return true;
+	} else {
+		return false;
+	}
+}
+bool Parser::maybe_parse_symdiff() {
+	if (input_token == "><") {
 		consume();
 		return true;
 	} else {
