@@ -167,6 +167,19 @@ bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
 #include "cst.h"
 #include <cstdio>
 
+// Aggregate frames are indexed for member names by add_frame_edge(), but
+// indexing frames is deliberately name-evidence-only. Aggregate type bodies
+// print member type refs, so the owning aggregate Type explicitly contributes
+// the value-entry Type* edges through this helper. Do not move this discovery
+// into ErrorLetContext::index_frame().
+static void add_frame_value_type_edges(ErrorLetContext* ctx, const Frame* frame) {
+	if (!frame)
+		return;
+	for (const auto& item : frame->values_local()) {
+		ctx->add_type_edge(item.second.ty);
+	}
+}
+
 void Type::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
 	out << diagnostic_kind() << " ...";
 }
@@ -210,6 +223,7 @@ void EnumType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 const char* RecordType::diagnostic_kind() const { return "record"; }
 void RecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
+	add_frame_value_type_edges(ctx, children);
 	ctx->add_type_edge(selector_type);
 	for (const auto& arm : arms)
 		for (const auto& field : arm.fields)
@@ -230,6 +244,7 @@ void RecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out
 const char* InterfaceType::diagnostic_kind() const { return "interface"; }
 void InterfaceType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
+	add_frame_value_type_edges(ctx, children);
 	for (auto* i : super_interfaces) ctx->add_type_edge(i);
 }
 void InterfaceType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
@@ -250,6 +265,7 @@ void ClassType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(super);
 	for (auto* i : implemented_interfaces) ctx->add_type_edge(i);
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
+	add_frame_value_type_edges(ctx, children);
 }
 void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "class\n";
@@ -270,7 +286,7 @@ void ClassRefType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrin
 void ClassRefType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << "class of ..."; }
 
 const char* ObjectType::diagnostic_kind() const { return "object"; }
-void ObjectType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(super); ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers); }
+void ObjectType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(super); ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers); add_frame_value_type_edges(ctx, children); }
 void ObjectType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "object\n";
 	if (super) { ctx->indent(out, indent + 1); out << "super: " << ctx->known_type_ref(super) << "\n"; }
@@ -296,6 +312,7 @@ void UnitType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&
 const char* UntypedIntegerType::diagnostic_kind() const { return "untyped_integer"; }
 void UntypedIntegerType::collect_diagnostic_edges(ErrorLetContext*) const {}
 void UntypedIntegerType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << "untyped integer"; }
+
 
 static const char* param_mode_text(ParamMode mode) {
 	switch (mode) {
