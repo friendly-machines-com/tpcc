@@ -1797,7 +1797,9 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			existing_cxx = r->cxx_name;
 		else if (auto c = dynamic_cast<ClassType*>(rhs))
 			existing_cxx = c->cxx_name;
-		else if (auto c = dynamic_cast<InterfaceType*>(rhs))
+		else if (auto c = dynamic_cast<ClassRefType*>(rhs)) {
+			existing_cxx = c->cxx_name;
+		} else if (auto c = dynamic_cast<InterfaceType*>(rhs))
 			existing_cxx = c->cxx_name;
 		else if (auto o = dynamic_cast<ObjectType*>(rhs))
 			existing_cxx = o->cxx_name;
@@ -1811,7 +1813,9 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 				r->cxx_name = cxx;
 			else if (auto c = dynamic_cast<ClassType*>(rhs))
 				c->cxx_name = cxx;
-			else if (auto c = dynamic_cast<InterfaceType*>(rhs))
+			else if (auto c = dynamic_cast<ClassRefType*>(rhs)) {
+				c->cxx_name = cxx;
+			} else if (auto c = dynamic_cast<InterfaceType*>(rhs))
 				c->cxx_name = cxx;
 			else if (auto o = dynamic_cast<ObjectType*>(rhs))
 				o->cxx_name = cxx;

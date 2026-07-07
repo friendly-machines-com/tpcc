@@ -122,6 +122,7 @@ struct ClassType: public Type {
 struct ClassRefType : public Type // metaclass
 {
 	Type* target; // ClassType or IncompleteType
+	std::string cxx_name;
 
 	explicit ClassRefType(Type* c)
 	   : target(c) {
