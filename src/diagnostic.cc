@@ -469,8 +469,7 @@ std::string ErrorLetContext::notes() {
 		return "";
 
 	std::ostringstream out;
-	out << "\ndiagnostic details:\n";
-	out << "  let\n";
+	out << "\n\n  where\n\n";
 
 	for (const Type* ty : type_order) {
 		if (!ty)
