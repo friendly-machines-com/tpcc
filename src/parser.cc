@@ -1109,6 +1109,8 @@ static Frame* body_frame_of(Type* ty) {
 		return r->children;
 	if (auto c = dynamic_cast<ClassType*>(ty))
 		return c->children;
+	if (auto c = dynamic_cast<ClassRefType*>(ty))
+		return body_frame_of(unwrap_incomplete(c->target));
 	if (auto c = dynamic_cast<InterfaceType*>(ty))
 		return c->children;
 	if (auto o = dynamic_cast<ObjectType*>(ty))
