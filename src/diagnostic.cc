@@ -434,9 +434,11 @@ void ErrorLetContext::indent(std::ostringstream& out, unsigned level) const {
 
 static void print_source_location(std::ostringstream& out, const SourceLocation& loc) {
 	std::string text = loc.file_name.empty() ? "<unknown>" : loc.file_name;
-	text += "(";
-	text += std::to_string(loc.line_number);
-	text += ")";
+	if (loc.line_number != 0) {
+		text += "(";
+		text += std::to_string(loc.line_number);
+		text += ")";
+	}
 	out << "'";
 	for (char ch : text) {
 		if (ch == '\'')

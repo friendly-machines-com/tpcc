@@ -11,6 +11,8 @@ class ErrorLetContext;
 
 struct SourceLocation {
 	std::string file_name;
+	// Parser-created locations are 1-based. 0 means the location is unknown or
+	// not backed by a Pascal source line, e.g. compiler builtin/internal types.
 	int line_number = 0;
 
 	SourceLocation() = default;
