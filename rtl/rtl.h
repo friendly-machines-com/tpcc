@@ -197,9 +197,14 @@ struct t_tobject: public m_iobject {
 template<class T>
 struct class_of
 {
-	static_assert(std::is_base_of_v<t_tobject, T>);
-	m_iobject* ptr;
-	//T* create(); // analogous to Delphi's ClassType.Create
+	using meta_type = typename T::m_meta;
+	meta_type* ptr;
+
+	template<class B>
+	requires std::is_base_of_v<B, T>
+	operator class_of<B>() const {
+		return {ptr};
+	}
 };
 // Usage: class_of<t_foo> x;
 
