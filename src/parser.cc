@@ -256,11 +256,14 @@ static bool callable_source_less(Callable* a, Callable* b) {
 	return false;
 }
 
-static void append_callable_source_prefix(std::stringstream& sst, Callable* c) {
+static void append_callable_source_prefix(std::stringstream& sst, Callable* c, bool is_viable) {
 	const SourceLocation& loc = callable_source_location(c);
-	if (loc.file_name.empty())
-		return;
-	sst << loc.file_name << "(" << loc.line_number << "): ";
+	if (!loc.file_name.empty())
+		sst << loc.file_name << "(" << loc.line_number << ")";
+	if (is_viable)
+		sst << "[viable]";
+	if (!loc.file_name.empty() || is_viable)
+		sst << ": ";
 }
 
 [[noreturn]] void Parser::raise_overload_resolution_error(std::string name,
@@ -281,45 +284,28 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c) {
 		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
 
+	(void)non_dominated;
+
 	std::vector<Callable*> sorted_candidates = candidates;
 	std::stable_sort(sorted_candidates.begin(), sorted_candidates.end(), callable_source_less);
-	std::vector<Callable*> sorted_non_dominated = non_dominated;
-	std::stable_sort(sorted_non_dominated.begin(), sorted_non_dominated.end(), callable_source_less);
-
-	if (ambiguous) {
-		// Ambiguity is decided by the viable candidates that are not dominated by
-		// any other viable candidate. Dominated candidates cannot be selected, so
-		// they are only listed later with the complete candidate set.
-		sst << "\n  viable candidates:";
-		for (Callable* c : sorted_non_dominated) {
-			sst << "\n    ";
-			append_callable_source_prefix(sst, c);
-			sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
-			for (const auto& v : viable) {
-				if (v.first == c) {
-					sst << " cost ";
-					append_cost_vector(sst, v.second);
-					break;
-				}
-			}
-		}
-	}
 
 	sst << "\n  all candidates:";
 	for (Callable* c : sorted_candidates) {
-		sst << "\n    ";
-		append_callable_source_prefix(sst, c);
-		sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
-		bool is_viable = false;
+		const std::vector<int>* viable_cost = nullptr;
 		for (const auto& v : viable) {
 			if (v.first == c) {
-				is_viable = true;
-				sst << " viable cost ";
-				append_cost_vector(sst, v.second);
+				viable_cost = &v.second;
 				break;
 			}
 		}
-		if (!is_viable) {
+
+		sst << "\n    ";
+		append_callable_source_prefix(sst, c, viable_cost != nullptr);
+		sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
+		if (viable_cost) {
+			sst << " viable cost ";
+			append_cost_vector(sst, *viable_cost);
+		} else {
 			sst << " not viable";
 		}
 	}
