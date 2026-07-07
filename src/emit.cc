@@ -409,13 +409,21 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
 		bool first = true;
 		if (c->super) {
-			fprintf(active, "public %s", c->super->cxx_name.c_str());
+			auto super_cxx_name = c->super->cxx_name;
+			if (in_meta) {
+				super_cxx_name = super_cxx_name + "::m_meta";
+			}
+			fprintf(active, "public %s", super_cxx_name.c_str());
 			first = false;
 		}
-		for (auto interface_type : c->implemented_interfaces) {
-			fprintf(active, first ? "public %s" : ", public %s",
-				interface_type->cxx_name.c_str());
-			first = false;
+		if (!in_meta) {
+			for (auto interface_type : c->implemented_interfaces) {
+				fprintf(active, first ? "public %s" : ", public %s",
+					interface_type->cxx_name.c_str());
+				first = false;
+			}
+		} else {
+			// not sure. FIXME: m_iobject ?
 		}
 	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		bool first = true;
