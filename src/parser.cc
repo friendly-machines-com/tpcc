@@ -883,7 +883,10 @@ Node* Parser::resolve_value(std::string name) {
 	// keep walking to aggregate additional overload-marked hits from lower
 	// scopes (cross-unit overloading).
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		Node* hit = it->frame->lookup_value(name);
+		// The parser scope stack is already the chain being searched here. Use the
+		// local Frame lookup so a parent Frame reached through lookup_value() is not
+		// seen again when the loop later visits that parent scope entry.
+		Node* hit = it->frame->lookup_value_local(name);
 		if (!hit)
 			continue;
 		auto as_call = dynamic_cast<Callable*>(hit);
