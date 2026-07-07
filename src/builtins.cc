@@ -22,7 +22,7 @@ IntrinsicType k_longint("pas::t_longint", 6);
 IntrinsicType k_qword("pas::t_qword", 7);
 IntrinsicType k_int64("pas::t_int64", 8);
 IntrinsicType k_double("pas::t_double", {});
-EnumType k_boolean("pas::t_boolean", "p_false", "p_true");
+EnumType k_boolean("pas::t_boolean", "false", "true");
 IntrinsicType k_char("pas::t_char", {});
 IntrinsicType k_shortstring("pas::t_shortstring", {});
 IntrinsicType k_pointer("pas::t_pointer", {});

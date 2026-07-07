@@ -1587,6 +1587,7 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 	Type* tag_type;
 	if (maybe_parse_colon()) {
 		rt->has_selector = true;
+		rt->selector_name = first;
 		rt->selector_cxx_name = cxx_value_name(first);
 		tag_type = parse_type_expression(false);
 
@@ -1622,7 +1623,7 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 				// pointer in both gives the emitter identity-based
 				// "is this a variant slot?" without name lookups.
 				body->register_variable(fname, slot, fty);
-				arm.fields.push_back({slot, fty});
+				arm.fields.push_back({fname, slot, fty});
 				if (!maybe_parse_semicolon())
 					break;
 			} while (input_token != ")");
@@ -1744,7 +1745,7 @@ Type* Parser::parse_enum_type() {
 		auto cxx = cxx_value_name(pas);
 		// FIXME: explicit member values (`Red = 5`) accepted by ISO/FPC are
 		// not parsed here -- every member takes next_value, then increments.
-		et->members.push_back({cxx, next_value});
+		et->members.push_back({pas, cxx, next_value});
 		// Register the member as a value in the enclosing scope so bare uses
 		// (`c := Red`) resolve. Pascal's default is unscoped enum members:
 		// they live in the same scope as the enum type itself, NOT inside

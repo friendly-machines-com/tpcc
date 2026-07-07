@@ -75,6 +75,7 @@ private:
 		DiagnosticName name;
 		std::string kind;
 		bool referenced = false;
+		bool ordered = false;
 		bool discovered = false;
 		bool discovering = false;
 		bool truncated = false;
@@ -89,6 +90,7 @@ private:
 		DiagnosticName name;
 		std::string kind;
 		bool referenced = false;
+		bool ordered = false;
 		bool discovered = false;
 		bool discovering = false;
 		bool truncated = false;

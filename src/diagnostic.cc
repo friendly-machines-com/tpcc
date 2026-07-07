@@ -134,13 +134,15 @@ void ErrorLetContext::discover_type(const Type* ty, unsigned depth) {
 	if (!ty)
 		return;
 	TypeNode& n = ensure_type(ty);
-	if (!n.referenced) {
+	if (!n.referenced)
 		n.referenced = true;
-		type_order.push_back(ty);
-	}
 	n.min_depth = std::min(n.min_depth, depth);
 	if (depth >= max_depth) {
 		n.truncated = true;
+		if (!n.ordered) {
+			n.ordered = true;
+			type_order.push_back(ty);
+		}
 		return;
 	}
 	if (n.discovered || n.discovering)
@@ -152,6 +154,13 @@ void ErrorLetContext::discover_type(const Type* ty, unsigned depth) {
 	current_depth = saved;
 	n.discovering = false;
 	n.discovered = true;
+	// Emit in postorder: dependencies discovered while collecting this type are
+	// ordered before the type body that refers to them. Recursive edges cannot be
+	// topologically sorted, but acyclic references are definition-before-use.
+	if (!n.ordered) {
+		n.ordered = true;
+		type_order.push_back(ty);
+	}
 }
 
 void ErrorLetContext::discover_value(const Node* node, unsigned depth) {
@@ -160,13 +169,15 @@ void ErrorLetContext::discover_value(const Node* node, unsigned depth) {
 	if (!node)
 		return;
 	ValueNode& n = ensure_value(node);
-	if (!n.referenced) {
+	if (!n.referenced)
 		n.referenced = true;
-		value_order.push_back(node);
-	}
 	n.min_depth = std::min(n.min_depth, depth);
 	if (depth >= max_depth) {
 		n.truncated = true;
+		if (!n.ordered) {
+			n.ordered = true;
+			value_order.push_back(node);
+		}
 		return;
 	}
 	if (n.discovered || n.discovering)
@@ -178,6 +189,12 @@ void ErrorLetContext::discover_value(const Node* node, unsigned depth) {
 	current_depth = saved;
 	n.discovering = false;
 	n.discovered = true;
+	// Values are also postordered so their type/default/value dependencies are
+	// defined before the value definition that references them.
+	if (!n.ordered) {
+		n.ordered = true;
+		value_order.push_back(node);
+	}
 }
 
 void ErrorLetContext::add_type_edge(const Type* ty) {

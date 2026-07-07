@@ -9,10 +9,12 @@ EnumType::EnumType() : cxx_name("") {
 
 EnumType::EnumType(std::string p_cxx_name, std::string a, std::string b) : cxx_name(p_cxx_name) {
 	members.push_back(Member {
+		.pas_name = a,
 		.cxx_name = a,
 		.value = 0,
 	});
 	members.push_back(Member {
+		.pas_name = b,
 		.cxx_name = b,
 		.value = 1,
 	});
@@ -213,7 +215,7 @@ void EnumType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 	for (const auto& m : members) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << m.cxx_name << " = " << m.value;
+		out << (m.pas_name.empty() ? "<member>" : m.pas_name) << " = " << m.value;
 	}
 	out << "\n";
 	ctx->indent(out, indent);
@@ -239,7 +241,7 @@ void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	ctx->print_frame_members(out, children, indent + 1);
 	if (has_selector) {
 		ctx->indent(out, indent + 1);
-		out << "case " << selector_cxx_name << ": " << ctx->known_type_ref(selector_type) << " of\n";
+		out << "case " << selector_name << ": " << ctx->known_type_ref(selector_type) << " of\n";
 		// Variant labels are parsed for layout/selection but not retained in
 		// VariantArm yet; the diagnostic can still show the important structural
 		// information: which overlapping fields exist in each arm and their types.
@@ -249,8 +251,8 @@ void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 			out << "arm " << (i + 1) << ":\n";
 			for (const auto& field : arms[i].fields) {
 				ctx->indent(out, indent + 3);
-				if (field.slot)
-					out << field.slot->cxx_name;
+				if (!field.pas_name.empty())
+					out << field.pas_name;
 				else
 					out << "<field>";
 				out << ": " << ctx->known_type_ref(field.ty) << ";\n";
