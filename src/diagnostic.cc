@@ -324,6 +324,13 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 			                               render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
 		}
 	}
+	if (auto tb = dynamic_cast<const TypeBound*>(n.node)) {
+		auto tit = type_nodes.find(tb->operand_type);
+		if (tit != type_nodes.end() && tit->second.name.assigned) {
+			std::string fn = tb->kind == TypeBoundKind::Low ? "low" : "high";
+			return NameBase{name_component(fn + "(" + render_name_display(tit->second.name) + ")", n.kind.c_str()), ""};
+		}
+	}
 	if (auto l = dynamic_cast<const Length*>(n.node)) {
 		auto ait = value_nodes.find(l->a);
 		if (ait != value_nodes.end() && ait->second.name.assigned)
