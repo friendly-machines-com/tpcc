@@ -80,6 +80,11 @@ Real::Real(double value, Type* ty) {
 	this->ty = ty;
 }
 
+FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty)
+    : elements(std::move(elements)) {
+	this->ty = ty;
+}
+
 Callable::Callable(std::string cxx_name,
 		   std::string pas_name,
 		   RoutineType* ty,
@@ -279,6 +284,32 @@ const char* Real::diagnostic_kind() const { return "real"; }
 ConstEvalResult Real::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new Real(value, ty)); }
 void Real::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << "real " << std::setprecision(17) << value << " : " << ctx->known_type_ref(ty);
+}
+
+const char* FixedArrayLiteral::diagnostic_kind() const { return "fixed_array_literal"; }
+ConstEvalResult FixedArrayLiteral::const_eval(ConstEvalContext& ctx) const {
+	std::vector<Node*> folded;
+	folded.reserve(elements.size());
+	for (Node* element : elements) {
+		ConstEvalResult r = element ? element->const_eval(ctx) : ConstEvalResult::not_constant();
+		if (r.kind != ConstEvalResult::Kind::Success)
+			return r;
+		folded.push_back(r.node);
+	}
+	return ConstEvalResult::success(new FixedArrayLiteral(std::move(folded), ty));
+}
+void FixedArrayLiteral::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	for (Node* element : elements)
+		ctx->add_value_edge(element);
+}
+void FixedArrayLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "fixed array literal : " << ctx->known_type_ref(ty);
+	for (Node* element : elements) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "element: " << ctx->known_value_ref(element);
+	}
 }
 
 const char* NilLiteral::diagnostic_kind() const { return "nil"; }

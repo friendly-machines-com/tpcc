@@ -83,6 +83,7 @@ public:
 	// name (ODR violation in C++).
 	void emit_type_alias(std::string cxx_name, std::string aliased_cxx_name);
 	void emit_var_decl(std::string cxx_name, Type* ty);
+	void emit_const_decl(std::string cxx_name, Type* ty, Node* initializer);
 	void emit_main_prologue();
 	void emit_main_epilogue();
 	void emit_statement(Node* stmt);

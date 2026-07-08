@@ -1749,6 +1749,15 @@ Node* Parser::parse_sum() {
 	return parse_sum_tail(parse_product());
 }
 
+Node* Parser::parse_subrange_bound_expression_after_identifier(std::string id) {
+	Node* result = parse_designator_tail(parse_value_from_identifier(std::move(id)));
+	return parse_sum_tail(parse_product_tail(parse_power_tail(result)));
+}
+
+Node* Parser::parse_subrange_bound_expression() {
+	return parse_sum();
+}
+
 Node* Parser::parse_comparison_tail(Node* result) {
 	while (true) {
 		if (maybe_parse_equal()) {
@@ -2437,17 +2446,14 @@ Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	return raise_type_parse_error("unsupported subrange bound kind");
 }
 
-static bool token_continues_expression_after_primary(const std::string& token) {
+static bool token_continues_subrange_bound_after_primary(const std::string& token) {
 	return token == "." || token == "(" || token == "[" || token == "^" ||
 	       token == "**" || token == "*" || token == "/" ||
 	       token == "div" || token == "mod" || token == "and" ||
 	       token == "shl" || token == "shr" || token == "as" ||
 	       token == "is" || token == "<<" || token == ">>" ||
 	       token == "><" || token == "+" || token == "-" ||
-	       token == "or" || token == "|" || token == "xor" ||
-	       token == "=" || token == "<>" || token == "<" ||
-	       token == ">" || token == "<=" || token == ">=" ||
-	       token == "in";
+	       token == "or" || token == "|" || token == "xor";
 }
 
 static bool token_is_identifier_start(const std::string& token) {
@@ -2517,23 +2523,23 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		// type name. Consume the identifier once, then use the token already in
 		// input_token to decide whether the identifier is bare (a type name) or
 		// the seed of a constant expression whose lower bound must be followed by
-		// `..`. The expression parser naturally stops at `..` because `..` is not
-		// an expression operator.
+		// `..`. Subrange-bound parsing deliberately stops before comparison
+		// operators so an enclosing `=` in `const X: T = ...` remains visible.
 		if (token_is_identifier_start(input_token)) {
 			std::string id = parse_identifier();
 			if (maybe_parse_period_period())
-				return reuse_subrange_type(parse_value_from_identifier(id), parse_expression());
-			if (token_continues_expression_after_primary(input_token)) {
-				Node* lower_bound = parse_expression_after_identifier(id);
+				return reuse_subrange_type(parse_value_from_identifier(id), parse_subrange_bound_expression());
+			if (token_continues_subrange_bound_after_primary(input_token)) {
+				Node* lower_bound = parse_subrange_bound_expression_after_identifier(id);
 				parse_period_period();
-				return reuse_subrange_type(lower_bound, parse_expression());
+				return reuse_subrange_type(lower_bound, parse_subrange_bound_expression());
 			}
 			return resolve_type(id, allow_forward);
 		}
 
-		Node* lower_bound = parse_expression();
+		Node* lower_bound = parse_subrange_bound_expression();
 		parse_period_period();
-		return reuse_subrange_type(lower_bound, parse_expression());
+		return reuse_subrange_type(lower_bound, parse_subrange_bound_expression());
 	}
 }
 
@@ -2561,6 +2567,65 @@ void Parser::parse_label_block() {
 	parse_semicolon();
 }
 
+static bool ordinal_constant_matches_range_type(Type* base_type, const FoldedSubrangeBound& value) {
+	base_type = subrange_range_type(base_type);
+	if (base_type == char_type())
+		return value.kind == FoldedSubrangeBound::Kind::Char;
+	if (dynamic_cast<EnumType*>(base_type))
+		return value.kind == FoldedSubrangeBound::Kind::Enum && value.ty == base_type;
+	return is_integer_semantic_type(base_type) && value.kind == FoldedSubrangeBound::Kind::Integer;
+}
+
+Node* Parser::parse_typed_const_initializer(Type* ty) {
+	if (auto arr = dynamic_cast<FixedArrayType*>(ty)) {
+		parse_opening_paren();
+		std::vector<Node*> elements;
+		if (input_token != ")") {
+			do {
+				elements.push_back(parse_typed_const_initializer(arr->item_type));
+			} while (maybe_parse_comma());
+		}
+		parse_closing_paren();
+		if (elements.size() != arr->range.length) {
+			raise_parse_error("array initializer length mismatch: expected " +
+					  std::to_string(arr->range.length) + " elements but got " +
+					  std::to_string(elements.size()));
+		}
+		return new FixedArrayLiteral(std::move(elements), ty);
+	}
+
+	Node* expr = parse_expression();
+	ConstEvalContext ctx;
+	ConstEvalResult folded = expr->const_eval(ctx);
+	if (folded.kind == ConstEvalResult::Kind::NotConstant)
+		raise_parse_error("constant expression expected");
+	if (folded.kind == ConstEvalResult::Kind::Error)
+		raise_parse_error(folded.message);
+	Node* value = folded.node;
+
+	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+		OrdinalRange range;
+		std::string error;
+		if (!ordinal_range_for_type(s, &range, &error))
+			raise_parse_error(error);
+		auto bound = classify_subrange_bound(value, &error);
+		if (!bound)
+			raise_parse_error(error);
+		if (!ordinal_constant_matches_range_type(range.base_type, *bound))
+			raise_parse_error("constant initializer has incompatible ordinal type");
+		if (compare_ordinal_value(bound->ordinal_value, range.lower_ordinal) < 0 ||
+		    compare_ordinal_value(bound->ordinal_value, range.upper_ordinal) > 0)
+			raise_parse_error("constant initializer out of range for target type");
+		return cast(bound->node, subrange_range_type(s->base_type));
+	}
+
+	Node* converted = cast(value, ty);
+	ConstEvalResult checked = converted->const_eval(ctx);
+	if (checked.kind == ConstEvalResult::Kind::Error)
+		raise_parse_error(checked.message);
+	return converted;
+}
+
 void Parser::parse_const_block() {
 	parse_keyword("const");
 	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
@@ -2586,7 +2651,13 @@ void Parser::parse_const_block() {
 		}
 		parse_colon();
 		auto ty = parse_type_expression(false);
-		scope->register_variable(name, new StorageSlot(cxx_value_name(name), ty), ty);
+		auto slot = new StorageSlot(cxx_value_name(name), ty);
+		scope->register_variable(name, slot, ty);
+		if (maybe_parse_equal()) {
+			Node* initializer = parse_typed_const_initializer(ty);
+			if (emitter)
+				emitter->emit_const_decl(slot->cxx_name, ty, initializer);
+		}
 		parse_semicolon();
 	} while (input_token.size() && keywords.find(input_token) == keywords.end());
 }

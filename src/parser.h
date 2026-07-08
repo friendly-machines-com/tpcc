@@ -187,6 +187,7 @@ protected:
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
 	Node* parse_numeral();
+	Node* parse_typed_const_initializer(Type* ty);
 	Node* resolve_lvalue(std::string name);
 	Node* maybe_resolve_value(std::string name);
 	Node* resolve_value(std::string name);
@@ -236,6 +237,8 @@ protected:
 	Node* parse_power_tail(Node* result);
 	Node* parse_product();
 	Node* parse_product_tail(Node* result);
+	Node* parse_subrange_bound_expression();
+	Node* parse_subrange_bound_expression_after_identifier(std::string id);
 	Node* parse_sum();
 	Node* parse_sum_tail(Node* result);
 	Type* parse_array_type();

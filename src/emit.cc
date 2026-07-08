@@ -154,6 +154,16 @@ void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
 	fprintf(active, " %s;\n", cxx_name.c_str());
 }
 
+void Emitter::emit_const_decl(std::string cxx_name, Type* ty, Node* initializer) {
+	if (!active)
+		return;
+	fprintf(active, "const ");
+	emit_type_ref(ty);
+	fprintf(active, " %s = ", cxx_name.c_str());
+	emit_expression(initializer);
+	fprintf(active, ";\n");
+}
+
 void Emitter::emit_main_prologue() {
 	if (!active)
 		return;
@@ -762,6 +772,16 @@ void Emitter::emit_expression(Node* expr) {
 			}
 		}
 		fputc('"', active);
+		return;
+	}
+	if (auto a = dynamic_cast<FixedArrayLiteral*>(expr)) {
+		fprintf(active, "{{");
+		for (size_t i = 0; i < a->elements.size(); i++) {
+			if (i > 0)
+				fprintf(active, ", ");
+			emit_expression(a->elements[i]);
+		}
+		fprintf(active, "}}");
 		return;
 	}
 	if (auto s = dynamic_cast<StorageSlot*>(expr)) {
