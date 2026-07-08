@@ -14,14 +14,17 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <vector>
 #include "cst.h"
 #include "frame.h"
 
+struct ConstEvalContext;
+struct ConstEvalResult;
+using BuiltinConstFold = ConstEvalResult (*)(ConstEvalContext& ctx, Type* result_ty, const std::vector<Node*>& args);
+
 struct BuiltinDesc {
 	std::string_view cxx_name;    // e.g. "pas::p_ord"
-	// Constant-folder; nullable when a row has no folding rule (see also the
-	// TODO next to kBuiltins in builtins.cc).
-	std::optional<uint64_t> (*const_fold)(Frame*, Node* args);
+	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
 };
 
 struct IntrinsicTypeDesc {
@@ -81,4 +84,5 @@ Type* double_type();
 Type* unknown_type();
 
 Type* lookup_builtin_type(std::string cxx_name);
+const BuiltinDesc* lookup_builtin_desc(std::string_view cxx_name);
 Builtin* create_builtin_value(std::string cxx_name);

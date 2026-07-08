@@ -1,4 +1,5 @@
 #include "cst.h"
+#include "builtins.h"
 #include <sstream>
 
 std::string Node::str() const {
@@ -158,6 +159,9 @@ ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
 	auto c = dynamic_cast<Callable*>(callee);
 	if (!c)
 		return ConstEvalResult::not_constant();
+	const BuiltinDesc* desc = lookup_builtin_desc(c->cxx_name);
+	if (!desc || !desc->const_fold)
+		return ConstEvalResult::not_constant();
 	std::vector<Node*> folded;
 	folded.reserve(args.size());
 	for (auto* arg : args) {
@@ -166,7 +170,7 @@ ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
 			return r;
 		folded.push_back(r.node);
 	}
-	return const_eval_builtin_call(ctx, c, folded);
+	return desc->const_fold(ctx, c->ty ? c->ty->return_type : nullptr, folded);
 }
 
 void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {

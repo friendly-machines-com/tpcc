@@ -1,5 +1,6 @@
 #include "builtins.h"
 #include "cst.h"
+#include "evaluator.h"
 #include "frame.h"
 #include "types.h"
 #include <string>
@@ -115,15 +116,64 @@ Type* shortstring_type() { return &k_shortstring; }
 Type* double_type() { return &k_double; }
 Type* unknown_type() { return &k_unknown; }
 
+
+static const Integer* const_integer_arg(Node* n) { return dynamic_cast<const Integer*>(n); }
+
+static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Type* ty) {
+	return const_convert_integer(magnitude, negative, ty, ty);
+}
+
+static ConstEvalResult fold_unary_minus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1 || !const_integer_arg(args[0]))
+		return ConstEvalResult::not_constant();
+	auto i = const_integer_arg(args[0]);
+	return fold_integer_result(i->value, !i->negative && i->value != 0, result_ty);
+}
+
+static ConstEvalResult fold_unary_plus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1 || !const_integer_arg(args[0]))
+		return ConstEvalResult::not_constant();
+	auto i = const_integer_arg(args[0]);
+	return fold_integer_result(i->value, i->negative, result_ty);
+}
+
+static bool add_u64_checked(uint64_t a, uint64_t b, uint64_t* out) {
+	*out = a + b;
+	return *out >= a;
+}
+
+static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& args, bool subtract) {
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	auto a = const_integer_arg(args[0]);
+	auto b = const_integer_arg(args[1]);
+	bool bneg = subtract ? (!b->negative && b->value != 0) : b->negative;
+	bool neg = false;
+	uint64_t mag = 0;
+	if (a->negative == bneg) {
+		if (!add_u64_checked(a->value, b->value, &mag))
+			return ConstEvalResult::error("integer constant overflow");
+		neg = a->negative;
+	} else if (a->value >= b->value) {
+		mag = a->value - b->value;
+		neg = a->negative;
+	} else {
+		mag = b->value - a->value;
+		neg = bneg;
+	}
+	return fold_integer_result(mag, neg && mag != 0, result_ty);
+}
+
+static ConstEvalResult fold_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, false); }
+static ConstEvalResult fold_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, true); }
+
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
-// TODO: const_fold is nullptr for every row; wire compile-time folding
-// rules for the ones that admit them (Ord on a Constant, at minimum).
-static const std::array<BuiltinDesc, 35> k_builtins{{
-    // Note: constant folder would be polymorphic.
+static const std::array<BuiltinDesc, 36> k_builtins{{
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
+    {"pas::p_str", nullptr},
     {"pas::p_low", nullptr},
     {"pas::p_high", nullptr},
     {"pas::p_length", nullptr},
@@ -139,10 +189,10 @@ static const std::array<BuiltinDesc, 35> k_builtins{{
     {"pas::p_logicalnot", nullptr},
     {"pas::p_logicalxor", nullptr},
 
-    {"pas::p_add", nullptr},
-    {"pas::p_subtract", nullptr},
-    {"pas::p_positive", nullptr},
-    {"pas::p_negative", nullptr},
+    {"pas::p_add", fold_add},
+    {"pas::p_subtract", fold_subtract},
+    {"pas::p_positive", fold_unary_plus},
+    {"pas::p_negative", fold_unary_minus},
     {"pas::p_multiply", nullptr},
     {"pas::p_divide", nullptr},
     {"pas::p_intdivide", nullptr},
@@ -177,6 +227,14 @@ Type* lookup_builtin_type(std::string cxx_name) {
 				return q;
 			}
 		}
+	}
+	return nullptr;
+}
+
+const BuiltinDesc* lookup_builtin_desc(std::string_view cxx_name) {
+	for (auto& b : k_builtins) {
+		if (b.cxx_name == cxx_name)
+			return &b;
 	}
 	return nullptr;
 }

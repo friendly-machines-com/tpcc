@@ -24,5 +24,4 @@ struct ConstEvalResult {
 };
 
 ConstEvalResult const_convert_integer(uint64_t magnitude, bool negative, Type* from_ty, Type* to_ty);
-ConstEvalResult const_eval_builtin_call(ConstEvalContext& ctx, Callable* callee, const std::vector<Node*>& args);
 ConstEvalResult const_eval_type_bound(TypeBoundKind kind, Type* ty);
