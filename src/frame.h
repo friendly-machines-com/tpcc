@@ -45,6 +45,11 @@ public:
     /** Replace an existing type binding (used when patching a placeholder with
      *  its real Type* at type-block-end). No-op-safe for a fresh name. */
     void rebind_type(std::string name, Type* ty);
+    /** Replace the cached type for an existing value binding after a type-block
+     *  forward reference has been resolved. The value node itself remains the
+     *  canonical owner of behavior; this keeps frame-based diagnostics and
+     *  emit walks from seeing stale IncompleteType pointers. */
+    void rebind_value_type(std::string name, Type* ty);
     bool register_variable(std::string name, Node* v, Type* ty); // FIXME: StorageSlot would already have ty
     /** Register a Callable (Procedure or Method) under NAME, applying Pascal's
      *  overload rules: a second registration succeeds only if both the

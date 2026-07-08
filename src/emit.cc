@@ -22,17 +22,7 @@
 	exit(1);
 }
 
-static Type* emit_unwrap_incomplete(Type* ty) {
-	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-		if (!inc->resolved)
-			break;
-		ty = inc->resolved;
-	}
-	return ty;
-}
-
 static bool fixed_array_length(Type* ty, uint64_t* out) {
-	ty = emit_unwrap_incomplete(ty);
 	auto arr = dynamic_cast<FixedArrayType*>(ty);
 	if (!arr)
 		return false;
@@ -590,7 +580,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			if (variant_slots.count(slot))
 				continue;
 			fprintf(active, "\t");
-			emit_type_ref(kv.second.ty);
+			emit_type_ref(slot->ty);
 			fprintf(active, " %s;\n", slot->cxx_name.c_str());
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
 			fprintf(active, "\t");
@@ -968,12 +958,6 @@ void Emitter::emit_template_value_arg(Node* expr) {
 void Emitter::emit_type_ref(Type* ty) {
 	if (!active)
 		return;
-	// Follow IncompleteType placeholders through to the real underlying type.
-	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-		if (!inc->resolved)
-			break;
-		ty = inc->resolved;
-	}
 	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		// C++ doesn't support those, so punt for now.
 		return emit_type_ref(s->base_type);
@@ -1003,12 +987,6 @@ void Emitter::emit_type_ref(Type* ty) {
 	}
 	if (auto r = dynamic_cast<ClassRefType*>(ty)) {
 		ty = r->target;
-		// Follow IncompleteType placeholders through to the real underlying type.
-		while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-			if (!inc->resolved)
-				break;
-			ty = inc->resolved;
-		}
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			if (c->cxx_name.empty())
 				emit_aggregate_decl("", ty);

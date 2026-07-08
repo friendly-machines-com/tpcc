@@ -56,6 +56,10 @@ void Frame::rebind_type(std::string name, Type* ty) {
 	type_items[name] = ty;
 }
 
+void Frame::rebind_value_type(std::string name, Type* ty) {
+	value_items[name].ty = ty;
+}
+
 /** returns whether it was registered anew, with type TY */
 bool Frame::register_type(std::string name, Type* ty) {
 	auto iter = type_items.find(name);

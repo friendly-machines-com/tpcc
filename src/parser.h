@@ -106,6 +106,11 @@ private:
 	// is declared); those must land in the enclosing type block's scope, not
 	// in whatever inner scope (record/class body) happens to be on top.
 	Frame* current_type_block = nullptr;
+	// Forward type references are a Pascal type-block feature, not a general
+	// declaration-scope feature. `current_type_block` names the registration
+	// frame for all declaration scopes; this flag narrows placeholder creation
+	// to the period where parse_type_block is actually consuming RHS types.
+	bool parsing_type_block = false;
 	// The Callable whose body is currently being parsed, or nullptr outside
 	// any routine body. Set in parse_routine_body; used by parse_value's
 	// `inherited` branch to walk the parent type's method table and to decide

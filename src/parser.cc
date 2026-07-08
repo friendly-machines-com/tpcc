@@ -29,7 +29,6 @@ static Type* call_result_type(Node* callee);
 static bool array_index_compatible(FixedArrayType* arr, Node* idx);
 static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error);
 static Type* subrange_range_type(Type* ty);
-static Type* unwrap_incomplete(Type* ty);
 
 static ErrorLetContext make_error_let_context_from_scopes(const std::vector<ScopeEntry>& scopes, unsigned max_depth) {
 	std::vector<DiagnosticScope> diagnostic_scopes;
@@ -780,15 +779,10 @@ xor
 }
 
 /** Return the Frame that holds the fields/members of TY, or nullptr if TY
- *  doesn't have one (i.e. isn't a record/class/object). Transparently walks
- *  through an IncompleteType via `resolved`. Used by `with` to find the
- *  field namespace to push. */
+ *  doesn't have one (i.e. isn't a record/class/object). Type-block forward
+ *  placeholders are resolved before statements are parsed; an IncompleteType
+ *  here is therefore a parser bug, not an ordinary lookup path. */
 static Frame* get_type_body_frame(Type* ty) {
-	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-		if (!inc->resolved)
-			return nullptr;
-		ty = inc->resolved;
-	}
 	if (auto r = dynamic_cast<RecordType*>(ty))
 		return r->children;
 	if (auto c = dynamic_cast<ClassType*>(ty))
@@ -1083,13 +1077,15 @@ static std::optional<TypeBoundKind> type_bound_kind_for_builtin(Node* n) {
 
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
- *  IncompleteType under NAME in current_type_block and return it. This is how
- *  `^TFoo` before TFoo is declared gets a placeholder. If allow_forward is
- *  false, an unresolved name is a hard error. */
+ *  IncompleteType under NAME in current_type_block and return it. That is
+ *  legal only while parse_type_block is consuming RHS types; outside that
+ *  narrow window Pascal does not have general declaration-order backpatching.
+ *  If allow_forward is false, or no type block is active, an unresolved name
+ *  is a hard error. */
 Type* Parser::resolve_type(std::string name, bool allow_forward) {
 	if (Type* hit = maybe_resolve_type(name))
 		return hit;
-	if (allow_forward && current_type_block) {
+	if (allow_forward && parsing_type_block && current_type_block) {
 		auto inc = new IncompleteType(current_location(), name);
 		current_type_block->register_type(name, inc);
 		return inc;
@@ -1161,7 +1157,7 @@ Node* Parser::parse_value() {
 			Node* arg = parse_expression();
 			parse_closing_paren();
 
-			Type* arg_ty = unwrap_incomplete(arg ? arg->ty : nullptr);
+			Type* arg_ty = arg ? arg->ty : nullptr;
 			if (arg_ty != shortstring_type() && !dynamic_cast<FixedArrayType*>(arg_ty))
 				raise_type_kind_mismatch("length() argument", "array or string", arg_ty);
 			return new Length(arg, lookup_builtin_type("pas::t_integer"));
@@ -1430,22 +1426,13 @@ Node* Parser::maybe_auto_call(Node* n) {
 	return call;
 }
 
-// Static helpers used inside parse_designator's branches.
-static Type* unwrap_incomplete(Type* ty) {
-	while (auto inc = dynamic_cast<IncompleteType*>(ty)) {
-		if (!inc->resolved)
-			return ty;
-		ty = inc->resolved;
-	}
-	return ty;
-}
 static Frame* body_frame_of(Type* ty) {
 	if (auto r = dynamic_cast<RecordType*>(ty))
 		return r->children;
 	if (auto c = dynamic_cast<ClassType*>(ty))
 		return c->children;
 	if (auto c = dynamic_cast<ClassRefType*>(ty))
-		return body_frame_of(unwrap_incomplete(c->target));
+		return body_frame_of(c->target);
 	if (auto c = dynamic_cast<InterfaceType*>(ty))
 		return c->children;
 	if (auto o = dynamic_cast<ObjectType*>(ty))
@@ -1465,7 +1452,7 @@ Node* Parser::parse_designator_tail(Node* result) {
 			// would try to look up a member of a callable, which is nonsense).
 			result = maybe_auto_call(result);
 			std::string member_name = parse_identifier();
-			Type* ct = unwrap_incomplete(result->ty);
+			Type* ct = result->ty;
 			Frame* members = body_frame_of(ct);
 			if (!members)
 				raise_parse_error("member access on non-composite type");
@@ -1499,7 +1486,7 @@ Node* Parser::parse_designator_tail(Node* result) {
 			result = maybe_auto_call(result);
 			do {
 				Node* idx = parse_expression();
-				Type* ct = unwrap_incomplete(result->ty);
+				Type* ct = result->ty;
 				auto arr = dynamic_cast<FixedArrayType*>(ct);
 				if (!arr)
 					raise_parse_error("index on non-array type");
@@ -1514,7 +1501,7 @@ Node* Parser::parse_designator_tail(Node* result) {
 			// Postfix: no RHS. Auto-call bare callable LHS first (deref of a
 			// callable reference is nonsense).
 			result = maybe_auto_call(result);
-			Type* ct = unwrap_incomplete(result->ty);
+			Type* ct = result->ty;
 			auto p = dynamic_cast<PointerType*>(ct);
 			if (!p)
 				raise_parse_error("deref of non-pointer type");
@@ -2004,12 +1991,14 @@ Type* Parser::parse_array_type() {
 	} while (maybe_parse_comma());
 	parse_closing_bracket();
 	parse_keyword("of");
-	Type* item_type = parse_type_expression(false);
+	Type* item_type = parse_type_expression(true);
 	for (auto it = bounds_types.rbegin(); it != bounds_types.rend(); ++it) {
 		OrdinalRange range;
-		std::string error;
-		if (!ordinal_range_for_type(*it, &range, &error))
-			return raise_type_parse_error(error);
+		if (!parsing_type_block) {
+			std::string error;
+			if (!ordinal_range_for_type(*it, &range, &error))
+				return raise_type_parse_error(error);
+		}
 		item_type = new FixedArrayType(current_location(), *it, range, item_type);
 	}
 	return item_type;
@@ -2052,9 +2041,8 @@ std::string Parser::parse_string_literal() {
 }
 
 static Type* subrange_range_type(Type* ty) {
-	ty = unwrap_incomplete(ty);
 	while (auto s = dynamic_cast<SubrangeType*>(ty)) {
-		ty = unwrap_incomplete(s->base_type);
+		ty = s->base_type;
 	}
 	return ty;
 }
@@ -2248,7 +2236,6 @@ static bool make_ordinal_range(Type* index_type,
 }
 
 static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error) {
-	ty = unwrap_incomplete(ty);
 	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		ConstEvalContext ctx;
 		ConstEvalResult lower_folded = s->lower_bound->const_eval(ctx);
@@ -2421,11 +2408,11 @@ static bool token_is_identifier_start(const std::string& token) {
 	return std::isalpha(first) || token.front() == '_';
 }
 
-/** allow_forward: if true, an unresolved identifier at this parse position is
- *  auto-registered as an IncompleteType in the current type block rather than
- *  raising. Only the pointer branch propagates true; compound-type sub-parses
- *  (record/array/set/etc.) reset to false because their contents need real,
- *  sized types. */
+/** allow_forward: if true, an unresolved identifier at this parse position may
+ *  become an IncompleteType, but only while parse_type_block is active. The
+ *  valid starts stay explicit here: identifiers are resolved as types unless
+ *  `..`/expression continuation makes them subrange bounds; we do not parse a
+ *  general expression and backtrack into a type name. */
 Type* Parser::parse_type_expression(bool allow_forward) {
 	if (maybe_parse_opening_paren()) {
 		return parse_enum_type();
@@ -2441,7 +2428,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
-		return new FixedSetType(current_location(), parse_type_expression(false));
+		return new FixedSetType(current_location(), parse_type_expression(true));
 	} else if (peek_keyword("array")) {
 		return parse_array_type();
 	} else if (peek_keyword("object")) {
@@ -2559,19 +2546,256 @@ void Parser::maybe_parse_const_block() {
 		parse_const_block();
 	}
 }
+
+struct TypeBlockResolver {
+	std::unordered_set<Type*> visiting_types;
+	std::unordered_set<Type*> done_types;
+	std::unordered_set<IncompleteType*> resolving_incomplete;
+	std::unordered_set<Node*> done_nodes;
+	std::unordered_set<Frame*> done_frames;
+	std::string error;
+
+	bool fail(std::string message) {
+		error = std::move(message);
+		return false;
+	}
+
+	bool normalize_type(Type*& ty) {
+		if (!ty)
+			return true;
+		if (auto inc = dynamic_cast<IncompleteType*>(ty)) {
+			if (!inc->resolved)
+				return fail("forward-referenced type not defined in this type block: " + inc->name);
+			if (!resolving_incomplete.insert(inc).second)
+				return fail("cyclic forward type reference involving: " + inc->name);
+			Type* resolved = inc->resolved;
+			if (!normalize_type(resolved))
+				return false;
+			resolving_incomplete.erase(inc);
+			ty = resolved;
+			return true;
+		}
+		if (done_types.count(ty))
+			return true;
+		if (visiting_types.count(ty))
+			return true;
+
+		visiting_types.insert(ty);
+		bool ok = normalize_type_contents(ty);
+		visiting_types.erase(ty);
+		if (ok)
+			done_types.insert(ty);
+		return ok;
+	}
+
+	template <typename T>
+	bool normalize_type_as(T*& ty, const char* role) {
+		if (!ty)
+			return true;
+		Type* resolved = ty;
+		if (!normalize_type(resolved))
+			return false;
+		if (auto typed = dynamic_cast<T*>(resolved)) {
+			ty = typed;
+			return true;
+		}
+		return fail(std::string(role) + " resolved to " +
+			    (resolved ? resolved->diagnostic_kind() : "<null>"));
+	}
+
+	bool normalize_node(Node* node) {
+		if (!node)
+			return true;
+		if (!done_nodes.insert(node).second)
+			return true;
+		if (!normalize_type(node->ty))
+			return false;
+		if (auto n = dynamic_cast<TypeBound*>(node)) {
+			if (!normalize_type(n->operand_type))
+				return false;
+			n->ty = n->operand_type;
+		}
+		if (auto n = dynamic_cast<UnaryOperation*>(node)) {
+			if (!normalize_node(n->a))
+				return false;
+		}
+		if (auto n = dynamic_cast<BinaryOperation*>(node)) {
+			if (!normalize_node(n->a) || !normalize_node(n->b))
+				return false;
+		}
+		if (auto n = dynamic_cast<ProcCall*>(node)) {
+			if (!normalize_node(n->receiver) || !normalize_node(n->callee))
+				return false;
+			for (auto* arg : n->args)
+				if (!normalize_node(arg))
+					return false;
+		}
+		if (auto n = dynamic_cast<InheritedCall*>(node)) {
+			if (!normalize_node(n->resolved))
+				return false;
+			for (auto* arg : n->args)
+				if (!normalize_node(arg))
+					return false;
+		}
+		if (auto n = dynamic_cast<Callable*>(node)) {
+			Type* routine_ty = n->ty;
+			if (!normalize_type(routine_ty))
+				return false;
+			auto normalized_routine = dynamic_cast<RoutineType*>(routine_ty);
+			if (!normalized_routine)
+				return fail("callable type resolved to non-routine type");
+			n->ty = normalized_routine;
+			if (auto m = dynamic_cast<Method*>(n)) {
+				if (!normalize_type(m->owner_class))
+					return false;
+			}
+		}
+		if (auto n = dynamic_cast<OverloadSet*>(node)) {
+			for (auto* member : n->members)
+				if (!normalize_node(member))
+					return false;
+		}
+		return true;
+	}
+
+	bool normalize_frame(Frame* frame) {
+		if (!frame)
+			return true;
+		if (!done_frames.insert(frame).second)
+			return true;
+
+		std::vector<std::pair<std::string, Type*>> local_types;
+		for (const auto& item : frame->types_local())
+			local_types.push_back(item);
+		for (auto& item : local_types) {
+			Type* ty = item.second;
+			if (!normalize_type(ty))
+				return false;
+			frame->rebind_type(item.first, ty);
+		}
+
+		std::vector<std::pair<std::string, FrameValueEntry>> local_values;
+		for (const auto& item : frame->values_local())
+			local_values.push_back(item);
+		for (auto& item : local_values) {
+			Node* value = item.second.value;
+			if (!normalize_node(value))
+				return false;
+			Type* ty = item.second.ty;
+			if (!normalize_type(ty))
+				return false;
+			if (auto slot = dynamic_cast<StorageSlot*>(value))
+				ty = slot->ty;
+			else if (auto call = dynamic_cast<Callable*>(value))
+				ty = call->ty ? call->ty->return_type : nullptr;
+			else if (value && value->ty)
+				ty = value->ty;
+			frame->rebind_value_type(item.first, ty);
+		}
+		return true;
+	}
+
+	bool normalize_type_contents(Type* ty) {
+		if (dynamic_cast<IntrinsicType*>(ty) ||
+		    dynamic_cast<UnitType*>(ty) ||
+		    dynamic_cast<UntypedIntegerType*>(ty) ||
+		    dynamic_cast<EnumType*>(ty))
+			return true;
+		if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+			return normalize_type(s->base_type) &&
+			       normalize_node(s->lower_bound) &&
+			       normalize_node(s->upper_bound);
+		}
+		if (auto a = dynamic_cast<FixedArrayType*>(ty)) {
+			if (!normalize_type(a->bounds) ||
+			    !normalize_type(a->item_type))
+				return false;
+			std::string range_error;
+			OrdinalRange range;
+			if (!ordinal_range_for_type(a->bounds, &range, &range_error))
+				return fail(range_error);
+			a->range = range;
+			return normalize_type(a->range.index_type) &&
+			       normalize_type(a->range.base_type) &&
+			       normalize_node(a->range.lower_bound) &&
+			       normalize_node(a->range.upper_bound);
+		}
+		if (auto s = dynamic_cast<FixedSetType*>(ty))
+			return normalize_type(s->item_type);
+		if (auto p = dynamic_cast<PointerType*>(ty))
+			return normalize_type(p->item_type);
+		if (auto r = dynamic_cast<ClassRefType*>(ty)) {
+			if (!normalize_type(r->target))
+				return false;
+			if (!dynamic_cast<ClassType*>(r->target))
+				return fail("'class of' target resolved to " +
+					    std::string(r->target ? r->target->diagnostic_kind() : "<null>"));
+			return true;
+		}
+		if (auto rt = dynamic_cast<RoutineType*>(ty)) {
+			if (!normalize_type(rt->return_type))
+				return false;
+			for (auto& formal : rt->formals) {
+				if (!normalize_type(formal.ty) ||
+				    !normalize_node(formal.default_value))
+					return false;
+			}
+			return true;
+		}
+		if (auto r = dynamic_cast<RecordType*>(ty)) {
+			if (!normalize_type(r->selector_type) ||
+			    !normalize_frame(r->children))
+				return false;
+			for (auto& arm : r->arms) {
+				for (auto& field : arm.fields) {
+					if (!normalize_type(field.ty))
+						return false;
+					if (field.slot)
+						field.slot->ty = field.ty;
+					if (!normalize_node(field.slot))
+						return false;
+				}
+			}
+			return true;
+		}
+		if (auto c = dynamic_cast<ClassType*>(ty)) {
+			if (!normalize_type_as(c->super, "class superclass"))
+				return false;
+			for (auto*& iface : c->implemented_interfaces)
+				if (!normalize_type_as(iface, "implemented interface"))
+					return false;
+			return normalize_frame(c->children);
+		}
+		if (auto i = dynamic_cast<InterfaceType*>(ty)) {
+			for (auto*& iface : i->super_interfaces)
+				if (!normalize_type_as(iface, "interface ancestor"))
+					return false;
+			return normalize_frame(i->children);
+		}
+		if (auto o = dynamic_cast<ObjectType*>(ty)) {
+			if (!normalize_type_as(o->super, "object superclass"))
+				return false;
+			return normalize_frame(o->children);
+		}
+		if (auto m = dynamic_cast<ModuleType*>(ty))
+			return normalize_frame(m->interface_children) &&
+			       normalize_frame(m->implementation_children);
+		return true;
+	}
+};
+
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually.
 
 DELPHI_AUTO_END: will automatically stop at some aggregate control directives (like "public" etc).
  */
 // Special cases this handles:
-//   type PX = ^TX; TX = record ... end;   (cross-decl forward via pointer)
-//   type TFoo = class x: TFoo end;        (self-recursive within one decl)
-// Each LHS is pre-registered as an IncompleteType so self-refs in its RHS
-// resolve. During RHS parsing, an unresolved identifier in pointer position
-// is auto-registered as an IncompleteType in this scope (see resolve_type).
-// After the RHS is parsed the LHS placeholder's `resolved` is filled and the
-// frame slot is rebound to the real Type*. At block end any remaining
-// unresolved IncompleteType in the scope is an error.
+//   type PX = ^TX; TX = record ... end;        (cross-decl forward via pointer)
+//   type TMeta = class of TObject; TObject = class ... end;
+//   type TList = array[0..3] of TItem; TItem = record ... end;
+// Pascal only grants this forward-reference latitude inside a type block.
+// The parser therefore opens a narrow placeholder-creation window while
+// parsing this block, then closes it before semantic normalization/emission.
+// No emitter path should need to unwrap IncompleteType as normal control flow.
 void Parser::parse_type_block(bool delphi_auto_end) {
 	parse_keyword("type");
 	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
@@ -2580,10 +2804,17 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	// forward-decl machinery need: new types land in the same Frame that future
 	// lookups (including cross-unit, after `uses`) walk.
 	Frame* scope = const_cast<Frame*>(scopes.back().frame);
-	// Track type names declared in THIS block so the unresolved-forward check
-	// at the end can report a meaningful error rather than walking every type
-	// in the enclosing scope (which would re-check already-defined siblings).
-	std::vector<std::pair<std::string, IncompleteType*>> block_incompletes;
+	struct PendingTypeDecl {
+		std::string name;
+		std::string cxx;
+		IncompleteType* lhs_placeholder;
+		Type* rhs;
+		bool alias = false;
+		std::string alias_target_cxx;
+	};
+	std::vector<PendingTypeDecl> pending;
+	bool saved_parsing_type_block = parsing_type_block;
+	parsing_type_block = true;
 	do {
 		auto name_optional = maybe_parse_identifier();
 		if (!name_optional)
@@ -2601,12 +2832,32 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			lhs_placeholder = new IncompleteType(current_location(), name);
 			scope->register_type(name, lhs_placeholder);
 		}
-		block_incompletes.push_back({name, lhs_placeholder});
-		Type* rhs = parse_type_expression(false);
+		Type* rhs = parse_type_expression(true);
+		pending.push_back(PendingTypeDecl{name, cxx_type_name(name), lhs_placeholder, rhs});
+		parse_semicolon();
+	} while (true);
+	parsing_type_block = saved_parsing_type_block;
+
+	// Fill every LHS placeholder before resolving any RHS. This is the part
+	// that lets an earlier declaration mention a later declaration without
+	// forcing the emitter to guess through IncompleteType.
+	for (auto& decl : pending)
+		decl.lhs_placeholder->resolved = decl.rhs;
+
+	TypeBlockResolver resolver;
+	for (auto& decl : pending) {
+		if (!resolver.normalize_type(decl.rhs))
+			raise_type_parse_error(resolver.error);
+		decl.lhs_placeholder->resolved = decl.rhs;
+	}
+	for (auto& decl : pending)
+		scope->rebind_type(decl.name, decl.rhs);
+
+	for (auto& decl : pending) {
+		Type* rhs = decl.rhs;
 		// Attach the LHS Pascal name (as its C++ identifier) to record-family
 		// types and enums so emit_type_ref has a name to spell instead of
 		// re-emitting the body inline at every use site.
-		std::string cxx = cxx_type_name(name);
 		// If rhs is an aggregate/enum that already carries a C++ name, this
 		// binding is an alias (`type B = A;` where A was defined above). In
 		// that case do NOT overwrite rhs->cxx_name (that would rename A's
@@ -2626,40 +2877,31 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			existing_cxx = o->cxx_name;
 		else if (auto e = dynamic_cast<EnumType*>(rhs))
 			existing_cxx = e->cxx_name;
-		if (!existing_cxx.empty() && existing_cxx != cxx) {
-			if (emitter)
-				emitter->emit_type_alias(cxx, existing_cxx);
+		if (!existing_cxx.empty() && existing_cxx != decl.cxx) {
+			decl.alias = true;
+			decl.alias_target_cxx = existing_cxx;
 		} else {
 			if (auto r = dynamic_cast<RecordType*>(rhs))
-				r->cxx_name = cxx;
+				r->cxx_name = decl.cxx;
 			else if (auto c = dynamic_cast<ClassType*>(rhs))
-				c->cxx_name = cxx;
+				c->cxx_name = decl.cxx;
 			else if (auto c = dynamic_cast<ClassRefType*>(rhs)) {
-				c->cxx_name = cxx;
+				c->cxx_name = decl.cxx;
 			} else if (auto c = dynamic_cast<InterfaceType*>(rhs))
-				c->cxx_name = cxx;
+				c->cxx_name = decl.cxx;
 			else if (auto o = dynamic_cast<ObjectType*>(rhs))
-				o->cxx_name = cxx;
+				o->cxx_name = decl.cxx;
 			else if (auto e = dynamic_cast<EnumType*>(rhs))
-				e->cxx_name = cxx;
-			if (emitter)
-				emitter->emit_type_definition(cxx, rhs);
+				e->cxx_name = decl.cxx;
 		}
-		// Patch the placeholder's `resolved` pointer to the real Type*. Anyone
-		// who captured the placeholder BEFORE this point (e.g. a `^TFoo` inside
-		// the RHS that grabbed the placeholder through lookup_type) still holds
-		// IncompleteType*; they deref through `resolved` to reach the real type.
-		lhs_placeholder->resolved = rhs;
-		// And replace the Frame binding (name -> placeholder) with (name -> rhs)
-		// so future name lookups return the real Type* directly without needed
-		// an unwrap step.
-		scope->rebind_type(name, rhs);
-		parse_semicolon();
-	} while (true);
-	for (auto& [name, inc] : block_incompletes) {
-		if (inc && !inc->resolved) {
-			raise_parse_error("forward-referenced type not defined in this type block: " + name);
-		}
+	}
+	if (!emitter)
+		return;
+	for (auto& decl : pending) {
+		if (decl.alias)
+			emitter->emit_type_alias(decl.cxx, decl.alias_target_cxx);
+		else
+			emitter->emit_type_definition(decl.cxx, decl.rhs);
 	}
 }
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually */
