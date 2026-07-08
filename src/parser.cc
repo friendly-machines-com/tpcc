@@ -547,25 +547,25 @@ std::string Parser::consume() {
 			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
-		} else if (input_char == '$') {
+	} else if (input_char == '$') {
+		sst << (char)input_char;
+		consume_lowlevel();
+		while ((input_char >= '0' && input_char <= '9') || (input_char >= 'a' && input_char <= 'f') || (input_char >= 'A' && input_char <= 'F') || input_char == '.' || input_char == '_') {
+			sst << (char)tolower(input_char);
+			consume_lowlevel();
+		}
+	} else if (input_char == '%') {
+		sst << (char)input_char;
+		consume_lowlevel();
+		while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
 			sst << (char)input_char;
 			consume_lowlevel();
-			while ((input_char >= '0' && input_char <= '9') || (input_char >= 'a' && input_char <= 'f') || (input_char >= 'A' && input_char <= 'F') || input_char == '.' || input_char == '_') {
-				sst << (char)tolower(input_char);
-				consume_lowlevel();
-			}
-		} else if (input_char == '%') {
+		}
+	} else if ((input_char >= '0' && input_char <= '9') || input_char == '_') {
+		/* consume integer part first */
+		while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
 			sst << (char)input_char;
 			consume_lowlevel();
-			while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
-				sst << (char)input_char;
-				consume_lowlevel();
-			}
-		} else if ((input_char >= '0' && input_char <= '9') || input_char == '_') {
-			/* consume integer part first */
-			while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
-				sst << (char)input_char;
-				consume_lowlevel();
 		}
 		if (input_char == '.') {
 			int next_char = peek_lowlevel(); // LL(2). Sigh.
