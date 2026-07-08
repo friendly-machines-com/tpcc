@@ -36,14 +36,7 @@ static bool fixed_array_length(Type* ty, uint64_t* out) {
 	auto arr = dynamic_cast<FixedArrayType*>(ty);
 	if (!arr)
 		return false;
-	Type* bounds_ty = emit_unwrap_incomplete(arr->bounds);
-#if 0
-	auto bounds = dynamic_cast<BoundedCardinalType*>(bounds_ty);
-	if (!bounds || bounds->higher_bound < bounds->lower_bound)
-		return false;
-	*out = bounds->higher_bound - bounds->lower_bound + 1;
-#endif
-	assert(false);
+	*out = arr->range.length;
 	return true;
 }
 
@@ -943,6 +936,31 @@ void Emitter::emit_expression(Node* expr) {
 	unhandled_node("emit_expression", expr);
 }
 
+void Emitter::emit_template_value_arg(Node* expr) {
+	if (!active)
+		return;
+	if (auto i = dynamic_cast<Integer*>(expr)) {
+		fprintf(active, "static_cast<");
+		emit_type_ref(i->ty);
+		fprintf(active, ">(");
+		if (i->negative) {
+			if (i->value == (uint64_t{1} << 63))
+				fprintf(active, "(-9223372036854775807ll - 1ll)");
+			else
+				fprintf(active, "-%llull", (unsigned long long)i->value);
+		} else {
+			fprintf(active, "%lluull", (unsigned long long)i->value);
+		}
+		fprintf(active, ")");
+		return;
+	}
+	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
+		fprintf(active, "%s", e->cxx_name.c_str());
+		return;
+	}
+	unhandled_node("emit_template_value_arg", expr);
+}
+
 void Emitter::emit_type_ref(Type* ty) {
 	if (!active)
 		return;
@@ -1063,9 +1081,9 @@ void Emitter::emit_type_ref(Type* ty) {
 		fprintf(active, "<");
 		emit_type_ref(s->item_type);
 		fprintf(active, ", ");
-		// FIXME: Type* bounds;
-		// FIXME; of xxx
-		fprintf(active, "1"); // FIXME.
+		fprintf(active, "%llu", (unsigned long long)s->range.length);
+		fprintf(active, ", ");
+		emit_template_value_arg(s->range.lower_bound);
 		fprintf(active, ">");
 		return;
 	}

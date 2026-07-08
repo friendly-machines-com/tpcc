@@ -6,6 +6,7 @@
 #include <utility>
 
 class Frame;
+class Node;
 class StorageSlot;
 class ErrorLetContext;
 
@@ -65,10 +66,25 @@ struct IncompleteType: public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+struct OrdinalRange {
+	struct Value {
+		bool negative = false;
+		uint64_t magnitude = 0;
+	};
+	Type* index_type = nullptr;
+	Type* base_type = nullptr;
+	Node* lower_bound = nullptr;
+	Node* upper_bound = nullptr;
+	Value lower_ordinal;
+	Value upper_ordinal;
+	uint64_t length = 0;
+};
+
 struct FixedArrayType: public Type {
 	Type* bounds;
 	Type* item_type;
-	FixedArrayType(SourceLocation source_location, Type* bounds, Type* item_type);
+	OrdinalRange range;
+	FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -247,8 +263,6 @@ struct UntypedIntegerType: public Type {
 };
 
 enum class ParamMode { Value, Var, Out, Const };
-
-class Node;
 
 struct Parameter {
     std::string pas_name;

@@ -160,4 +160,5 @@ public:
 	// ObjectType receivers (by-value capture would copy a value-typed object,
 	// diverging from Pascal TMethod's pointer-to-instance semantics).
 	void emit_method_pointer_lambda(Node* obj_expr, Method* method);
+	void emit_template_value_arg(Node* expr);
 };

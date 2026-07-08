@@ -16,7 +16,6 @@
 #include <cstring>
 #include <format>
 #include <functional>
-#include <limits>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -27,6 +26,9 @@
 // earlier in the file) reference these before their definitions.
 static Frame* body_frame_of(Type* ty);
 static Type* call_result_type(Node* callee);
+static bool array_index_compatible(FixedArrayType* arr, Node* idx);
+static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error);
+static Type* subrange_range_type(Type* ty);
 static Type* unwrap_incomplete(Type* ty);
 
 static ErrorLetContext make_error_let_context_from_scopes(const std::vector<ScopeEntry>& scopes, unsigned max_depth) {
@@ -1500,6 +1502,8 @@ Node* Parser::parse_designator_tail(Node* result) {
 			auto arr = dynamic_cast<FixedArrayType*>(ct);
 			if (!arr)
 				raise_parse_error("index on non-array type");
+			if (!array_index_compatible(arr, idx))
+				raise_type_mismatch("array index expression compatible with index type", arr->range.base_type, idx->ty);
 			auto ix = new Index(result, idx);
 			ix->ty = arr->item_type;
 			result = ix;
@@ -1983,11 +1987,21 @@ Type* Parser::parse_object_type() {
 Type* Parser::parse_array_type() {
 	parse_keyword("array");
 	parse_opening_bracket();
-	auto bounds_type = parse_type_expression(false);
+	std::vector<Type*> bounds_types;
+	do {
+		bounds_types.push_back(parse_type_expression(false));
+	} while (maybe_parse_comma());
 	parse_closing_bracket();
 	parse_keyword("of");
-	auto item_type = parse_type_expression(false);
-	return new FixedArrayType(current_location(), bounds_type, item_type);
+	Type* item_type = parse_type_expression(false);
+	for (auto it = bounds_types.rbegin(); it != bounds_types.rend(); ++it) {
+		OrdinalRange range;
+		std::string error;
+		if (!ordinal_range_for_type(*it, &range, &error))
+			return raise_type_parse_error(error);
+		item_type = new FixedArrayType(current_location(), *it, range, item_type);
+	}
+	return item_type;
 }
 
 Type* Parser::parse_enum_type() {
@@ -2042,22 +2056,69 @@ static bool is_integer_semantic_type(Type* ty) {
 	return intrinsic && intrinsic->rank;
 }
 
+static bool array_index_compatible(FixedArrayType* arr, Node* idx) {
+	if (!arr || !idx)
+		return false;
+	Type* expected = subrange_range_type(arr->range.base_type);
+	Type* actual = subrange_range_type(idx->ty);
+	if (expected == actual)
+		return true;
+	if (expected == char_type())
+		return actual == char_type();
+	if (dynamic_cast<EnumType*>(expected))
+		return actual == expected;
+	if (is_integer_semantic_type(expected))
+		return is_integer_semantic_type(actual);
+	return false;
+}
+
 static bool ordinal_bounds_contains(const OrdinalBounds& bounds, bool negative, uint64_t magnitude) {
 	if (negative)
 		return bounds.signed_type && magnitude <= bounds.min_magnitude;
 	return magnitude <= bounds.max_positive;
 }
 
+static OrdinalRange::Value ordinal_value(bool negative, uint64_t magnitude) {
+	return OrdinalRange::Value{magnitude != 0 && negative, magnitude};
+}
+
+static OrdinalRange::Value ordinal_value(int64_t value) {
+	if (value < 0)
+		return ordinal_value(true, static_cast<uint64_t>(-(value + 1)) + 1);
+	return ordinal_value(false, static_cast<uint64_t>(value));
+}
+
+static int compare_ordinal_value(OrdinalRange::Value a, OrdinalRange::Value b) {
+	if (a.negative != b.negative)
+		return a.negative ? -1 : 1;
+	if (a.magnitude == b.magnitude)
+		return 0;
+	if (a.negative)
+		return a.magnitude > b.magnitude ? -1 : 1;
+	return a.magnitude < b.magnitude ? -1 : 1;
+}
+
+static bool checked_add(uint64_t a, uint64_t b, uint64_t* out) {
+	if (a > UINT64_MAX - b)
+		return false;
+	*out = a + b;
+	return true;
+}
+
+static bool checked_add_one(uint64_t value, uint64_t* out) {
+	if (value == UINT64_MAX)
+		return false;
+	*out = value + 1;
+	return true;
+}
+
 struct FoldedSubrangeBound {
-	enum class Kind { Integer,
-			  Char,
-			  Enum } kind;
+	enum class Kind { Integer, Char, Enum } kind;
 	Node* node = nullptr;
 	Type* ty = nullptr;
 	bool negative = false;
 	uint64_t magnitude = 0;
-	__int128 integer_value = 0;
-	int64_t ordinal_value = 0;
+	OrdinalRange::Value ordinal_value;
 };
 
 static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, std::string* error) {
@@ -2075,25 +2136,20 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 			    ty,
 			    false,
 			    i->value,
-			    static_cast<__int128>(i->value),
-			    static_cast<int64_t>(i->value),
+			    ordinal_value(false, i->value),
 			};
 		}
 		if (!is_integer_semantic_type(ty)) {
 			*error = "integer subrange bound has a non-integer type";
 			return {};
 		}
-		__int128 value = static_cast<__int128>(i->value);
-		if (i->negative)
-			value = -value;
 		return FoldedSubrangeBound{
 		    FoldedSubrangeBound::Kind::Integer,
 		    node,
 		    ty,
 		    i->negative,
 		    i->value,
-		    value,
-		    0,
+		    ordinal_value(i->negative, i->value),
 		};
 	}
 	if (auto s = dynamic_cast<String*>(node)) {
@@ -2114,8 +2170,7 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 		    char_type(),
 		    false,
 		    value,
-		    static_cast<__int128>(value),
-		    static_cast<int64_t>(value),
+		    ordinal_value(false, value),
 		};
 	}
 	if (auto e = dynamic_cast<EnumMemberRef*>(node)) {
@@ -2130,15 +2185,121 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 		    ty,
 		    false,
 		    0,
-		    e->value,
-		    e->value,
+		    ordinal_value(e->value),
 		};
 	}
 	*error = "subrange bound must fold to an ordinal constant";
 	return {};
 }
 
-static Type* infer_integer_subrange_host(__int128 lo, __int128 hi, std::string* error) {
+static bool ordinal_length(OrdinalRange::Value lo, OrdinalRange::Value hi, uint64_t* out, std::string* error) {
+	if (compare_ordinal_value(lo, hi) > 0) {
+		*error = "array index type has an empty range";
+		return false;
+	}
+	uint64_t distance = 0;
+	if (lo.negative && hi.negative) {
+		distance = lo.magnitude - hi.magnitude;
+	} else if (lo.negative) {
+		if (!checked_add(lo.magnitude, hi.magnitude, &distance)) {
+			*error = "array index range is too large";
+			return false;
+		}
+	} else {
+		distance = hi.magnitude - lo.magnitude;
+	}
+	if (!checked_add_one(distance, out)) {
+		*error = "array index range is too large";
+		return false;
+	}
+	return true;
+}
+
+static bool make_ordinal_range(Type* index_type,
+			       Type* base_type,
+			       Node* lower_bound,
+			       Node* upper_bound,
+			       OrdinalRange::Value lower_ordinal,
+			       OrdinalRange::Value upper_ordinal,
+			       OrdinalRange* out,
+			       std::string* error) {
+	uint64_t length = 0;
+	if (!ordinal_length(lower_ordinal, upper_ordinal, &length, error))
+		return false;
+	out->index_type = index_type;
+	out->base_type = base_type;
+	out->lower_bound = lower_bound;
+	out->upper_bound = upper_bound;
+	out->lower_ordinal = lower_ordinal;
+	out->upper_ordinal = upper_ordinal;
+	out->length = length;
+	return true;
+}
+
+static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error) {
+	ty = unwrap_incomplete(ty);
+	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+		ConstEvalContext ctx;
+		ConstEvalResult lower_folded = s->lower_bound->const_eval(ctx);
+		ConstEvalResult upper_folded = s->upper_bound->const_eval(ctx);
+		if (lower_folded.kind != ConstEvalResult::Kind::Success || upper_folded.kind != ConstEvalResult::Kind::Success) {
+			*error = "array subrange bounds must be constant";
+			return false;
+		}
+
+		auto lower = classify_subrange_bound(lower_folded.node, error);
+		if (!lower)
+			return false;
+		auto upper = classify_subrange_bound(upper_folded.node, error);
+		if (!upper)
+			return false;
+		if (lower->kind != upper->kind) {
+			*error = "array subrange bounds must be compatible ordinal constants";
+			return false;
+		}
+		return make_ordinal_range(ty,
+					  subrange_range_type(s->base_type),
+					  lower->node,
+					  upper->node,
+					  lower->ordinal_value,
+					  upper->ordinal_value,
+					  out,
+					  error);
+	}
+	if (auto e = dynamic_cast<EnumType*>(ty)) {
+		if (e->members.empty()) {
+			*error = "array enum index type has no members";
+			return false;
+		}
+		const auto& lo = e->members.front();
+		const auto& hi = e->members.back();
+		return make_ordinal_range(ty,
+					  ty,
+					  new EnumMemberRef(lo.cxx_name, lo.value, ty),
+					  new EnumMemberRef(hi.cxx_name, hi.value, ty),
+					  ordinal_value(lo.value),
+					  ordinal_value(hi.value),
+					  out,
+					  error);
+	}
+	OrdinalBounds bounds;
+	if (intrinsic_ordinal_bounds(ty, &bounds)) {
+		Node* lower_bound = bounds.signed_type ? new Integer(bounds.min_magnitude, ty, true) : new Integer(0, ty);
+		Node* upper_bound = new Integer(bounds.max_positive, ty);
+		return make_ordinal_range(ty,
+					  ty,
+					  lower_bound,
+					  upper_bound,
+					  ordinal_value(bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0),
+					  ordinal_value(false, bounds.max_positive),
+					  out,
+					  error);
+	}
+	*error = "fixed array bounds must be an ordinal type";
+	return false;
+}
+
+static Type* infer_integer_subrange_host(OrdinalRange::Value lo, OrdinalRange::Value hi, std::string* error) {
 	// Match the BP/FPC-style representation choice: choose the smallest
 	// builtin integer type that can represent the whole range, preferring
 	// signed carriers before same-width unsigned carriers. The backend can
@@ -2158,9 +2319,9 @@ static Type* infer_integer_subrange_host(__int128 lo, __int128 hi, std::string* 
 		OrdinalBounds bounds;
 		if (!integer_bounds(candidate, &bounds))
 			continue;
-		__int128 min_value = bounds.signed_type ? -static_cast<__int128>(bounds.min_magnitude) : 0;
-		__int128 max_value = static_cast<__int128>(bounds.max_positive);
-		if (lo >= min_value && hi <= max_value)
+		OrdinalRange::Value min_value = ordinal_value(bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0);
+		OrdinalRange::Value max_value = ordinal_value(false, bounds.max_positive);
+		if (compare_ordinal_value(lo, min_value) >= 0 && compare_ordinal_value(hi, max_value) <= 0)
 			return candidate;
 	}
 	*error = "integer subrange bounds are outside the supported integer range";
@@ -2202,9 +2363,9 @@ Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	// FIXME: reuse existing subranges structurally.
 	switch (lower->kind) {
 	case FoldedSubrangeBound::Kind::Integer: {
-		if (upper->integer_value < lower->integer_value)
+		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
 			return raise_type_parse_error("subrange upper bound is lower than lower bound");
-		Type* host = infer_integer_subrange_host(lower->integer_value, upper->integer_value, &error);
+		Type* host = infer_integer_subrange_host(lower->ordinal_value, upper->ordinal_value, &error);
 		if (!host)
 			return raise_type_parse_error(error);
 		Node* typed_lower = convert_integer_subrange_bound(*lower, host, &error);
@@ -2216,13 +2377,13 @@ Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
 		return new SubrangeType(current_location(), host, typed_lower, typed_upper);
 	}
 	case FoldedSubrangeBound::Kind::Char:
-		if (upper->ordinal_value < lower->ordinal_value)
+		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
 			return raise_type_parse_error("subrange upper bound is lower than lower bound");
 		return new SubrangeType(current_location(), char_type(), lower->node, upper->node);
 	case FoldedSubrangeBound::Kind::Enum:
 		if (lower->ty != upper->ty)
 			return raise_type_mismatch("subrange constructor with bounds from the same enum type", lower->ty, upper->ty);
-		if (upper->ordinal_value < lower->ordinal_value)
+		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
 			return raise_type_parse_error("subrange upper bound is lower than lower bound");
 		return new SubrangeType(current_location(), lower->ty, lower->node, upper->node);
 	}

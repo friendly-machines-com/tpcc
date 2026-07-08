@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <iostream>
 #include <memory>
 #include <cstdio>
@@ -52,14 +53,23 @@ struct t_shortstring {
 struct t_set {
 };
 
-template<typename T, int length>
-struct t_fixedarray<T> {
-	// nope: int length;
+template<typename T, std::size_t length, auto low>
+struct t_fixedarray {
 	T items[length];
+
+	template<typename I>
+	constexpr T& operator[](I index) {
+		return items[static_cast<std::ptrdiff_t>(index) - static_cast<std::ptrdiff_t>(low)];
+	}
+
+	template<typename I>
+	constexpr const T& operator[](I index) const {
+		return items[static_cast<std::ptrdiff_t>(index) - static_cast<std::ptrdiff_t>(low)];
+	}
 };
 
-template<typename T, int length>
-struct t_dynamicarray<T> {
+template<typename T>
+struct t_dynamicarray {
 	int length;
 	T* items;
 };
@@ -127,7 +137,8 @@ template<typename T> inline T p_low() { return std::numeric_limits<T>::lowest();
 template<typename T> inline T p_high() { return std::numeric_limits<T>::max(); }
 inline t_integer p_length(const t_shortstring& s) { return s.length; }
 inline t_integer p_length(const t_ansistring& s) { return s.length; }
-template<typename T, size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
+template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
+template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_integer>(N); }
 
 #define DEFINE_OPERATIONS(T) \
 	inline T p_bitwiseand(T a, T b) { return a & b; } \

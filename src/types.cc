@@ -25,9 +25,10 @@ EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::
 	});
 }
 
-FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, Type* item_type)
+FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type)
     : Type(std::move(source_location)) {
 	this->bounds = bounds;
+	this->range = range;
 	this->item_type = item_type;
 }
 
@@ -234,12 +235,23 @@ void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostr
 const char* FixedArrayType::diagnostic_kind() const { return "array"; }
 void FixedArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(bounds);
+	ctx->add_value_edge(range.lower_bound);
+	ctx->add_value_edge(range.upper_bound);
 	ctx->add_type_edge(item_type);
 }
 void FixedArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "bounds: " << ctx->known_type_ref(bounds);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "lower_bound: " << ctx->known_value_ref(range.lower_bound);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "upper_bound: " << ctx->known_value_ref(range.upper_bound);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "length: " << range.length;
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "item: " << ctx->known_type_ref(item_type);
