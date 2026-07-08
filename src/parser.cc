@@ -1748,7 +1748,11 @@ Node* Parser::parse_expression() {
  *  and registered with owner_class as their owner. */
 Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	bool is_class = false; // "class method" etc.
-	Frame* body = new Frame(nullptr);
+	// Member lookup on a class/object has to see inherited members. Keep that
+	// as the Frame's structural parent relation instead of teaching every
+	// caller (`Self.X`, `class of T`.X, unqualified method-body lookup, etc.)
+	// to walk superclasses separately.
+	Frame* body = new Frame(owner_class ? get_type_body_frame(parent_of(owner_class)) : nullptr);
 	push_scope(body);
 	std::string visibility = "published";
 	do {
@@ -3427,13 +3431,17 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	push_scope(body_frame);
 	StorageSlot* self_slot = nullptr;
 	if (auto m = dynamic_cast<Method*>(target)) {
-		// Self is a reference to the owner instance. ClassType/InterfaceType
-		// are themselves reference types under the new model, so the storage
-		// form is `t_foo*` natively -- no PointerType wrap. ObjectType stays
-		// a value type, so wrap manually to keep `Self` pointer-shaped for
-		// member-access emission.
+		// Pascal class-method Self is the class reference, not an instance.
+		// Keep that as the same Type used for `class of Foo`; emit_type_ref
+		// then spells both explicit class refs and hidden Self as Foo::m_meta*.
+		//
+		// Instance Self is a reference to the owner instance. ClassType and
+		// InterfaceType are already reference-shaped; ObjectType is value-shaped
+		// and needs a pointer wrapper for member-access emission.
 		Type* self_ty = nullptr;
-		if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
+		if (target->ty->kind == CLASS_METHOD) {
+			self_ty = new ClassRefType(current_location(), m->owner_class);
+		} else if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
 			self_ty = m->owner_class;
 		} else {
 			self_ty = new PointerType(current_location(), m->owner_class);
