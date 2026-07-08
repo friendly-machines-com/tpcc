@@ -3244,7 +3244,9 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		}
 		kind = METHOD;
 	} else {
-		if (auto ty = dynamic_cast<ClassType*>(owner)) {
+		if (dynamic_cast<ClassType*>(owner)) {
+			if (is_class && kind == METHOD)
+				kind = CLASS_METHOD;
 		} else {
 			if (kind != ROUTINE) {
 				raise_type_kind_mismatch("expected routine", "routine", owner);
