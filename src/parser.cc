@@ -547,7 +547,7 @@ std::string Parser::consume() {
 			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
-	} else if ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
+	} else if ((input_char >= '0' && input_char <= '9') || input_char == '_') {
 		while ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
 			sst << (char)input_char;
 			consume_lowlevel();
@@ -555,7 +555,7 @@ std::string Parser::consume() {
 	} else if (input_char == '#') {
 		sst << (char)input_char;
 		consume_lowlevel();
-		while ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
+		while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
 			sst << (char)input_char;
 			consume_lowlevel();
 		}
@@ -577,6 +577,13 @@ std::string Parser::consume() {
 		sst << (char)input_char;
 		consume_lowlevel();
 		if (input_char == '=') {
+			sst << (char)input_char;
+			consume_lowlevel();
+		}
+	} else if (input_char == '.') {
+		sst << (char)input_char;
+		consume_lowlevel();
+		if (input_char == '.') {
 			sst << (char)input_char;
 			consume_lowlevel();
 		}
