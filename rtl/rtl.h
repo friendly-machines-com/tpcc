@@ -33,6 +33,7 @@ using t_ptrint = intptr_t;
 using t_ptruint = uintptr_t;
 using t_sizeint = ssize_t;
 using t_sizeuint = size_t;
+using t_double = double;
 enum t_boolean {
 	p_false = false,
 	p_true = true,
@@ -137,6 +138,7 @@ DEFINE_OPERATIONS(t_integer)
 DEFINE_OPERATIONS(t_longint)
 DEFINE_OPERATIONS(t_int64)
 DEFINE_OPERATIONS(t_qword)
+DEFINE_OPERATIONS(t_double)
 
 inline t_boolean p_logicalnot(t_boolean a) {
 	return !a;

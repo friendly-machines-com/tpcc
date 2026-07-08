@@ -64,6 +64,7 @@ operator/(a, b: Cardinal): Double; external nil name 'pas::p_divide';
 operator/(a, b: Integer): Double; external nil name 'pas::p_divide';
 operator/(a, b: QWord): Double; external nil name 'pas::p_divide';
 operator/(a, b: Int64): Double; external nil name 'pas::p_divide';
+operator/(a, b: Double): Double; external nil name 'pas::p_divide';
 
 operator :=(a: Cardinal): Cardinal; external nil name 'pas::p_assign';
 operator :=(a: Boolean): Boolean; external nil name 'pas::p_assign';
