@@ -48,6 +48,11 @@ struct t_shortstring {
 	t_char data[255];
 };
 
+// Placeholder carrier for Pascal AnsiString. It is deliberately a distinct C++
+// type from t_shortstring so Pascal overloads on string vs AnsiString do not
+// collapse, even though this runtime does not implement real managed strings yet.
+struct t_ansistring : t_shortstring {};
+
 inline t_shortstring tpcc_shortstring_from_c(const char* s) {
 	t_shortstring result{};
 	result.length = min(strlen(s), 254);
@@ -105,6 +110,7 @@ template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>
 template<typename T> inline T p_low() { return std::numeric_limits<T>::lowest(); }
 template<typename T> inline T p_high() { return std::numeric_limits<T>::max(); }
 inline t_integer p_length(const t_shortstring& s) { return s.length; }
+inline t_integer p_length(const t_ansistring& s) { return s.length; }
 template<typename T, size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
 
 #define DEFINE_OPERATIONS(T) \
