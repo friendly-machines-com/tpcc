@@ -23,9 +23,11 @@ IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6);
 IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7);
 IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8);
 IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {});
+IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {});
 EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
 IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {});
 IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {});
+IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {});
 IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {});
 IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", {});
 IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", {});
@@ -78,9 +80,11 @@ Type* const k_all_intrinsics[] = {
     &k_qword,
     &k_int64,
     &k_double,
+    &k_extended,
     &k_boolean,
     &k_char,
     &k_shortstring,
+    &k_ansistring,
     &k_pointer,
     &k_ptrint,
     &k_ptruint,

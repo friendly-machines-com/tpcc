@@ -17,6 +17,7 @@ type
   Boolean = external nil name 'pas::t_boolean';
   Char = external nil name 'pas::t_char';
   Double = external nil name 'pas::t_double';
+  Extended = external nil name 'pas::t_extended';
   Pointer = external nil name 'pas::t_pointer';
   PtrInt = external nil name 'pas::t_ptrint';
   PtrUInt = external nil name 'pas::t_ptruint';
