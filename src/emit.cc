@@ -40,6 +40,17 @@ static bool fixed_array_length(Type* ty, uint64_t* out) {
 	return true;
 }
 
+static void emit_integer_literal(FILE* out, uint64_t value, bool negative) {
+	if (negative) {
+		if (value == (uint64_t{1} << 63))
+			fprintf(out, "(-9223372036854775807ll - 1ll)");
+		else
+			fprintf(out, "-%llull", (unsigned long long)value);
+	} else {
+		fprintf(out, "%lluull", (unsigned long long)value);
+	}
+}
+
 [[noreturn]] static void unhandled_type(const char* site, const Type* ty) {
 	if (ty) {
 		fprintf(stderr, "internal compiler error: %s does not handle type kind '%s'\n",
@@ -720,7 +731,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
-		fprintf(active, "%s%lluu", c->negative ? "-" : "", (unsigned long long)c->value);
+		emit_integer_literal(active, c->value, c->negative);
 		return;
 	}
 	if (auto r = dynamic_cast<Real*>(expr)) {
@@ -943,14 +954,7 @@ void Emitter::emit_template_value_arg(Node* expr) {
 		fprintf(active, "static_cast<");
 		emit_type_ref(i->ty);
 		fprintf(active, ">(");
-		if (i->negative) {
-			if (i->value == (uint64_t{1} << 63))
-				fprintf(active, "(-9223372036854775807ll - 1ll)");
-			else
-				fprintf(active, "-%llull", (unsigned long long)i->value);
-		} else {
-			fprintf(active, "%lluull", (unsigned long long)i->value);
-		}
+		emit_integer_literal(active, i->value, i->negative);
 		fprintf(active, ")");
 		return;
 	}
