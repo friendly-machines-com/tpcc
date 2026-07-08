@@ -443,10 +443,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	if (!cxx_name.empty())
 		fprintf(active, " %s", cxx_name.c_str());
 
-	// Base-class list emits LAYOUT names (the struct, not the storage pointer
+	// Base-class lists emit layout names (the struct, not the storage pointer
 	// form `t_foo*` that emit_type_ref would produce under the new model).
-	// Spell the cxx_name directly. Skip the "public " prefix when there's no
-	// super (avoids the pre-existing null-deref through emit_type_ref).
+	// The first base needs the C++ `:` introducer; later bases use commas.
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
 		bool first = true;
 		if (c->super) {
@@ -454,29 +453,29 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			if (in_meta) {
 				super_cxx_name = super_cxx_name + "::m_meta";
 			}
-				fprintf(active, " : public %s", super_cxx_name.c_str());
-				first = false;
-			}
-			if (!in_meta) {
-				for (auto interface_type : c->implemented_interfaces) {
-					fprintf(active, first ? " : public %s" : ", public %s",
-						interface_type->cxx_name.c_str());
-					first = false;
-				}
-			} else {
-			// not sure. FIXME: m_iobject ?
+			fprintf(active, " : public %s", super_cxx_name.c_str());
+			first = false;
 		}
-	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
-			bool first = true;
-			for (auto interface_type : c->super_interfaces) {
+		if (!in_meta) {
+			for (auto interface_type : c->implemented_interfaces) {
 				fprintf(active, first ? " : public %s" : ", public %s",
 					interface_type->cxx_name.c_str());
 				first = false;
 			}
-		} else if (auto c = dynamic_cast<ObjectType*>(ty)) {
-			if (c->super)
-				fprintf(active, " : public %s", c->super->cxx_name.c_str());
+		} else {
+			// not sure. FIXME: m_iobject ?
 		}
+	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
+		bool first = true;
+		for (auto interface_type : c->super_interfaces) {
+			fprintf(active, first ? " : public %s" : ", public %s",
+				interface_type->cxx_name.c_str());
+			first = false;
+		}
+	} else if (auto c = dynamic_cast<ObjectType*>(ty)) {
+		if (c->super)
+			fprintf(active, " : public %s", c->super->cxx_name.c_str());
+	}
 
 	fprintf(active, " {\n");
 	if (is_class && in_meta) {
