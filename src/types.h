@@ -321,9 +321,10 @@ public:
 // types don't combine (caller decides whether that's an error).
 Type* common_arith_type(Type* a, Type* b);
 
-// Cost of converting FROM to TO: 0 = same (or Untyped fits), 1 = widening,
-// -1 = no implicit conversion. Used by both call-site coercion and overload
-// ranking.
+// Cost of converting FROM to TO: 0 = same (or Untyped fits), positive =
+// implicit conversion, -1 = no implicit conversion. Integer conversions are
+// ordered by target range distance so overload resolution can prefer the
+// closest fitting ordinal type.
 int conversion_cost(Type* from, Type* to);
 
 // A dominates B iff A's cost is <= B's on every position AND strictly < on

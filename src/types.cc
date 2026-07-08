@@ -104,6 +104,64 @@ static bool is_real_intrinsic(Type* ty) {
 	return ty == double_type();
 }
 
+static bool ordinal_bounds_contain_range(const OrdinalBounds& outer, const OrdinalBounds& inner) {
+	if (inner.signed_type) {
+		if (!outer.signed_type || outer.min_magnitude < inner.min_magnitude)
+			return false;
+	}
+	return outer.max_positive >= inner.max_positive;
+}
+
+static uint64_t saturating_add(uint64_t a, uint64_t b) {
+	if (a > UINT64_MAX - b)
+		return UINT64_MAX;
+	return a + b;
+}
+
+static uint64_t unsigned_abs_diff(uint64_t a, uint64_t b) {
+	return a >= b ? a - b : b - a;
+}
+
+static uint64_t ordinal_lower_bound_distance(const OrdinalBounds& a, const OrdinalBounds& b) {
+	if (a.signed_type && b.signed_type)
+		return unsigned_abs_diff(a.min_magnitude, b.min_magnitude);
+	if (a.signed_type)
+		return a.min_magnitude;
+	if (b.signed_type)
+		return b.min_magnitude;
+	return 0;
+}
+
+static int bit_width(uint64_t value) {
+	int result = 0;
+	while (value != 0) {
+		++result;
+		value >>= 1;
+	}
+	return result;
+}
+
+static int integer_conversion_cost(Type* from, Type* to) {
+	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
+	if (rfrom < 0 || rto < 0 || rto < rfrom)
+		return -1;
+
+	OrdinalBounds from_bounds;
+	OrdinalBounds to_bounds;
+	if (!integer_bounds(from, &from_bounds) || !integer_bounds(to, &to_bounds))
+		return -1;
+
+	uint64_t distance = ordinal_lower_bound_distance(from_bounds, to_bounds);
+	distance = saturating_add(distance, unsigned_abs_diff(from_bounds.max_positive, to_bounds.max_positive));
+
+	int cost = 10 + bit_width(distance) * 2;
+	if (from_bounds.signed_type != to_bounds.signed_type)
+		++cost;
+	if (!ordinal_bounds_contain_range(to_bounds, from_bounds))
+		cost += 200;
+	return cost;
+}
+
 Type* common_arith_type(Type* a, Type* b) {
 	if (!a || !b)
 		return nullptr;
@@ -159,9 +217,10 @@ int conversion_cost(Type* from, Type* to) {
 		}
 		return -1;
 	}
-	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
-	if (rfrom >= 0 && rto >= 0 && rto >= rfrom)
-		return 1;
+	int rfrom = integer_widening_rank(from);
+	int int_cost = integer_conversion_cost(from, to);
+	if (int_cost >= 0)
+		return int_cost;
 	// Pascal permits integer-to-real assignment/conversion. This can be lossy:
 	// large Int64/QWord values are not all exactly representable as double. Keep
 	// the rule explicit here instead of pretending it is another integer widening.
