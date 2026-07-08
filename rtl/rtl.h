@@ -49,6 +49,21 @@ struct t_shortstring {
 	t_char data[255];
 };
 
+struct t_set {
+};
+
+template<typename T, int length>
+struct t_fixedarray<T> {
+	// nope: int length;
+	T items[length];
+};
+
+template<typename T, int length>
+struct t_dynamicarray<T> {
+	int length;
+	T* items;
+};
+
 // Placeholder carrier for Pascal AnsiString. It is deliberately a distinct C++
 // type from t_shortstring so Pascal overloads on string vs AnsiString do not
 // collapse, even though this runtime does not implement real managed strings yet.

@@ -5,23 +5,23 @@
 #include "types.h"
 #include <string>
 
-IntrinsicType::IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank)
-    : Type(std::move(source_location)), cxx_name(std::move(cxx_name)), rank(std::move(rank)) {}
+IntrinsicType::IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank, std::optional<IntegerBounds> bounds)
+    : Type(std::move(source_location)), cxx_name(std::move(cxx_name)), rank(std::move(rank)), bounds(std::move(bounds)) {}
 
 Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 
 // Integer rows are ordered narrowest -> widest; the ordering is what
 // common_arith_type and conversion_cost use to compute widening.
 namespace {
-IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0);
-IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1);
-IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2);
-IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3);
-IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4);
-IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5);
-IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6);
-IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7);
-IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8);
+IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0, IntegerBounds{false, 0, UINT8_MAX});
+IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1, IntegerBounds{true, 128, 127});
+IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2, IntegerBounds{false, 0, UINT16_MAX});
+IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3, IntegerBounds{true, 32768, 32767});
+IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4, IntegerBounds{false, 0, UINT32_MAX});
+IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5, IntegerBounds{true, 2147483648ull, 2147483647ull});
+IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6, IntegerBounds{true, 2147483648ull, 2147483647ull});
+IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7, IntegerBounds{false, 0, UINT64_MAX});
+IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8, IntegerBounds{true, 9223372036854775808ull, 9223372036854775807ull});
 IntrinsicType k_set(SourceLocation::builtin(), "pas::t_set", {});
 IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}); // FIXME: Why {}
 IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {});
@@ -125,6 +125,14 @@ Type* double_type() { return &k_double; }
 Type* set_type() { return &k_set; }
 Type* fixedarray_type() { return &k_fixedarray; }
 Type* unknown_type() { return &k_unknown; }
+
+bool integer_bounds(Type* ty, IntegerBounds* out) {
+	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+	if (!intrinsic || !intrinsic->bounds)
+		return false;
+	*out = *intrinsic->bounds;
+	return true;
+}
 
 
 static const Integer* const_integer_arg(Node* n) { return dynamic_cast<const Integer*>(n); }
@@ -248,8 +256,8 @@ static const std::array<BuiltinDesc, 36> k_builtins{{
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
     {"pas::p_str", nullptr},
-    {"pas::p_low", nullptr},
-    {"pas::p_high", nullptr},
+    {"pas::p_low", nullptr, TypeBoundKind::Low},
+    {"pas::p_high", nullptr, TypeBoundKind::High},
     {"pas::p_length", nullptr},
     {"pas::p_assigned", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".

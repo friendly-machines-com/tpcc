@@ -190,6 +190,7 @@ protected:
 	void parse_directive(std::string s);
 	void parse_operator(std::string s);
 	Node* parse_value();
+	Node* parse_value_from_identifier(std::string id);
 	// Parse `inherited Name[(args)]` or anonymous `inherited;`. Returns an
 	// InheritedCall node. The enclosing routine must be a Method on a
 	// composite type with a parent (else: parse error).
@@ -222,10 +223,15 @@ protected:
 	 *  Dereference, or an Index. Everything else (constants, calls,
 	 *  callable references) rejects. */
 	bool is_assignable(Node* n);
+	Node* parse_expression_after_identifier(std::string id);
 	Node* parse_comparison();
+	Node* parse_comparison_tail(Node* result);
 	Node* parse_power();
+	Node* parse_power_tail(Node* result);
 	Node* parse_product();
+	Node* parse_product_tail(Node* result);
 	Node* parse_sum();
+	Node* parse_sum_tail(Node* result);
 	Type* parse_array_type();
 	Type* parse_object_type();
 	Type* parse_record_type();

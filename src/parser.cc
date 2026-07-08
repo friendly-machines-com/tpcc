@@ -11,6 +11,7 @@
 #include <cassert>
 #include <charconv>
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -1074,6 +1075,13 @@ static bool is_builtin_cxx_name(Node* n, std::string_view cxx_name) {
 	return b && b->desc && b->desc->cxx_name == cxx_name;
 }
 
+static std::optional<TypeBoundKind> type_bound_kind_for_builtin(Node* n) {
+	auto b = dynamic_cast<Builtin*>(n);
+	if (!b || !b->desc)
+		return {};
+	return b->desc->type_bound_kind;
+}
+
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
  *  IncompleteType under NAME in current_type_block and return it. This is how
@@ -1142,21 +1150,10 @@ Node* Parser::parse_value() {
 		consume();
 		return new String(std::move(s), shortstring_type());
 	}
-	// Low/High/Length are Pascal predefined intrinsics, not reserved words. In
-	// this parser's terminology they are directive-like: usable as ordinary
-	// identifiers unless the visible binding is the root builtin and this exact
-	// syntactic form is present. Do not put them in the keyword table.
-	if (peek_directive("low") || peek_directive("high")) {
-		std::string directive = input_token;
-		Node* value = maybe_resolve_value(directive);
-		if (is_builtin_cxx_name(value, "pas::p_low") || is_builtin_cxx_name(value, "pas::p_high")) {
-			parse_directive(directive);
-			parse_opening_paren();
-			Type* target_ty = parse_type_expression(false);
-			parse_closing_paren();
-			return new TypeBound(directive == "low" ? TypeBoundKind::Low : TypeBoundKind::High, target_ty);
-		}
-	}
+	// Length is a Pascal predefined intrinsic, not a reserved word. In this
+	// parser's terminology it is directive-like: usable as an ordinary
+	// identifier unless the visible binding is the root builtin and this exact
+	// syntactic form is present. Do not put it in the keyword table.
 	if (peek_directive("length")) {
 		Node* value = maybe_resolve_value("length");
 		if (is_builtin_cxx_name(value, "pas::p_length")) {
@@ -1173,9 +1170,24 @@ Node* Parser::parse_value() {
 	}
 
 	// FIXME: bool literals also belong here (need enum-member support).
-	auto id = parse_identifier();
-	if (Node* value = maybe_resolve_value(id))
+	return parse_value_from_identifier(parse_identifier());
+}
+
+Node* Parser::parse_value_from_identifier(std::string id) {
+	if (Node* value = maybe_resolve_value(id)) {
+		// Low/High are type-argument intrinsics, so ordinary call finalization
+		// cannot infer their result type from a RoutineType. Dispatch on the
+		// resolved builtin object rather than the source spelling: user shadowing
+		// still wins, and seeded subrange expressions use the same path as normal
+		// value expressions.
+		if (auto kind = type_bound_kind_for_builtin(value); kind && input_token == "(") {
+			parse_opening_paren();
+			Type* target_ty = parse_type_expression(false);
+			parse_closing_paren();
+			return new TypeBound(*kind, target_ty);
+		}
 		return value;
+	}
 	if (input_token == "(") {
 		if (Type* target_ty = maybe_resolve_type(id)) {
 			parse_opening_paren();
@@ -1581,6 +1593,14 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 	return call;
 }
 
+Node* Parser::parse_power_tail(Node* result) {
+	result = maybe_auto_call(result);
+	while (maybe_parse_star_star()) {
+		result = mk_arith("**", result, parse_power());
+	}
+	return result;
+}
+
 Node* Parser::parse_power() {
 	if (maybe_parse_keyword("not")) {
 		return mk_unary_same("not", parse_power());
@@ -1597,15 +1617,10 @@ Node* Parser::parse_power() {
 
     // Mirror FPC's quirk. `-1 ** 4` parses as `-(1 ** 4)`, not `(-1) ** 4`.
     // FIXME: Fix it later.
-	Node* result = maybe_auto_call(parse_designator());
-	while (maybe_parse_star_star()) {
-		result = mk_arith("**", result, parse_power());
-	}
-	return result;
+	return parse_power_tail(parse_designator());
 }
 
-Node* Parser::parse_product() {
-	auto result = parse_power();
+Node* Parser::parse_product_tail(Node* result) {
 	while (true) {
 		if (maybe_parse_star()) {
 			result = mk_arith("*", result, parse_power());
@@ -1656,8 +1671,11 @@ Node* Parser::parse_product() {
 	return result;
 }
 
-Node* Parser::parse_sum() {
-	auto result = parse_product();
+Node* Parser::parse_product() {
+	return parse_product_tail(parse_power());
+}
+
+Node* Parser::parse_sum_tail(Node* result) {
 	while (true) {
 		if (maybe_parse_plus()) {
 			result = mk_arith("+", result, parse_product());
@@ -1683,8 +1701,11 @@ Node* Parser::parse_sum() {
 	return result;
 }
 
-Node* Parser::parse_comparison() {
-	auto result = parse_sum();
+Node* Parser::parse_sum() {
+	return parse_sum_tail(parse_product());
+}
+
+Node* Parser::parse_comparison_tail(Node* result) {
 	while (true) {
 		if (maybe_parse_equal()) {
 			result = mk_compare("=", result, parse_sum());
@@ -1708,6 +1729,15 @@ Node* Parser::parse_comparison() {
 		}
 	}
 	return result;
+}
+
+Node* Parser::parse_comparison() {
+	return parse_comparison_tail(parse_sum());
+}
+
+Node* Parser::parse_expression_after_identifier(std::string id) {
+	Node* result = parse_designator_tail(parse_value_from_identifier(std::move(id)));
+	return parse_comparison_tail(parse_sum_tail(parse_product_tail(parse_power_tail(result))));
 }
 
 Node* Parser::parse_expression() {
@@ -1999,16 +2029,181 @@ std::string Parser::parse_string_literal() {
 	return result;
 }
 
-Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
-	if (lower_bound->ty != upper_bound->ty) {
-		return raise_type_mismatch("subrange constructor with two bounds of the same type", lower_bound->ty, upper_bound->ty);
-	} else {
-		// FIXME: reuse existing subranges structually
-		// FIXME: it's not allowed to have a subrange type as a base type (or as bounds).  Resolve back to the base type of such.
-		// FIXME: UntypedIntegerType needs to be resolved somehow, otherwise the emitter will (correctly) choke on it.
-		auto base_type = lower_bound->ty;
-		return new SubrangeType(current_location(), base_type, lower_bound, upper_bound);
+static Type* subrange_range_type(Type* ty) {
+	ty = unwrap_incomplete(ty);
+	while (auto s = dynamic_cast<SubrangeType*>(ty)) {
+		ty = unwrap_incomplete(s->base_type);
 	}
+	return ty;
+}
+
+static bool is_integer_semantic_type(Type* ty) {
+	ty = subrange_range_type(ty);
+	if (ty == &untyped_integer_type())
+		return true;
+	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+	return intrinsic && intrinsic->rank;
+}
+
+struct FoldedSubrangeBound {
+	enum class Kind { Integer, Char, Enum } kind;
+	Node* node = nullptr;
+	Type* ty = nullptr;
+	bool negative = false;
+	uint64_t magnitude = 0;
+	__int128 integer_value = 0;
+	int64_t ordinal_value = 0;
+};
+
+static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, std::string* error) {
+	if (auto i = dynamic_cast<Integer*>(node)) {
+		Type* ty = subrange_range_type(i->ty);
+		if (ty == char_type()) {
+			if (i->negative || i->value > static_cast<uint64_t>(std::numeric_limits<unsigned char>::max())) {
+				*error = "character subrange bound is outside Char range";
+				return {};
+			}
+			return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Char, node, ty, false, i->value, static_cast<__int128>(i->value), static_cast<int64_t>(i->value)};
+		}
+		if (!is_integer_semantic_type(ty)) {
+			*error = "integer subrange bound has a non-integer type";
+			return {};
+		}
+		__int128 value = static_cast<__int128>(i->value);
+		if (i->negative)
+			value = -value;
+		return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Integer, node, ty, i->negative, i->value, value, 0};
+	}
+	if (auto s = dynamic_cast<String*>(node)) {
+		if (s->value.size() != 1) {
+			*error = "string literal subrange bound must contain exactly one character";
+			return {};
+		}
+		auto value = static_cast<unsigned char>(s->value[0]);
+		auto as_char = new Integer(value, char_type());
+		return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Char, as_char, char_type(), false, value, static_cast<__int128>(value), static_cast<int64_t>(value)};
+	}
+	if (auto e = dynamic_cast<EnumMemberRef*>(node)) {
+		Type* ty = subrange_range_type(e->ty);
+		if (!dynamic_cast<EnumType*>(ty)) {
+			*error = "enum subrange bound has a non-enum type";
+			return {};
+		}
+		return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Enum, node, ty, false, 0, e->value, e->value};
+	}
+	*error = "subrange bound must fold to an ordinal constant";
+	return {};
+}
+
+static Type* infer_integer_subrange_host(__int128 lo, __int128 hi, std::string* error) {
+	// Match the BP/FPC-style representation choice: choose the smallest
+	// builtin integer type that can represent the whole range, preferring
+	// signed carriers before same-width unsigned carriers. The backend can
+	// erase SubrangeType to this host type while runtime range checks remain
+	// a later semantic feature.
+	Type* candidates[] = {
+		shortint_type(),
+		byte_type(),
+		smallint_type(),
+		word_type(),
+		integer_type(),
+		cardinal_type(),
+		int64_type(),
+		qword_type(),
+	};
+	for (Type* candidate : candidates) {
+		IntegerBounds bounds;
+		if (!integer_bounds(candidate, &bounds))
+			continue;
+		__int128 min_value = bounds.signed_type ? -static_cast<__int128>(bounds.min_magnitude) : 0;
+		__int128 max_value = static_cast<__int128>(bounds.max_positive);
+		if (lo >= min_value && hi <= max_value)
+			return candidate;
+	}
+	*error = "integer subrange bounds are outside the supported integer range";
+	return nullptr;
+}
+
+static Node* convert_integer_subrange_bound(const FoldedSubrangeBound& bound, Type* host, std::string* error) {
+	ConstEvalResult converted = const_convert_integer(bound.magnitude, bound.negative, bound.ty, host);
+	if (converted.kind == ConstEvalResult::Kind::Success)
+		return converted.node;
+	if (converted.kind == ConstEvalResult::Kind::Error)
+		*error = converted.message;
+	else
+		*error = "integer subrange bound could not be converted to host type";
+	return nullptr;
+}
+
+Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
+	ConstEvalContext ctx;
+	ConstEvalResult lower_folded = lower_bound->const_eval(ctx);
+	ConstEvalResult upper_folded = upper_bound->const_eval(ctx);
+	if (lower_folded.kind == ConstEvalResult::Kind::NotConstant || upper_folded.kind == ConstEvalResult::Kind::NotConstant)
+		return raise_type_parse_error("subrange bounds must be constant expressions");
+	if (lower_folded.kind == ConstEvalResult::Kind::Error)
+		return raise_type_parse_error(lower_folded.message);
+	if (upper_folded.kind == ConstEvalResult::Kind::Error)
+		return raise_type_parse_error(upper_folded.message);
+
+	std::string error;
+	auto lower = classify_subrange_bound(lower_folded.node, &error);
+	if (!lower)
+		return raise_type_parse_error(error);
+	auto upper = classify_subrange_bound(upper_folded.node, &error);
+	if (!upper)
+		return raise_type_parse_error(error);
+	if (lower->kind != upper->kind)
+		return raise_type_parse_error("subrange bounds must be compatible ordinal constants");
+
+	// FIXME: reuse existing subranges structurally.
+	switch (lower->kind) {
+	case FoldedSubrangeBound::Kind::Integer: {
+		if (upper->integer_value < lower->integer_value)
+			return raise_type_parse_error("subrange upper bound is lower than lower bound");
+		Type* host = infer_integer_subrange_host(lower->integer_value, upper->integer_value, &error);
+		if (!host)
+			return raise_type_parse_error(error);
+		Node* typed_lower = convert_integer_subrange_bound(*lower, host, &error);
+		if (!typed_lower)
+			return raise_type_parse_error(error);
+		Node* typed_upper = convert_integer_subrange_bound(*upper, host, &error);
+		if (!typed_upper)
+			return raise_type_parse_error(error);
+		return new SubrangeType(current_location(), host, typed_lower, typed_upper);
+	}
+	case FoldedSubrangeBound::Kind::Char:
+		if (upper->ordinal_value < lower->ordinal_value)
+			return raise_type_parse_error("subrange upper bound is lower than lower bound");
+		return new SubrangeType(current_location(), char_type(), lower->node, upper->node);
+	case FoldedSubrangeBound::Kind::Enum:
+		if (lower->ty != upper->ty)
+			return raise_type_mismatch("subrange constructor with bounds from the same enum type", lower->ty, upper->ty);
+		if (upper->ordinal_value < lower->ordinal_value)
+			return raise_type_parse_error("subrange upper bound is lower than lower bound");
+		return new SubrangeType(current_location(), lower->ty, lower->node, upper->node);
+	}
+	return raise_type_parse_error("unsupported subrange bound kind");
+}
+
+static bool token_continues_expression_after_primary(const std::string& token) {
+	return token == "." || token == "(" || token == "[" || token == "^" ||
+	       token == "**" || token == "*" || token == "/" ||
+	       token == "div" || token == "mod" || token == "and" ||
+	       token == "shl" || token == "shr" || token == "as" ||
+	       token == "is" || token == "<<" || token == ">>" ||
+	       token == "><" || token == "+" || token == "-" ||
+	       token == "or" || token == "|" || token == "xor" ||
+	       token == "=" || token == "<>" || token == "<" ||
+	       token == ">" || token == "<=" || token == ">=" ||
+	       token == "in";
+}
+
+static bool token_is_identifier_start(const std::string& token) {
+	if (token.empty() || keywords.find(token) != keywords.end())
+		return false;
+	unsigned char first = static_cast<unsigned char>(token.front());
+	return std::isalpha(first) || token.front() == '_';
 }
 
 
@@ -2062,19 +2257,33 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		// scope->rebind_type(name, intrinsic);
 		return intrinsic;
 	} else {
-		// TODO: This is really a type-level binary operator ".." and it really should do pretty similar automatic conversions
-		if (auto lower_bound = maybe_parse_numeral()) {
-			parse_period_period();
-			if (auto upper_bound = maybe_parse_numeral()) {
-				return reuse_subrange_type(lower_bound, upper_bound);
-			} else {
-				raise_type_parse_error("subrange constructor needs upper bound");
+		// Simple-type syntax is ambiguous at an identifier:
+		//
+		//   TColor              { type identifier }
+		//   Red..Blue           { enum-member subrange }
+		//   MaxListSize - 1..N  { constant-expression subrange }
+		//
+		// Do not speculatively parse a full expression and then backtrack to a
+		// type name. Consume the identifier once, then use the token already in
+		// input_token to decide whether the identifier is bare (a type name) or
+		// the seed of a constant expression whose lower bound must be followed by
+		// `..`. The expression parser naturally stops at `..` because `..` is not
+		// an expression operator.
+		if (token_is_identifier_start(input_token)) {
+			std::string id = parse_identifier();
+			if (maybe_parse_period_period())
+				return reuse_subrange_type(parse_value_from_identifier(id), parse_expression());
+			if (token_continues_expression_after_primary(input_token)) {
+				Node* lower_bound = parse_expression_after_identifier(id);
+				parse_period_period();
+				return reuse_subrange_type(lower_bound, parse_expression());
 			}
-		} else {
-			auto id = parse_identifier();
-			// FIXME: how to know whether this is a type symbol or a enum variant symbol
 			return resolve_type(id, allow_forward);
 		}
+
+		Node* lower_bound = parse_expression();
+		parse_period_period();
+		return reuse_subrange_type(lower_bound, parse_expression());
 	}
 }
 

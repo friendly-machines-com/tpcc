@@ -106,6 +106,8 @@ static bool is_real_intrinsic(Type* ty) {
 Type* common_arith_type(Type* a, Type* b) {
 	if (!a || !b)
 		return nullptr;
+	if (a == &untyped_integer_type() && b == &untyped_integer_type())
+		return integer_type();
 	if (a == b)
 		return a;
 	if (a == shortstring_type() && b == char_type()) {

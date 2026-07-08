@@ -4,24 +4,6 @@
 #include "types.h"
 #include <string>
 
-struct IntegerBounds {
-	bool signed_type;
-	uint64_t min_magnitude; // only meaningful for signed_type: magnitude of minimum negative value
-	uint64_t max_positive;
-};
-
-static bool integer_bounds(Type* ty, IntegerBounds* out) {
-	if (ty == byte_type()) { *out = {false, 0, UINT8_MAX}; return true; }
-	if (ty == shortint_type()) { *out = {true, 128, 127}; return true; }
-	if (ty == word_type()) { *out = {false, 0, UINT16_MAX}; return true; }
-	if (ty == smallint_type()) { *out = {true, 32768, 32767}; return true; }
-	if (ty == cardinal_type()) { *out = {false, 0, UINT32_MAX}; return true; }
-	if (ty == integer_type() || ty == longint_type()) { *out = {true, 2147483648ull, 2147483647ull}; return true; }
-	if (ty == qword_type()) { *out = {false, 0, UINT64_MAX}; return true; }
-	if (ty == int64_type()) { *out = {true, 9223372036854775808ull, 9223372036854775807ull}; return true; }
-	return false;
-}
-
 static ConstEvalResult integer_result(uint64_t magnitude, bool negative, Type* ty) {
 	IntegerBounds b;
 	if (!integer_bounds(ty, &b))
@@ -57,4 +39,3 @@ ConstEvalResult const_eval_type_bound(TypeBoundKind kind, Type* ty) {
 	}
 	return ConstEvalResult::success(new Integer(b.max_positive, ty));
 }
-

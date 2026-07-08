@@ -25,6 +25,7 @@ using BuiltinConstFold = ConstEvalResult (*)(ConstEvalContext& ctx, Type* result
 struct BuiltinDesc {
 	std::string_view cxx_name;    // e.g. "pas::p_ord"
 	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
+	std::optional<TypeBoundKind> type_bound_kind = {};
 };
 
 struct IntrinsicTypeDesc {
@@ -32,11 +33,18 @@ struct IntrinsicTypeDesc {
 	std::string_view cxx_name;    // e.g. "pas::t_integer"
 };
 
+struct IntegerBounds {
+	bool signed_type;
+	uint64_t min_magnitude; // only meaningful for signed_type: magnitude of minimum negative value
+	uint64_t max_positive;
+};
+
 class IntrinsicType: public Type {
 public:
 	std::string cxx_name;
 	std::optional<int> rank;
-	IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank);
+	std::optional<IntegerBounds> bounds;
+	IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank, std::optional<IntegerBounds> bounds = {});
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -85,6 +93,7 @@ Type* set_type();
 Type* fixedarray_type();
 Type* unknown_type();
 
+bool integer_bounds(Type* ty, IntegerBounds* out);
 Type* lookup_builtin_type(std::string cxx_name);
 const BuiltinDesc* lookup_builtin_desc(std::string_view cxx_name);
 Builtin* create_builtin_value(std::string cxx_name);
