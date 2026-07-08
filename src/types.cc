@@ -13,15 +13,15 @@ EnumType::EnumType(SourceLocation source_location) : Type(std::move(source_locat
 
 EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::string a, std::string b)
     : Type(std::move(source_location)), cxx_name(std::move(p_cxx_name)) {
-	members.push_back(Member {
-		.pas_name = a,
-		.cxx_name = a,
-		.value = 0,
+	members.push_back(Member{
+	    .pas_name = a,
+	    .cxx_name = a,
+	    .value = 0,
 	});
-	members.push_back(Member {
-		.pas_name = b,
-		.cxx_name = b,
-		.value = 1,
+	members.push_back(Member{
+	    .pas_name = b,
+	    .cxx_name = b,
+	    .value = 1,
 	});
 }
 
@@ -172,23 +172,22 @@ int conversion_cost(Type* from, Type* to) {
 // A dominates B iff A's cost is <= B's on every position AND strictly < on
 // at least one. Different-length vectors don't compare (ambiguity later).
 bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
-    if (a.size() != b.size())
-        return false;
-    bool strict = false;
-    for (size_t i = 0; i < a.size(); i++) {
-        if (a[i] > b[i])
-            return false;
-        if (a[i] < b[i])
-            strict = true;
-    }
-    return strict;
+	if (a.size() != b.size())
+		return false;
+	bool strict = false;
+	for (size_t i = 0; i < a.size(); i++) {
+		if (a[i] > b[i])
+			return false;
+		if (a[i] < b[i])
+			strict = true;
+	}
+	return strict;
 }
 
+#include "cst.h"
 #include "diagnostic.h"
 #include "frame.h"
-#include "cst.h"
 #include <cstdio>
-
 
 static std::string diagnostic_string_literal(const std::string& text) {
 	std::string r = "'";
@@ -233,13 +232,34 @@ void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostr
 }
 
 const char* FixedArrayType::diagnostic_kind() const { return "array"; }
-void FixedArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(bounds); ctx->add_type_edge(item_type); }
-void FixedArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "bounds: " << ctx->known_type_ref(bounds); out << "\n"; ctx->indent(out, indent + 1); out << "item: " << ctx->known_type_ref(item_type); }
-void FixedArrayType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "bounds: ..."; out << "\n"; ctx->indent(out, indent + 1); out << "item: ..."; }
+void FixedArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(bounds);
+	ctx->add_type_edge(item_type);
+}
+void FixedArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "bounds: " << ctx->known_type_ref(bounds);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "item: " << ctx->known_type_ref(item_type);
+}
+void FixedArrayType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "bounds: ...";
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "item: ...";
+}
 
 const char* FixedSetType::diagnostic_kind() const { return "set"; }
 void FixedSetType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
-void FixedSetType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "item: " << ctx->known_type_ref(item_type); }
+void FixedSetType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "item: " << ctx->known_type_ref(item_type);
+}
 
 const char* EnumType::diagnostic_kind() const { return "enum"; }
 void EnumType::collect_diagnostic_edges(ErrorLetContext*) const {}
@@ -301,65 +321,110 @@ const char* InterfaceType::diagnostic_kind() const { return "interface"; }
 void InterfaceType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
-	for (auto* i : super_interfaces) ctx->add_type_edge(i);
+	for (auto* i : super_interfaces)
+		ctx->add_type_edge(i);
 }
 void InterfaceType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	if (!super_interfaces.empty()) {
 		ctx->indent(out, indent + 1);
 		out << "inherits:";
-		for (auto* i : super_interfaces) out << " " << ctx->known_type_ref(i);
+		for (auto* i : super_interfaces)
+			out << " " << ctx->known_type_ref(i);
 		out << "\n";
 	}
 	ctx->print_frame_members(out, children, indent + 1);
-	ctx->indent(out, indent); out << "end";
+	ctx->indent(out, indent);
+	out << "end";
 }
 void InterfaceType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
 
 const char* ClassType::diagnostic_kind() const { return "class"; }
 void ClassType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(super);
-	for (auto* i : implemented_interfaces) ctx->add_type_edge(i);
+	for (auto* i : implemented_interfaces)
+		ctx->add_type_edge(i);
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
 }
 void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
-	if (super) { ctx->indent(out, indent + 1); out << "super: " << ctx->known_type_ref(super) << "\n"; }
+	if (super) {
+		ctx->indent(out, indent + 1);
+		out << "super: " << ctx->known_type_ref(super) << "\n";
+	}
 	if (!implemented_interfaces.empty()) {
-		ctx->indent(out, indent + 1); out << "implements:";
-		for (auto* i : implemented_interfaces) out << " " << ctx->known_type_ref(i);
+		ctx->indent(out, indent + 1);
+		out << "implements:";
+		for (auto* i : implemented_interfaces)
+			out << " " << ctx->known_type_ref(i);
 		out << "\n";
 	}
 	ctx->print_frame_members(out, children, indent + 1);
-	ctx->indent(out, indent); out << "end";
+	ctx->indent(out, indent);
+	out << "end";
 }
 void ClassType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
 
 const char* ClassRefType::diagnostic_kind() const { return "classref"; }
 void ClassRefType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(target); }
-void ClassRefType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "target: " << ctx->known_type_ref(target); }
-void ClassRefType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "target: ..."; }
+void ClassRefType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "target: " << ctx->known_type_ref(target);
+}
+void ClassRefType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "target: ...";
+}
 
 const char* ObjectType::diagnostic_kind() const { return "object"; }
-void ObjectType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(super); ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers); add_frame_value_type_edges(ctx, children); }
+void ObjectType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(super);
+	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
+	add_frame_value_type_edges(ctx, children);
+}
 void ObjectType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
-	if (super) { ctx->indent(out, indent + 1); out << "super: " << ctx->known_type_ref(super) << "\n"; }
+	if (super) {
+		ctx->indent(out, indent + 1);
+		out << "super: " << ctx->known_type_ref(super) << "\n";
+	}
 	ctx->print_frame_members(out, children, indent + 1);
-	ctx->indent(out, indent); out << "end";
+	ctx->indent(out, indent);
+	out << "end";
 }
 void ObjectType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
 
 const char* PointerType::diagnostic_kind() const { return "pointer"; }
 void PointerType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
-void PointerType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "to: " << ctx->known_type_ref(item_type); }
-void PointerType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "to: ..."; }
+void PointerType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "to: " << ctx->known_type_ref(item_type);
+}
+void PointerType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "to: ...";
+}
 
 const char* ModuleType::diagnostic_kind() const { return "module"; }
-void ModuleType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_frame_edge(interface_children, DiagnosticFrameUse::ModuleMembers); ctx->add_frame_edge(implementation_children, DiagnosticFrameUse::ModuleMembers); }
-void ModuleType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "details: ..."; }
-void ModuleType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "details: ..."; }
+void ModuleType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_frame_edge(interface_children, DiagnosticFrameUse::ModuleMembers);
+	ctx->add_frame_edge(implementation_children, DiagnosticFrameUse::ModuleMembers);
+}
+void ModuleType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "details: ...";
+}
+void ModuleType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "details: ...";
+}
 
 const char* UnitType::diagnostic_kind() const { return "unit"; }
 void UnitType::collect_diagnostic_edges(ErrorLetContext*) const {}
@@ -369,13 +434,16 @@ const char* UntypedIntegerType::diagnostic_kind() const { return "untyped_intege
 void UntypedIntegerType::collect_diagnostic_edges(ErrorLetContext*) const {}
 void UntypedIntegerType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {}
 
-
 static const char* param_mode_text(ParamMode mode) {
 	switch (mode) {
-	case ParamMode::Value: return "";
-	case ParamMode::Var: return "var ";
-	case ParamMode::Out: return "out ";
-	case ParamMode::Const: return "const ";
+	case ParamMode::Value:
+		return "";
+	case ParamMode::Var:
+		return "var ";
+	case ParamMode::Out:
+		return "out ";
+	case ParamMode::Const:
+		return "const ";
 	}
 	return "";
 }
@@ -383,7 +451,10 @@ static const char* param_mode_text(ParamMode mode) {
 const char* RoutineType::diagnostic_kind() const { return "routine"; }
 
 void RoutineType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
-	for (const auto& p : formals) { ctx->add_type_edge(p.ty); ctx->add_value_edge(p.default_value); }
+	for (const auto& p : formals) {
+		ctx->add_type_edge(p.ty);
+		ctx->add_value_edge(p.default_value);
+	}
 	ctx->add_type_edge(return_type);
 }
 
@@ -392,21 +463,27 @@ void RoutineType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostring
 		out << "\n";
 		ctx->indent(out, indent + 1);
 		out << "kind: ";
-		if (kind == CONSTRUCTOR) out << "constructor";
-		else if (kind == DESTRUCTOR) out << "destructor";
-		else out << "class_method";
+		if (kind == CONSTRUCTOR)
+			out << "constructor";
+		else if (kind == DESTRUCTOR)
+			out << "destructor";
+		else
+			out << "class_method";
 	}
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "signature: (";
 	for (size_t i = 0; i < formals.size(); i++) {
-		if (i) out << "; ";
+		if (i)
+			out << "; ";
 		const auto& p = formals[i];
 		out << param_mode_text(p.mode) << p.pas_name << ": " << ctx->known_type_ref(p.ty);
-		if (p.default_value) out << " = " << ctx->known_value_ref(p.default_value);
+		if (p.default_value)
+			out << " = " << ctx->known_value_ref(p.default_value);
 	}
 	out << ")";
-	if (return_type) out << ": " << ctx->known_type_ref(return_type);
+	if (return_type)
+		out << ": " << ctx->known_type_ref(return_type);
 }
 
 void RoutineType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
@@ -415,7 +492,7 @@ void RoutineType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream
 	out << "signature: ...";
 }
 
-SubrangeType::SubrangeType(SourceLocation source_location, Type* base_type, Node* lower_bound, Node* upper_bound): Type(std::move(source_location)) {
+SubrangeType::SubrangeType(SourceLocation source_location, Type* base_type, Node* lower_bound, Node* upper_bound) : Type(std::move(source_location)) {
 	this->base_type = base_type;
 	this->lower_bound = lower_bound;
 	this->upper_bound = upper_bound;

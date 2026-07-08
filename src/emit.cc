@@ -3,12 +3,12 @@
 #include "cst.h"
 #include "frame.h"
 #include "types.h"
-#include <cstdlib>
-#include <set>
-#include <typeinfo>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
+#include <set>
+#include <typeinfo>
 
 // NODE may be null; SITE names the caller for the error message.
 [[noreturn]] static void unhandled_node(const char* site, const Node* node) {
@@ -484,7 +484,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	fprintf(active, " {\n");
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
-			std::string class_name = c->cxx_name; // FIXME: terrible name.
+			std::string class_name = c->cxx_name;					// FIXME: terrible name.
 			std::string parent_class_cxx_name = c->super ? c->super->cxx_name : ""; // FIXME: terrible name
 			if (c->super && parent_class_cxx_name.empty()) {
 				unhandled_type("parent class name unknown", c);
@@ -591,15 +591,15 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
 			fprintf(active, "\t");
 			if (auto m = dynamic_cast<Method*>(call)) {
-				//if (is_tobject && m->cxx_name == "p_classtype") { // prevent emitting a duplicate.
+				// if (is_tobject && m->cxx_name == "p_classtype") { // prevent emitting a duplicate.
 				//	continue;
-				//}
+				// }
 				if (is_interface) {
 					fprintf(active, "virtual ");
 				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {
 					// autogenerate proxies in regular class
 					fprintf(active, "inline static");
-				} else if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic/*FIXME*/) {
+				} else if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic /*FIXME*/) {
 					fprintf(active, "virtual ");
 				}
 			}
@@ -612,9 +612,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
 					fprintf(active, " {\n");
 					fprintf(active, "\t%s static_cast<%s*>(p_classtype())->%s(",
-							call->ty->return_type == &unit_type() ? "" : "return",
-					        "m_meta",
-					        call->cxx_name.c_str()); // TODO: escape
+						call->ty->return_type == &unit_type() ? "" : "return",
+						"m_meta",
+						call->cxx_name.c_str()); // TODO: escape
 					for (size_t i = 0; i < call->ty->formals.size(); i++) {
 						auto& f = call->ty->formals[i];
 						if (i > 0) {
@@ -710,7 +710,6 @@ void Emitter::emit_method_pointer_lambda(Node* obj_expr, Method* method) {
 	}
 	fprintf(active, "); }");
 }
-
 
 static const char* cxx_unary_operator(UnaryOperation* op) {
 	if (dynamic_cast<AddrOf*>(op))

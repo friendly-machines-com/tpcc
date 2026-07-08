@@ -8,8 +8,6 @@
 #include <cctype>
 #include <cstdio>
 
-
-
 static bool diagnostic_ident_char(char ch) {
 	unsigned char c = static_cast<unsigned char>(ch);
 	return std::isalnum(c) || ch == '_';
@@ -47,10 +45,14 @@ static std::string diagnostic_name_token(std::string s, const char* fallback) {
 
 static const char* diagnostic_param_mode_text(ParamMode mode) {
 	switch (mode) {
-	case ParamMode::Value: return "";
-	case ParamMode::Var: return "var ";
-	case ParamMode::Out: return "out ";
-	case ParamMode::Const: return "const ";
+	case ParamMode::Value:
+		return "";
+	case ParamMode::Var:
+		return "var ";
+	case ParamMode::Out:
+		return "out ";
+	case ParamMode::Const:
+		return "const ";
 	}
 	return "";
 }
@@ -307,7 +309,9 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 		if (ait != value_nodes.end() && ait->second.name.assigned &&
 		    bit != value_nodes.end() && bit->second.name.assigned) {
 			return NameBase{name_component(render_name_display(ait->second.name) + "[" +
-			                               render_name_display(bit->second.name) + "]", n.kind.c_str()), ""};
+							   render_name_display(bit->second.name) + "]",
+						       n.kind.c_str()),
+					""};
 		}
 	}
 	if (auto d = dynamic_cast<const Dereference*>(n.node)) {
@@ -321,7 +325,9 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 		if (ait != value_nodes.end() && ait->second.name.assigned &&
 		    tit != type_nodes.end() && tit->second.name.assigned) {
 			return NameBase{name_component(render_name_display(tit->second.name) + "(" +
-			                               render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
+							   render_name_display(ait->second.name) + ")",
+						       n.kind.c_str()),
+					""};
 		}
 	}
 	if (auto tb = dynamic_cast<const TypeBound*>(n.node)) {
@@ -514,7 +520,6 @@ void ErrorLetContext::indent(std::ostringstream& out, unsigned level) const {
 	for (unsigned i = 0; i < level; i++)
 		out << "  ";
 }
-
 
 static void print_source_location(std::ostringstream& out, const SourceLocation& loc) {
 	std::string text = loc.file_name.empty() ? "<unknown>" : loc.file_name;

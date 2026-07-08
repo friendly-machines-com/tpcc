@@ -95,7 +95,7 @@ Type* const k_all_intrinsics[] = {
     &k_sizeuint,
     &k_fixedarray,
     &k_unknown,
-//    &k_m_iobject,
+    //    &k_m_iobject,
 };
 } // namespace
 
@@ -133,7 +133,6 @@ bool integer_bounds(Type* ty, IntegerBounds* out) {
 	*out = *intrinsic->bounds;
 	return true;
 }
-
 
 static const Integer* const_integer_arg(Node* n) { return dynamic_cast<const Integer*>(n); }
 
@@ -330,7 +329,7 @@ Builtin* create_builtin_value(std::string cxx_name) {
 	}
 	// Fallback to anything, we will get a linker error anyway.
 	fprintf(stderr, "warning: builtin '%s' doesn't have a registration.  Allowing it--but it won't constant-fold.\n", cxx_name.c_str());
-	auto bs = BuiltinDesc {cxx_name, nullptr};
+	auto bs = BuiltinDesc{cxx_name, nullptr};
 	auto bi = new Builtin(&bs);
 	return bi;
 }

@@ -9,9 +9,9 @@
 #include "units.h"
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <charconv>
 #include <chrono>
-#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -201,7 +201,6 @@ void Parser::pop_scope() {
 	this->scopes.pop_back();
 }
 
-
 SourceLocation Parser::current_location() const {
 	return SourceLocation(input_file_name, input_file_line_number);
 }
@@ -244,7 +243,6 @@ Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got
 	return expected; // future non-fatal diagnostics can continue with the expected type
 }
 
-
 Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
 	std::string got_ref = ctx.type_ref(got);
@@ -254,7 +252,6 @@ Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected
 	emit_parse_error_at(current_location(), sst.str());
 	return got; // future non-fatal diagnostics can continue with the parsed type
 }
-
 
 static void append_cost_vector(std::stringstream& sst, const std::vector<int>& costs) {
 	sst << "[";
@@ -294,13 +291,13 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 }
 
 [[noreturn]] void Parser::raise_overload_resolution_error(SourceLocation error_location,
-                                                          std::string name,
-                                                          Node* receiver,
-                                                          const std::vector<Node*>& args,
-                                                          const std::vector<Callable*>& candidates,
-                                                          const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
-                                                          const std::vector<Callable*>& non_dominated,
-                                                          bool ambiguous) {
+							  std::string name,
+							  Node* receiver,
+							  const std::vector<Node*>& args,
+							  const std::vector<Callable*>& candidates,
+							  const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
+							  const std::vector<Callable*>& non_dominated,
+							  bool ambiguous) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
 	std::stringstream sst;
 	sst << (ambiguous ? "ambiguous overload" : "no matching overload") << " for '" << name << "'";
@@ -566,7 +563,7 @@ std::string Parser::consume() {
 			int next_char = peek_lowlevel(); // LL(2). Sigh.
 			if (next_char >= '0' && next_char <= '9') {
 				sst << (char)input_char; // Append the '.'
-				consume_lowlevel();      // Consume the '.' so input_char becomes the digit
+				consume_lowlevel();	 // Consume the '.' so input_char becomes the digit
 				// Consume the fractional part
 				while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
 					sst << (char)input_char;
@@ -1212,7 +1209,7 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 // auto-chain); we mark the node `dropped` and emit produces nothing.
 // Statement and expression context both flow through here.
 Node* Parser::parse_inherited() {
-	consume();  // `inherited`
+	consume(); // `inherited`
 
 	std::string name;
 	auto opt = maybe_parse_identifier();
@@ -1266,7 +1263,7 @@ Node* Parser::parse_inherited() {
 					resolved = os->members.front();
 				else
 					raise_parse_error("inherited: '" + name +
-						"' is overloaded; supply an argument list to disambiguate");
+							  "' is overloaded; supply an argument list to disambiguate");
 			}
 		}
 		if (!resolved)
@@ -1540,7 +1537,7 @@ bool Parser::is_assignable(Node* n) {
 }
 
 Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
-    auto fn = resolve_value(id);
+	auto fn = resolve_value(id);
 	std::vector<Node*> args;
 	auto common_ty = common_arith_type(a->ty, b->ty);
 	if (common_ty == nullptr) {
@@ -1561,7 +1558,7 @@ Node* Parser::mk_assign(Node* a, Node* b) {
 }
 
 Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
-    auto fn = resolve_value(id);
+	auto fn = resolve_value(id);
 	std::vector<Node*> args;
 	auto common_ty = common_arith_type(a->ty, b->ty);
 	if (common_ty == nullptr) {
@@ -1574,22 +1571,22 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
-/*	if (call->ty->return_type != boolean_type()) {
-		raise_type_mismatch("custom comparison operator '" + id + "' has wrong return type", boolean_type(), call->ty);
-	} FIXME */
+	/*	if (call->ty->return_type != boolean_type()) {
+			raise_type_mismatch("custom comparison operator '" + id + "' has wrong return type", boolean_type(), call->ty);
+		} FIXME */
 	return call;
 }
 
 Node* Parser::mk_unary_same(std::string id, Node* x) {
-    auto fn = resolve_value(id);
+	auto fn = resolve_value(id);
 	std::vector<Node*> args;
 	args.push_back(x);
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 	call->ty = call_result_type(fc.callee);
-/*	if (call->ty->return_type != x->ty) {
-		raise_type_mismatch("custom unary operator '" + id + "' has wrong return type", x->ty, call->ty);
-	} FIXME */
+	/*	if (call->ty->return_type != x->ty) {
+			raise_type_mismatch("custom unary operator '" + id + "' has wrong return type", x->ty, call->ty);
+		} FIXME */
 	return call;
 }
 
@@ -1615,8 +1612,8 @@ Node* Parser::parse_power() {
 		return mk_unary_same("+", parse_power());
 	}
 
-    // Mirror FPC's quirk. `-1 ** 4` parses as `-(1 ** 4)`, not `(-1) ** 4`.
-    // FIXME: Fix it later.
+	// Mirror FPC's quirk. `-1 ** 4` parses as `-(1 ** 4)`, not `(-1) ** 4`.
+	// FIXME: Fix it later.
 	return parse_power_tail(parse_designator());
 }
 
@@ -1905,7 +1902,7 @@ Type* Parser::parse_class_type() {
 			return raise_type_kind_mismatch("parse_class_type: type after 'class of' is not a class", "class", target_ty);
 		}
 		// FIXME: return lookup_builtin_type("pas::m_iobject");
-		//return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
+		// return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
 	}
 	ClassType* super_ty = nullptr; // FIXME: TObject--but how?
 	std::vector<InterfaceType*> implemented_interfaces;
@@ -2046,7 +2043,9 @@ static bool is_integer_semantic_type(Type* ty) {
 }
 
 struct FoldedSubrangeBound {
-	enum class Kind { Integer, Char, Enum } kind;
+	enum class Kind { Integer,
+			  Char,
+			  Enum } kind;
 	Node* node = nullptr;
 	Type* ty = nullptr;
 	bool negative = false;
@@ -2102,14 +2101,14 @@ static Type* infer_integer_subrange_host(__int128 lo, __int128 hi, std::string* 
 	// erase SubrangeType to this host type while runtime range checks remain
 	// a later semantic feature.
 	Type* candidates[] = {
-		shortint_type(),
-		byte_type(),
-		smallint_type(),
-		word_type(),
-		integer_type(),
-		cardinal_type(),
-		int64_type(),
-		qword_type(),
+	    shortint_type(),
+	    byte_type(),
+	    smallint_type(),
+	    word_type(),
+	    integer_type(),
+	    cardinal_type(),
+	    int64_type(),
+	    qword_type(),
 	};
 	for (Type* candidate : candidates) {
 		IntegerBounds bounds;
@@ -2205,7 +2204,6 @@ static bool token_is_identifier_start(const std::string& token) {
 	unsigned char first = static_cast<unsigned char>(token.front());
 	return std::isalpha(first) || token.front() == '_';
 }
-
 
 /** allow_forward: if true, an unresolved identifier at this parse position is
  *  auto-registered as an IncompleteType in the current type block rather than
@@ -2321,7 +2319,7 @@ void Parser::parse_const_block() {
 			Node* expr = parse_expression();
 			if (maybe_parse_directive("deprecated")) {
 				// TODO: Store deprecated-ness.
-				//parse_expression();
+				// parse_expression();
 				parse_string_literal();
 			}
 			ConstEvalContext ctx;
@@ -2764,7 +2762,7 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 
 // is_class is whether there was a "class" prefix token
 RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner) {
- 	std::vector<Parameter> formals;
+	std::vector<Parameter> formals;
 	if (input_token == "(") {
 		formals = parse_proc_formal_parameters();
 	}
@@ -2825,7 +2823,9 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		parse_keyword(is_function ? "function" : "procedure");
 	}
 	std::string pas_name = parse_identifier();
-	RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_destructor ? DESTRUCTOR : is_constructor ? CONSTRUCTOR : METHOD, owner_class);
+	RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_destructor ? DESTRUCTOR : is_constructor ? CONSTRUCTOR
+															     : METHOD,
+						   owner_class);
 	parse_semicolon();
 	bool has_overload = false;
 	Method::VirtualKind vk = Method::VirtualKind::None;
@@ -3069,16 +3069,18 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		Frame* owner_frame = get_type_body_frame(owner_ty);
 		if (!owner_frame)
 			raise_parse_error("'" + first_name + "' is not a class/record/object");
-		//if (is_destructor) {
+		// if (is_destructor) {
 		//	if (auto class_type = dynamic_cast<ClassType*>(owner_ty)) {
 		//		method_name = "~" + class_type->cxx_name;
 		//	}
-		//}
+		// }
 		Node* hit = owner_frame->lookup_value(method_name);
 		auto m = dynamic_cast<Method*>(hit);
 		if (!m)
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
-		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD, owner_ty);
+		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR
+																      : METHOD,
+							   owner_ty);
 		parse_semicolon();
 		while (maybe_parse_keyword("inline")) {
 			// FIXME: use
@@ -3099,7 +3101,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 	} else { // Standalone Routine
 		bool had_paren = (input_token == "(");
 		if (is_class) {
-		    raise_parse_error("expected class method, not class routine");
+			raise_parse_error("expected class method, not class routine");
 		}
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, ROUTINE);
 		parse_semicolon();
@@ -3239,7 +3241,7 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		call->ty = call_result_type(fc.callee);
 		return call;
 
-		//return new Cast(a, target_ty); // FIXME.
+		// return new Cast(a, target_ty); // FIXME.
 	}
 }
 
