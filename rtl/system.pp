@@ -7,7 +7,9 @@ type
   ShortInt = external nil name 'pas::t_shortint';
   Word = external nil name 'pas::t_word';
   SmallInt = external nil name 'pas::t_smallint';
-  Cardinal = external nil name 'pas::t_cardinal';
+  Cardinal = external nil name 'pas::t_longword';
+  LongWord = external nil name 'pas::t_longword';
+  DWord = external nil name 'pas::t_longword';
   Integer = external nil name 'pas::t_integer';
   LongInt = external nil name 'pas::t_longint';
   QWord = external nil name 'pas::t_qword';

@@ -24,7 +24,7 @@ using t_byte     = uint8_t;
 using t_shortint = int8_t;
 using t_word     = uint16_t;
 using t_smallint = int16_t;
-using t_cardinal = uint32_t;
+using t_longword = uint32_t;
 using t_integer  = int32_t;
 using t_longint  = int32_t;
 using t_int64 = int64_t;
@@ -134,7 +134,7 @@ DEFINE_OPERATIONS(t_byte)
 DEFINE_OPERATIONS(t_shortint)
 DEFINE_OPERATIONS(t_word)
 DEFINE_OPERATIONS(t_smallint)
-DEFINE_OPERATIONS(t_cardinal)
+DEFINE_OPERATIONS(t_longword)
 DEFINE_OPERATIONS(t_integer)
 DEFINE_OPERATIONS(t_longint)
 DEFINE_OPERATIONS(t_int64)

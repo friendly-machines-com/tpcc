@@ -17,7 +17,7 @@ IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0);
 IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1);
 IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2);
 IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3);
-IntrinsicType k_cardinal(SourceLocation::builtin(), "pas::t_cardinal", 4);
+IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4);
 IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5);
 IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6);
 IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7);
@@ -72,7 +72,7 @@ Type* const k_all_intrinsics[] = {
     &k_shortint,
     &k_word,
     &k_smallint,
-    &k_cardinal,
+    &k_longword,
     &k_integer,
     &k_longint,
     &k_qword,
@@ -105,7 +105,7 @@ Type* byte_type() { return &k_byte; }
 Type* shortint_type() { return &k_shortint; }
 Type* word_type() { return &k_word; }
 Type* smallint_type() { return &k_smallint; }
-Type* cardinal_type() { return &k_cardinal; }
+Type* cardinal_type() { return &k_longword; }
 Type* integer_type() { return &k_integer; }
 Type* longint_type() { return &k_longint; }
 Type* qword_type() { return &k_qword; }
@@ -320,6 +320,10 @@ Builtin* create_builtin_value(std::string cxx_name) {
 const Frame& root_frame() {
 	static const Frame f = []() {
 		Frame ff(nullptr);
+		ff.register_type("cardinal", &k_longword);
+		ff.register_type("longword", &k_longword);
+		ff.register_type("dword", &k_longword);
+
 		auto p_false = new EnumMemberRef("pas::t_boolean::p_false", 0, &k_boolean);
 		ff.register_variable("false", p_false, &k_boolean);
 		auto p_true = new EnumMemberRef("pas::t_boolean::p_true", 1, &k_boolean);
