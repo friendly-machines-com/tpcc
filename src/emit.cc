@@ -7,6 +7,7 @@
 #include <set>
 #include <typeinfo>
 #include <cstdint>
+#include <limits>
 
 // NODE may be null; SITE names the caller for the error message.
 [[noreturn]] static void unhandled_node(const char* site, const Node* node) {
@@ -724,6 +725,16 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
 		fprintf(active, "%s%lluu", c->negative ? "-" : "", (unsigned long long)c->value);
+		return;
+	}
+	if (auto r = dynamic_cast<Real*>(expr)) {
+		double inf = std::numeric_limits<double>::infinity();
+		if (r->value != r->value)
+			fprintf(active, "std::numeric_limits<double>::quiet_NaN()");
+		else if (r->value == inf || r->value == -inf)
+			fprintf(active, "%sstd::numeric_limits<double>::infinity()", r->value < 0 ? "-" : "");
+		else
+			fprintf(active, "%.17g", r->value);
 		return;
 	}
 	if (auto s = dynamic_cast<String*>(expr)) {

@@ -209,6 +209,15 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+class Real: public Node {
+public:
+	double value = 0.0;
+	Real(double value, Type* ty);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 /** Pascal `nil`. Constructed without a type: its type is fixed up by cast()
  *  to the surrounding reference-type target during assignment / argument
  *  passing. Emits as C++ `nullptr`. */

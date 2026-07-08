@@ -119,6 +119,20 @@ Type* unknown_type() { return &k_unknown; }
 
 static const Integer* const_integer_arg(Node* n) { return dynamic_cast<const Integer*>(n); }
 
+static bool const_numeric_as_double(Node* n, double* out) {
+	if (auto i = dynamic_cast<const Integer*>(n)) {
+		*out = static_cast<double>(i->value);
+		if (i->negative)
+			*out = -*out;
+		return true;
+	}
+	if (auto r = dynamic_cast<const Real*>(n)) {
+		*out = r->value;
+		return true;
+	}
+	return false;
+}
+
 static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Type* ty) {
 	return const_convert_integer(magnitude, negative, ty, ty);
 }
@@ -206,6 +220,17 @@ static ConstEvalResult fold_modulus(ConstEvalContext&, Type* result_ty, const st
 	return fold_integer_result(mag, neg, result_ty);
 }
 
+static ConstEvalResult fold_divide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2)
+		return ConstEvalResult::not_constant();
+	double a = 0.0, b = 0.0;
+	if (!const_numeric_as_double(args[0], &a) || !const_numeric_as_double(args[1], &b))
+		return ConstEvalResult::not_constant();
+	if (b == 0.0)
+		return ConstEvalResult::error("real constant division by zero");
+	return ConstEvalResult::success(new Real(a / b, result_ty));
+}
+
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const std::array<BuiltinDesc, 36> k_builtins{{
@@ -233,7 +258,7 @@ static const std::array<BuiltinDesc, 36> k_builtins{{
     {"pas::p_positive", fold_unary_plus},
     {"pas::p_negative", fold_unary_minus},
     {"pas::p_multiply", fold_multiply},
-    {"pas::p_divide", nullptr},
+    {"pas::p_divide", fold_divide},
     {"pas::p_intdivide", fold_intdivide},
     {"pas::p_assign", nullptr}, // delphi doesnt have it; well it has some kind of "implicit" operator that does the same.
     {"pas::p_modulus", fold_modulus},
