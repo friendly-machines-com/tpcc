@@ -1952,7 +1952,8 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return new PointerType(current_location(), parse_type_expression(true));
 	} else if (peek_keyword("string")) {
 		parse_keyword("string");
-		parse_opening_bracket();
+		if (!maybe_parse_opening_bracket())
+			return shortstring_type();
 		parse_expression();
 		parse_closing_bracket();
 		return raise_type_parse_error("sized-string type (string[N]) not implemented yet");
