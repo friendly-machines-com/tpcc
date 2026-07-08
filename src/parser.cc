@@ -2807,9 +2807,30 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 		}
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, ROUTINE);
 		parse_semicolon();
-		while (maybe_parse_keyword("overload")) {
-			has_overload = true;
-			parse_semicolon();
+		bool body_follows = true;
+		std::optional<std::string> external_cxx_name;
+		while (true) {
+			if (maybe_parse_keyword("overload")) {
+				has_overload = true;
+				parse_semicolon();
+			} else if (maybe_parse_keyword("inline")) {
+				// FIXME: use
+				parse_semicolon();
+			} else if (maybe_parse_keyword("noreturn")) {
+				// FIXME: use
+				parse_semicolon();
+			} else if (maybe_parse_keyword("forward")) {
+				body_follows = false;
+				parse_semicolon();
+			} else if (maybe_parse_directive("external")) {
+				parse_keyword("nil");
+				parse_directive("name");
+				external_cxx_name = parse_string_literal();
+				body_follows = false;
+				parse_semicolon();
+			} else {
+				break;
+			}
 		}
 		// FPC mode permits overloaded standalone/global routines without an
 		// explicit `overload` directive. Keep this policy at the parser call site:
@@ -2817,28 +2838,10 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 		// Frame::register_callable globally permissive would silently change method
 		// overload rules. Method prototypes still use their parsed directive bit.
 		has_overload = true;
-		bool body_follows = true;
-		while (maybe_parse_keyword("forward")) {
-			parse_semicolon();
-			body_follows = false;
-		}
 		Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
-		while (maybe_parse_keyword("inline")) {
-			// FIXME: use
-			parse_semicolon();
-		}
-		while (maybe_parse_keyword("noreturn")) {
-			// FIXME: use
-			parse_semicolon();
-		}
 		body_follows = body_follows && (peek_keyword("begin") || peek_keyword("var") || peek_keyword("const") || peek_keyword("type"));
-		if (maybe_parse_directive("external")) {
-			parse_keyword("nil");
-			parse_directive("name");
-			std::string cxx_name = parse_string_literal();
-			parse_semicolon();
-
-			auto builtin = lookup_external_value(nullptr, cxx_name);
+		if (external_cxx_name) {
+			auto builtin = lookup_external_value(nullptr, *external_cxx_name);
 			if (builtin != nullptr) {
 				// This is basically making TARGET an ALIAS for BUILTIN.
 				target->has_body = true;
@@ -2848,7 +2851,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 					auto desc = qbuiltin->desc;
 					target->cxx_name = desc->cxx_name;
 				} else {
-					raise_parse_error("unknown intrinsic via external '" + cxx_name + "'");
+					raise_parse_error("unknown intrinsic via external '" + *external_cxx_name + "'");
 				}
 			}
 		} else if (body_follows) {
