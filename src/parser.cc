@@ -2810,6 +2810,12 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 			has_overload = true;
 			parse_semicolon();
 		}
+		// FPC mode permits overloaded standalone/global routines without an
+		// explicit `overload` directive. Keep this policy at the parser call site:
+		// Frame is also used as class/object/record member storage, and making
+		// Frame::register_callable globally permissive would silently change method
+		// overload rules. Method prototypes still use their parsed directive bit.
+		has_overload = true;
 		bool body_follows = true;
 		while (maybe_parse_keyword("forward")) {
 			parse_semicolon();
