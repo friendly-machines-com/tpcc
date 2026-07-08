@@ -22,7 +22,8 @@ IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5);
 IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6);
 IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7);
 IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8);
-IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {});
+IntrinsicType k_set(SourceLocation::builtin(), "pas::t_set", {});
+IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}); // FIXME: Why {}
 IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {});
 EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
 IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {});
@@ -33,6 +34,7 @@ IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", {});
 IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", {});
 IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", {});
 IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", {});
+IntrinsicType k_fixedarray(SourceLocation::builtin(), "pas::t_fixedarray", {});
 IntrinsicType k_unknown(SourceLocation::builtin(), "pas::unknown_type", {});
 #if 0
 // Note: I don't think it's useful to have actual user-visible interfaces implemented on the metaclass.
@@ -79,6 +81,7 @@ Type* const k_all_intrinsics[] = {
     &k_longint,
     &k_qword,
     &k_int64,
+    &k_set,
     &k_double,
     &k_extended,
     &k_boolean,
@@ -90,6 +93,7 @@ Type* const k_all_intrinsics[] = {
     &k_ptruint,
     &k_sizeint,
     &k_sizeuint,
+    &k_fixedarray,
     &k_unknown,
 //    &k_m_iobject,
 };
@@ -118,6 +122,8 @@ Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
 Type* double_type() { return &k_double; }
+Type* set_type() { return &k_set; }
+Type* fixedarray_type() { return &k_fixedarray; }
 Type* unknown_type() { return &k_unknown; }
 
 

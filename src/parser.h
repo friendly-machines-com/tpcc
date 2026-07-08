@@ -92,6 +92,7 @@ private:
 	std::string input_file_name;
 	int input_file_line_number;
 	int input_char;
+	int peek_lowlevel();
 	int consume_lowlevel();
 	std::string consume();
 	bool peek_keyword(std::string s);
@@ -157,7 +158,7 @@ private:
 	Node* mk_unary_same(std::string id, Node* x);
 	Node* mk_assign(Node* a, Node* b);
 	Node* cast(Node* a, Type* target_ty);
-
+	Type* reuse_subrange_type(Node* lower_bound, Node* upper_bound);
 protected:
 	std::string input_token;
 	void parse_block_body();
@@ -312,6 +313,8 @@ protected:
 	bool maybe_parse_greater_equal();
 	bool maybe_parse_period();
 	void parse_period();
+	bool maybe_parse_period_period();
+	void parse_period_period();
 	/** Push a plain declaration frame. */
 	void push_scope(const Frame* scope);
 	/** Push a frame that participates in resolution as a `with` binding:

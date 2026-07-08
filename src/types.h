@@ -65,16 +65,6 @@ struct IncompleteType: public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-struct BoundedCardinalType: public Type {
-	uint64_t lower_bound;
-	uint64_t higher_bound;
-	BoundedCardinalType(SourceLocation source_location, uint64_t lower_bound, uint64_t higher_bound);
-	const char* diagnostic_kind() const override;
-	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
-	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
-	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
-};
-
 struct FixedArrayType: public Type {
 	Type* bounds;
 	Type* item_type;
@@ -293,6 +283,19 @@ public:
 	RoutineKind kind;
 
 	RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+class SubrangeType : public Type {
+public:
+	Node* lower_bound; // its type is base_type
+	Node* upper_bound; // its type is base_type
+	Type* base_type; /* NOT a subrange type */
+
+	SubrangeType(SourceLocation source_location, Type* base_type, Node* lower_bound, Node* upper_bound);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

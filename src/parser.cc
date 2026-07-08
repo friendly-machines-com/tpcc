@@ -120,6 +120,14 @@ void Parser::pop_input_file() {
 	input_file_line_number = p.input_file_line_number;
 	input_char = fgetc(input_file);
 }
+/** LL(2) lookahead to be able to identify ".." and disambiguate it from "5.." */
+int Parser::peek_lowlevel() {
+	int c = fgetc(input_file);
+	if (c != EOF) {
+		ungetc(c, input_file);
+	}
+	return c;
+}
 int Parser::consume_lowlevel() {
 	int result = input_char;
 	if (result == '\n') {
@@ -548,9 +556,40 @@ std::string Parser::consume() {
 			consume_lowlevel();
 		}
 	} else if ((input_char >= '0' && input_char <= '9') || input_char == '_') {
-		while ((input_char >= '0' && input_char <= '9') || input_char == '.' || input_char == '_') {
+		/* consume integer part first */
+		while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
 			sst << (char)input_char;
 			consume_lowlevel();
+		}
+		if (input_char == '.') {
+			int next_char = peek_lowlevel(); // LL(2). Sigh.
+			if (next_char >= '0' && next_char <= '9') {
+				sst << (char)input_char; // Append the '.'
+				consume_lowlevel();      // Consume the '.' so input_char becomes the digit
+				// Consume the fractional part
+				while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
+					sst << (char)input_char;
+					consume_lowlevel();
+				}
+			}
+		}
+		if (input_char == 'e' || input_char == 'E') {
+			// Peek to ensure it's actually an exponent, not just random garbage.
+			// In Pascal, an exponent MUST be followed by a digit, '+', or '-'.
+			int next_char = peek_lowlevel();
+			if ((next_char >= '0' && next_char <= '9') || next_char == '+' || next_char == '-') {
+				sst << (char)input_char; // Append the 'e' or 'E'
+				consume_lowlevel();
+				if (input_char == '+' || input_char == '-') {
+					sst << (char)input_char;
+					consume_lowlevel();
+				}
+				// Consume the exponent digits
+				while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
+					sst << (char)input_char;
+					consume_lowlevel();
+				}
+			}
 		}
 	} else if (input_char == '#') {
 		sst << (char)input_char;
@@ -1252,6 +1291,19 @@ void Parser::parse_period() {
 		raise_parse_error("missing period");
 	}
 }
+bool Parser::maybe_parse_period_period() {
+	if (input_token == "..") {
+		consume();
+		return true;
+	} else {
+		return false;
+	}
+}
+void Parser::parse_period_period() {
+	if (!maybe_parse_period_period()) {
+		raise_parse_error("missing period period");
+	}
+}
 
 bool Parser::maybe_parse_less_less() {
 	if (input_token == "<<") {
@@ -1947,6 +1999,19 @@ std::string Parser::parse_string_literal() {
 	return result;
 }
 
+Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
+	if (lower_bound->ty != upper_bound->ty) {
+		return raise_type_mismatch("subrange constructor with two bounds of the same type", lower_bound->ty, upper_bound->ty);
+	} else {
+		// FIXME: reuse existing subranges structually
+		// FIXME: it's not allowed to have a subrange type as a base type (or as bounds).  Resolve back to the base type of such.
+		// FIXME: UntypedIntegerType needs to be resolved somehow, otherwise the emitter will (correctly) choke on it.
+		auto base_type = lower_bound->ty;
+		return new SubrangeType(current_location(), base_type, lower_bound, upper_bound);
+	}
+}
+
+
 /** allow_forward: if true, an unresolved identifier at this parse position is
  *  auto-registered as an IncompleteType in the current type block rather than
  *  raising. Only the pointer branch propagates true; compound-type sub-parses
@@ -1997,9 +2062,19 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		// scope->rebind_type(name, intrinsic);
 		return intrinsic;
 	} else {
-		// FIXME: constant folding for ranges (2..5 -> BoundedCardinalType)
-		auto id = parse_identifier();
-		return resolve_type(id, allow_forward);
+		// TODO: This is really a type-level binary operator ".." and it really should do pretty similar automatic conversions
+		if (auto lower_bound = maybe_parse_numeral()) {
+			parse_period_period();
+			if (auto upper_bound = maybe_parse_numeral()) {
+				return reuse_subrange_type(lower_bound, upper_bound);
+			} else {
+				raise_type_parse_error("subrange constructor needs upper bound");
+			}
+		} else {
+			auto id = parse_identifier();
+			// FIXME: how to know whether this is a type symbol or a enum variant symbol
+			return resolve_type(id, allow_forward);
+		}
 	}
 }
 

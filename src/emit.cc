@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <set>
 #include <typeinfo>
+#include <cassert>
 #include <cstdint>
 #include <limits>
 
@@ -36,10 +37,13 @@ static bool fixed_array_length(Type* ty, uint64_t* out) {
 	if (!arr)
 		return false;
 	Type* bounds_ty = emit_unwrap_incomplete(arr->bounds);
+#if 0
 	auto bounds = dynamic_cast<BoundedCardinalType*>(bounds_ty);
 	if (!bounds || bounds->higher_bound < bounds->lower_bound)
 		return false;
 	*out = bounds->higher_bound - bounds->lower_bound + 1;
+#endif
+	assert(false);
 	return true;
 }
 
@@ -949,6 +953,10 @@ void Emitter::emit_type_ref(Type* ty) {
 			break;
 		ty = inc->resolved;
 	}
+	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+		// C++ doesn't support those, so punt for now.
+		return emit_type_ref(s->base_type);
+	}
 	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
 		fprintf(active, "%.*s", (int)it->cxx_name.size(), it->cxx_name.data());
 		return;
@@ -1045,6 +1053,21 @@ void Emitter::emit_type_ref(Type* ty) {
 		} else {
 			emit_routine_signature(rt, "(*)", Position::Declaration, "");
 		}
+		return;
+	}
+	if (auto s = dynamic_cast<FixedSetType*>(ty)) {
+		emit_type_ref(set_type());
+		return;
+	}
+	if (auto s = dynamic_cast<FixedArrayType*>(ty)) {
+		emit_type_ref(fixedarray_type());
+		fprintf(active, "<");
+		emit_type_ref(s->item_type);
+		fprintf(active, ", ");
+		// FIXME: Type* bounds;
+		// FIXME; of xxx
+		fprintf(active, "1"); // FIXME.
+		fprintf(active, ">");
 		return;
 	}
 	unhandled_type("emit_type_ref", ty);

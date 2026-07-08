@@ -82,13 +82,6 @@ ModuleType::ModuleType(SourceLocation source_location, Frame* interface_children
 UnitType::UnitType(SourceLocation source_location) : Type(std::move(source_location)) {}
 UntypedIntegerType::UntypedIntegerType(SourceLocation source_location) : Type(std::move(source_location)) {}
 
-BoundedCardinalType::BoundedCardinalType(SourceLocation source_location, uint64_t lower_bound, uint64_t higher_bound)
-    : Type(std::move(source_location)) {
-	this->lower_bound = lower_bound;
-	this->higher_bound = higher_bound;
-	assert(higher_bound >= lower_bound);
-}
-
 RoutineType::RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind)
     : Type(std::move(source_location)) {
 	this->formals = std::move(formals);
@@ -236,11 +229,6 @@ void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostr
 		out << "resolved: " << ctx->known_type_ref(resolved);
 	}
 }
-
-const char* BoundedCardinalType::diagnostic_kind() const { return "range"; }
-void BoundedCardinalType::collect_diagnostic_edges(ErrorLetContext*) const {}
-void BoundedCardinalType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "bounds: " << lower_bound << ".." << higher_bound; }
-void BoundedCardinalType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "bounds: ..."; }
 
 const char* FixedArrayType::diagnostic_kind() const { return "array"; }
 void FixedArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(bounds); ctx->add_type_edge(item_type); }
@@ -391,10 +379,12 @@ static const char* param_mode_text(ParamMode mode) {
 }
 
 const char* RoutineType::diagnostic_kind() const { return "routine"; }
+
 void RoutineType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	for (const auto& p : formals) { ctx->add_type_edge(p.ty); ctx->add_value_edge(p.default_value); }
 	ctx->add_type_edge(return_type);
 }
+
 void RoutineType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	if (kind == CONSTRUCTOR || kind == DESTRUCTOR || kind == CLASS_METHOD) {
 		out << "\n";
@@ -416,4 +406,54 @@ void RoutineType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostring
 	out << ")";
 	if (return_type) out << ": " << ctx->known_type_ref(return_type);
 }
-void RoutineType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const { out << "\n"; ctx->indent(out, indent + 1); out << "signature: ..."; }
+
+void RoutineType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "signature: ...";
+}
+
+SubrangeType::SubrangeType(SourceLocation source_location, Type* base_type, Node* lower_bound, Node* upper_bound): Type(std::move(source_location)) {
+	this->base_type = base_type;
+	this->lower_bound = lower_bound;
+	this->upper_bound = upper_bound;
+	// FIXME: assert(higher_bound >= lower_bound);
+	assert(this->lower_bound->ty == base_type);
+	assert(this->upper_bound->ty == base_type);
+}
+
+const char* SubrangeType::diagnostic_kind() const {
+	return "subrange";
+}
+
+void SubrangeType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(base_type);
+	ctx->add_value_edge(lower_bound);
+	ctx->add_value_edge(upper_bound);
+}
+
+void SubrangeType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "lower_bound: " << ctx->known_value_ref(lower_bound);
+
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "upper_bound: " << ctx->known_value_ref(upper_bound);
+
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "base: " << ctx->known_type_ref(base_type);
+}
+
+void SubrangeType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "lower_bound: ...";
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "upper_bound: ...";
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "base: ...";
+}
