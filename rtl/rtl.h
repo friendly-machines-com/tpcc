@@ -47,6 +47,10 @@ enum t_boolean {
 using t_char     = char;
 using unknown_type = void*;
 
+inline t_boolean bool_to_boolean(bool value) {
+	return value ? p_true : p_false;
+}
+
 struct t_shortstring {
 	uint8_t length;
 	t_char data[255];
@@ -89,49 +93,50 @@ inline t_shortstring tpcc_shortstring_from_c(const char* s) {
 	return result;
 }
 
-inline t_shortstring p_add(t_shortstring&& a, t_shortstring&& b) {
-	uint16_t l = (uint16_t) a.length + (uint16_t) b.length;
-	if (l > 254) {
-		l = 254;
-	}
+inline t_shortstring p_add(const t_shortstring& a, const t_shortstring& b) {
 	t_shortstring result {};
-	result.length = l;
-	memcpy(result.data, a.data, a.length);
-	memcpy(&result.data[a.length], b.data, b.length);
+	const std::size_t result_length = std::min<std::size_t>(
+	    static_cast<std::size_t>(a.length) + static_cast<std::size_t>(b.length),
+	    sizeof(result.data) - 1);
+	const std::size_t a_length = std::min<std::size_t>(a.length, result_length);
+	const std::size_t b_length = result_length - a_length;
+	result.length = static_cast<uint8_t>(result_length);
+	memcpy(result.data, a.data, a_length);
+	memcpy(&result.data[a_length], b.data, b_length);
 	result.data[result.length] = 0;
-	return a + b;
+	return result;
 }
 
-inline int stringcmp(t_shortstring&& a, t_shortstring&& b) {
+inline int stringcmp(const t_shortstring& a, const t_shortstring& b) {
 	int r = memcmp(a.data, b.data, std::min(a.length, b.length));
 	if (r == 0) {
-		return (int) b.length - (int) a.length;
+		return (int) a.length - (int) b.length;
 	}
 	return r;
 }
 
-inline t_boolean p_lessthan(t_shortstring&& a, t_shortstring&& b) {
-	return stringcmp(a, b) < 0;
+inline t_boolean p_lessthan(const t_shortstring& a, const t_shortstring& b) {
+	return bool_to_boolean(stringcmp(a, b) < 0);
 }
 
-inline t_boolean p_lessthanorequal(t_shortstring&& a, t_shortstring&& b) {
-	return stringcmp(a, b) <= 0;
+inline t_boolean p_lessthanorequal(const t_shortstring& a, const t_shortstring& b) {
+	return bool_to_boolean(stringcmp(a, b) <= 0);
 }
 
-inline t_boolean p_equal(t_shortstring&& a, t_shortstring&& b) {
-	return stringcmp(a, b) == 0;
+inline t_boolean p_equal(const t_shortstring& a, const t_shortstring& b) {
+	return bool_to_boolean(stringcmp(a, b) == 0);
 }
 
-inline t_boolean p_notequal(t_shortstring&& a, t_shortstring&& b) {
-	return stringcmp(a, b) != 0;
+inline t_boolean p_notequal(const t_shortstring& a, const t_shortstring& b) {
+	return bool_to_boolean(stringcmp(a, b) != 0);
 }
 
-inline t_boolean p_greaterthan(t_shortstring&& a, t_shortstring&& b) {
-	return stringcmp(a, b) > 0;
+inline t_boolean p_greaterthan(const t_shortstring& a, const t_shortstring& b) {
+	return bool_to_boolean(stringcmp(a, b) > 0);
 }
 
-inline t_boolean p_greaterthanorequal(t_shortstring&& a, t_shortstring&& b) {
-	return stringcmp(a, b) >= 0;
+inline t_boolean p_greaterthanorequal(const t_shortstring& a, const t_shortstring& b) {
+	return bool_to_boolean(stringcmp(a, b) >= 0);
 }
 
 template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
@@ -142,10 +147,7 @@ inline t_integer p_length(const t_ansistring& s) { return s.length; }
 template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
 template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_integer>(N); }
 
-#define DEFINE_OPERATIONS(T) \
-	inline T p_bitwiseand(T a, T b) { return a & b; } \
-	inline T p_bitwiseor(T a, T b) { return a | b; } \
-	inline T p_bitwisexor(T a, T b) { return a ^ b; } \
+#define DEFINE_ARITHMETIC_OPERATIONS(T) \
 	inline T p_add(T a, T b) { return a + b; } \
 	inline T p_subtract(T a, T b) { return a - b; } \
 	inline T p_positive(T b) { return +b; } \
@@ -154,35 +156,43 @@ template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_
 	inline T p_multiply(T a, T b) { return a * b; } \
 	inline double p_divide(T a, T b) { return (double) a / (double) b; } \
 	inline T p_assign(T source) { T target = source; return target; } \
+	inline t_boolean p_lessthan(T a, T b) { return bool_to_boolean(a < b); } \
+	inline t_boolean p_lessthanorequal(T a, T b) { return bool_to_boolean(a <= b); } \
+	inline t_boolean p_equal(T a, T b) { return bool_to_boolean(a == b); } \
+	inline t_boolean p_notequal(T a, T b) { return bool_to_boolean(a != b); } \
+	inline t_boolean p_greaterthan(T a, T b) { return bool_to_boolean(a > b); } \
+	inline t_boolean p_greaterthanorequal(T a, T b) { return bool_to_boolean(a >= b); }
+
+#define DEFINE_INTEGER_OPERATIONS(T) \
+	inline T p_bitwiseand(T a, T b) { return a & b; } \
+	inline T p_bitwiseor(T a, T b) { return a | b; } \
+	inline T p_bitwisexor(T a, T b) { return a ^ b; } \
 	inline T p_intdivide(T a, T b) { return a / b; } \
 	inline T p_modulus(T a, T b) { return a % b; } \
 	inline T p_leftshift(T a, T b) { return a << b; } /* FIXME: b smaller */ \
-	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */ \
-	inline t_boolean p_lessthan(T a, T b) { return a < b; } \
-	inline t_boolean p_lessthanorequal(T a, T b) { return a <= b; } \
-	inline t_boolean p_equal(T a, T b) { return a == b; } \
-	inline t_boolean p_notequal(T a, T b) { return !(p_equal(a, b)); } \
-	inline t_boolean p_greaterthan(T a, T b) { return a > b; } \
-	inline t_boolean p_greaterthanorequal(T a, T b) { return a >= b; }
+	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */
 
-DEFINE_OPERATIONS(t_byte)
-DEFINE_OPERATIONS(t_shortint)
-DEFINE_OPERATIONS(t_word)
-DEFINE_OPERATIONS(t_smallint)
-DEFINE_OPERATIONS(t_longword)
-DEFINE_OPERATIONS(t_integer)
-DEFINE_OPERATIONS(t_longint)
-DEFINE_OPERATIONS(t_int64)
-DEFINE_OPERATIONS(t_qword)
-DEFINE_OPERATIONS(t_double)
-DEFINE_OPERATIONS(t_extended)
+#define DEFINE_INTEGRAL_OPERATIONS(T) \
+	DEFINE_ARITHMETIC_OPERATIONS(T) \
+	DEFINE_INTEGER_OPERATIONS(T)
+
+DEFINE_INTEGRAL_OPERATIONS(t_byte)
+DEFINE_INTEGRAL_OPERATIONS(t_shortint)
+DEFINE_INTEGRAL_OPERATIONS(t_word)
+DEFINE_INTEGRAL_OPERATIONS(t_smallint)
+DEFINE_INTEGRAL_OPERATIONS(t_longword)
+DEFINE_INTEGRAL_OPERATIONS(t_integer)
+DEFINE_INTEGRAL_OPERATIONS(t_int64)
+DEFINE_INTEGRAL_OPERATIONS(t_qword)
+DEFINE_ARITHMETIC_OPERATIONS(t_double)
+DEFINE_ARITHMETIC_OPERATIONS(t_extended)
 
 inline t_boolean p_logicalnot(t_boolean a) {
-	return !a;
+	return bool_to_boolean(!a);
 }
 
 inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
-	return ((a != 0) ^ (b != 0)) != 0;
+	return bool_to_boolean(((a != 0) ^ (b != 0)) != 0);
 }
 
 inline t_boolean p_assign(t_boolean b) {
@@ -190,7 +200,7 @@ inline t_boolean p_assign(t_boolean b) {
 }
 
 inline t_boolean p_assigned(const void* p) {
-	return (p != nullptr);
+	return bool_to_boolean(p != nullptr);
 }
 
 template<typename T> inline void p_inc(T& x, t_integer n = 1) { x = p_add(x, static_cast<T>(n)); }
