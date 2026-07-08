@@ -167,6 +167,45 @@ static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& a
 static ConstEvalResult fold_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, false); }
 static ConstEvalResult fold_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, true); }
 
+static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	auto a = const_integer_arg(args[0]);
+	auto b = const_integer_arg(args[1]);
+	uint64_t mag = 0;
+	if (a->value != 0 && b->value > UINT64_MAX / a->value)
+		return ConstEvalResult::error("integer constant overflow");
+	mag = a->value * b->value;
+	bool neg = (a->negative != b->negative) && mag != 0;
+	return fold_integer_result(mag, neg, result_ty);
+}
+
+static ConstEvalResult fold_intdivide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	auto a = const_integer_arg(args[0]);
+	auto b = const_integer_arg(args[1]);
+	if (b->value == 0)
+		return ConstEvalResult::error("integer constant division by zero");
+	uint64_t mag = a->value / b->value;
+	bool neg = (a->negative != b->negative) && mag != 0;
+	return fold_integer_result(mag, neg, result_ty);
+}
+
+static ConstEvalResult fold_modulus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	auto a = const_integer_arg(args[0]);
+	auto b = const_integer_arg(args[1]);
+	if (b->value == 0)
+		return ConstEvalResult::error("integer constant modulo by zero");
+	uint64_t mag = a->value % b->value;
+	// Pascal's integer remainder follows the dividend's sign. For zero, keep the
+	// canonical non-negative representation.
+	bool neg = a->negative && mag != 0;
+	return fold_integer_result(mag, neg, result_ty);
+}
+
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const std::array<BuiltinDesc, 36> k_builtins{{
@@ -193,11 +232,11 @@ static const std::array<BuiltinDesc, 36> k_builtins{{
     {"pas::p_subtract", fold_subtract},
     {"pas::p_positive", fold_unary_plus},
     {"pas::p_negative", fold_unary_minus},
-    {"pas::p_multiply", nullptr},
+    {"pas::p_multiply", fold_multiply},
     {"pas::p_divide", nullptr},
-    {"pas::p_intdivide", nullptr},
+    {"pas::p_intdivide", fold_intdivide},
     {"pas::p_assign", nullptr}, // delphi doesnt have it; well it has some kind of "implicit" operator that does the same.
-    {"pas::p_modulus", nullptr},
+    {"pas::p_modulus", fold_modulus},
     {"pas::p_leftshift", nullptr},
     {"pas::p_rightshift", nullptr},
 
