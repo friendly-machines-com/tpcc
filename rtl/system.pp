@@ -104,6 +104,8 @@ operator shr(a, b: Int64): Cardinal; external nil name 'pas::p_rightshift'; // F
 function ord(const x): Cardinal; external nil name 'pas::p_ord';
 procedure inc(var x); external nil name 'pas::p_inc';
 procedure dec(var x); external nil name 'pas::p_dec';
+procedure str(const x: Int64; var s: ShortString); overload; external nil name 'pas::p_str';
+procedure str(const x: QWord; var s: ShortString); overload; external nil name 'pas::p_str';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
 
 operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
