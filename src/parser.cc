@@ -2035,6 +2035,11 @@ void Parser::parse_const_block() {
 		auto name = parse_identifier();
 		if (maybe_parse_equal()) {
 			Node* expr = parse_expression();
+			if (maybe_parse_directive("deprecated")) {
+				// TODO: Store deprecated-ness.
+				//parse_expression();
+				parse_string_literal();
+			}
 			ConstEvalContext ctx;
 			ConstEvalResult folded = expr->const_eval(ctx);
 			if (folded.kind == ConstEvalResult::Kind::NotConstant)
