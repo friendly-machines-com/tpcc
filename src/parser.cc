@@ -2069,7 +2069,15 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 				*error = "character subrange bound is outside Char range";
 				return {};
 			}
-			return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Char, node, ty, false, i->value, static_cast<__int128>(i->value), static_cast<int64_t>(i->value)};
+			return FoldedSubrangeBound{
+			    FoldedSubrangeBound::Kind::Char,
+			    node,
+			    ty,
+			    false,
+			    i->value,
+			    static_cast<__int128>(i->value),
+			    static_cast<int64_t>(i->value),
+			};
 		}
 		if (!is_integer_semantic_type(ty)) {
 			*error = "integer subrange bound has a non-integer type";
@@ -2078,7 +2086,15 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 		__int128 value = static_cast<__int128>(i->value);
 		if (i->negative)
 			value = -value;
-		return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Integer, node, ty, i->negative, i->value, value, 0};
+		return FoldedSubrangeBound{
+		    FoldedSubrangeBound::Kind::Integer,
+		    node,
+		    ty,
+		    i->negative,
+		    i->value,
+		    value,
+		    0,
+		};
 	}
 	if (auto s = dynamic_cast<String*>(node)) {
 		if (s->value.size() != 1) {
@@ -2092,7 +2108,15 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 			return {};
 		}
 		auto as_char = new Integer(value, char_type());
-		return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Char, as_char, char_type(), false, value, static_cast<__int128>(value), static_cast<int64_t>(value)};
+		return FoldedSubrangeBound{
+		    FoldedSubrangeBound::Kind::Char,
+		    as_char,
+		    char_type(),
+		    false,
+		    value,
+		    static_cast<__int128>(value),
+		    static_cast<int64_t>(value),
+		};
 	}
 	if (auto e = dynamic_cast<EnumMemberRef*>(node)) {
 		Type* ty = subrange_range_type(e->ty);
@@ -2100,7 +2124,15 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 			*error = "enum subrange bound has a non-enum type";
 			return {};
 		}
-		return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Enum, node, ty, false, 0, e->value, e->value};
+		return FoldedSubrangeBound{
+		    FoldedSubrangeBound::Kind::Enum,
+		    node,
+		    ty,
+		    false,
+		    0,
+		    e->value,
+		    e->value,
+		};
 	}
 	*error = "subrange bound must fold to an ordinal constant";
 	return {};

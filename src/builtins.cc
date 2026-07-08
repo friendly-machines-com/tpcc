@@ -6,9 +6,9 @@
 #include <string>
 
 IntrinsicType::IntrinsicType(SourceLocation source_location,
-                             std::string cxx_name,
-                             std::optional<int> rank,
-                             std::optional<OrdinalBounds> ordinal_bounds)
+			     std::string cxx_name,
+			     std::optional<int> rank,
+			     std::optional<OrdinalBounds> ordinal_bounds)
     : Type(std::move(source_location)),
       cxx_name(std::move(cxx_name)),
       rank(std::move(rank)),
