@@ -888,10 +888,10 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_with_epilogue();
 	} else {
-		// A leading identifier followed by ':' is a Pascal label definition. It is
-		// emitted directly like other control-flow framing in this parser. If the
-		// colon is absent, keep the resolved identifier and parse the remaining
-		// designator tail normally; no token pushback is needed.
+		// A leading identifier followed by ':' is a Pascal label definition.
+		// If the next token is immediately ':=', resolve the identifier in
+		// lvalue context before value lookup: Pascal function-name assignment
+		// writes the hidden result slot, while expression use stays a call.
 		Node* lhs = nullptr;
 		if (!input_token.empty() && keywords.find(input_token) == keywords.end()) {
 			std::string first = parse_identifier();
@@ -901,7 +901,10 @@ void Parser::maybe_parse_statement() {
 				parse_statement();
 				return;
 			}
-			lhs = parse_designator_tail(resolve_value(first));
+			if (input_token == ":=")
+				lhs = resolve_lvalue(first);
+			else
+				lhs = parse_designator_tail(resolve_value(first));
 		} else {
 			lhs = parse_designator();
 		}
@@ -1039,10 +1042,34 @@ Node* Parser::resolve_value(std::string name) {
 	return nullptr;
 }
 
+Node* Parser::active_function_result_lvalue(Callable* c) const {
+	if (!c || !c->body_frame || c->ty->return_type == &unit_type())
+		return nullptr;
+	bool active = false;
+	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+		if (it->frame == c->body_frame) {
+			active = true;
+			break;
+		}
+	}
+	if (!active)
+		return nullptr;
+	return c->body_frame->lookup_value_local("result");
+}
+
 /** value that can be assigned to */
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (Node* hit = it->frame->lookup_value(name)) {
+			if (auto c = dynamic_cast<Callable*>(hit)) {
+				if (Node* result = active_function_result_lvalue(c))
+					return result;
+			} else if (auto os = dynamic_cast<OverloadSet*>(hit)) {
+				for (auto* c : os->members) {
+					if (Node* result = active_function_result_lvalue(c))
+						return result;
+				}
+			}
 			if (it->unwrap_via) {
 				auto m = new MemberAccess(it->unwrap_via, hit);
 				m->ty = hit->ty;

@@ -164,6 +164,7 @@ private:
 	Node* mk_assign(Node* a, Node* b);
 	Node* cast(Node* a, Type* target_ty);
 	Type* reuse_subrange_type(Node* lower_bound, Node* upper_bound);
+	Node* active_function_result_lvalue(Callable* c) const;
 protected:
 	std::string input_token;
 	void parse_block_body();
