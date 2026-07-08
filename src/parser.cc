@@ -2623,7 +2623,9 @@ Node* Parser::parse_typed_const_initializer(Type* ty) {
 	ConstEvalResult checked = converted->const_eval(ctx);
 	if (checked.kind == ConstEvalResult::Kind::Error)
 		raise_parse_error(checked.message);
-	return converted;
+	if (checked.kind == ConstEvalResult::Kind::NotConstant)
+		raise_parse_error("constant expression expected");
+	return checked.node;
 }
 
 void Parser::parse_const_block() {
