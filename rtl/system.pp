@@ -24,6 +24,8 @@ type
   SizeInt = external nil name 'pas::t_sizeint';
   SizeUInt = external nil name 'pas::t_sizeuint';
   shortstring = external nil name 'pas::t_shortstring';
+  PShortString = ^shortstring;
+  PChar = ^Char;
   AnsiString = external nil name 'pas::t_ansistring';
   //TClass = external nil name 'pas::m_iobject'; // class of TObject;  this would technically be okay, but I am not sure how we would get enough type info into the compiler this way.
   TClass = class of TObject; // instead, the compiler has now hardcoded that all "class of X" will be pas::m_iobject*".
