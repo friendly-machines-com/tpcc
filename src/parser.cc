@@ -3458,6 +3458,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	Frame* body_frame = new Frame(enclosing);
 	target->body_frame = body_frame;
 	Callable* saved_routine = current_routine;
+	bool nested_lambda = saved_routine && dynamic_cast<Procedure*>(target);
 	current_routine = target;
 	push_scope(body_frame);
 	StorageSlot* self_slot = nullptr;
@@ -3490,16 +3491,15 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
 	}
 	if (emitter)
-		emitter->emit_procedure_open(target);
+		emitter->emit_procedure_open(target, nested_lambda);
 	size_t pushed = parse_decl_blocks(false);
 	parse_keyword("begin");
 	parse_block_body();
 	target->has_body = true;
 	parse_keyword("end");
 	parse_semicolon();
-	if (emitter) {
-		emitter->emit_procedure_close(target);
-	}
+	if (emitter)
+		emitter->emit_procedure_close(target, nested_lambda);
 	for (size_t i = 0; i < pushed; i++)
 		pop_scope();
 	if (self_slot)

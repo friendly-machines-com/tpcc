@@ -369,10 +369,25 @@ void Emitter::emit_callable_signature(Callable* c, Position pos, std::string own
 	emit_routine_signature(c->ty, callable_cxx_name(c), pos, owner_qualifier);
 }
 
-void Emitter::emit_procedure_open(Callable* c) {
+void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 	if (!active)
 		return;
 	fprintf(active, "\n");
+	if (nested_lambda) {
+		fprintf(active, "\tauto %s = [&]", callable_cxx_name(c).c_str());
+		emit_routine_signature(c->ty, "", Position::DeclarationFormalsOnly, "");
+		if (c->ty->return_type != &unit_type()) {
+			fprintf(active, " -> ");
+			emit_type_ref(c->ty->return_type);
+		}
+		fprintf(active, " {\n");
+		if (c->ty->return_type != &unit_type()) {
+			fprintf(active, "\t");
+			emit_type_ref(c->ty->return_type);
+			fprintf(active, " p_result;\n");
+		}
+		return;
+	}
 	std::string qualifier;
 	if (auto m = dynamic_cast<Method*>(c)) {
 		if (m->owner_class) {
@@ -390,7 +405,7 @@ void Emitter::emit_procedure_open(Callable* c) {
 	}
 }
 
-void Emitter::emit_procedure_close(Callable* target) {
+void Emitter::emit_procedure_close(Callable* target, bool nested_lambda) {
 	if (!active)
 		return;
 	auto ty = target->ty;
@@ -399,7 +414,7 @@ void Emitter::emit_procedure_close(Callable* target) {
 	} else if (ty->return_type != &unit_type()) {
 		fprintf(active, "\treturn p_result;\n");
 	}
-	fprintf(active, "}\n");
+	fprintf(active, nested_lambda ? "\t};\n" : "}\n");
 }
 
 void Emitter::emit_callable_prototype(Callable* c, std::string owner_qualifier, std::string prefix, std::string suffix) {
