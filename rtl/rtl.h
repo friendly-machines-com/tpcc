@@ -12,8 +12,10 @@
 // from Pascal source.
 #pragma once
 
-#include <cstdint>
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <cstdio>
@@ -81,7 +83,7 @@ struct t_ansistring : t_shortstring {};
 
 inline t_shortstring tpcc_shortstring_from_c(const char* s) {
 	t_shortstring result{};
-	result.length = min(strlen(s), 254);
+	result.length = std::min(strlen(s), 254ul);
 	memcpy(result.data, s, result.length);
 	result.data[result.length] = 0;
 	return result;
@@ -101,7 +103,7 @@ inline t_shortstring p_add(t_shortstring&& a, t_shortstring&& b) {
 }
 
 inline int stringcmp(t_shortstring&& a, t_shortstring&& b) {
-	int r = memcmp(a.data, b.data, min(a.length, b.length));
+	int r = memcmp(a.data, b.data, std::min(a.length, b.length));
 	if (r == 0) {
 		return (int) b.length - (int) a.length;
 	}
