@@ -27,15 +27,17 @@ type
   PShortString = ^shortstring;
   PChar = ^Char;
   AnsiString = external nil name 'pas::t_ansistring';
-  //TClass = external nil name 'pas::m_iobject'; // class of TObject;  this would technically be okay, but I am not sure how we would get enough type info into the compiler this way.
-  TClass = class of TObject; // instead, the compiler has now hardcoded that all "class of X" will be pas::m_iobject*".
+  // `class of X` is a real class-reference type in the compiler.  The C++
+  // representation is the target class's metaclass pointer: X::m_meta*.
+  TClass = class of TObject;
   TObject = class
   public
     destructor Destroy; virtual;
     
-    // Compiler generates (for any class): static inline m_meta* m_meta::p_classtype() { return &meta; }
-    // Those "class function"s will be generated as regular functions in m_tobject--if anywhere.
-    class function ClassType: TClass; virtual; external nil name 'p_classtype'; // compiler-generated impl each time
+    // Class methods live on the generated m_meta class.  The regular class
+    // emits static proxies so TObject.ClassName and obj.ClassName both dispatch
+    // through the metaclass instance.
+    class function ClassType: TClass; virtual; external nil name 'p_classtype';
     class function ClassName: shortstring; virtual;
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;
