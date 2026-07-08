@@ -1493,20 +1493,23 @@ Node* Parser::parse_designator_tail(Node* result) {
 			result = call;
 			continue;
 		} else if (maybe_parse_opening_bracket()) {
-			// Bracketed: RHS is a single expression. Auto-call bare callable
-			// LHS first (indexing into a callable reference is nonsense).
+			// Bracketed: RHS is one or more comma-separated index expressions.
+			// Each comma dimension is a nested fixed-array index. Auto-call bare
+			// callable LHS first (indexing into a callable reference is nonsense).
 			result = maybe_auto_call(result);
-			Node* idx = parse_expression();
+			do {
+				Node* idx = parse_expression();
+				Type* ct = unwrap_incomplete(result->ty);
+				auto arr = dynamic_cast<FixedArrayType*>(ct);
+				if (!arr)
+					raise_parse_error("index on non-array type");
+				if (!array_index_compatible(arr, idx))
+					raise_type_mismatch("array index expression compatible with index type", arr->range.base_type, idx->ty);
+				auto ix = new Index(result, idx);
+				ix->ty = arr->item_type;
+				result = ix;
+			} while (maybe_parse_comma());
 			parse_closing_bracket();
-			Type* ct = unwrap_incomplete(result->ty);
-			auto arr = dynamic_cast<FixedArrayType*>(ct);
-			if (!arr)
-				raise_parse_error("index on non-array type");
-			if (!array_index_compatible(arr, idx))
-				raise_type_mismatch("array index expression compatible with index type", arr->range.base_type, idx->ty);
-			auto ix = new Index(result, idx);
-			ix->ty = arr->item_type;
-			result = ix;
 		} else if (maybe_parse_circumflex()) {
 			// Postfix: no RHS. Auto-call bare callable LHS first (deref of a
 			// callable reference is nonsense).
@@ -1582,6 +1585,14 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 }
 
 Node* Parser::mk_unary_same(std::string id, Node* x) {
+	if (auto i = dynamic_cast<Integer*>(x)) {
+		if (x->ty == &untyped_integer_type()) {
+			if (id == "-")
+				return new Integer(i->value, i->ty, !i->negative);
+			if (id == "+")
+				return x;
+		}
+	}
 	auto fn = resolve_value(id);
 	std::vector<Node*> args;
 	args.push_back(x);
