@@ -478,20 +478,23 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	}
 
 	fprintf(active, " {\n");
+	auto classref_api_cxx_for = [&](ClassType* c) -> std::string {
+		ClassType* target = c;
+		while (target->super)
+			target = target->super;
+		if (target->cxx_name.empty())
+			unhandled_type("metaclass API target name unknown", target);
+		return target->cxx_name + "::m_meta*";
+	};
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			std::string class_name = c->cxx_name;					// FIXME: terrible name.
 			std::string parent_class_cxx_name = c->super ? c->super->cxx_name : ""; // FIXME: terrible name
-				if (c->super && parent_class_cxx_name.empty()) {
-					unhandled_type("parent class name unknown", c);
-				}
-				ClassType* classref_api_target = c;
-				while (classref_api_target->super)
-					classref_api_target = classref_api_target->super;
-				if (classref_api_target->cxx_name.empty())
-					unhandled_type("metaclass API target name unknown", classref_api_target);
-				std::string classref_api_cxx = classref_api_target->cxx_name + "::m_meta*";
-				fprintf(active, "\tpublic: inline static m_meta* m_meta_instance() {\n");
+			if (c->super && parent_class_cxx_name.empty()) {
+				unhandled_type("parent class name unknown", c);
+			}
+			std::string classref_api_cxx = classref_api_cxx_for(c);
+			fprintf(active, "\tpublic: inline static m_meta* m_meta_instance() {\n");
 			// This will basically NEVER be possible in Pascal.
 			// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
 			fprintf(active, "\t\tstatic %s meta{};\n", cxx_name.c_str());
@@ -501,20 +504,20 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
 				fprintf(active, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
 				fprintf(active, "\t}\n");
+			}
+			if (!body->lookup_value_local("inheritsfrom")) {
+				fprintf(active, "\tpublic: virtual inline ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
+				if (parent_class_cxx_name.empty()) {
+					fprintf(active, "\t\treturn ::pas::bool_to_boolean(s == this);\n");
+				} else {
+					fprintf(active, "\t\treturn ::pas::bool_to_boolean(s == this || %s::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
-				if (!body->lookup_value_local("inheritsfrom")) {
-					fprintf(active, "\tpublic: virtual inline ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
-					if (parent_class_cxx_name.empty()) {
-						fprintf(active, "\t\treturn ::pas::bool_to_boolean(s == this);\n");
-					} else {
-						fprintf(active, "\t\treturn ::pas::bool_to_boolean(s == this || %s::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
-					}
-					fprintf(active, "\t}\n");
-				}
-				if (!body->lookup_value_local("classparent")) {
-					fprintf(active, "\tpublic: virtual inline %s p_classparent() {\n", classref_api_cxx.c_str());
-					if (parent_class_cxx_name.empty()) {
-						fprintf(active, "\t\treturn nullptr;\n");
+				fprintf(active, "\t}\n");
+			}
+			if (!body->lookup_value_local("classparent")) {
+				fprintf(active, "\tpublic: virtual inline %s p_classparent() {\n", classref_api_cxx.c_str());
+				if (parent_class_cxx_name.empty()) {
+					fprintf(active, "\t\treturn nullptr;\n");
 				} else {
 					fprintf(active, "\t\treturn %s::m_meta::m_meta_instance();\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
@@ -525,31 +528,26 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		} else {
 			unhandled_type("emit_aggregate_decl", ty);
 		}
-		} else if (is_class && !in_meta) {
-			auto c = static_cast<ClassType*>(ty);
-			ClassType* classref_api_target = c;
-			while (classref_api_target->super)
-				classref_api_target = classref_api_target->super;
-			if (classref_api_target->cxx_name.empty())
-				unhandled_type("metaclass API target name unknown", classref_api_target);
-			std::string classref_api_cxx = classref_api_target->cxx_name + "::m_meta*";
-			emit_aggregate_decl("m_meta", ty, true);
-			fprintf(active, ";\n");
+	} else if (is_class && !in_meta) {
+		auto c = static_cast<ClassType*>(ty);
+		std::string classref_api_cxx = classref_api_cxx_for(c);
+		emit_aggregate_decl("m_meta", ty, true);
+		fprintf(active, ";\n");
 		// Generate wrapper proxies in the regular class.  Those all have to be generated each time since they are static.
 		if (!body->lookup_value_local("classname")) {
 			fprintf(active, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
 			fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_classname();\n");
 			fprintf(active, "\t}\n");
-			}
-			if (!body->lookup_value_local("inheritsfrom")) {
-				fprintf(active, "\tpublic: inline static ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
-				fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_inheritsfrom(s);\n");
-				fprintf(active, "\t}\n");
-			}
-			if (!body->lookup_value_local("classparent")) {
-				fprintf(active, "\tpublic: inline static %s p_classparent() {\n", classref_api_cxx.c_str());
-				fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_classparent();\n");
-				fprintf(active, "\t}\n");
+		}
+		if (!body->lookup_value_local("inheritsfrom")) {
+			fprintf(active, "\tpublic: inline static ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
+			fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_inheritsfrom(s);\n");
+			fprintf(active, "\t}\n");
+		}
+		if (!body->lookup_value_local("classparent")) {
+			fprintf(active, "\tpublic: inline static %s p_classparent() {\n", classref_api_cxx.c_str());
+			fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_classparent();\n");
+			fprintf(active, "\t}\n");
 		}
 		// fallthrough
 	}
