@@ -1047,10 +1047,14 @@ Node* Parser::active_function_result_lvalue(Callable* c) const {
 		return nullptr;
 	bool active = false;
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (it->frame == c->body_frame) {
-			active = true;
-			break;
+		for (const Frame* frame = it->frame; frame; frame = frame->parent) {
+			if (frame == c->body_frame) {
+				active = true;
+				break;
+			}
 		}
+		if (active)
+			break;
 	}
 	if (!active)
 		return nullptr;
