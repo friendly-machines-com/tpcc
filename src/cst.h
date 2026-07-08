@@ -9,6 +9,8 @@ class Frame;
 class RoutineType;
 class Callable;
 class ErrorLetContext;
+struct ConstEvalContext;
+struct ConstEvalResult;
 
 enum class TypeBoundKind { Low, High };
 
@@ -18,6 +20,7 @@ public:
 	virtual void collect_diagnostic_edges(ErrorLetContext* ctx) const;
 	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
 	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
+	virtual ConstEvalResult const_eval(ConstEvalContext& ctx) const;
 	// Result type of the value this node produces. Filled by the Parser at
 	// construction time; readers (emit, checker, evaluator) treat it as the
 	// single source of truth. Null on statement nodes (Block, Assign,
@@ -75,6 +78,7 @@ public:
 	std::vector<Node*> args;
 	ProcCall(Node* receiver, Node* callee, std::vector<Node*> args);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -163,6 +167,7 @@ class Cast: public UnaryOperation {
 public:
 	Cast(Node* value, Type* target);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
@@ -178,14 +183,20 @@ struct EnumMemberRef: public Node {
 	int64_t value;
 	EnumMemberRef(std::string cxx_name, int64_t value, Type* ty);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class Integer: public Node {
 public:
-	uint64_t value;
-	Integer(uint64_t value, Type* ty);
+	// Signed magnitude. Pascal integer constants are not typed until context fixes
+	// them; this keeps -9223372036854775808 representable without pretending it
+	// fits in int64_t before conversion.
+	bool negative = false;
+	uint64_t value = 0;
+	Integer(uint64_t value, Type* ty, bool negative = false);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
@@ -194,6 +205,7 @@ public:
 	std::string value;
 	String(std::string value, Type* ty);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
@@ -217,6 +229,7 @@ public:
 	Type* operand_type;
 	TypeBound(TypeBoundKind kind, Type* operand_type);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -227,6 +240,7 @@ class Length: public UnaryOperation {
 public:
 	Length(Node* value, Type* result_type);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 

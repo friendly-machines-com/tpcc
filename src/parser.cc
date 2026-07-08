@@ -15,6 +15,7 @@
 #include <cstring>
 #include <format>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -907,7 +908,6 @@ std::string Parser::parse_identifier() {
 Node* Parser::maybe_parse_numeral() {
 	auto input = input_token.data();
 	auto input_size = input_token.size();
-	uint64_t value;
 	int base = 10;
 	if (input_size > 0 && (isdigit(*input) || *input == '$' || *input == '.')) {
 		if (*input == '$') {
@@ -916,6 +916,7 @@ Node* Parser::maybe_parse_numeral() {
 			--input_size;
 		}
 		if (*input != '.') {
+			uint64_t value;
 			auto [ptr, ec] = std::from_chars(input, input + input_size, value, base);
 			if (ec != std::errc() || ptr != input + input_size) {
 				raise_parse_error("malformed numeral: " + input_token);
@@ -1280,7 +1281,7 @@ bool Parser::maybe_parse_equal() {
 	}
 }
 bool Parser::maybe_parse_less_greater() {
-	if (input_token == "<=") {
+	if (input_token == "<>") {
 		consume();
 		return true;
 	} else {
@@ -1629,7 +1630,10 @@ Node* Parser::parse_comparison() {
 		if (maybe_parse_equal()) {
 			result = mk_compare("=", result, parse_sum());
 		} else if (maybe_parse_less_greater()) {
-			result = mk_compare("<>", result, parse_sum());
+			// Pascal <> is inequality. Do not require or expose a separate custom
+			// operator<> declaration; derive it from equality and boolean not so user
+			// equality overloads participate consistently.
+			result = mk_unary_same("not", mk_compare("=", result, parse_sum()));
 		} else if (maybe_parse_less()) {
 			result = mk_compare("<", result, parse_sum());
 		} else if (maybe_parse_greater()) {
@@ -2021,14 +2025,23 @@ void Parser::parse_const_block() {
 	Frame* scope = const_cast<Frame*>(scopes.back().frame);
 	do {
 		auto name = parse_identifier();
-		// FIXME: handle actual compile-time consts which have no colon (and are no variables).
+		if (maybe_parse_equal()) {
+			Node* expr = parse_expression();
+			ConstEvalContext ctx;
+			ConstEvalResult folded = expr->const_eval(ctx);
+			if (folded.kind == ConstEvalResult::Kind::NotConstant)
+				raise_parse_error("constant expression expected");
+			if (folded.kind == ConstEvalResult::Kind::Error)
+				raise_parse_error(folded.message);
+			scope->register_variable(name, folded.node, folded.node ? folded.node->ty : nullptr);
+			parse_semicolon();
+			continue;
+		}
 		parse_colon();
 		auto ty = parse_type_expression(false);
 		scope->register_variable(name, new StorageSlot(cxx_value_name(name), ty), ty);
-		if (!maybe_parse_comma()) {
-			break;
-		}
-	} while (true);
+		parse_semicolon();
+	} while (input_token.size() && keywords.find(input_token) == keywords.end());
 }
 void Parser::maybe_parse_const_block() {
 	if (peek_keyword("const")) {

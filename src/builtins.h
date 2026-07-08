@@ -65,6 +65,15 @@ UnitType& unit_type();
 UntypedIntegerType& untyped_integer_type();
 
 // Cached lookups of frequently-referenced intrinsics from root_frame().
+Type* byte_type();
+Type* shortint_type();
+Type* word_type();
+Type* smallint_type();
+Type* cardinal_type();
+Type* integer_type();
+Type* longint_type();
+Type* qword_type();
+Type* int64_type();
 Type* boolean_type();
 Type* char_type();
 Type* shortstring_type();

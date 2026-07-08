@@ -100,6 +100,15 @@ UntypedIntegerType& untyped_integer_type() {
 	return t;
 }
 
+Type* byte_type() { return &k_byte; }
+Type* shortint_type() { return &k_shortint; }
+Type* word_type() { return &k_word; }
+Type* smallint_type() { return &k_smallint; }
+Type* cardinal_type() { return &k_cardinal; }
+Type* integer_type() { return &k_integer; }
+Type* longint_type() { return &k_longint; }
+Type* qword_type() { return &k_qword; }
+Type* int64_type() { return &k_int64; }
 Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
@@ -145,7 +154,6 @@ static const std::array<BuiltinDesc, 35> k_builtins{{
     {"pas::p_lessthan", nullptr},
     {"pas::p_lessthanorequal", nullptr},
     {"pas::p_equal", nullptr},
-    //{"pas::p_not_equal", nullptr}, // delphi doesnt have it
     {"pas::p_greaterthan", nullptr},
     {"pas::p_greaterthanorequal", nullptr},
     {"pas::p_supports", nullptr},

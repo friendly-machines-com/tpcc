@@ -62,7 +62,8 @@ EnumMemberRef::EnumMemberRef(std::string cxx_name, int64_t value, Type* ty) {
 	this->ty = ty;
 }
 
-Integer::Integer(uint64_t value, Type* ty) {
+Integer::Integer(uint64_t value, Type* ty, bool negative) {
+	this->negative = negative && value != 0;
 	this->value = value;
 	this->ty = ty;
 }
@@ -114,6 +115,7 @@ OverloadSet::OverloadSet(std::vector<Callable*> members)
 #include "diagnostic.h"
 #include "frame.h"
 #include "types.h"
+#include "evaluator.h"
 #include <algorithm>
 
 
@@ -131,6 +133,7 @@ const char* Node::diagnostic_kind() const { return "value"; }
 void Node::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(ty); }
 void Node::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " : " << ctx->known_type_ref(ty); }
 void Node::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << "value ..."; }
+ConstEvalResult Node::const_eval(ConstEvalContext&) const { return ConstEvalResult::not_constant(); }
 
 const char* Block::diagnostic_kind() const { return "block"; }
 void Block::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); for (auto* s : statements) ctx->add_value_edge(s); }
@@ -151,6 +154,21 @@ void BinaryOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ost
 
 const char* ProcCall::diagnostic_kind() const { return "call"; }
 void ProcCall::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_value_edge(receiver); ctx->add_value_edge(callee); for (auto* a : args) ctx->add_value_edge(a); }
+ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
+	auto c = dynamic_cast<Callable*>(callee);
+	if (!c)
+		return ConstEvalResult::not_constant();
+	std::vector<Node*> folded;
+	folded.reserve(args.size());
+	for (auto* arg : args) {
+		ConstEvalResult r = arg ? arg->const_eval(ctx) : ConstEvalResult::not_constant();
+		if (r.kind != ConstEvalResult::Kind::Success)
+			return r;
+		folded.push_back(r.node);
+	}
+	return const_eval_builtin_call(ctx, c, folded);
+}
+
 void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "call\n"; ctx->indent(out, indent + 1); out << "callee: " << ctx->known_value_ref(callee) << "\n";
 	if (receiver) { ctx->indent(out, indent + 1); out << "receiver: " << ctx->known_value_ref(receiver) << "\n"; }
@@ -175,18 +193,29 @@ const char* Index::diagnostic_kind() const { return "index"; }
 const char* Return::diagnostic_kind() const { return "return"; }
 
 const char* Cast::diagnostic_kind() const { return "cast"; }
+ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
+	ConstEvalResult r = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
+	if (r.kind != ConstEvalResult::Kind::Success)
+		return r;
+	if (auto i = dynamic_cast<Integer*>(r.node))
+		return const_convert_integer(i->value, i->negative, i->ty, ty);
+	return ConstEvalResult::not_constant();
+}
 void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }
 
 const char* StorageSlot::diagnostic_kind() const { return "slot"; }
 void StorageSlot::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "slot : " << ctx->known_type_ref(ty); }
 
 const char* EnumMemberRef::diagnostic_kind() const { return "enum_member"; }
+ConstEvalResult EnumMemberRef::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new EnumMemberRef(cxx_name, value, ty)); }
 void EnumMemberRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "enum member = " << value << " : " << ctx->known_type_ref(ty); }
 
 const char* Integer::diagnostic_kind() const { return "integer"; }
-void Integer::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "integer " << value << " : " << ctx->known_type_ref(ty); }
+ConstEvalResult Integer::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new Integer(value, ty, negative)); }
+void Integer::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "integer " << (negative ? "-" : "") << value << " : " << ctx->known_type_ref(ty); }
 
 const char* String::diagnostic_kind() const { return "string"; }
+ConstEvalResult String::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new String(value, ty)); }
 void String::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	std::string text = value.substr(0, std::min<size_t>(value.size(), 40));
 	if (value.size() > 40)
@@ -199,11 +228,13 @@ void NilLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 
 const char* TypeBound::diagnostic_kind() const { return kind == TypeBoundKind::Low ? "low" : "high"; }
 void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const { Node::collect_diagnostic_edges(ctx); ctx->add_type_edge(operand_type); }
+ConstEvalResult TypeBound::const_eval(ConstEvalContext&) const { return const_eval_type_bound(kind, operand_type); }
 void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
 }
 
 const char* Length::diagnostic_kind() const { return "length"; }
+ConstEvalResult Length::const_eval(ConstEvalContext&) const { return ConstEvalResult::not_constant(); }
 void Length::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << "length(" << ctx->known_value_ref(a) << ") : " << ctx->known_type_ref(ty);
 }

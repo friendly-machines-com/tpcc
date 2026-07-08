@@ -723,7 +723,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
-		fprintf(active, "%llu", (unsigned long long)c->value);
+		fprintf(active, "%s%lluu", c->negative ? "-" : "", (unsigned long long)c->value);
 		return;
 	}
 	if (auto s = dynamic_cast<String*>(expr)) {
