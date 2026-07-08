@@ -3642,7 +3642,9 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		  const Foo = 'Hello';
 		That const Foo is supposed to be global, not in the function.
 		*/
-		body_follows = body_follows && (peek_keyword("begin") || peek_keyword("var") || peek_keyword("const") || peek_keyword("type"));
+		body_follows = body_follows && (peek_keyword("begin") || peek_keyword("label") ||
+						peek_keyword("var") || peek_keyword("const") || peek_keyword("type") ||
+						peek_keyword("procedure") || peek_keyword("function"));
 		if (external_cxx_name) {
 			auto builtin = lookup_external_value(nullptr, *external_cxx_name);
 			if (builtin != nullptr) {
