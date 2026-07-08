@@ -172,7 +172,7 @@ protected:
 	 *  allows `type`, `const`, `var` blocks and `procedure`/`function` decls
 	 *  interleaved freely). Returns the count of scopes pushed so the caller
 	 *  can pop that many after the body. */
-	size_t parse_decl_blocks();
+	size_t parse_decl_blocks(bool is_decl_only);
 	void parse_block();
 	void parse_semicolon();
 	void maybe_parse_statement();
@@ -328,7 +328,7 @@ protected:
 	 *  it into a fresh body_frame; if followed by `forward;`, leaves body
 	 *  null. Registers the resulting Procedure in the current scope and emits
 	 *  the signature/body when an emitter is attached. */
-	void parse_procedure_or_function(bool is_class, bool is_function);
+	void parse_procedure_or_function(bool is_class, bool is_function, bool is_decl_only);
 	std::vector<Parameter> parse_proc_formal_parameters();
 
 	[[noreturn]] void emit_parse_error_at(SourceLocation loc, std::string message);

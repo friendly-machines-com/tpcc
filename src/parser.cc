@@ -2374,7 +2374,7 @@ void Parser::parse_equals() {
 	}
 }
 
-size_t Parser::parse_decl_blocks() {
+size_t Parser::parse_decl_blocks(bool is_decl_only) {
 	size_t pushed = 0;
 	bool is_class = false;
 	while (true) {
@@ -2404,22 +2404,22 @@ size_t Parser::parse_decl_blocks() {
 			}
 			parse_var_block();
 		} else if (peek_keyword("procedure")) {
-			parse_procedure_or_function(is_class, false);
+			parse_procedure_or_function(is_class, false, is_decl_only);
 			is_class = false;
 		} else if (peek_keyword("function")) {
-			parse_procedure_or_function(is_class, true);
+			parse_procedure_or_function(is_class, true, is_decl_only);
 			is_class = false;
 		} else if (peek_keyword("constructor")) {
-			parse_procedure_or_function(is_class, false);
+			parse_procedure_or_function(is_class, false, is_decl_only);
 			is_class = false;
 		} else if (peek_keyword("destructor")) {
-			parse_procedure_or_function(is_class, false);
+			parse_procedure_or_function(is_class, false, is_decl_only);
 			is_class = false;
 		} else if (peek_keyword("operator")) {
 			if (is_class) {
 				raise_parse_error("'class operator' is not supported");
 			}
-			parse_procedure_or_function(is_class, true);
+			parse_procedure_or_function(is_class, true, is_decl_only);
 			is_class = false;
 		} else {
 			break;
@@ -2432,7 +2432,7 @@ size_t Parser::parse_decl_blocks() {
 }
 
 void Parser::parse_block() {
-	size_t pushed = parse_decl_blocks();
+	size_t pushed = parse_decl_blocks(false);
 	parse_keyword("begin");
 	parse_block_body();
 	parse_keyword("end");
@@ -2708,7 +2708,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	}
 	if (emitter)
 		emitter->emit_procedure_open(target);
-	size_t pushed = parse_decl_blocks();
+	size_t pushed = parse_decl_blocks(false);
 	parse_keyword("begin");
 	parse_block_body();
 	target->has_body = true;
@@ -2753,7 +2753,7 @@ Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
 	}
 }
 
-void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
+void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool is_decl_only) {
 	bool has_overload = false;
 	std::string first_name;
 	bool is_destructor = false;
@@ -2819,7 +2819,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 		}
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, ROUTINE);
 		parse_semicolon();
-		bool body_follows = true;
+		bool body_follows = !is_decl_only;
 		std::optional<std::string> external_cxx_name;
 		while (true) {
 			if (maybe_parse_keyword("overload")) {
@@ -2851,6 +2851,12 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function) {
 		// overload rules. Method prototypes still use their parsed directive bit.
 		has_overload = true;
 		Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
+		/*
+		In an INTERFACE section there is this:
+		  function x: Integer;
+		  const Foo = 'Hello';
+		That const Foo is supposed to be global, not in the function.
+		*/
 		body_follows = body_follows && (peek_keyword("begin") || peek_keyword("var") || peek_keyword("const") || peek_keyword("type"));
 		if (external_cxx_name) {
 			auto builtin = lookup_external_value(nullptr, *external_cxx_name);
@@ -3117,10 +3123,7 @@ void Parser::parse_unit_body() {
 		emitter->emit_unit_interface_prologue(h_files);
 	}
 	// Interface section: parse_decl_blocks handles type/const/var/proc/func.
-	// Procedures parsed here fall out as prototypes because
-	// parse_procedure_or_function's body_follows check sees no body-starter
-	// after their `;` and returns without expecting a body.
-	size_t iface_decls = parse_decl_blocks();
+	size_t iface_decls = parse_decl_blocks(true);
 	unit->phase = UnitPhase::InterfaceDone;
 
 	parse_keyword("implementation");
@@ -3141,7 +3144,7 @@ void Parser::parse_unit_body() {
 	// Implementation section: same dispatcher; procedures with bodies attach
 	// to the interface prototypes via the lookup-then-adopt path in
 	// parse_procedure_or_function.
-	size_t impl_decls = parse_decl_blocks();
+	size_t impl_decls = parse_decl_blocks(false);
 
 	parse_keyword("end");
 	parse_period();
@@ -3198,7 +3201,7 @@ void Parser::parse_program_or_unit() {
 		// Inlined equivalent of parse_block; we need to bracket the body-block
 		// with main() emission hooks, which parse_block itself doesn't know
 		// about (it's also called from procedure bodies).
-		size_t pushed = parse_decl_blocks();
+		size_t pushed = parse_decl_blocks(false);
 		parse_keyword("begin");
 		if (emitter)
 			emitter->emit_main_prologue();
