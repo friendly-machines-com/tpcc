@@ -495,10 +495,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			}
 			auto existing_classtype = body->lookup_value_local("classtype");
 			if (!existing_classtype || (dynamic_cast<Method*>(existing_classtype) && dynamic_cast<Method*>(existing_classtype)->is_external)) {
-				fprintf(active, "\tpublic: inline static ::pas::t_tclass* p_classtype() {\n");
+				fprintf(active, "\tpublic: inline static m_meta* p_classtype() {\n");
 				// This will basically NEVER be possible in Pascal.
 				// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
-				fprintf(active, "\t\tinline static %s meta{};\n", cxx_name.c_str());
+				fprintf(active, "\t\tstatic %s meta{};\n", cxx_name.c_str());
 				fprintf(active, "\t\treturn &meta;\n");
 				fprintf(active, "\t}\n");
 			} else {
