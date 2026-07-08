@@ -2042,6 +2042,12 @@ static bool is_integer_semantic_type(Type* ty) {
 	return intrinsic && intrinsic->rank;
 }
 
+static bool ordinal_bounds_contains(const OrdinalBounds& bounds, bool negative, uint64_t magnitude) {
+	if (negative)
+		return bounds.signed_type && magnitude <= bounds.min_magnitude;
+	return magnitude <= bounds.max_positive;
+}
+
 struct FoldedSubrangeBound {
 	enum class Kind { Integer,
 			  Char,
@@ -2058,7 +2064,8 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 	if (auto i = dynamic_cast<Integer*>(node)) {
 		Type* ty = subrange_range_type(i->ty);
 		if (ty == char_type()) {
-			if (i->negative || i->value > static_cast<uint64_t>(std::numeric_limits<unsigned char>::max())) {
+			OrdinalBounds bounds;
+			if (!intrinsic_ordinal_bounds(ty, &bounds) || !ordinal_bounds_contains(bounds, i->negative, i->value)) {
 				*error = "character subrange bound is outside Char range";
 				return {};
 			}
@@ -2079,6 +2086,11 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 			return {};
 		}
 		auto value = static_cast<unsigned char>(s->value[0]);
+		OrdinalBounds bounds;
+		if (!intrinsic_ordinal_bounds(char_type(), &bounds) || !ordinal_bounds_contains(bounds, false, value)) {
+			*error = "character subrange bound is outside Char range";
+			return {};
+		}
 		auto as_char = new Integer(value, char_type());
 		return FoldedSubrangeBound{FoldedSubrangeBound::Kind::Char, as_char, char_type(), false, value, static_cast<__int128>(value), static_cast<int64_t>(value)};
 	}
@@ -2111,7 +2123,7 @@ static Type* infer_integer_subrange_host(__int128 lo, __int128 hi, std::string* 
 	    qword_type(),
 	};
 	for (Type* candidate : candidates) {
-		IntegerBounds bounds;
+		OrdinalBounds bounds;
 		if (!integer_bounds(candidate, &bounds))
 			continue;
 		__int128 min_value = bounds.signed_type ? -static_cast<__int128>(bounds.min_magnitude) : 0;

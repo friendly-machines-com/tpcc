@@ -5,28 +5,50 @@
 #include "types.h"
 #include <string>
 
-IntrinsicType::IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank, std::optional<IntegerBounds> bounds)
-    : Type(std::move(source_location)), cxx_name(std::move(cxx_name)), rank(std::move(rank)), bounds(std::move(bounds)) {}
+IntrinsicType::IntrinsicType(SourceLocation source_location,
+                             std::string cxx_name,
+                             std::optional<int> rank,
+                             std::optional<OrdinalBounds> ordinal_bounds)
+    : Type(std::move(source_location)),
+      cxx_name(std::move(cxx_name)),
+      rank(std::move(rank)),
+      ordinal_bounds(std::move(ordinal_bounds)) {}
 
 Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 
 // Integer rows are ordered narrowest -> widest; the ordering is what
 // common_arith_type and conversion_cost use to compute widening.
 namespace {
-IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0, IntegerBounds{false, 0, UINT8_MAX});
-IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1, IntegerBounds{true, 128, 127});
-IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2, IntegerBounds{false, 0, UINT16_MAX});
-IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3, IntegerBounds{true, 32768, 32767});
-IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4, IntegerBounds{false, 0, UINT32_MAX});
-IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5, IntegerBounds{true, 2147483648ull, 2147483647ull});
-IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6, IntegerBounds{true, 2147483648ull, 2147483647ull});
-IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7, IntegerBounds{false, 0, UINT64_MAX});
-IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8, IntegerBounds{true, 9223372036854775808ull, 9223372036854775807ull});
+constexpr uint64_t unsigned_max_for_bits(unsigned bits) {
+	return bits == 64 ? UINT64_MAX : ((uint64_t{1} << bits) - 1);
+}
+
+constexpr OrdinalBounds unsigned_bounds(unsigned bits) {
+	return OrdinalBounds{false, 0, unsigned_max_for_bits(bits)};
+}
+
+constexpr OrdinalBounds signed_bounds(unsigned bits) {
+	return OrdinalBounds{
+	    true,
+	    uint64_t{1} << (bits - 1),
+	    unsigned_max_for_bits(bits - 1),
+	};
+}
+
+IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0, unsigned_bounds(8));
+IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1, signed_bounds(8));
+IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2, unsigned_bounds(16));
+IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3, signed_bounds(16));
+IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4, unsigned_bounds(32));
+IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5, signed_bounds(32));
+IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6, signed_bounds(32));
+IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7, unsigned_bounds(64));
+IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8, signed_bounds(64));
 IntrinsicType k_set(SourceLocation::builtin(), "pas::t_set", {});
 IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}); // FIXME: Why {}
 IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {});
 EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
-IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {});
+IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_bounds(8));
 IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {});
 IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {});
 IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {});
@@ -126,11 +148,19 @@ Type* set_type() { return &k_set; }
 Type* fixedarray_type() { return &k_fixedarray; }
 Type* unknown_type() { return &k_unknown; }
 
-bool integer_bounds(Type* ty, IntegerBounds* out) {
+bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
 	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
-	if (!intrinsic || !intrinsic->bounds)
+	if (!intrinsic || !intrinsic->ordinal_bounds)
 		return false;
-	*out = *intrinsic->bounds;
+	*out = *intrinsic->ordinal_bounds;
+	return true;
+}
+
+bool integer_bounds(Type* ty, OrdinalBounds* out) {
+	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+	if (!intrinsic || !intrinsic->rank || !intrinsic->ordinal_bounds)
+		return false;
+	*out = *intrinsic->ordinal_bounds;
 	return true;
 }
 
