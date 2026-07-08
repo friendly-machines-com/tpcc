@@ -1,5 +1,6 @@
 #include "types.h"
 #include "builtins.h"
+#include "evaluator.h"
 #include <cassert>
 #include <utility>
 
@@ -92,6 +93,8 @@ RoutineType::RoutineType(SourceLocation source_location, std::vector<Parameter> 
 
 // Integer widening rank; -1 for non-integer types.
 static int integer_widening_rank(Type* ty) {
+	while (auto s = dynamic_cast<SubrangeType*>(ty))
+		ty = s->base_type;
 	auto it = dynamic_cast<IntrinsicType*>(ty);
 	if (!it)
 		return -1;
@@ -110,6 +113,27 @@ static bool ordinal_bounds_contain_range(const OrdinalBounds& outer, const Ordin
 			return false;
 	}
 	return outer.max_positive >= inner.max_positive;
+}
+
+static bool integer_like_bounds(Type* ty, OrdinalBounds* out) {
+	if (integer_bounds(ty, out))
+		return true;
+	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+		ConstEvalContext ctx;
+		ConstEvalResult lower = s->lower_bound->const_eval(ctx);
+		ConstEvalResult upper = s->upper_bound->const_eval(ctx);
+		if (lower.kind != ConstEvalResult::Kind::Success || upper.kind != ConstEvalResult::Kind::Success)
+			return false;
+		auto lo = dynamic_cast<Integer*>(lower.node);
+		auto hi = dynamic_cast<Integer*>(upper.node);
+		if (!lo || !hi)
+			return false;
+		out->signed_type = lo->negative;
+		out->min_magnitude = lo->negative ? lo->value : 0;
+		out->max_positive = hi->negative ? 0 : hi->value;
+		return true;
+	}
+	return false;
 }
 
 static uint64_t saturating_add(uint64_t a, uint64_t b) {
@@ -148,7 +172,7 @@ static int integer_conversion_cost(Type* from, Type* to) {
 
 	OrdinalBounds from_bounds;
 	OrdinalBounds to_bounds;
-	if (!integer_bounds(from, &from_bounds) || !integer_bounds(to, &to_bounds))
+	if (!integer_like_bounds(from, &from_bounds) || !integer_like_bounds(to, &to_bounds))
 		return -1;
 
 	uint64_t distance = ordinal_lower_bound_distance(from_bounds, to_bounds);
