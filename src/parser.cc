@@ -1871,10 +1871,16 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				raise_parse_error("class var unsupported");
 			}
 			// parse_var_block inlined
-			auto member_name = parse_identifier();
+			std::vector<std::string> member_names;
+			do {
+				auto member_name = parse_identifier();
+				member_names.push_back(member_name);
+			} while (maybe_parse_comma());
 			parse_colon();
 			auto ty = parse_type_expression(false);
-			body->register_variable(member_name, new StorageSlot(cxx_value_name(member_name), ty), ty);
+			for (auto member_name : member_names) {
+				body->register_variable(member_name, new StorageSlot(cxx_value_name(member_name), ty), ty);
+			}
 		}
 		if (input_token.size() && input_token != "end") {
 			if (!maybe_parse_semicolon()) {
