@@ -256,6 +256,11 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 		return r;
 	if (auto i = dynamic_cast<Integer*>(r.node))
 		return const_convert_integer(i->value, i->negative, i->ty, ty);
+	if (auto real = dynamic_cast<Real*>(r.node)) {
+		if ((real->ty == double_type() || real->ty == extended_type()) &&
+		    (ty == double_type() || ty == extended_type()))
+			return ConstEvalResult::success(new Real(real->value, ty));
+	}
 	return ConstEvalResult::not_constant();
 }
 void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }

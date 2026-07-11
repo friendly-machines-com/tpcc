@@ -15,11 +15,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <cstdio>
 #include <limits>
 #include <cstdint>
@@ -153,14 +155,14 @@ inline t_integer p_length(const t_ansistring& s) { return s.length; }
 template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
 template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_integer>(N); }
 
-#define DEFINE_ARITHMETIC_OPERATIONS(T) \
+#define DEFINE_ARITHMETIC_OPERATIONS(T, DIV_RESULT) \
 	inline T p_add(T a, T b) { return a + b; } \
 	inline T p_subtract(T a, T b) { return a - b; } \
 	inline T p_positive(T b) { return +b; } \
 	/* For unsigned T, unary minus wraps modulo T's range; this is intentional RTL behavior, not a widening or signed conversion. */ \
 	inline T p_negative(T b) { return -b; } \
 	inline T p_multiply(T a, T b) { return a * b; } \
-	inline double p_divide(T a, T b) { return (double) a / (double) b; } \
+	inline DIV_RESULT p_divide(T a, T b) { return static_cast<DIV_RESULT>(a) / static_cast<DIV_RESULT>(b); } \
 	inline T p_assign(T source) { T target = source; return target; } \
 	inline t_boolean p_lessthan(T a, T b) { return bool_to_boolean(a < b); } \
 	inline t_boolean p_lessthanorequal(T a, T b) { return bool_to_boolean(a <= b); } \
@@ -179,7 +181,7 @@ template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_
 	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */
 
 #define DEFINE_INTEGRAL_OPERATIONS(T) \
-	DEFINE_ARITHMETIC_OPERATIONS(T) \
+	DEFINE_ARITHMETIC_OPERATIONS(T, t_double) \
 	DEFINE_INTEGER_OPERATIONS(T)
 
 DEFINE_INTEGRAL_OPERATIONS(t_byte)
@@ -190,8 +192,37 @@ DEFINE_INTEGRAL_OPERATIONS(t_longword)
 DEFINE_INTEGRAL_OPERATIONS(t_integer)
 DEFINE_INTEGRAL_OPERATIONS(t_int64)
 DEFINE_INTEGRAL_OPERATIONS(t_qword)
-DEFINE_ARITHMETIC_OPERATIONS(t_double)
-DEFINE_ARITHMETIC_OPERATIONS(t_extended)
+DEFINE_ARITHMETIC_OPERATIONS(t_double, t_double)
+DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended)
+
+// Floating-to-integer conversion is undefined in C++ when the finite value is
+// outside the destination range (and for NaN/infinity). Check before casting
+// so Pascal Trunc/Round never rely on C++ undefined behavior.
+inline t_int64 tpcc_checked_real_to_int64(t_extended value, const char* operation) {
+	constexpr t_extended limit = 0x1p63L;
+	if (!__builtin_isfinite(value) || value < -limit || value >= limit)
+		throw std::range_error(operation);
+	return static_cast<t_int64>(value);
+}
+
+inline t_int64 p_trunc(t_extended value) {
+	return tpcc_checked_real_to_int64(::truncl(value), "Trunc result is outside Int64 range");
+}
+
+inline t_int64 p_round(t_extended value) {
+	// Pascal Round follows the active floating-point rounding mode. nearbyint
+	// does likewise and therefore gives ties-to-even under the default mode.
+	return tpcc_checked_real_to_int64(::nearbyintl(value), "Round result is outside Int64 range");
+}
+
+inline t_extended p_frac(t_extended value) {
+	t_extended integral = 0.0L;
+	return ::modfl(value, &integral);
+}
+
+inline t_extended p_sqrt(t_extended value) { return ::sqrtl(value); }
+inline t_extended p_exp(t_extended value) { return ::expl(value); }
+inline t_extended p_ln(t_extended value) { return ::logl(value); }
 
 inline t_boolean p_logicalnot(t_boolean a) {
 	return bool_to_boolean(!a);

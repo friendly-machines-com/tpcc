@@ -17,14 +17,15 @@ static ConstEvalResult integer_result(uint64_t magnitude, bool negative, Type* t
 	return ConstEvalResult::success(new Integer(magnitude, ty, negative));
 }
 
-static double integer_to_double(uint64_t magnitude, bool negative) {
-	double d = static_cast<double>(magnitude);
+static long double integer_to_real(uint64_t magnitude, bool negative) {
+	long double d = static_cast<long double>(magnitude);
 	return negative ? -d : d;
 }
 
 ConstEvalResult const_convert_integer(uint64_t magnitude, bool negative, Type*, Type* to_ty) {
-	if (to_ty == double_type())
-		return ConstEvalResult::success(new Real(integer_to_double(magnitude, negative), to_ty));
+	if (to_ty == double_type() || to_ty == extended_type())
+		return ConstEvalResult::success(new Real(
+			static_cast<double>(integer_to_real(magnitude, negative)), to_ty));
 	return integer_result(magnitude, negative, to_ty);
 }
 

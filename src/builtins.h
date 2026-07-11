@@ -92,6 +92,7 @@ Type* boolean_type();
 Type* char_type();
 Type* shortstring_type();
 Type* double_type();
+Type* extended_type();
 Type* set_type();
 Type* fixedarray_type();
 Type* unknown_type();

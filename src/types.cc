@@ -2,6 +2,7 @@
 #include "builtins.h"
 #include "evaluator.h"
 #include <cassert>
+#include <cstdlib>
 #include <utility>
 
 Type::Type(SourceLocation source_location) : source_location(std::move(source_location)) {}
@@ -107,8 +108,15 @@ static int integer_widening_rank(Type* ty) {
 	return *(it->rank);
 }
 
-static bool is_real_intrinsic(Type* ty) {
-	return ty == double_type();
+// Pascal real-family widening order. Keep this independent from the integer
+// rank stored on IntrinsicType: those ranks describe ordinal overloads and
+// bounds, while real widening has different semantics.
+static int real_widening_rank(Type* ty) {
+	if (ty == double_type())
+		return 0;
+	if (ty == extended_type())
+		return 1;
+	return -1;
 }
 
 static bool ordinal_bounds_contain_range(const OrdinalBounds& outer, const OrdinalBounds& inner) {
@@ -171,7 +179,7 @@ static int bit_width(uint64_t value) {
 
 static int integer_conversion_cost(Type* from, Type* to) {
 	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
-	if (rfrom < 0 || rto < 0 || rto < rfrom)
+	if (rfrom < 0 || rto < 0)
 		return -1;
 
 	OrdinalBounds from_bounds;
@@ -207,9 +215,16 @@ Type* common_arith_type(Type* a, Type* b) {
 	if (b == &untyped_integer_type())
 		return a;
 	int ra = integer_widening_rank(a), rb = integer_widening_rank(b);
-	if (ra < 0 || rb < 0)
-		return nullptr;
-	return (ra >= rb) ? a : b;
+	if (ra >= 0 && rb >= 0)
+		return (ra >= rb) ? a : b;
+	int rra = real_widening_rank(a), rrb = real_widening_rank(b);
+	if (rra >= 0 && rrb >= 0)
+		return (rra >= rrb) ? a : b;
+	if (rra >= 0 && rb >= 0)
+		return a;
+	if (rrb >= 0 && ra >= 0)
+		return b;
+	return nullptr;
 }
 
 // FIXME: add enums, sets; add class-to-interface via implemented_interfaces
@@ -249,11 +264,21 @@ int conversion_cost(Type* from, Type* to) {
 	int int_cost = integer_conversion_cost(from, to);
 	if (int_cost >= 0)
 		return int_cost;
+	int real_from = real_widening_rank(from);
+	int real_to = real_widening_rank(to);
+	if (real_from >= 0 && real_to >= 0) {
+		int cost = 2 + std::abs(real_to - real_from);
+		if (real_to < real_from)
+			cost += 200; // permitted narrowing, never preferred by overloads
+		return cost;
+	}
 	// Pascal permits integer-to-real assignment/conversion. This can be lossy:
-	// large Int64/QWord values are not all exactly representable as double. Keep
-	// the rule explicit here instead of pretending it is another integer widening.
-	if (rfrom >= 0 && is_real_intrinsic(to))
-		return 2;
+	// large Int64/QWord values are not all exactly representable. Any viable
+	// integer overload must beat a real overload for integer operands, so keep
+	// this in a cost band above even widening to Int64/QWord. Double still beats
+	// Extended when both real overloads are otherwise candidates.
+	if (rfrom >= 0 && real_to >= 0)
+		return 500 + real_to;
 	return -1;
 }
 

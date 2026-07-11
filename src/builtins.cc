@@ -3,6 +3,8 @@
 #include "evaluator.h"
 #include "frame.h"
 #include "types.h"
+#include <cmath>
+#include <limits>
 #include <string>
 
 IntrinsicType::IntrinsicType(SourceLocation source_location,
@@ -144,6 +146,7 @@ Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
 Type* double_type() { return &k_double; }
+Type* extended_type() { return &k_extended; }
 Type* set_type() { return &k_set; }
 Type* fixedarray_type() { return &k_fixedarray; }
 Type* unknown_type() { return &k_unknown; }
@@ -166,15 +169,15 @@ bool integer_bounds(Type* ty, OrdinalBounds* out) {
 
 static const Integer* const_integer_arg(Node* n) { return dynamic_cast<const Integer*>(n); }
 
-static bool const_numeric_as_double(Node* n, double* out) {
+static bool const_numeric_as_long_double(Node* n, long double* out) {
 	if (auto i = dynamic_cast<const Integer*>(n)) {
-		*out = static_cast<double>(i->value);
+		*out = static_cast<long double>(i->value);
 		if (i->negative)
 			*out = -*out;
 		return true;
 	}
 	if (auto r = dynamic_cast<const Real*>(n)) {
-		*out = r->value;
+		*out = static_cast<long double>(r->value);
 		return true;
 	}
 	return false;
@@ -270,17 +273,80 @@ static ConstEvalResult fold_modulus(ConstEvalContext&, Type* result_ty, const st
 static ConstEvalResult fold_divide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 2)
 		return ConstEvalResult::not_constant();
-	double a = 0.0, b = 0.0;
-	if (!const_numeric_as_double(args[0], &a) || !const_numeric_as_double(args[1], &b))
+	long double a = 0.0, b = 0.0;
+	if (!const_numeric_as_long_double(args[0], &a) || !const_numeric_as_long_double(args[1], &b))
 		return ConstEvalResult::not_constant();
 	if (b == 0.0)
 		return ConstEvalResult::error("real constant division by zero");
-	return ConstEvalResult::success(new Real(a / b, result_ty));
+	return ConstEvalResult::success(new Real(static_cast<double>(a / b), result_ty));
+}
+
+static ConstEvalResult fold_real_to_int64(const std::vector<Node*>& args, bool round) {
+	if (args.size() != 1)
+		return ConstEvalResult::not_constant();
+	long double value = 0.0L;
+	if (!const_numeric_as_long_double(args[0], &value))
+		return ConstEvalResult::not_constant();
+	long double integral = round ? ::nearbyintl(value) : ::truncl(value);
+	constexpr long double limit = 0x1p63L;
+	if (!__builtin_isfinite(integral) || integral < -limit || integral >= limit)
+		return ConstEvalResult::error(round
+			? "Round constant is outside the Int64 range"
+			: "Trunc constant is outside the Int64 range");
+	bool negative = integral < 0.0L;
+	long double magnitude = negative ? -integral : integral;
+	return fold_integer_result(static_cast<uint64_t>(magnitude), negative, int64_type());
+}
+
+static ConstEvalResult fold_trunc(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_real_to_int64(args, false);
+}
+
+static ConstEvalResult fold_round(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_real_to_int64(args, true);
+}
+
+static ConstEvalResult fold_frac(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1)
+		return ConstEvalResult::not_constant();
+	long double value = 0.0L;
+	if (!const_numeric_as_long_double(args[0], &value))
+		return ConstEvalResult::not_constant();
+	long double integral = 0.0L;
+	return ConstEvalResult::success(new Real(
+		static_cast<double>(::modfl(value, &integral)), result_ty));
+}
+
+static ConstEvalResult fold_sqrt(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1)
+		return ConstEvalResult::not_constant();
+	long double value = 0.0L;
+	if (!const_numeric_as_long_double(args[0], &value))
+		return ConstEvalResult::not_constant();
+	return ConstEvalResult::success(new Real(static_cast<double>(::sqrtl(value)), result_ty));
+}
+
+static ConstEvalResult fold_exp(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1)
+		return ConstEvalResult::not_constant();
+	long double value = 0.0L;
+	if (!const_numeric_as_long_double(args[0], &value))
+		return ConstEvalResult::not_constant();
+	return ConstEvalResult::success(new Real(static_cast<double>(::expl(value)), result_ty));
+}
+
+static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1)
+		return ConstEvalResult::not_constant();
+	long double value = 0.0L;
+	if (!const_numeric_as_long_double(args[0], &value))
+		return ConstEvalResult::not_constant();
+	return ConstEvalResult::success(new Real(static_cast<double>(::logl(value)), result_ty));
 }
 
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
-static const std::array<BuiltinDesc, 36> k_builtins{{
+static const BuiltinDesc k_builtins[] = {
     {"pas::p_ord", nullptr},
     {"pas::p_inc", nullptr},
     {"pas::p_dec", nullptr},
@@ -289,6 +355,12 @@ static const std::array<BuiltinDesc, 36> k_builtins{{
     {"pas::p_high", nullptr, TypeBoundKind::High},
     {"pas::p_length", nullptr},
     {"pas::p_assigned", nullptr},
+    {"pas::p_trunc", fold_trunc},
+    {"pas::p_round", fold_round},
+    {"pas::p_frac", fold_frac},
+    {"pas::p_sqrt", fold_sqrt},
+    {"pas::p_exp", fold_exp},
+    {"pas::p_ln", fold_ln},
     // TODO: Delphi has operators "explicit", "implicit".
 
     {"pas::p_bitwiseand", nullptr},
@@ -321,7 +393,7 @@ static const std::array<BuiltinDesc, 36> k_builtins{{
 
     {"pas::t_boolean::p_true", nullptr},
     {"pas::t_boolean::p_false", nullptr},
-}};
+};
 
 Type* lookup_builtin_type(std::string cxx_name) {
 	for (auto t : k_all_intrinsics) {

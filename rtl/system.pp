@@ -47,32 +47,43 @@ operator+(a: Cardinal): Cardinal; external nil name 'pas::p_positive';
 operator+(a: Integer): Integer; external nil name 'pas::p_positive';
 operator+(a: QWord): QWord; external nil name 'pas::p_positive';
 operator+(a: Int64): Int64; external nil name 'pas::p_positive';
+operator+(a: Double): Double; external nil name 'pas::p_positive';
+operator+(a: Extended): Extended; external nil name 'pas::p_positive';
 
 operator+(a, b: Cardinal): Cardinal; external nil name 'pas::p_add';
 operator+(a, b: Integer): Integer; external nil name 'pas::p_add';
 operator+(a, b: QWord): QWord; external nil name 'pas::p_add';
 operator+(a, b: Int64): Int64; external nil name 'pas::p_add';
+operator+(a, b: Double): Double; external nil name 'pas::p_add';
+operator+(a, b: Extended): Extended; external nil name 'pas::p_add';
 
 operator-(a: Cardinal): Cardinal; external nil name 'pas::p_negative';
 operator-(a: Integer): Integer; external nil name 'pas::p_negative';
 operator-(a: QWord): QWord; external nil name 'pas::p_negative';
 operator-(a: Int64): Int64; external nil name 'pas::p_negative';
+operator-(a: Double): Double; external nil name 'pas::p_negative';
+operator-(a: Extended): Extended; external nil name 'pas::p_negative';
 
 operator-(a, b: Cardinal): Cardinal; external nil name 'pas::p_subtract';
 operator-(a, b: Integer): Integer; external nil name 'pas::p_subtract';
 operator-(a, b: QWord): QWord; external nil name 'pas::p_subtract';
 operator-(a, b: Int64): Int64; external nil name 'pas::p_subtract';
+operator-(a, b: Double): Double; external nil name 'pas::p_subtract';
+operator-(a, b: Extended): Extended; external nil name 'pas::p_subtract';
 
 operator*(a, b: Cardinal): Cardinal; external nil name 'pas::p_multiply';
 operator*(a, b: Integer): Integer; external nil name 'pas::p_multiply';
 operator*(a, b: QWord): QWord; external nil name 'pas::p_multiply';
 operator*(a, b: Int64): Int64; external nil name 'pas::p_multiply';
+operator*(a, b: Double): Double; external nil name 'pas::p_multiply';
+operator*(a, b: Extended): Extended; external nil name 'pas::p_multiply';
 
 operator/(a, b: Cardinal): Double; external nil name 'pas::p_divide';
 operator/(a, b: Integer): Double; external nil name 'pas::p_divide';
 operator/(a, b: QWord): Double; external nil name 'pas::p_divide';
 operator/(a, b: Int64): Double; external nil name 'pas::p_divide';
 operator/(a, b: Double): Double; external nil name 'pas::p_divide';
+operator/(a, b: Extended): Extended; external nil name 'pas::p_divide';
 
 operator :=(a: Cardinal): Cardinal; external nil name 'pas::p_assign';
 operator :=(a: Boolean): Boolean; external nil name 'pas::p_assign';
@@ -109,12 +120,30 @@ operator xor(a, b: Int64): Cardinal; external nil name 'pas::p_bitwisexor';
 operator shl(a, b: Int64): Cardinal; external nil name 'pas::p_leftshift';
 operator shr(a, b: Int64): Cardinal; external nil name 'pas::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
 
+operator <(a, b: Double): Boolean; external nil name 'pas::p_lessthan';
+operator <=(a, b: Double): Boolean; external nil name 'pas::p_lessthanorequal';
+operator =(a, b: Double): Boolean; external nil name 'pas::p_equal';
+operator >(a, b: Double): Boolean; external nil name 'pas::p_greaterthan';
+operator >=(a, b: Double): Boolean; external nil name 'pas::p_greaterthanorequal';
+
+operator <(a, b: Extended): Boolean; external nil name 'pas::p_lessthan';
+operator <=(a, b: Extended): Boolean; external nil name 'pas::p_lessthanorequal';
+operator =(a, b: Extended): Boolean; external nil name 'pas::p_equal';
+operator >(a, b: Extended): Boolean; external nil name 'pas::p_greaterthan';
+operator >=(a, b: Extended): Boolean; external nil name 'pas::p_greaterthanorequal';
+
 function ord(const x): Cardinal; external nil name 'pas::p_ord';
 procedure inc(var x); external nil name 'pas::p_inc';
 procedure dec(var x); external nil name 'pas::p_dec';
 procedure str(const x: Int64; var s: ShortString); overload; external nil name 'pas::p_str';
 procedure str(const x: QWord; var s: ShortString); overload; external nil name 'pas::p_str';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
+function trunc(const x: Extended): Int64; external nil name 'pas::p_trunc';
+function round(const x: Extended): Int64; external nil name 'pas::p_round';
+function frac(const x: Extended): Extended; external nil name 'pas::p_frac';
+function sqrt(const x: Extended): Extended; external nil name 'pas::p_sqrt';
+function exp(const x: Extended): Extended; external nil name 'pas::p_exp';
+function ln(const x: Extended): Extended; external nil name 'pas::p_ln';
 
 operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
 operator not(a: Boolean): Boolean; external nil name 'pas::p_logicalnot';
