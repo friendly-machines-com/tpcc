@@ -123,6 +123,25 @@ inline t_longint p_pos(t_char needle, const t_shortstring& haystack) {
 	return 0;
 }
 
+inline void p_delete(t_shortstring& value, t_longint index, t_longint count) {
+	if (index < 1 || count <= 0)
+		return;
+	const std::size_t start = static_cast<std::size_t>(index - 1);
+	const std::size_t length = value.length;
+	if (start >= length)
+		return;
+	const std::size_t requested = static_cast<std::size_t>(count);
+	const std::size_t removed = std::min(requested, length - start);
+	const std::size_t tail = length - start - removed;
+	std::memmove(value.data + start, value.data + start + removed, tail);
+	value.length = static_cast<uint8_t>(length - removed);
+	value.data[value.length] = 0;
+}
+
+inline void p_delete(t_ansistring& value, t_longint index, t_longint count) {
+	p_delete(static_cast<t_shortstring&>(value), index, count);
+}
+
 inline t_shortstring p_add(const t_shortstring& a, const t_shortstring& b) {
 	t_shortstring result {};
 	const std::size_t result_length = std::min<std::size_t>(

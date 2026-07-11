@@ -373,6 +373,7 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_exp", fold_exp},
     {"pas::p_ln", fold_ln},
     {"pas::p_pos", fold_pos},
+    {"pas::p_delete", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
     {"pas::p_bitwiseand", nullptr},
