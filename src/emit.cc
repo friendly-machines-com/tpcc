@@ -930,17 +930,36 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
+		// The raw C++ spelling `3ull` discards the Pascal type already chosen
+		// by contextual typing. Passing that raw literal to an overloaded RTL
+		// function (p_equal, p_divide, ...) makes C++ choose among every integer
+		// and real overload and can be ambiguous. Preserve the compiler's type
+		// decision explicitly; a genuinely context-free Pascal numeral has the
+		// language's default Integer type.
+		fprintf(active, "static_cast<");
+		emit_type_ref(c->ty == &untyped_integer_type() ? integer_type() : c->ty);
+		fprintf(active, ">(");
 		emit_integer_literal(active, c->value, c->negative);
+		fprintf(active, ")");
 		return;
 	}
 	if (auto r = dynamic_cast<Real*>(expr)) {
 		double inf = std::numeric_limits<double>::infinity();
-		if (r->value != r->value)
-			fprintf(active, "std::numeric_limits<double>::quiet_NaN()");
-		else if (r->value == inf || r->value == -inf)
-			fprintf(active, "%sstd::numeric_limits<double>::infinity()", r->value < 0 ? "-" : "");
-		else
+		if (r->value != r->value) {
+			fprintf(active, "std::numeric_limits<");
+			emit_type_ref(r->ty);
+			fprintf(active, ">::quiet_NaN()");
+		} else if (r->value == inf || r->value == -inf) {
+			fprintf(active, "%sstd::numeric_limits<", r->value < 0 ? "-" : "");
+			emit_type_ref(r->ty);
+			fprintf(active, ">::infinity()");
+		} else {
+			fprintf(active, "static_cast<");
+			emit_type_ref(r->ty);
+			fprintf(active, ">(");
 			fprintf(active, "%.17g", r->value);
+			fprintf(active, ")");
+		}
 		return;
 	}
 	if (auto s = dynamic_cast<String*>(expr)) {
