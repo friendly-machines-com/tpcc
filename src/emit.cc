@@ -451,6 +451,53 @@ void Emitter::emit_repeat_epilogue(Node* condition) {
 	fprintf(active, "));\n");
 }
 
+void Emitter::emit_for_prologue(Node* control, Node* initial, Node* final, bool descending) {
+	if (!active)
+		return;
+	// Snapshot both bounds once. tpcc_for_done prevents the step after the
+	// terminal iteration from overflowing at High(T)/Low(T); keeping the step
+	// in the C++ for-increment expression also gives Pascal Continue its proper
+	// "perform the loop step, then retest" behavior.
+	fprintf(active, "\t{ ");
+	emit_type_ref(control->ty);
+	fprintf(active, " tpcc_for_initial = ");
+	emit_expression(initial);
+	fprintf(active, ";\n");
+	fprintf(active, "\t");
+	emit_type_ref(control->ty);
+	fprintf(active, " tpcc_for_final = ");
+	emit_expression(final);
+	fprintf(active, ";\n");
+	fprintf(active, "\tbool tpcc_for_done = false;\n");
+	fprintf(active, "\tfor (");
+	emit_expression(control);
+	fprintf(active, " = tpcc_for_initial; !tpcc_for_done && pas::tpcc_for_%s_equal(",
+		descending ? "greater" : "less");
+	emit_expression(control);
+	fprintf(active, ", tpcc_for_final); tpcc_for_done = pas::tpcc_for_equal(");
+	emit_expression(control);
+	fprintf(active, ", tpcc_for_final), ");
+	emit_expression(control);
+	fprintf(active, " = tpcc_for_done ? ");
+	emit_expression(control);
+	fprintf(active, " : pas::tpcc_for_%s(", descending ? "pred" : "succ");
+	emit_expression(control);
+	fprintf(active, ")) {\n");
+}
+
+void Emitter::emit_for_epilogue() {
+	if (!active)
+		return;
+	fprintf(active, "\t}\n");
+	fprintf(active, "\t}\n");
+}
+
+void Emitter::emit_loop_control(bool is_break) {
+	if (!active)
+		return;
+	fprintf(active, is_break ? "\tbreak;\n" : "\tcontinue;\n");
+}
+
 void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Position pos, std::string owner_qualifier) {
 	if (!active)
 		return;

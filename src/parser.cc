@@ -46,17 +46,21 @@ static std::unordered_set<std::string> keywords = {
     "as",
     "begin",
     "bitpacked",
+    "break",
     "case",
     "class",
     "const",
     "constructor",
+    "continue",
     "destructor",
     "div", // operator
     "do",
+    "downto",
     "dynamic", // FIXME
     "else",
     "end",
     "forward", // FIXME directive ?
+    "for",
     "function",
     "goto",
     "if",
@@ -88,6 +92,7 @@ static std::unordered_set<std::string> keywords = {
     "shr", // operator
     "string",
     "then",
+    "to",
     "type",
     "unit",
     "until",
@@ -805,10 +810,17 @@ static Frame* get_type_body_frame(Type* ty) {
 }
 
 void Parser::maybe_parse_statement() {
-	if (peek_keyword("end")) {
+	if (peek_keyword("end") || peek_keyword("until")) {
 		return;
 	}
-	if (peek_keyword("return")) { // FIXME Exit
+	if (peek_keyword("break") || peek_keyword("continue")) {
+		bool is_break = peek_keyword("break");
+		consume();
+		if (loop_depth == 0)
+			raise_parse_error(is_break ? "break outside loop" : "continue outside loop");
+		if (emitter)
+			emitter->emit_loop_control(is_break);
+	} else if (peek_keyword("return")) { // FIXME Exit
 		consume();
 		parse_expression();
 	} else if (peek_directive("exit")) {
@@ -929,14 +941,50 @@ void Parser::maybe_parse_statement() {
 		parse_keyword("do");
 		if (emitter)
 			emitter->emit_while_prologue(condition);
+		++loop_depth;
 		parse_statement();
+		--loop_depth;
 		if (emitter)
 			emitter->emit_while_epilogue();
+	} else if (peek_keyword("for")) {
+		parse_keyword("for");
+		std::string control_name = parse_identifier();
+		Node* control = resolve_lvalue(control_name);
+		if (!dynamic_cast<StorageSlot*>(control))
+			raise_parse_error("for control variable must be a simple variable");
+		if (!maybe_parse_colon_equals())
+			raise_parse_error("expected ':=' after for control variable");
+		Node* initial = cast(parse_expression(), control->ty);
+		bool descending;
+		if (maybe_parse_keyword("to"))
+			descending = false;
+		else if (maybe_parse_keyword("downto"))
+			descending = true;
+		else
+			raise_parse_error("expected 'to' or 'downto' in for statement");
+		Node* final = cast(parse_expression(), control->ty);
+		parse_keyword("do");
+
+		OrdinalBounds bounds;
+		if (!intrinsic_ordinal_bounds(control->ty, &bounds) &&
+		    !dynamic_cast<EnumType*>(control->ty) &&
+		    !dynamic_cast<SubrangeType*>(control->ty))
+			raise_parse_error("for control variable must have an ordinal type");
+
+		if (emitter)
+			emitter->emit_for_prologue(control, initial, final, descending);
+		++loop_depth;
+		parse_statement();
+		--loop_depth;
+		if (emitter)
+			emitter->emit_for_epilogue();
 	} else if (peek_keyword("repeat")) {
 		parse_keyword("repeat");
 		if (emitter)
 			emitter->emit_repeat_prologue();
+		++loop_depth;
 		parse_block_body();
+		--loop_depth;
 		parse_keyword("until");
 		auto condition = parse_expression();
 		if (emitter)

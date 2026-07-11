@@ -36,6 +36,9 @@ test-case-statement: mp
 test-math-intrinsics: mp
 	sh tests/test_math_intrinsics.sh
 
-test: test-packed-record test-case-statement test-math-intrinsics
+test-loop-control: mp
+	sh tests/test_loop_control.sh
 
-.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics
+test: test-packed-record test-case-statement test-math-intrinsics test-loop-control
+
+.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control

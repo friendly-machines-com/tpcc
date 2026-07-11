@@ -224,6 +224,39 @@ inline t_extended p_sqrt(t_extended value) { return ::sqrtl(value); }
 inline t_extended p_exp(t_extended value) { return ::expl(value); }
 inline t_extended p_ln(t_extended value) { return ::logl(value); }
 
+template<typename T>
+constexpr auto tpcc_for_ordinal_value(T value) {
+	if constexpr (std::is_enum_v<T>)
+		return static_cast<std::underlying_type_t<T>>(value);
+	else
+		return value;
+}
+
+template<typename T>
+constexpr t_boolean tpcc_for_less_equal(T a, T b) {
+	return bool_to_boolean(tpcc_for_ordinal_value(a) <= tpcc_for_ordinal_value(b));
+}
+
+template<typename T>
+constexpr t_boolean tpcc_for_greater_equal(T a, T b) {
+	return bool_to_boolean(tpcc_for_ordinal_value(a) >= tpcc_for_ordinal_value(b));
+}
+
+template<typename T>
+constexpr t_boolean tpcc_for_equal(T a, T b) {
+	return bool_to_boolean(tpcc_for_ordinal_value(a) == tpcc_for_ordinal_value(b));
+}
+
+template<typename T>
+constexpr T tpcc_for_succ(T value) {
+	return static_cast<T>(tpcc_for_ordinal_value(value) + 1);
+}
+
+template<typename T>
+constexpr T tpcc_for_pred(T value) {
+	return static_cast<T>(tpcc_for_ordinal_value(value) - 1);
+}
+
 inline t_boolean p_logicalnot(t_boolean a) {
 	return bool_to_boolean(!a);
 }

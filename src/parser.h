@@ -117,6 +117,8 @@ private:
 	// `inherited` branch to walk the parent type's method table and to decide
 	// the destructor-auto-chain drop.
 	Callable* current_routine = nullptr;
+	// Number of enclosing statement loops. break/continue are invalid at zero.
+	unsigned loop_depth = 0;
 	UnitRegistry* unit_registry;
 	// May be null. When non-null, emission hooks in the parser call into it
 	// as declarations and statements are parsed. Null is used only by
