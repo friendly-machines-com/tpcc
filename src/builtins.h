@@ -22,10 +22,17 @@ struct ConstEvalContext;
 struct ConstEvalResult;
 using BuiltinConstFold = ConstEvalResult (*)(ConstEvalContext& ctx, Type* result_ty, const std::vector<Node*>& args);
 
+enum class BuiltinGenericKind {
+	None,
+	OrdinalValue,
+	OrdinalMutation,
+};
+
 struct BuiltinDesc {
 	std::string_view cxx_name;    // e.g. "pas::p_ord"
 	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
 	std::optional<TypeBoundKind> type_bound_kind = {};
+	BuiltinGenericKind generic_kind = BuiltinGenericKind::None;
 };
 
 struct IntrinsicTypeDesc {

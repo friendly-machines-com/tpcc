@@ -132,9 +132,9 @@ operator =(a, b: Extended): Boolean; external nil name 'pas::p_equal';
 operator >(a, b: Extended): Boolean; external nil name 'pas::p_greaterthan';
 operator >=(a, b: Extended): Boolean; external nil name 'pas::p_greaterthanorequal';
 
-function ord(const x): Cardinal; external nil name 'pas::p_ord';
-procedure inc(var x); external nil name 'pas::p_inc';
-procedure dec(var x); external nil name 'pas::p_dec';
+function ord(const x): Cardinal; external nil name 'pas::p_ord'; // generic intrinsic
+procedure inc(var x; n: Integer = 1); external nil name 'pas::p_inc'; // generic intrinsic
+procedure dec(var x; n: Integer = 1); external nil name 'pas::p_dec'; // generic intrinsic
 procedure str(const x: Int64; var s: ShortString); overload; external nil name 'pas::p_str';
 procedure str(const x: QWord; var s: ShortString); overload; external nil name 'pas::p_str';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';

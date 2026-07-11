@@ -346,9 +346,9 @@ static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::ve
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const BuiltinDesc k_builtins[] = {
-    {"pas::p_ord", nullptr},
-    {"pas::p_inc", nullptr},
-    {"pas::p_dec", nullptr},
+    {"pas::p_ord", nullptr, {}, BuiltinGenericKind::OrdinalValue},
+    {"pas::p_inc", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
+    {"pas::p_dec", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
     {"pas::p_str", nullptr},
     {"pas::p_low", nullptr, TypeBoundKind::Low},
     {"pas::p_high", nullptr, TypeBoundKind::High},

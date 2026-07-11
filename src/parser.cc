@@ -4004,8 +4004,18 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 // the candidate isn't viable. Costs sized to formals.size() (+1 for Self
 // when candidate is a Method with receiver); entries past args.size() are 0
 // (default-supplied positions).
+static bool is_ordinal_intrinsic_argument(Type* ty) {
+	while (auto subrange = dynamic_cast<SubrangeType*>(ty))
+		ty = subrange->base_type;
+	if (dynamic_cast<EnumType*>(ty))
+		return true;
+	OrdinalBounds bounds;
+	return intrinsic_ordinal_bounds(ty, &bounds);
+}
+
 static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::vector<Node*>& args) {
 	auto rty = static_cast<RoutineType*>(c->ty);
+	const BuiltinDesc* builtin = lookup_builtin_desc(c->cxx_name);
 
 	if (args.size() > rty->formals.size())
 		return {};
@@ -4025,6 +4035,16 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 	}
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
+		if (rty->formals[i].ty == unknown_type() &&
+		    builtin && builtin->generic_kind != BuiltinGenericKind::None) {
+			if (!is_ordinal_intrinsic_argument(from))
+				return {};
+			// This is a constrained generic match. It is viable for every
+			// ordinal type but should lose to a concrete exact overload if one
+			// is ever added alongside the intrinsic.
+			costs[self_slots + i] = 1000;
+			continue;
+		}
 		int cc = conversion_cost(from, rty->formals[i].ty);
 		if (cc < 0)
 			return {};
@@ -4137,6 +4157,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	if (args.size() > rty->formals.size()) {
 		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
 	}
+	const BuiltinDesc* builtin = lookup_builtin_desc(chosen->cxx_name);
+	if (builtin && builtin->generic_kind != BuiltinGenericKind::None) {
+		if (args.empty() || !is_ordinal_intrinsic_argument(args[0] ? args[0]->ty : nullptr)) {
+			emit_parse_error_at(error_location,
+				name_for_error + " requires an ordinal argument");
+		}
+	}
 	for (size_t i = 0; i < args.size(); i++) {
 		auto mode = rty->formals[i].mode;
 		if (mode != ParamMode::Var && mode != ParamMode::Out)
@@ -4154,6 +4181,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* t = rty->formals[i].ty;
+		if (t == unknown_type() &&
+		    builtin && builtin->generic_kind != BuiltinGenericKind::None)
+			continue; // preserve the generic argument's exact Pascal type
 		args[i] = cast(args[i], t);
 	}
 	return FinalizedCall{receiver, chosen};

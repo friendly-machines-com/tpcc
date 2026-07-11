@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -273,8 +274,39 @@ inline t_boolean p_assigned(const void* p) {
 	return bool_to_boolean(p != nullptr);
 }
 
-template<typename T> inline void p_inc(T& x, t_integer n = 1) { x = p_add(x, static_cast<T>(n)); }
-template<typename T> inline void p_dec(T& x, t_integer n = 1) { x = p_subtract(x, static_cast<T>(n)); }
+template<typename T, bool = std::is_enum_v<T>>
+struct tpcc_ordinal_raw {
+	using type = T;
+};
+
+template<typename T>
+struct tpcc_ordinal_raw<T, true> {
+	using type = std::underlying_type_t<T>;
+};
+
+template<typename T>
+inline T tpcc_ordinal_step(T value, t_integer amount, bool subtract) {
+	using raw_type = typename tpcc_ordinal_raw<T>::type;
+	static_assert(std::is_integral_v<raw_type>, "Inc/Dec require an ordinal carrier");
+	using unsigned_type = std::make_unsigned_t<raw_type>;
+	unsigned_type bits = static_cast<unsigned_type>(static_cast<raw_type>(value));
+	unsigned_type delta = static_cast<unsigned_type>(amount);
+	unsigned_type stepped = subtract ? bits - delta : bits + delta;
+	raw_type raw;
+	if constexpr (std::is_signed_v<raw_type>)
+		raw = std::bit_cast<raw_type>(stepped);
+	else
+		raw = static_cast<raw_type>(stepped);
+	return static_cast<T>(raw);
+}
+
+template<typename T> inline void p_inc(T& x, t_integer n = 1) {
+	x = tpcc_ordinal_step(x, n, false);
+}
+
+template<typename T> inline void p_dec(T& x, t_integer n = 1) {
+	x = tpcc_ordinal_step(x, n, true);
+}
 
 template<typename T> inline void p_str(T x, t_shortstring& s) {
 	char buf[128];
