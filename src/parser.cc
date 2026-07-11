@@ -851,6 +851,78 @@ void Parser::maybe_parse_statement() {
 		}
 		if (emitter)
 			emitter->emit_if_epilogue();
+	} else if (peek_keyword("case")) {
+		parse_keyword("case");
+		Node* selector = parse_expression();
+		parse_keyword("of");
+
+		// Every emitted case owns a C++ block, so a fixed tpcc-owned
+		// name is sufficient: sibling blocks do not overlap and nested blocks
+		// may shadow it. Pascal values are emitted with `p_`, preventing a
+		// source identifier from colliding with this spelling.
+		std::string selector_name = "tpcc_case_selector";
+		auto selector_slot = new StorageSlot(selector_name, selector->ty);
+		if (emitter)
+			emitter->emit_case_prologue(selector_name, selector);
+
+		bool has_arm = false;
+		while (!peek_keyword("end") &&
+		       !peek_keyword("else") &&
+		       !peek_directive("otherwise")) {
+			Node* arm_condition = nullptr;
+			do {
+				Node* lower = parse_subrange_bound_expression();
+				Node* label_condition;
+				if (maybe_parse_period_period()) {
+					Node* upper = parse_subrange_bound_expression();
+					auto lower_test = mk_compare(">=", selector_slot, lower);
+					auto upper_test = mk_compare("<=", selector_slot, upper);
+					auto both = new ShortCircuitOperation(AND, lower_test, upper_test);
+					both->ty = boolean_type();
+					label_condition = both;
+				} else {
+					label_condition = mk_compare("=", selector_slot, lower);
+				}
+				if (arm_condition) {
+					auto either = new ShortCircuitOperation(OR, arm_condition, label_condition);
+					either->ty = boolean_type();
+					arm_condition = either;
+				} else {
+					arm_condition = label_condition;
+				}
+			} while (maybe_parse_comma());
+			parse_colon();
+
+			if (emitter)
+				emitter->emit_case_arm_prologue(arm_condition, !has_arm);
+			parse_statement();
+			if (emitter)
+				emitter->emit_case_arm_epilogue();
+			has_arm = true;
+
+			// A semicolon separates arms. It is also accepted immediately
+			// before ELSE/OTHERWISE, as in normal Pascal source.
+			if (!maybe_parse_semicolon() &&
+			    !peek_keyword("end") &&
+			    !peek_keyword("else") &&
+			    !peek_directive("otherwise"))
+				raise_parse_error("missing semicolon between case arms");
+		}
+
+		if (peek_keyword("else") || peek_directive("otherwise")) {
+			if (peek_keyword("else"))
+				parse_keyword("else");
+			else
+				parse_directive("otherwise");
+			if (emitter)
+				emitter->emit_case_else_prologue(has_arm);
+			parse_block_body();
+			if (emitter)
+				emitter->emit_case_arm_epilogue();
+		}
+		parse_keyword("end");
+		if (emitter)
+			emitter->emit_case_epilogue();
 	} else if (peek_keyword("while")) {
 		parse_keyword("while");
 		auto condition = parse_expression();
@@ -888,8 +960,9 @@ void Parser::maybe_parse_statement() {
 		if (!body_frame)
 			raise_parse_error("with target's type has no field body");
 		parse_keyword("do");
-		std::string alias = emitter ? emitter->next_fresh_cxx_name("pas_with") : std::string("pas_with_x");
-		auto alias_slot = new StorageSlot(cxx_value_name(alias), target_slot->ty);
+		// emit_with_prologue introduces a C++ block. As with case selectors,
+		// nested blocks can safely reuse this tpcc-owned spelling.
+		auto alias_slot = new StorageSlot("tpcc_with_target", target_slot->ty);
 		if (emitter)
 			emitter->emit_with_prologue(alias_slot->cxx_name, target);
 		push_with_scope(body_frame, alias_slot);

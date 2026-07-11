@@ -30,4 +30,9 @@ distclean: clean
 test-packed-record: mp
 	sh tests/test_packed_record.sh
 
-.PHONY: all clean distclean test-packed-record
+test-case-statement: mp
+	sh tests/test_case_statement.sh
+
+test: test-packed-record test-case-statement
+
+.PHONY: all clean distclean test test-packed-record test-case-statement

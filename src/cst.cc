@@ -32,7 +32,7 @@ BinaryOperation::BinaryOperation(Node* a, Node* b) {
 ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
     : receiver(receiver), callee(callee), args(std::move(args)) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
-ShortCircuitOperation::ShortCircuitOperation(enum ShortCircuitOperationKind, Node* a, Node* b) : BinaryOperation(a, b) {
+ShortCircuitOperation::ShortCircuitOperation(enum ShortCircuitOperationKind kind, Node* a, Node* b) : BinaryOperation(a, b) {
 	this->kind = kind;
 }
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}

@@ -46,7 +46,6 @@ private:
 	FILE* out_h;       // null for programs
 	FILE* out_cc;
 	FILE* active;      // points at out_h or out_cc; null until a section is set
-	int fresh_counter;
 
 public:
 	Emitter();
@@ -60,11 +59,6 @@ public:
 	void close();
 	bool is_open() const { return out_cc != nullptr; }
 	void set_section(Section s);
-
-	/** Generate a fresh identifier of the form `<prefix>_N`, unique per
-	 *  Emitter. Callers pick a prefix that stays clear of C++'s reserved
-	 *  name rules (i.e. no leading underscore); `pas_` is the convention. */
-	std::string next_fresh_cxx_name(std::string prefix);
 
 	void emit_program_prologue(std::vector<std::string> used_unit_h_files);
 	// Emit a per-unit .h prologue: #include "rtl.h" plus an #include per
@@ -99,6 +93,14 @@ public:
 	void emit_if_prologue(Node* condition);
 	void emit_if_else();
 	void emit_if_epilogue();
+	// Pascal case is emitted as an if/else-if chain rather than C++ switch:
+	// labels may be non-integral and ranges become two comparisons. The
+	// selector prologue snapshots the expression exactly once.
+	void emit_case_prologue(std::string selector_cxx_name, Node* selector);
+	void emit_case_arm_prologue(Node* condition, bool first);
+	void emit_case_arm_epilogue();
+	void emit_case_else_prologue(bool has_previous_arm);
+	void emit_case_epilogue();
 	void emit_while_prologue(Node* condition);
 	void emit_while_epilogue();
 	void emit_repeat_prologue();

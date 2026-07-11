@@ -77,11 +77,7 @@ std::string cxx_type_name(std::string pas_name) {
 	return "t_" + pas_name;
 }
 
-Emitter::Emitter() : out_h(nullptr), out_cc(nullptr), active(nullptr), fresh_counter(0) {}
-
-std::string Emitter::next_fresh_cxx_name(std::string prefix) {
-	return prefix + "_" + std::to_string(++fresh_counter);
-}
+Emitter::Emitter() : out_h(nullptr), out_cc(nullptr), active(nullptr) {}
 
 Emitter::~Emitter() {
 	close();
@@ -240,23 +236,23 @@ void Emitter::emit_statement(Node* stmt) {
 						if (packed->cxx_name.empty())
 							unhandled_type("anonymous packed overlay", packed);
 						fprintf(active, "\t[&]() {\n");
-						fprintf(active, "\t\tauto&& pas_overlay_source = ");
+						fprintf(active, "\t\tauto&& tpcc_overlay_source = ");
 						emit_expression(overlay->a);
 						fprintf(active, ";\n");
-						fprintf(active, "\t\tusing pas_overlay_source_type = std::remove_cvref_t<decltype(pas_overlay_source)>;\n");
-						fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<pas_overlay_source_type>, \"packed overlay source must be trivially copyable\");\n");
-						fprintf(active, "\t\tstatic_assert(sizeof(pas_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\");\n",
+						fprintf(active, "\t\tusing tpcc_overlay_source_type = std::remove_cvref_t<decltype(tpcc_overlay_source)>;\n");
+						fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<tpcc_overlay_source_type>, \"packed overlay source must be trivially copyable\");\n");
+						fprintf(active, "\t\tstatic_assert(sizeof(tpcc_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\");\n",
 							packed->cxx_name.c_str());
-						fprintf(active, "\t\t%s pas_overlay_value{};\n", packed->cxx_name.c_str());
-						fprintf(active, "\t\tstd::memcpy(pas_overlay_value.m_data(), std::addressof(pas_overlay_source), sizeof(pas_overlay_source));\n");
-						fprintf(active, "\t\tauto pas_overlay_field = pas_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
-						fprintf(active, "\t\tpas_overlay_field[");
+						fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
+						fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source));\n");
+						fprintf(active, "\t\tauto tpcc_overlay_field = tpcc_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
+						fprintf(active, "\t\ttpcc_overlay_field[");
 						emit_expression(ix->b);
 						fprintf(active, "] = ");
 						emit_expression(a->b);
 						fprintf(active, ";\n");
-						fprintf(active, "\t\tpas_overlay_value.m_set_%s(pas_overlay_field);\n", field->cxx_name.c_str());
-						fprintf(active, "\t\tstd::memcpy(std::addressof(pas_overlay_source), pas_overlay_value.m_data(), sizeof(pas_overlay_source));\n");
+						fprintf(active, "\t\ttpcc_overlay_value.m_set_%s(tpcc_overlay_field);\n", field->cxx_name.c_str());
+						fprintf(active, "\t\tstd::memcpy(std::addressof(tpcc_overlay_source), tpcc_overlay_value.m_data(), sizeof(tpcc_overlay_source));\n");
 						fprintf(active, "\t}();\n");
 						return;
 					}
@@ -273,19 +269,19 @@ void Emitter::emit_statement(Node* stmt) {
 						unhandled_type("anonymous packed overlay", packed);
 					auto field = static_cast<StorageSlot*>(m->b);
 					fprintf(active, "\t[&]() {\n");
-					fprintf(active, "\t\tauto&& pas_overlay_source = ");
+					fprintf(active, "\t\tauto&& tpcc_overlay_source = ");
 					emit_expression(overlay->a);
 					fprintf(active, ";\n");
-					fprintf(active, "\t\tusing pas_overlay_source_type = std::remove_cvref_t<decltype(pas_overlay_source)>;\n");
-					fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<pas_overlay_source_type>, \"packed overlay source must be trivially copyable\");\n");
-					fprintf(active, "\t\tstatic_assert(sizeof(pas_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\");\n",
+					fprintf(active, "\t\tusing tpcc_overlay_source_type = std::remove_cvref_t<decltype(tpcc_overlay_source)>;\n");
+					fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<tpcc_overlay_source_type>, \"packed overlay source must be trivially copyable\");\n");
+					fprintf(active, "\t\tstatic_assert(sizeof(tpcc_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\");\n",
 						packed->cxx_name.c_str());
-					fprintf(active, "\t\t%s pas_overlay_value{};\n", packed->cxx_name.c_str());
-					fprintf(active, "\t\tstd::memcpy(pas_overlay_value.m_data(), std::addressof(pas_overlay_source), sizeof(pas_overlay_source));\n");
-					fprintf(active, "\t\tpas_overlay_value.m_set_%s(", field->cxx_name.c_str());
+					fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
+					fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source));\n");
+					fprintf(active, "\t\ttpcc_overlay_value.m_set_%s(", field->cxx_name.c_str());
 					emit_expression(a->b);
 					fprintf(active, ");\n");
-					fprintf(active, "\t\tstd::memcpy(std::addressof(pas_overlay_source), pas_overlay_value.m_data(), sizeof(pas_overlay_source));\n");
+					fprintf(active, "\t\tstd::memcpy(std::addressof(tpcc_overlay_source), tpcc_overlay_value.m_data(), sizeof(tpcc_overlay_source));\n");
 					fprintf(active, "\t}();\n");
 					return;
 				}
@@ -385,6 +381,43 @@ void Emitter::emit_if_else() {
 }
 
 void Emitter::emit_if_epilogue() {
+	if (!active)
+		return;
+	fprintf(active, "\t}\n");
+}
+
+void Emitter::emit_case_prologue(std::string selector_cxx_name, Node* selector) {
+	if (!active)
+		return;
+	// Copy, rather than bind a reference: Pascal evaluates the selector to a
+	// value once. A volatile or otherwise mutable lvalue must not be reread for
+	// every arm comparison.
+	fprintf(active, "\t{ auto %s = ", selector_cxx_name.c_str());
+	emit_expression(selector);
+	fprintf(active, ";\n");
+}
+
+void Emitter::emit_case_arm_prologue(Node* condition, bool first) {
+	if (!active)
+		return;
+	fprintf(active, first ? "\tif (" : "\telse if (");
+	emit_expression(condition);
+	fprintf(active, ") {\n");
+}
+
+void Emitter::emit_case_arm_epilogue() {
+	if (!active)
+		return;
+	fprintf(active, "\t}\n");
+}
+
+void Emitter::emit_case_else_prologue(bool has_previous_arm) {
+	if (!active)
+		return;
+	fprintf(active, has_previous_arm ? "\telse {\n" : "\t{\n");
+}
+
+void Emitter::emit_case_epilogue() {
 	if (!active)
 		return;
 	fprintf(active, "\t}\n");
@@ -1072,31 +1105,31 @@ void Emitter::emit_expression(Node* expr) {
 		if (auto packed = dynamic_cast<PackedRecordType*>(ca->ty)) {
 			if (packed->cxx_name.empty())
 				unhandled_type("anonymous packed overlay", packed);
-			fprintf(active, "([&]() { const auto& pas_overlay_source = ");
+			fprintf(active, "([&]() { const auto& tpcc_overlay_source = ");
 			emit_expression(ca->a);
 			fprintf(active, "; ");
-			fprintf(active, "using pas_overlay_source_type = std::remove_cvref_t<decltype(pas_overlay_source)>; ");
-			fprintf(active, "static_assert(std::is_trivially_copyable_v<pas_overlay_source_type>, \"packed overlay source must be trivially copyable\"); ");
-			fprintf(active, "static_assert(sizeof(pas_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\"); ",
+			fprintf(active, "using tpcc_overlay_source_type = std::remove_cvref_t<decltype(tpcc_overlay_source)>; ");
+			fprintf(active, "static_assert(std::is_trivially_copyable_v<tpcc_overlay_source_type>, \"packed overlay source must be trivially copyable\"); ");
+			fprintf(active, "static_assert(sizeof(tpcc_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\"); ",
 				packed->cxx_name.c_str());
-			fprintf(active, "%s pas_overlay_value{}; ", packed->cxx_name.c_str());
-			fprintf(active, "std::memcpy(pas_overlay_value.m_data(), std::addressof(pas_overlay_source), sizeof(pas_overlay_source)); ");
-			fprintf(active, "return pas_overlay_value; }())");
+			fprintf(active, "%s tpcc_overlay_value{}; ", packed->cxx_name.c_str());
+			fprintf(active, "std::memcpy(tpcc_overlay_value.m_data(), std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source)); ");
+			fprintf(active, "return tpcc_overlay_value; }())");
 			return;
 		}
 		if (auto packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr)) {
-			fprintf(active, "([&]() { const auto& pas_overlay_source = ");
+			fprintf(active, "([&]() { const auto& tpcc_overlay_source = ");
 			emit_expression(ca->a);
 			fprintf(active, "; ");
-			fprintf(active, "using pas_overlay_target_type = ");
+			fprintf(active, "using tpcc_overlay_target_type = ");
 			emit_type_ref(ca->ty);
 			fprintf(active, "; ");
-			fprintf(active, "static_assert(std::is_trivially_copyable_v<pas_overlay_target_type>, \"packed overlay target must be trivially copyable\"); ");
-			fprintf(active, "static_assert(sizeof(pas_overlay_target_type) == %s::m_storage_size, \"packed overlay size mismatch\"); ",
+			fprintf(active, "static_assert(std::is_trivially_copyable_v<tpcc_overlay_target_type>, \"packed overlay target must be trivially copyable\"); ");
+			fprintf(active, "static_assert(sizeof(tpcc_overlay_target_type) == %s::m_storage_size, \"packed overlay size mismatch\"); ",
 				packed->cxx_name.c_str());
-			fprintf(active, "pas_overlay_target_type pas_overlay_value{}; ");
-			fprintf(active, "std::memcpy(std::addressof(pas_overlay_value), pas_overlay_source.m_data(), sizeof(pas_overlay_value)); ");
-			fprintf(active, "return pas_overlay_value; }())");
+			fprintf(active, "tpcc_overlay_target_type tpcc_overlay_value{}; ");
+			fprintf(active, "std::memcpy(std::addressof(tpcc_overlay_value), tpcc_overlay_source.m_data(), sizeof(tpcc_overlay_value)); ");
+			fprintf(active, "return tpcc_overlay_value; }())");
 			return;
 		}
 		fprintf(active, "static_cast<");
