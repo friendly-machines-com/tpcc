@@ -102,6 +102,27 @@ inline t_shortstring tpcc_shortstring_from_c(const char* s) {
 	return result;
 }
 
+inline t_longint p_pos(const t_shortstring& needle, const t_shortstring& haystack) {
+	if (needle.length == 0)
+		return 1;
+	if (needle.length > haystack.length)
+		return 0;
+	const std::size_t last = static_cast<std::size_t>(haystack.length - needle.length);
+	for (std::size_t offset = 0; offset <= last; ++offset) {
+		if (std::memcmp(haystack.data + offset, needle.data, needle.length) == 0)
+			return static_cast<t_longint>(offset + 1);
+	}
+	return 0;
+}
+
+inline t_longint p_pos(t_char needle, const t_shortstring& haystack) {
+	for (std::size_t offset = 0; offset < haystack.length; ++offset) {
+		if (haystack.data[offset] == needle)
+			return static_cast<t_longint>(offset + 1);
+	}
+	return 0;
+}
+
 inline t_shortstring p_add(const t_shortstring& a, const t_shortstring& b) {
 	t_shortstring result {};
 	const std::size_t result_length = std::min<std::size_t>(
@@ -148,7 +169,7 @@ inline t_boolean p_greaterthanorequal(const t_shortstring& a, const t_shortstrin
 	return bool_to_boolean(stringcmp(a, b) >= 0);
 }
 
-template<typename T> inline t_integer p_ord(T x) { return static_cast<t_integer>(x); }
+template<typename T> inline t_longword p_ord(T x) { return static_cast<t_longword>(x); }
 template<typename T> inline T p_low() { return std::numeric_limits<T>::lowest(); }
 template<typename T> inline T p_high() { return std::numeric_limits<T>::max(); }
 inline t_integer p_length(const t_shortstring& s) { return s.length; }

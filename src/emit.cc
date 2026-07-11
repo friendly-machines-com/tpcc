@@ -1000,6 +1000,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto s = dynamic_cast<String*>(expr)) {
+		fprintf(active, "pas::tpcc_shortstring_from_c(");
 		fputc('"', active);
 		for (char ch : s->value) {
 			if (ch == '"' || ch == '\\')
@@ -1011,6 +1012,7 @@ void Emitter::emit_expression(Node* expr) {
 			}
 		}
 		fputc('"', active);
+		fprintf(active, ")");
 		return;
 	}
 	if (auto a = dynamic_cast<FixedArrayLiteral*>(expr)) {

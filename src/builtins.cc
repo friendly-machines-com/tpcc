@@ -343,6 +343,18 @@ static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::ve
 	return ConstEvalResult::success(new Real(::logl(value), result_ty));
 }
 
+static ConstEvalResult fold_pos(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2)
+		return ConstEvalResult::not_constant();
+	auto needle = dynamic_cast<const String*>(args[0]);
+	auto haystack = dynamic_cast<const String*>(args[1]);
+	if (!needle || !haystack)
+		return ConstEvalResult::not_constant();
+	std::size_t found = haystack->value.find(needle->value);
+	uint64_t pascal_index = found == std::string::npos ? 0 : static_cast<uint64_t>(found + 1);
+	return fold_integer_result(pascal_index, false, result_ty);
+}
+
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const BuiltinDesc k_builtins[] = {
@@ -360,6 +372,7 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_sqrt", fold_sqrt},
     {"pas::p_exp", fold_exp},
     {"pas::p_ln", fold_ln},
+    {"pas::p_pos", fold_pos},
     // TODO: Delphi has operators "explicit", "implicit".
 
     {"pas::p_bitwiseand", nullptr},

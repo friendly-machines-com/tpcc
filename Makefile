@@ -39,6 +39,12 @@ test-math-intrinsics: mp
 test-loop-control: mp
 	sh tests/test_loop_control.sh
 
-test: test-packed-record test-case-statement test-math-intrinsics test-loop-control
+test-generic-intrinsics: mp
+	sh tests/test_generic_intrinsics.sh
 
-.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control
+test-pos-builtin: mp
+	sh tests/test_pos_builtin.sh
+
+test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin
+
+.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin
