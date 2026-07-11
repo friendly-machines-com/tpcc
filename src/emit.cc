@@ -221,10 +221,74 @@ void Emitter::emit_statement(Node* stmt) {
 	if (!active)
 		return;
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
+		// Writable packed overlay, array-field element:
+		//
+		//   TPacked(source).bytes[index] := rhs
+		//
+		// The parser has already proved SOURCE is an assignable place. Bind it
+		// once, copy into an aligned nominal carrier, update a copied array
+		// field, put that field back, then synchronously copy the entire carrier
+		// back to SOURCE. No reference to packed bytes is ever formed and no
+		// temporary view can lose a delayed write.
+		if (auto ix = dynamic_cast<Index*>(a->a)) {
+			if (auto m = dynamic_cast<MemberAccess*>(ix->a)) {
+				if (auto overlay = dynamic_cast<Cast*>(m->a)) {
+					if (auto packed = dynamic_cast<PackedRecordType*>(overlay->ty)) {
+						auto field = dynamic_cast<StorageSlot*>(m->b);
+						if (!field)
+							unhandled_node("packed overlay array target is not a field", m);
+						if (packed->cxx_name.empty())
+							unhandled_type("anonymous packed overlay", packed);
+						fprintf(active, "\t[&]() {\n");
+						fprintf(active, "\t\tauto&& pas_overlay_source = ");
+						emit_expression(overlay->a);
+						fprintf(active, ";\n");
+						fprintf(active, "\t\tusing pas_overlay_source_type = std::remove_cvref_t<decltype(pas_overlay_source)>;\n");
+						fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<pas_overlay_source_type>, \"packed overlay source must be trivially copyable\");\n");
+						fprintf(active, "\t\tstatic_assert(sizeof(pas_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\");\n",
+							packed->cxx_name.c_str());
+						fprintf(active, "\t\t%s pas_overlay_value{};\n", packed->cxx_name.c_str());
+						fprintf(active, "\t\tstd::memcpy(pas_overlay_value.m_data(), std::addressof(pas_overlay_source), sizeof(pas_overlay_source));\n");
+						fprintf(active, "\t\tauto pas_overlay_field = pas_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
+						fprintf(active, "\t\tpas_overlay_field[");
+						emit_expression(ix->b);
+						fprintf(active, "] = ");
+						emit_expression(a->b);
+						fprintf(active, ";\n");
+						fprintf(active, "\t\tpas_overlay_value.m_set_%s(pas_overlay_field);\n", field->cxx_name.c_str());
+						fprintf(active, "\t\tstd::memcpy(std::addressof(pas_overlay_source), pas_overlay_value.m_data(), sizeof(pas_overlay_source));\n");
+						fprintf(active, "\t}();\n");
+						return;
+					}
+				}
+			}
+		}
 		if (auto m = dynamic_cast<MemberAccess*>(a->a)) {
 			if (dynamic_cast<PackedRecordType*>(m->a->ty)) {
 				if (!dynamic_cast<StorageSlot*>(m->b))
 					unhandled_node("packed-record assignment target is not a field", a->a);
+				if (auto overlay = dynamic_cast<Cast*>(m->a)) {
+					auto packed = static_cast<PackedRecordType*>(overlay->ty);
+					if (packed->cxx_name.empty())
+						unhandled_type("anonymous packed overlay", packed);
+					auto field = static_cast<StorageSlot*>(m->b);
+					fprintf(active, "\t[&]() {\n");
+					fprintf(active, "\t\tauto&& pas_overlay_source = ");
+					emit_expression(overlay->a);
+					fprintf(active, ";\n");
+					fprintf(active, "\t\tusing pas_overlay_source_type = std::remove_cvref_t<decltype(pas_overlay_source)>;\n");
+					fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<pas_overlay_source_type>, \"packed overlay source must be trivially copyable\");\n");
+					fprintf(active, "\t\tstatic_assert(sizeof(pas_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\");\n",
+						packed->cxx_name.c_str());
+					fprintf(active, "\t\t%s pas_overlay_value{};\n", packed->cxx_name.c_str());
+					fprintf(active, "\t\tstd::memcpy(pas_overlay_value.m_data(), std::addressof(pas_overlay_source), sizeof(pas_overlay_source));\n");
+					fprintf(active, "\t\tpas_overlay_value.m_set_%s(", field->cxx_name.c_str());
+					emit_expression(a->b);
+					fprintf(active, ");\n");
+					fprintf(active, "\t\tstd::memcpy(std::addressof(pas_overlay_source), pas_overlay_value.m_data(), sizeof(pas_overlay_source));\n");
+					fprintf(active, "\t}();\n");
+					return;
+				}
 				fprintf(active, "\t");
 				if (auto d = dynamic_cast<Dereference*>(m->a)) {
 					emit_expression(d->a);
@@ -706,19 +770,28 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 		fprintf(active, "\tusing m_field_%zu_type = ", i);
 		emit_type_ref(field.ty);
 		fprintf(active, ";\n");
-		fprintf(active, "\tinline static constexpr std::size_t m_field_%zu_offset = ", i);
+		// Use enumerators rather than `inline static constexpr` data members.
+		// Pascal permits a packed-record type declaration inside a routine
+		// (cutils.pas does this for TWordRec/TLongWordRec), which makes the
+		// emitted C++ struct a local class. C++20 [class.local] forbids static
+		// data members in local classes, including inline constexpr ones.
+		// An enumerator is not a data member, remains an integral constant
+		// expression, and is still addressable syntactically as
+		// `PackedType::m_field_N_offset`.
+		fprintf(active, "\tenum : std::size_t { m_field_%zu_offset = ", i);
 		if (i == 0)
 			fprintf(active, "0");
 		else
 			fprintf(active, "m_field_%zu_offset + sizeof(m_field_%zu_type)", i - 1, i - 1);
-		fprintf(active, ";\n");
+		fprintf(active, " };\n");
 	}
-	fprintf(active, "\tinline static constexpr std::size_t m_storage_size = ");
+	// Same local-class restriction as the field offsets above.
+	fprintf(active, "\tenum : std::size_t { m_storage_size = ");
 	if (p->fields.empty())
 		fprintf(active, "1");
 	else
 		fprintf(active, "m_field_%zu_offset + sizeof(m_field_%zu_type)", p->fields.size() - 1, p->fields.size() - 1);
-	fprintf(active, ";\n");
+	fprintf(active, " };\n");
 	fprintf(active, "\nprivate:\n");
 	fprintf(active, "\tstd::array<std::byte, m_storage_size> m_storage{};\n");
 	fprintf(active, "\npublic:\n");
@@ -996,6 +1069,36 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
+		if (auto packed = dynamic_cast<PackedRecordType*>(ca->ty)) {
+			if (packed->cxx_name.empty())
+				unhandled_type("anonymous packed overlay", packed);
+			fprintf(active, "([&]() { const auto& pas_overlay_source = ");
+			emit_expression(ca->a);
+			fprintf(active, "; ");
+			fprintf(active, "using pas_overlay_source_type = std::remove_cvref_t<decltype(pas_overlay_source)>; ");
+			fprintf(active, "static_assert(std::is_trivially_copyable_v<pas_overlay_source_type>, \"packed overlay source must be trivially copyable\"); ");
+			fprintf(active, "static_assert(sizeof(pas_overlay_source_type) == %s::m_storage_size, \"packed overlay size mismatch\"); ",
+				packed->cxx_name.c_str());
+			fprintf(active, "%s pas_overlay_value{}; ", packed->cxx_name.c_str());
+			fprintf(active, "std::memcpy(pas_overlay_value.m_data(), std::addressof(pas_overlay_source), sizeof(pas_overlay_source)); ");
+			fprintf(active, "return pas_overlay_value; }())");
+			return;
+		}
+		if (auto packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr)) {
+			fprintf(active, "([&]() { const auto& pas_overlay_source = ");
+			emit_expression(ca->a);
+			fprintf(active, "; ");
+			fprintf(active, "using pas_overlay_target_type = ");
+			emit_type_ref(ca->ty);
+			fprintf(active, "; ");
+			fprintf(active, "static_assert(std::is_trivially_copyable_v<pas_overlay_target_type>, \"packed overlay target must be trivially copyable\"); ");
+			fprintf(active, "static_assert(sizeof(pas_overlay_target_type) == %s::m_storage_size, \"packed overlay size mismatch\"); ",
+				packed->cxx_name.c_str());
+			fprintf(active, "pas_overlay_target_type pas_overlay_value{}; ");
+			fprintf(active, "std::memcpy(std::addressof(pas_overlay_value), pas_overlay_source.m_data(), sizeof(pas_overlay_value)); ");
+			fprintf(active, "return pas_overlay_value; }())");
+			return;
+		}
 		fprintf(active, "static_cast<");
 		emit_type_ref(ca->ty);
 		fprintf(active, ">(");

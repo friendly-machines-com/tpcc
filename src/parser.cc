@@ -925,6 +925,20 @@ void Parser::maybe_parse_statement() {
 			if (!is_assignable(lhs)) {
 				raise_parse_error("LHS of ':=' is not assignable");
 			}
+			// A packed overlay is writable only when its source is a real
+			// assignable place. In particular, never accept `TPacked(F()).X`
+			// and then silently mutate a copied C++ temporary.
+			Node* overlay_source = nullptr;
+			MemberAccess* overlay_member = dynamic_cast<MemberAccess*>(lhs);
+			if (auto ix = dynamic_cast<Index*>(lhs))
+				overlay_member = dynamic_cast<MemberAccess*>(ix->a);
+			if (overlay_member) {
+				if (auto overlay = dynamic_cast<Cast*>(overlay_member->a))
+					if (dynamic_cast<PackedRecordType*>(overlay->ty))
+						overlay_source = overlay->a;
+			}
+			if (overlay_source && !is_assignable(overlay_source))
+				raise_parse_error("writable packed-record overlay requires an assignable source");
 			if (contains_packed_projection(lhs) && !is_supported_packed_assignment(lhs)) {
 				raise_parse_error("write through a nested or indexed packed-record field is not implemented");
 			}
@@ -1255,10 +1269,6 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			parse_opening_paren();
 			Node* value = parse_expression();
 			parse_closing_paren();
-			if (dynamic_cast<PackedRecordType*>(target_ty) ||
-			    (value && dynamic_cast<PackedRecordType*>(value->ty))) {
-				raise_parse_error("packed-record overlay casts are not implemented");
-			}
 
 			// Pascal typecast syntax is `Type(expr)`. This is an explicit cast,
 			// not a value call and not the implicit-conversion helper `cast()`, so
@@ -1621,10 +1631,22 @@ bool Parser::contains_packed_projection(Node* n) {
 }
 
 bool Parser::is_supported_packed_assignment(Node* n) {
-	auto ma = dynamic_cast<MemberAccess*>(n);
-	if (!ma || !ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty))
-		return false;
-	return is_assignable(ma->a) && !contains_packed_projection(ma->a);
+	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
+		if (!ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty))
+			return false;
+		if (auto overlay = dynamic_cast<Cast*>(ma->a))
+			return is_assignable(overlay->a) && !contains_packed_projection(overlay->a);
+		return is_assignable(ma->a) && !contains_packed_projection(ma->a);
+	}
+	if (auto ix = dynamic_cast<Index*>(n)) {
+		auto ma = dynamic_cast<MemberAccess*>(ix->a);
+		if (!ma || !ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty))
+			return false;
+		auto overlay = dynamic_cast<Cast*>(ma->a);
+		return overlay && is_assignable(overlay->a) &&
+		       !contains_packed_projection(overlay->a);
+	}
+	return false;
 }
 
 Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
