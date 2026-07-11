@@ -180,6 +180,8 @@ void Emitter::emit_main_epilogue() {
 static std::string owner_cxx_name(Type* owner) {
 	if (auto r = dynamic_cast<RecordType*>(owner))
 		return r->cxx_name;
+	if (auto r = dynamic_cast<PackedRecordType*>(owner))
+		return r->cxx_name;
 	if (auto c = dynamic_cast<ClassType*>(owner))
 		return c->cxx_name;
 	if (auto i = dynamic_cast<InterfaceType*>(owner))
@@ -219,6 +221,24 @@ void Emitter::emit_statement(Node* stmt) {
 	if (!active)
 		return;
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
+		if (auto m = dynamic_cast<MemberAccess*>(a->a)) {
+			if (dynamic_cast<PackedRecordType*>(m->a->ty)) {
+				if (!dynamic_cast<StorageSlot*>(m->b))
+					unhandled_node("packed-record assignment target is not a field", a->a);
+				fprintf(active, "\t");
+				if (auto d = dynamic_cast<Dereference*>(m->a)) {
+					emit_expression(d->a);
+					fprintf(active, "->");
+				} else {
+					emit_expression(m->a);
+					fprintf(active, ".");
+				}
+				fprintf(active, "m_set_%s(", static_cast<StorageSlot*>(m->b)->cxx_name.c_str());
+				emit_expression(a->b);
+				fprintf(active, ");\n");
+				return;
+			}
+		}
 		fprintf(active, "\t");
 		emit_expression(a->a);
 		fprintf(active, " = ");
@@ -461,10 +481,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	} else {
 		unhandled_type("emit_aggregate_decl", ty);
 	}
-	const char* attributes = "";
-	if (rec && rec->packed)
-		attributes = "[[gnu::packed]] ";
-	fprintf(active, "%s%s", attributes, kw);
+	fprintf(active, "%s", kw);
 	if (!cxx_name.empty())
 		fprintf(active, " %s", cxx_name.c_str());
 
@@ -677,6 +694,52 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	fprintf(active, "}");
 }
 
+void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p) {
+	if (!active)
+		return;
+	if (cxx_name.empty())
+		unhandled_type("anonymous packed records are not implemented", p);
+
+	fprintf(active, "struct %s {\n", cxx_name.c_str());
+	for (size_t i = 0; i < p->fields.size(); ++i) {
+		auto& field = p->fields[i];
+		fprintf(active, "\tusing m_field_%zu_type = ", i);
+		emit_type_ref(field.ty);
+		fprintf(active, ";\n");
+		fprintf(active, "\tinline static constexpr std::size_t m_field_%zu_offset = ", i);
+		if (i == 0)
+			fprintf(active, "0");
+		else
+			fprintf(active, "m_field_%zu_offset + sizeof(m_field_%zu_type)", i - 1, i - 1);
+		fprintf(active, ";\n");
+	}
+	fprintf(active, "\tinline static constexpr std::size_t m_storage_size = ");
+	if (p->fields.empty())
+		fprintf(active, "1");
+	else
+		fprintf(active, "m_field_%zu_offset + sizeof(m_field_%zu_type)", p->fields.size() - 1, p->fields.size() - 1);
+	fprintf(active, ";\n");
+	fprintf(active, "\nprivate:\n");
+	fprintf(active, "\tstd::array<std::byte, m_storage_size> m_storage{};\n");
+	fprintf(active, "\npublic:\n");
+	fprintf(active, "\tstd::byte* m_data() noexcept { return m_storage.data(); }\n");
+	fprintf(active, "\tconst std::byte* m_data() const noexcept { return m_storage.data(); }\n");
+	for (size_t i = 0; i < p->fields.size(); ++i) {
+		auto& field = p->fields[i];
+		fprintf(active, "\tm_field_%zu_type m_get_%s() const noexcept {\n", i, field.slot->cxx_name.c_str());
+		fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<m_field_%zu_type>, \"packed field must be trivially copyable\");\n", i);
+		fprintf(active, "\t\tm_field_%zu_type value{};\n", i);
+		fprintf(active, "\t\tstd::memcpy(&value, m_storage.data() + m_field_%zu_offset, sizeof value);\n", i);
+		fprintf(active, "\t\treturn value;\n");
+		fprintf(active, "\t}\n");
+		fprintf(active, "\tvoid m_set_%s(const m_field_%zu_type& value) noexcept {\n", field.slot->cxx_name.c_str(), i);
+		fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<m_field_%zu_type>, \"packed field must be trivially copyable\");\n", i);
+		fprintf(active, "\t\tstd::memcpy(m_storage.data() + m_field_%zu_offset, &value, sizeof value);\n", i);
+		fprintf(active, "\t}\n");
+	}
+	fprintf(active, "}");
+}
+
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	if (!active)
 		return;
@@ -689,6 +752,20 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(active, "\n");
 		emit_enum_decl(e);
 		fprintf(active, ";\n");
+		return;
+	}
+	if (auto p = dynamic_cast<PackedRecordType*>(ty)) {
+		fprintf(active, "\n");
+		emit_packed_record_decl(cxx_name, p);
+		fprintf(active, ";\n");
+		fprintf(active, "static_assert(sizeof(%s) == %s::m_storage_size, \"packed-record carrier size mismatch\");\n",
+			cxx_name.c_str(), cxx_name.c_str());
+		fprintf(active, "static_assert(alignof(%s) == 1, \"packed-record carrier alignment mismatch\");\n",
+			cxx_name.c_str());
+		fprintf(active, "static_assert(std::is_standard_layout_v<%s>, \"packed-record carrier must have standard layout\");\n",
+			cxx_name.c_str());
+		fprintf(active, "static_assert(std::is_trivially_copyable_v<%s>, \"packed-record carrier must be trivially copyable\");\n",
+			cxx_name.c_str());
 		return;
 	}
 	if (dynamic_cast<RecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<ObjectType*>(ty) || dynamic_cast<InterfaceType*>(ty)) {
@@ -801,6 +878,21 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
+		if (auto packed = dynamic_cast<PackedRecordType*>(m->a->ty)) {
+			(void)packed;
+			auto field = dynamic_cast<StorageSlot*>(m->b);
+			if (!field)
+				unhandled_node("packed-record member is not a field", expr);
+			if (auto d = dynamic_cast<Dereference*>(m->a)) {
+				emit_expression(d->a);
+				fprintf(active, "->");
+			} else {
+				emit_expression(m->a);
+				fprintf(active, ".");
+			}
+			fprintf(active, "m_get_%s()", field->cxx_name.c_str());
+			return;
+		}
 		// Use `->` when the container is (a) an explicit Dereference (collapse
 		// `(*ptr).member` to `ptr->member`) or (b) a reference-typed lvalue
 		// (Pascal `class`, `interface`, or `^T` -- all pointers in C++).
@@ -1011,6 +1103,12 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_aggregate_decl("", ty);
 		else
 			fprintf(active, "%s", r->cxx_name.c_str());
+		return;
+	}
+	if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
+		if (r->cxx_name.empty())
+			unhandled_type("anonymous packed record type reference", ty);
+		fprintf(active, "%s", r->cxx_name.c_str());
 		return;
 	}
 	if (auto c = dynamic_cast<ClassType*>(ty)) {

@@ -27,4 +27,7 @@ clean:
 distclean: clean
 	rm -f mp core
 
-.PHONY: all clean distclean
+test-packed-record: mp
+	sh tests/test_packed_record.sh
+
+.PHONY: all clean distclean test-packed-record

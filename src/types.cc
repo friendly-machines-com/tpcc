@@ -43,10 +43,14 @@ PointerType::PointerType(SourceLocation source_location, Type* item_type)
 	this->item_type = item_type;
 }
 
-RecordType::RecordType(SourceLocation source_location, Frame* children, bool packed)
+RecordType::RecordType(SourceLocation source_location, Frame* children)
     : Type(std::move(source_location)) {
 	this->children = children;
-	this->packed = packed;
+}
+
+PackedRecordType::PackedRecordType(SourceLocation source_location, Frame* children)
+    : Type(std::move(source_location)) {
+	this->children = children;
 }
 
 ClassType::ClassType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super)
@@ -380,11 +384,6 @@ void RecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 			ctx->add_type_edge(field.ty);
 }
 void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
-	if (packed) {
-		out << "\n";
-		ctx->indent(out, indent + 1);
-		out << "packed: yes";
-	}
 	out << "\n";
 	ctx->print_frame_members(out, children, indent + 1);
 	if (has_selector) {
@@ -411,6 +410,21 @@ void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	out << "end";
 }
 void RecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
+
+const char* PackedRecordType::diagnostic_kind() const { return "packed record"; }
+void PackedRecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
+	add_frame_value_type_edges(ctx, children);
+	for (const auto& field : fields)
+		ctx->add_type_edge(field.ty);
+}
+void PackedRecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->print_frame_members(out, children, indent + 1);
+	ctx->indent(out, indent);
+	out << "end";
+}
+void PackedRecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
 
 const char* InterfaceType::diagnostic_kind() const { return "interface"; }
 void InterfaceType::collect_diagnostic_edges(ErrorLetContext* ctx) const {

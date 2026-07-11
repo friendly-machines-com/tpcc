@@ -14,6 +14,7 @@ class Node;
 class Symbol;
 class Type;
 class RecordType;
+class PackedRecordType;
 class Unit;
 class UnitRegistry;
 class Emitter;
@@ -230,6 +231,16 @@ protected:
 	 *  Dereference, or an Index. Everything else (constants, calls,
 	 *  callable references) rejects. */
 	bool is_assignable(Node* n);
+	/** True when NODE's storage path crosses a packed-record field.  Such a
+	 *  field is a read/write projection implemented by copying bytes, not a
+	 *  C++ lvalue to which a reference or pointer can bind.  Dereference ends
+	 *  the path: a pointer read from packed storage may still designate an
+	 *  ordinary object elsewhere. */
+	bool contains_packed_projection(Node* n);
+	/** The initial packed lowering can write a direct packed field when its
+	 *  carrier is itself a stable assignable place.  Deeper projections need
+	 *  the future copy-in/copy-back Place machinery. */
+	bool is_supported_packed_assignment(Node* n);
 	Node* parse_expression_after_identifier(std::string id);
 	Node* parse_comparison();
 	Node* parse_comparison_tail(Node* result);

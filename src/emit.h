@@ -6,6 +6,7 @@
 class Node;
 class Type;
 class EnumType;
+class PackedRecordType;
 class Callable;
 class Method;
 class RoutineType;
@@ -147,6 +148,10 @@ public:
 	// already-defined named enum do NOT go through here -- those just
 	// spell the cxx name.
 	void emit_enum_decl(EnumType* e);
+	// Emit the opaque byte carrier and generated direct-field accessors for a
+	// PackedRecordType. Packed records deliberately do not flow through
+	// emit_aggregate_decl because they have no C++ field members.
+	void emit_packed_record_decl(std::string cxx_name, PackedRecordType* p);
 	// Emit a record/class/object body: `<kw> [NAME] { <fields> <variant-union> }`
 	// -- no leading newline, no trailing semicolon. Caller frames those. Used
 	// by emit_type_definition (named, top-level) and emit_type_ref's anonymous

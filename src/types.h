@@ -136,7 +136,6 @@ struct RecordType: public Type {
 	// C++ identifier emitted for this record. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
-	bool packed = false;
 
 	// Variant part. Pascal allows AT MOST ONE variant part, declared last
 	// in the record body as `case [<sel_name> ':'] <TagType> of <arms>`:
@@ -159,7 +158,35 @@ struct RecordType: public Type {
 	Type* selector_type = nullptr;
 	std::vector<VariantArm> arms;
 
-	RecordType(SourceLocation source_location, Frame* children, bool packed);
+	RecordType(SourceLocation source_location, Frame* children);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+/** A byte-packed Pascal record.
+ *
+ * This is deliberately NOT derived from RecordType: ordinary records emit
+ * actual C++ fields and use C++ layout, while packed records emit one opaque
+ * byte carrier and generated accessors. Keeping the types disjoint prevents
+ * an unimplemented packed operation from silently entering ordinary-record
+ * lowering through dynamic_cast<RecordType*>.
+ */
+struct PackedRecordType: public Type {
+	struct Field {
+		std::string pas_name;
+		StorageSlot* slot;
+		Type* ty;
+	};
+
+	Frame* children;
+	std::string cxx_name;
+	// Pascal source order. Frame is for lookup and intentionally cannot be
+	// used for layout because it stores values in name order.
+	std::vector<Field> fields;
+
+	PackedRecordType(SourceLocation source_location, Frame* children);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

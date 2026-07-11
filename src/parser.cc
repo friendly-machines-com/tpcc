@@ -45,6 +45,7 @@ static std::unordered_set<std::string> keywords = {
     "array",
     "as",
     "begin",
+    "bitpacked",
     "case",
     "class",
     "const",
@@ -792,6 +793,8 @@ xor
 static Frame* get_type_body_frame(Type* ty) {
 	if (auto r = dynamic_cast<RecordType*>(ty))
 		return r->children;
+	if (auto r = dynamic_cast<PackedRecordType*>(ty))
+		return r->children;
 	if (auto c = dynamic_cast<ClassType*>(ty))
 		return c->children;
 	if (auto i = dynamic_cast<InterfaceType*>(ty))
@@ -911,7 +914,7 @@ void Parser::maybe_parse_statement() {
 			if (input_token == ":=")
 				lhs = resolve_lvalue(first);
 			else
-				lhs = parse_designator_tail(resolve_value(first));
+				lhs = parse_designator_tail(parse_value_from_identifier(first));
 		} else {
 			lhs = parse_designator();
 		}
@@ -921,6 +924,9 @@ void Parser::maybe_parse_statement() {
 		if (maybe_parse_colon_equals()) {
 			if (!is_assignable(lhs)) {
 				raise_parse_error("LHS of ':=' is not assignable");
+			}
+			if (contains_packed_projection(lhs) && !is_supported_packed_assignment(lhs)) {
+				raise_parse_error("write through a nested or indexed packed-record field is not implemented");
 			}
 			Node* rhs = parse_expression();
 			auto assign = mk_assign(lhs, rhs);
@@ -1215,6 +1221,22 @@ Node* Parser::parse_value() {
 
 Node* Parser::parse_value_from_identifier(std::string id) {
 	if (Node* value = maybe_resolve_value(id)) {
+		// Within a function body, a bare occurrence of that function's name
+		// denotes its hidden result variable.  Parentheses still mean a call,
+		// which is how recursive calls remain distinguishable.  resolve_lvalue
+		// already applies this rule for `FunctionName := value`; it is equally
+		// required in value context for representation overlays such as
+		// `TWordRec(reverse_word).hi`.
+		if (input_token != "(") {
+			if (auto c = dynamic_cast<Callable*>(value)) {
+				if (Node* result = active_function_result_lvalue(c))
+					return result;
+			} else if (auto os = dynamic_cast<OverloadSet*>(value)) {
+				for (auto* c : os->members)
+					if (Node* result = active_function_result_lvalue(c))
+						return result;
+			}
+		}
 		// Low/High are type-argument intrinsics, so ordinary call finalization
 		// cannot infer their result type from a RoutineType. Dispatch on the
 		// resolved builtin object rather than the source spelling: user shadowing
@@ -1233,6 +1255,10 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			parse_opening_paren();
 			Node* value = parse_expression();
 			parse_closing_paren();
+			if (dynamic_cast<PackedRecordType*>(target_ty) ||
+			    (value && dynamic_cast<PackedRecordType*>(value->ty))) {
+				raise_parse_error("packed-record overlay casts are not implemented");
+			}
 
 			// Pascal typecast syntax is `Type(expr)`. This is an explicit cast,
 			// not a value call and not the implicit-conversion helper `cast()`, so
@@ -1474,6 +1500,8 @@ Node* Parser::maybe_auto_call(Node* n) {
 static Frame* body_frame_of(Type* ty) {
 	if (auto r = dynamic_cast<RecordType*>(ty))
 		return r->children;
+	if (auto r = dynamic_cast<PackedRecordType*>(ty))
+		return r->children;
 	if (auto c = dynamic_cast<ClassType*>(ty))
 		return c->children;
 	if (auto c = dynamic_cast<ClassRefType*>(ty))
@@ -1575,6 +1603,30 @@ bool Parser::is_assignable(Node* n) {
 	return false;
 }
 
+bool Parser::contains_packed_projection(Node* n) {
+	if (!n)
+		return false;
+	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
+		if (ma->a && dynamic_cast<PackedRecordType*>(ma->a->ty))
+			return true;
+		return contains_packed_projection(ma->a);
+	}
+	if (auto ix = dynamic_cast<Index*>(n))
+		return contains_packed_projection(ix->a);
+	if (dynamic_cast<Dereference*>(n))
+		return false;
+	if (auto ca = dynamic_cast<Cast*>(n))
+		return contains_packed_projection(ca->a);
+	return false;
+}
+
+bool Parser::is_supported_packed_assignment(Node* n) {
+	auto ma = dynamic_cast<MemberAccess*>(n);
+	if (!ma || !ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty))
+		return false;
+	return is_assignable(ma->a) && !contains_packed_projection(ma->a);
+}
+
 Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 	auto fn = resolve_value(id);
 	std::vector<Node*> args;
@@ -1650,6 +1702,8 @@ Node* Parser::parse_power() {
 		return mk_unary_same("not", parse_power());
 	} else if (maybe_parse_at()) {
 		auto x = parse_power();
+		if (contains_packed_projection(x))
+			raise_parse_error("address of a packed-record field is not available");
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(current_location(), x->ty)) : nullptr;
 		return n;
@@ -1854,11 +1908,15 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				raise_parse_error("expected a class container");
 			}
 		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
+			if (dynamic_cast<PackedRecordType*>(owner_class))
+				raise_parse_error("methods inside packed records are not implemented");
 			parse_method_prototype(body, owner_class, peek_keyword("function"), peek_keyword("destructor"), peek_keyword("constructor"), is_class);
 			is_class = false;
 			continue; // parse_method_prototype consumes its terminating ';'
 		} else if (peek_keyword("case")) {
 			auto rt = dynamic_cast<RecordType*>(owner_class);
+			if (dynamic_cast<PackedRecordType*>(owner_class))
+				raise_parse_error("variant parts inside packed records are not implemented");
 			if (is_class) {
 				raise_parse_error("variant part only valid in a record, not in a metaclass");
 			}
@@ -1878,8 +1936,16 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			} while (maybe_parse_comma());
 			parse_colon();
 			auto ty = parse_type_expression(false);
+			if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+			    dynamic_cast<PackedRecordType*>(owner_class) &&
+			    intrinsic && intrinsic->cxx_name == "pas::t_ansistring") {
+				raise_parse_error("managed fields inside packed records are not implemented");
+			}
 			for (auto member_name : member_names) {
-				body->register_variable(member_name, new StorageSlot(cxx_value_name(member_name), ty), ty);
+				auto slot = new StorageSlot(cxx_value_name(member_name), ty);
+				body->register_variable(member_name, slot, ty);
+				if (auto packed = dynamic_cast<PackedRecordType*>(owner_class))
+					packed->fields.push_back({member_name, slot, ty});
 			}
 		}
 		if (input_token.size() && input_token != "end") {
@@ -2015,15 +2081,21 @@ Type* Parser::parse_interface_type() {
 }
 
 Type* Parser::parse_record_type() {
-	bool packed = false;
 	if (maybe_parse_keyword("packed")) {
-		packed = true;
+		parse_keyword("record");
+		if (maybe_parse_opening_paren()) {
+			return raise_type_parse_error("packed record with parenthesized header not implemented");
+		}
+		auto rt = new PackedRecordType(current_location(), nullptr);
+		rt->children = parse_aggregate_type_body(rt);
+		parse_keyword("end");
+		return rt;
 	}
 	parse_keyword("record");
 	if (maybe_parse_opening_paren()) {
 		return raise_type_parse_error("record with parenthesized header not implemented yet");
 	}
-	auto rt = new RecordType(current_location(), nullptr, packed);
+	auto rt = new RecordType(current_location(), nullptr);
 	rt->children = parse_aggregate_type_body(rt);
 	parse_keyword("end");
 	return rt;
@@ -2477,6 +2549,9 @@ static bool token_is_identifier_start(const std::string& token) {
 Type* Parser::parse_type_expression(bool allow_forward) {
 	if (maybe_parse_opening_paren()) {
 		return parse_enum_type();
+	} else if (peek_keyword("bitpacked")) {
+		parse_keyword("bitpacked");
+		return raise_type_parse_error("bitpacked record is not implemented");
 	} else if (maybe_parse_circumflex()) {
 		return new PointerType(current_location(), parse_type_expression(true));
 	} else if (peek_keyword("string")) {
@@ -2886,6 +2961,19 @@ struct TypeBlockResolver {
 			}
 			return true;
 		}
+		if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
+			if (!normalize_frame(r->children))
+				return false;
+			for (auto& field : r->fields) {
+				if (!normalize_type(field.ty))
+					return false;
+				if (field.slot)
+					field.slot->ty = field.ty;
+				if (!normalize_node(field.slot))
+					return false;
+			}
+			return true;
+		}
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			if (!normalize_type_as(c->super, "class superclass"))
 				return false;
@@ -2995,6 +3083,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		std::string existing_cxx;
 		if (auto r = dynamic_cast<RecordType*>(rhs))
 			existing_cxx = r->cxx_name;
+		else if (auto r = dynamic_cast<PackedRecordType*>(rhs))
+			existing_cxx = r->cxx_name;
 		else if (auto c = dynamic_cast<ClassType*>(rhs))
 			existing_cxx = c->cxx_name;
 		else if (auto c = dynamic_cast<ClassRefType*>(rhs)) {
@@ -3010,6 +3100,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			decl.alias_target_cxx = existing_cxx;
 		} else {
 			if (auto r = dynamic_cast<RecordType*>(rhs))
+				r->cxx_name = decl.cxx;
+			else if (auto r = dynamic_cast<PackedRecordType*>(rhs))
 				r->cxx_name = decl.cxx;
 			else if (auto c = dynamic_cast<ClassType*>(rhs))
 				c->cxx_name = decl.cxx;
@@ -3901,6 +3993,20 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	}
 	if (args.size() > rty->formals.size()) {
 		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
+	}
+	for (size_t i = 0; i < args.size(); i++) {
+		auto mode = rty->formals[i].mode;
+		if (mode != ParamMode::Var && mode != ParamMode::Out)
+			continue;
+		if (!is_assignable(args[i])) {
+			emit_parse_error_at(error_location,
+				"argument for var/out parameter '" + rty->formals[i].pas_name + "' is not assignable");
+		}
+		if (contains_packed_projection(args[i])) {
+			emit_parse_error_at(error_location,
+				"packed-record field cannot yet be passed as var/out parameter '" +
+				rty->formals[i].pas_name + "'");
+		}
 	}
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {

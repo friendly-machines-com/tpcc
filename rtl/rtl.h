@@ -8,11 +8,13 @@
 // Naming convention:
 //   t_<name>  - a Pascal-visible TYPE
 //   p_<name>  - a Pascal-visible value (including procedure or function or operation)
+//   m_<name>  - Pascal-invisible views that are used by the compiler
 // Anything else in this namespace is implementation detail and not reachable
 // from Pascal source.
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -20,6 +22,10 @@
 #include <memory>
 #include <cstdio>
 #include <limits>
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
+#include <cstddef> // for std::byte
 
 namespace pas {
 
