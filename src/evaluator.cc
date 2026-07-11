@@ -24,8 +24,7 @@ static long double integer_to_real(uint64_t magnitude, bool negative) {
 
 ConstEvalResult const_convert_integer(uint64_t magnitude, bool negative, Type*, Type* to_ty) {
 	if (to_ty == double_type() || to_ty == extended_type())
-		return ConstEvalResult::success(new Real(
-			static_cast<double>(integer_to_real(magnitude, negative)), to_ty));
+		return ConstEvalResult::success(new Real(integer_to_real(magnitude, negative), to_ty));
 	return integer_result(magnitude, negative, to_ty);
 }
 

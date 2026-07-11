@@ -1,6 +1,7 @@
 #include "cst.h"
 #include "builtins.h"
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 std::string Node::str() const {
@@ -75,7 +76,7 @@ String::String(std::string value, Type* ty) {
 	this->ty = ty;
 }
 
-Real::Real(double value, Type* ty) {
+Real::Real(long double value, Type* ty) {
 	this->value = value;
 	this->ty = ty;
 }
@@ -288,7 +289,8 @@ void String::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstrea
 const char* Real::diagnostic_kind() const { return "real"; }
 ConstEvalResult Real::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new Real(value, ty)); }
 void Real::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "real " << std::setprecision(17) << value << " : " << ctx->known_type_ref(ty);
+	out << "real " << std::setprecision(std::numeric_limits<long double>::max_digits10)
+	    << value << " : " << ctx->known_type_ref(ty);
 }
 
 const char* FixedArrayLiteral::diagnostic_kind() const { return "fixed_array_literal"; }

@@ -177,7 +177,7 @@ static bool const_numeric_as_long_double(Node* n, long double* out) {
 		return true;
 	}
 	if (auto r = dynamic_cast<const Real*>(n)) {
-		*out = static_cast<long double>(r->value);
+		*out = r->value;
 		return true;
 	}
 	return false;
@@ -278,7 +278,7 @@ static ConstEvalResult fold_divide(ConstEvalContext&, Type* result_ty, const std
 		return ConstEvalResult::not_constant();
 	if (b == 0.0)
 		return ConstEvalResult::error("real constant division by zero");
-	return ConstEvalResult::success(new Real(static_cast<double>(a / b), result_ty));
+	return ConstEvalResult::success(new Real(a / b, result_ty));
 }
 
 static ConstEvalResult fold_real_to_int64(const std::vector<Node*>& args, bool round) {
@@ -313,8 +313,7 @@ static ConstEvalResult fold_frac(ConstEvalContext&, Type* result_ty, const std::
 	if (!const_numeric_as_long_double(args[0], &value))
 		return ConstEvalResult::not_constant();
 	long double integral = 0.0L;
-	return ConstEvalResult::success(new Real(
-		static_cast<double>(::modfl(value, &integral)), result_ty));
+	return ConstEvalResult::success(new Real(::modfl(value, &integral), result_ty));
 }
 
 static ConstEvalResult fold_sqrt(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -323,7 +322,7 @@ static ConstEvalResult fold_sqrt(ConstEvalContext&, Type* result_ty, const std::
 	long double value = 0.0L;
 	if (!const_numeric_as_long_double(args[0], &value))
 		return ConstEvalResult::not_constant();
-	return ConstEvalResult::success(new Real(static_cast<double>(::sqrtl(value)), result_ty));
+	return ConstEvalResult::success(new Real(::sqrtl(value), result_ty));
 }
 
 static ConstEvalResult fold_exp(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -332,7 +331,7 @@ static ConstEvalResult fold_exp(ConstEvalContext&, Type* result_ty, const std::v
 	long double value = 0.0L;
 	if (!const_numeric_as_long_double(args[0], &value))
 		return ConstEvalResult::not_constant();
-	return ConstEvalResult::success(new Real(static_cast<double>(::expl(value)), result_ty));
+	return ConstEvalResult::success(new Real(::expl(value), result_ty));
 }
 
 static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -341,7 +340,7 @@ static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::ve
 	long double value = 0.0L;
 	if (!const_numeric_as_long_double(args[0], &value))
 		return ConstEvalResult::not_constant();
-	return ConstEvalResult::success(new Real(static_cast<double>(::logl(value)), result_ty));
+	return ConstEvalResult::success(new Real(::logl(value), result_ty));
 }
 
 // Pascal-visible builtin procedures/functions. To add one: append a row

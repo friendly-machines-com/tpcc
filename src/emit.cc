@@ -930,21 +930,11 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
-		// The raw C++ spelling `3ull` discards the Pascal type already chosen
-		// by contextual typing. Passing that raw literal to an overloaded RTL
-		// function (p_equal, p_divide, ...) makes C++ choose among every integer
-		// and real overload and can be ambiguous. Preserve the compiler's type
-		// decision explicitly; a genuinely context-free Pascal numeral has the
-		// language's default Integer type.
-		fprintf(active, "static_cast<");
-		emit_type_ref(c->ty == &untyped_integer_type() ? integer_type() : c->ty);
-		fprintf(active, ">(");
 		emit_integer_literal(active, c->value, c->negative);
-		fprintf(active, ")");
 		return;
 	}
 	if (auto r = dynamic_cast<Real*>(expr)) {
-		double inf = std::numeric_limits<double>::infinity();
+		long double inf = std::numeric_limits<long double>::infinity();
 		if (r->value != r->value) {
 			fprintf(active, "std::numeric_limits<");
 			emit_type_ref(r->ty);
@@ -957,7 +947,7 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "static_cast<");
 			emit_type_ref(r->ty);
 			fprintf(active, ">(");
-			fprintf(active, "%.17g", r->value);
+			fprintf(active, "%.*Lg", std::numeric_limits<long double>::max_digits10, r->value);
 			fprintf(active, ")");
 		}
 		return;
@@ -1099,7 +1089,34 @@ void Emitter::emit_expression(Node* expr) {
 		for (size_t i = 0; i < pc->args.size(); i++) {
 			if (i > 0)
 				fprintf(active, ", ");
-			emit_expression(pc->args[i]);
+			Node* arg = pc->args[i];
+			// Callable has its semantic RoutineType in Callable::ty (the
+			// historical class currently shadows Node::ty), so recover it
+			// through the concrete callee rather than reading Node::ty.
+			RoutineType* call_ty = nullptr;
+			if (auto callable = dynamic_cast<Callable*>(pc->callee))
+				call_ty = callable->ty;
+			else
+				call_ty = dynamic_cast<RoutineType*>(pc->callee->ty);
+			if (call_ty && i < call_ty->formals.size() &&
+			    call_ty->formals[i].mode == ParamMode::Value &&
+			    dynamic_cast<Integer*>(arg)) {
+				Type* formal_ty = call_ty->formals[i].ty;
+				// The Pascal overload has already been selected. Spell its
+				// value-parameter type at the C++ call boundary so a raw
+				// literal such as `3ull` cannot make C++ independently choose
+				// among every p_equal/p_divide overload. Non-literal implicit
+				// conversions are already explicit Cast nodes; variables
+				// already have their declared C++ type. Do not value-cast
+				// var/out/const arguments: those must remain references.
+				fprintf(active, "static_cast<");
+				emit_type_ref(formal_ty);
+				fprintf(active, ">(");
+				emit_expression(arg);
+				fprintf(active, ")");
+			} else {
+				emit_expression(arg);
+			}
 		}
 		fprintf(active, ")");
 		return;
