@@ -58,6 +58,7 @@ using t_sizeint = ssize_t;
 using t_sizeuint = size_t;
 using t_double = double;
 using t_extended = long double;
+inline t_word p_errorcode = 0;
 static_assert(sizeof(t_ptrint) == 8);
 static_assert(sizeof(t_ptruint) == 8);
 static_assert(sizeof(t_sizeint) == 8);
@@ -80,6 +81,23 @@ static_assert(sizeof(t_longint) == 4);
 static_assert(sizeof(t_qword) == 8);
 static_assert(sizeof(t_int64) == 8);
 static_assert(sizeof(t_boolean) == 1);
+
+[[noreturn]] inline void p_halt(t_longint value) {
+	std::exit(static_cast<int>(value));
+}
+
+[[noreturn]] inline void p_halt() {
+	p_halt(0);
+}
+
+[[noreturn]] inline void p_runerror(t_word value) {
+	p_errorcode = value;
+	p_halt(static_cast<t_longint>(value));
+}
+
+[[noreturn]] inline void p_runerror() {
+	p_runerror(0);
+}
 
 // FPC's Char is an unsigned 8-bit ordinal, but it is nominally distinct from
 // Byte. A wrapper preserves both facts in C++ overloads while remaining an

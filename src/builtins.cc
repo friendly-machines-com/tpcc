@@ -400,6 +400,8 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_strlen", nullptr},
     {"pas::p_getmem", nullptr},
     {"pas::p_freemem", nullptr},
+    {"pas::p_halt", nullptr},
+    {"pas::p_runerror", nullptr},
     {"pas::p_low", nullptr, TypeBoundKind::Low},
     {"pas::p_high", nullptr, TypeBoundKind::High},
     {
