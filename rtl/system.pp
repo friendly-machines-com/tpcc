@@ -87,6 +87,14 @@ operator/(a, b: Extended): Extended; external nil name 'pas::p_divide';
 
 operator :=(a: Cardinal): Cardinal; external nil name 'pas::p_assign';
 operator :=(a: Boolean): Boolean; external nil name 'pas::p_assign';
+operator :=(a: Char): Char; external nil name 'pas::p_assign';
+operator :=(a: Char): ShortString; external nil name 'pas::p_char_to_shortstring';
+
+operator <(a, b: Char): Boolean; external nil name 'pas::p_lessthan';
+operator <=(a, b: Char): Boolean; external nil name 'pas::p_lessthanorequal';
+operator =(a, b: Char): Boolean; external nil name 'pas::p_equal';
+operator >(a, b: Char): Boolean; external nil name 'pas::p_greaterthan';
+operator >=(a, b: Char): Boolean; external nil name 'pas::p_greaterthanorequal';
 
 operator <(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthan';
 operator <=(a, b: Cardinal): Boolean; external nil name 'pas::p_lessthanorequal';

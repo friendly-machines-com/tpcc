@@ -1057,6 +1057,13 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto s = dynamic_cast<String*>(expr)) {
+		if (s->ty == char_type()) {
+			if (s->value.size() != 1)
+				unhandled_node("Char literal does not contain exactly one byte", s);
+			fprintf(active, "static_cast<pas::t_char>(static_cast<uint8_t>(%u))",
+				static_cast<unsigned>(static_cast<unsigned char>(s->value[0])));
+			return;
+		}
 		fprintf(active, "pas::tpcc_shortstring_from_c(");
 		fputc('"', active);
 		for (char ch : s->value) {

@@ -55,9 +55,19 @@ enum t_boolean {
 	p_true = true,
 };
 
-// FPC's Char in this RTL is an unsigned 8-bit ordinal. It is not C++ char:
-// plain char has implementation-defined signedness and is a distinct type.
-using t_char     = uint8_t;
+// FPC's Char is an unsigned 8-bit ordinal, but it is nominally distinct from
+// Byte. A wrapper preserves both facts in C++ overloads while remaining an
+// inline, trivially-copyable one-byte value suitable for ShortString storage.
+struct t_char {
+	uint8_t value;
+
+	constexpr t_char() = default;
+	constexpr t_char(uint8_t value) : value(value) {}
+	constexpr operator uint8_t() const { return value; }
+};
+static_assert(sizeof(t_char) == 1);
+static_assert(alignof(t_char) == 1);
+static_assert(std::is_trivially_copyable_v<t_char>);
 using unknown_type = void*;
 
 inline t_boolean bool_to_boolean(bool value) {
@@ -143,6 +153,14 @@ inline t_shortstring tpcc_shortstring_from_c(const char* s) {
 	result.length = std::min(strlen(s), 254ul);
 	memcpy(result.data, s, result.length);
 	result.data[result.length] = 0;
+	return result;
+}
+
+inline t_shortstring p_char_to_shortstring(t_char value) {
+	t_shortstring result{};
+	result.length = 1;
+	result.data[0] = value;
+	result.data[1] = 0;
 	return result;
 }
 
@@ -289,9 +307,27 @@ inline t_boolean p_greaterthanorequal(const t_shortstring& a, const t_shortstrin
 	return bool_to_boolean(stringcmp(a, b) >= 0);
 }
 
+inline t_char p_assign(t_char value) { return value; }
+inline t_boolean p_lessthan(t_char a, t_char b) { return bool_to_boolean(a.value < b.value); }
+inline t_boolean p_lessthanorequal(t_char a, t_char b) { return bool_to_boolean(a.value <= b.value); }
+inline t_boolean p_equal(t_char a, t_char b) { return bool_to_boolean(a.value == b.value); }
+inline t_boolean p_notequal(t_char a, t_char b) { return bool_to_boolean(a.value != b.value); }
+inline t_boolean p_greaterthan(t_char a, t_char b) { return bool_to_boolean(a.value > b.value); }
+inline t_boolean p_greaterthanorequal(t_char a, t_char b) { return bool_to_boolean(a.value >= b.value); }
+
 template<typename T> inline t_longword p_ord(T x) { return static_cast<t_longword>(x); }
-template<typename T> inline T p_low() { return std::numeric_limits<T>::lowest(); }
-template<typename T> inline T p_high() { return std::numeric_limits<T>::max(); }
+template<typename T> inline T p_low() {
+	if constexpr (std::is_same_v<T, t_char>)
+		return t_char{0};
+	else
+		return std::numeric_limits<T>::lowest();
+}
+template<typename T> inline T p_high() {
+	if constexpr (std::is_same_v<T, t_char>)
+		return t_char{255};
+	else
+		return std::numeric_limits<T>::max();
+}
 inline t_integer p_length(const t_shortstring& s) { return s.length; }
 inline t_integer p_length(const t_ansistring& s) { return s.length; }
 template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
@@ -423,6 +459,11 @@ struct tpcc_ordinal_raw {
 template<typename T>
 struct tpcc_ordinal_raw<T, true> {
 	using type = std::underlying_type_t<T>;
+};
+
+template<>
+struct tpcc_ordinal_raw<t_char, false> {
+	using type = uint8_t;
 };
 
 template<typename T>

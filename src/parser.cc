@@ -4262,6 +4262,19 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	if (a->ty == target_ty) {
 		return a;
 	}
+	// A one-character Pascal quoted literal is contextually a Char as well as
+	// a one-character string. Preserve one literal node and pin its type when
+	// the surrounding assignment/case/formal requires Char.
+	if (auto literal = dynamic_cast<String*>(a)) {
+		if (target_ty == char_type() && literal->value.size() == 1) {
+			literal->ty = target_ty;
+			return literal;
+		}
+		if (target_ty == shortstring_type()) {
+			literal->ty = target_ty;
+			return literal;
+		}
+	}
 	// Built-in implicit conversions are already described by conversion_cost().
 	// Do not route them through user-visible operator := overloads: those overloads
 	// are ordinary Pascal conversion operators with their own result type, while a
