@@ -4584,6 +4584,15 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		Type* t = rty->formals[i].ty;
 		if (t == unknown_type())
 			continue; // untyped formal preserves the argument's exact Pascal type
+		auto mode = rty->formals[i].mode;
+		if (mode == ParamMode::Var || mode == ParamMode::Out) {
+			// Integer subranges use their base type as their C++ storage
+			// carrier. Preserve that storage expression: casting it would
+			// manufacture an rvalue and lose the var/out destination.
+			if (auto subrange = dynamic_cast<SubrangeType*>(args[i]->ty))
+				if (subrange->base_type == t)
+					continue;
+		}
 		args[i] = cast(args[i], t);
 	}
 	return FinalizedCall{receiver, chosen};
