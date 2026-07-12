@@ -1130,19 +1130,33 @@ Node* Parser::maybe_parse_numeral() {
 		if (input_size == 0) {
 			raise_parse_error("malformed numeral: " + input_token);
 		}
-		if (*input != '.') {
+		const bool is_decimal_real =
+		    base == 10 &&
+		    input_token.find_first_of(".eE") !=
+		        std::string::npos;
+		if (!is_decimal_real) {
 			uint64_t value;
 			auto [ptr, ec] = std::from_chars(input, input + input_size, value, base);
 			if (ec != std::errc() || ptr != input + input_size) {
 				raise_parse_error("malformed numeral: " + input_token);
 			}
-			// FIXME: continue for non-integer here.
 			auto lit = new Integer(value, &untyped_integer_type());
 			consume();
 			return lit;
 		} else {
-			// FIXME: continue for non-integer here.
-			raise_parse_error("unimplemented real numeral: " + input_token);
+			long double value;
+			auto [ptr, ec] = std::from_chars(
+			    input, input + input_size, value,
+			    std::chars_format::general);
+			if (ec != std::errc() ||
+			    ptr != input + input_size) {
+				raise_parse_error(
+				    "malformed real numeral: " +
+				    input_token);
+			}
+			auto lit = new Real(value, extended_type());
+			consume();
+			return lit;
 		}
 	} else {
 		return nullptr;
