@@ -146,7 +146,7 @@ function chr(value: Byte): Char; external nil name 'pas::p_chr';
 procedure fillchar(var destination; count: SizeInt; value: Byte); external nil name 'pas::p_fillchar';
 function low(const x): Integer; external nil name 'pas::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external nil name 'pas::p_high'; // generic intrinsic: parser supplies the type operand/result
-function length(const x): Integer; external nil name 'pas::p_length'; // generic intrinsic
+function length(const x): SizeInt; external nil name 'pas::p_length'; // generic intrinsic
 procedure inc(var x; n: Integer = 1); external nil name 'pas::p_inc'; // generic intrinsic
 procedure dec(var x; n: Integer = 1); external nil name 'pas::p_dec'; // generic intrinsic
 procedure str(const x: Int64; var s: ShortString); overload; external nil name 'pas::p_str';

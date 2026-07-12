@@ -54,8 +54,8 @@ IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_boun
 IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {});
 IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {});
 IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {});
-IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", {});
-IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", {});
+IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", 8, signed_bounds(64));
+IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", 7, unsigned_bounds(64));
 IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", 8, signed_bounds(64));
 IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", 7, unsigned_bounds(64));
 IntrinsicType k_fixedarray(SourceLocation::builtin(), "pas::t_fixedarray", {});
