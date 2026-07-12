@@ -70,9 +70,9 @@ struct t_char {
 static_assert(sizeof(t_char) == 1);
 static_assert(alignof(t_char) == 1);
 static_assert(std::is_trivially_copyable_v<t_char>);
-using unknown_type = void*;
+using tpcc_unknown_type = void*;
 
-inline t_boolean bool_to_boolean(bool value) {
+inline t_boolean tpcc_bool_to_boolean(bool value) {
 	return value ? p_true : p_false;
 }
 
@@ -81,18 +81,33 @@ struct t_shortstring {
 	t_char data[255];
 };
 
-struct t_set_span {
+struct tpcc_storage_ref {
+	std::byte* data;
+	std::size_t size;
+};
+
+template<typename T>
+inline tpcc_storage_ref tpcc_make_storage_ref(T& value) {
+	static_assert(std::is_trivially_copyable_v<T>,
+	    "untyped var storage must be trivially copyable");
+	return tpcc_storage_ref{
+	    reinterpret_cast<std::byte*>(std::addressof(value)),
+	    sizeof(T),
+	};
+}
+
+struct tpcc_set_span {
 	int64_t lower;
 	int64_t upper;
 };
 
 template<typename T>
 struct t_set {
-	std::vector<t_set_span> spans;
+	std::vector<tpcc_set_span> spans;
 };
 
 template<typename T>
-inline int64_t p_set_key(T value) {
+inline int64_t tpcc_set_key(T value) {
 	if constexpr (std::is_same_v<T, t_char>)
 		return static_cast<int64_t>(value.value);
 	else
@@ -100,25 +115,25 @@ inline int64_t p_set_key(T value) {
 }
 
 template<typename T>
-inline t_set_span p_set_single(T value) {
-	const int64_t key = p_set_key(value);
-	return t_set_span{key, key};
+inline tpcc_set_span tpcc_set_single(T value) {
+	const int64_t key = tpcc_set_key(value);
+	return tpcc_set_span{key, key};
 }
 
 template<typename T>
-inline t_set_span p_set_range(T lower, T upper) {
-	return t_set_span{p_set_key(lower), p_set_key(upper)};
+inline tpcc_set_span tpcc_set_range(T lower, T upper) {
+	return tpcc_set_span{tpcc_set_key(lower), tpcc_set_key(upper)};
 }
 
 template<typename T>
-inline t_set<T> p_make_set(std::initializer_list<t_set_span> spans) {
-	return t_set<T>{std::vector<t_set_span>(spans)};
+inline t_set<T> tpcc_make_set(std::initializer_list<tpcc_set_span> spans) {
+	return t_set<T>{std::vector<tpcc_set_span>(spans)};
 }
 
 template<typename Value, typename T>
 inline t_boolean p_in(Value value, const t_set<T>& set) {
-	const int64_t key = p_set_key(value);
-	for (const t_set_span& span : set.spans)
+	const int64_t key = tpcc_set_key(value);
+	for (const tpcc_set_span& span : set.spans)
 		if (span.lower <= key && key <= span.upper)
 			return p_true;
 	return p_false;
@@ -159,6 +174,22 @@ inline const T& p_index(const t_fixedarray<T, length, low>& value, I index) {
 	return value.items[static_cast<std::size_t>(actual - first)];
 }
 
+template<typename T, std::size_t length, auto low, typename I>
+inline tpcc_storage_ref tpcc_make_storage_ref(t_fixedarray<T, length, low>& value, I index) {
+	static_assert(std::is_trivially_copyable_v<T>,
+	    "untyped array-element storage must be trivially copyable");
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
+	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
+		throw std::out_of_range("Pascal fixed-array storage index out of range");
+	const std::size_t offset = static_cast<std::size_t>(actual - first);
+	auto* bytes = reinterpret_cast<std::byte*>(std::addressof(value.items));
+	return tpcc_storage_ref{
+	    bytes + offset * sizeof(T),
+	    (length - offset) * sizeof(T),
+	};
+}
+
 template<typename I>
 inline t_char& p_index(t_shortstring& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
@@ -177,6 +208,24 @@ inline const t_char& p_index(const t_shortstring& value, I index) {
 	if (actual == 0)
 		return value.length;
 	return value.data[static_cast<std::size_t>(actual - 1)];
+}
+
+template<typename I>
+inline tpcc_storage_ref tpcc_make_storage_ref(t_shortstring& value, I index) {
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 || actual > 255)
+		throw std::out_of_range("Pascal ShortString storage index out of range");
+	if (actual == 0)
+		return tpcc_storage_ref{
+		    reinterpret_cast<std::byte*>(std::addressof(value.length)),
+		    sizeof(value.length),
+		};
+	const std::size_t offset = static_cast<std::size_t>(actual - 1);
+	auto* bytes = reinterpret_cast<std::byte*>(std::addressof(value.data));
+	return tpcc_storage_ref{
+	    bytes + offset * sizeof(t_char),
+	    (sizeof(value.data) - 1) - offset,
+	};
 }
 
 template<typename T>
@@ -198,7 +247,13 @@ inline void p_uniquestring(t_ansistring&) {
 }
 
 template<typename I>
-inline t_char& p_index_write(t_ansistring& value, I index) {
+inline tpcc_storage_ref tpcc_make_storage_ref(t_ansistring& value, I index) {
+	p_uniquestring(value);
+	return tpcc_make_storage_ref(static_cast<t_shortstring&>(value), index);
+}
+
+template<typename I>
+inline t_char& tpcc_index_write(t_ansistring& value, I index) {
 	p_uniquestring(value);
 	return p_index(static_cast<t_shortstring&>(value), index);
 }
@@ -377,7 +432,7 @@ inline t_shortstring p_add(const t_shortstring& a, const t_shortstring& b) {
 	return result;
 }
 
-inline int stringcmp(const t_shortstring& a, const t_shortstring& b) {
+inline int tpcc_stringcmp(const t_shortstring& a, const t_shortstring& b) {
 	int r = memcmp(a.data, b.data, std::min(a.length, b.length));
 	if (r == 0) {
 		return (int) a.length - (int) b.length;
@@ -386,27 +441,23 @@ inline int stringcmp(const t_shortstring& a, const t_shortstring& b) {
 }
 
 inline t_boolean p_lessthan(const t_shortstring& a, const t_shortstring& b) {
-	return bool_to_boolean(stringcmp(a, b) < 0);
+	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) < 0);
 }
 
 inline t_boolean p_lessthanorequal(const t_shortstring& a, const t_shortstring& b) {
-	return bool_to_boolean(stringcmp(a, b) <= 0);
+	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) <= 0);
 }
 
 inline t_boolean p_equal(const t_shortstring& a, const t_shortstring& b) {
-	return bool_to_boolean(stringcmp(a, b) == 0);
-}
-
-inline t_boolean p_notequal(const t_shortstring& a, const t_shortstring& b) {
-	return bool_to_boolean(stringcmp(a, b) != 0);
+	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) == 0);
 }
 
 inline t_boolean p_greaterthan(const t_shortstring& a, const t_shortstring& b) {
-	return bool_to_boolean(stringcmp(a, b) > 0);
+	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) > 0);
 }
 
 inline t_boolean p_greaterthanorequal(const t_shortstring& a, const t_shortstring& b) {
-	return bool_to_boolean(stringcmp(a, b) >= 0);
+	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) >= 0);
 }
 
 inline t_char p_assign(t_char value) { return value; }
@@ -415,12 +466,11 @@ inline t_ansistring p_assign(t_shortstring value) {
 	static_cast<t_shortstring&>(result) = value;
 	return result;
 }
-inline t_boolean p_lessthan(t_char a, t_char b) { return bool_to_boolean(a.value < b.value); }
-inline t_boolean p_lessthanorequal(t_char a, t_char b) { return bool_to_boolean(a.value <= b.value); }
-inline t_boolean p_equal(t_char a, t_char b) { return bool_to_boolean(a.value == b.value); }
-inline t_boolean p_notequal(t_char a, t_char b) { return bool_to_boolean(a.value != b.value); }
-inline t_boolean p_greaterthan(t_char a, t_char b) { return bool_to_boolean(a.value > b.value); }
-inline t_boolean p_greaterthanorequal(t_char a, t_char b) { return bool_to_boolean(a.value >= b.value); }
+inline t_boolean p_lessthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value < b.value); }
+inline t_boolean p_lessthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value <= b.value); }
+inline t_boolean p_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value == b.value); }
+inline t_boolean p_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value > b.value); }
+inline t_boolean p_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
 
 template<typename T> inline t_longword p_ord(T x) { return static_cast<t_longword>(x); }
 template<typename T> inline T p_low() {
@@ -450,7 +500,7 @@ inline void p_setlength(t_ansistring& s, t_integer value) {
 template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
 template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_integer>(N); }
 
-#define DEFINE_ARITHMETIC_OPERATIONS(T, DIV_RESULT) \
+#define TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, DIV_RESULT) \
 	inline T p_add(T a, T b) { return a + b; } \
 	inline T p_subtract(T a, T b) { return a - b; } \
 	inline T p_positive(T b) { return +b; } \
@@ -459,14 +509,13 @@ template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_
 	inline T p_multiply(T a, T b) { return a * b; } \
 	inline DIV_RESULT p_divide(T a, T b) { return static_cast<DIV_RESULT>(a) / static_cast<DIV_RESULT>(b); } \
 	inline T p_assign(T source) { T target = source; return target; } \
-	inline t_boolean p_lessthan(T a, T b) { return bool_to_boolean(a < b); } \
-	inline t_boolean p_lessthanorequal(T a, T b) { return bool_to_boolean(a <= b); } \
-	inline t_boolean p_equal(T a, T b) { return bool_to_boolean(a == b); } \
-	inline t_boolean p_notequal(T a, T b) { return bool_to_boolean(a != b); } \
-	inline t_boolean p_greaterthan(T a, T b) { return bool_to_boolean(a > b); } \
-	inline t_boolean p_greaterthanorequal(T a, T b) { return bool_to_boolean(a >= b); }
+	inline t_boolean p_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
+	inline t_boolean p_lessthanorequal(T a, T b) { return tpcc_bool_to_boolean(a <= b); } \
+	inline t_boolean p_equal(T a, T b) { return tpcc_bool_to_boolean(a == b); } \
+	inline t_boolean p_greaterthan(T a, T b) { return tpcc_bool_to_boolean(a > b); } \
+	inline t_boolean p_greaterthanorequal(T a, T b) { return tpcc_bool_to_boolean(a >= b); }
 
-#define DEFINE_INTEGER_OPERATIONS(T) \
+#define TPCC_DEFINE_INTEGER_OPERATIONS(T) \
 	inline T p_bitwiseand(T a, T b) { return a & b; } \
 	inline T p_bitwiseor(T a, T b) { return a | b; } \
 	inline T p_bitwisexor(T a, T b) { return a ^ b; } \
@@ -475,20 +524,20 @@ template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_
 	inline T p_leftshift(T a, T b) { return a << b; } /* FIXME: b smaller */ \
 	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */
 
-#define DEFINE_INTEGRAL_OPERATIONS(T) \
-	DEFINE_ARITHMETIC_OPERATIONS(T, t_double) \
-	DEFINE_INTEGER_OPERATIONS(T)
+#define TPCC_DEFINE_INTEGRAL_OPERATIONS(T) \
+	TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, t_double) \
+	TPCC_DEFINE_INTEGER_OPERATIONS(T)
 
-DEFINE_INTEGRAL_OPERATIONS(t_byte)
-DEFINE_INTEGRAL_OPERATIONS(t_shortint)
-DEFINE_INTEGRAL_OPERATIONS(t_word)
-DEFINE_INTEGRAL_OPERATIONS(t_smallint)
-DEFINE_INTEGRAL_OPERATIONS(t_longword)
-DEFINE_INTEGRAL_OPERATIONS(t_integer)
-DEFINE_INTEGRAL_OPERATIONS(t_int64)
-DEFINE_INTEGRAL_OPERATIONS(t_qword)
-DEFINE_ARITHMETIC_OPERATIONS(t_double, t_double)
-DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_byte)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_shortint)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_word)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_smallint)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_longword)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_integer)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_int64)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_qword)
+TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_double, t_double)
+TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended)
 
 // Floating-to-integer conversion is undefined in C++ when the finite value is
 // outside the destination range (and for NaN/infinity). Check before casting
@@ -529,17 +578,17 @@ constexpr auto tpcc_for_ordinal_value(T value) {
 
 template<typename T>
 constexpr t_boolean tpcc_for_less_equal(T a, T b) {
-	return bool_to_boolean(tpcc_for_ordinal_value(a) <= tpcc_for_ordinal_value(b));
+	return tpcc_bool_to_boolean(tpcc_for_ordinal_value(a) <= tpcc_for_ordinal_value(b));
 }
 
 template<typename T>
 constexpr t_boolean tpcc_for_greater_equal(T a, T b) {
-	return bool_to_boolean(tpcc_for_ordinal_value(a) >= tpcc_for_ordinal_value(b));
+	return tpcc_bool_to_boolean(tpcc_for_ordinal_value(a) >= tpcc_for_ordinal_value(b));
 }
 
 template<typename T>
 constexpr t_boolean tpcc_for_equal(T a, T b) {
-	return bool_to_boolean(tpcc_for_ordinal_value(a) == tpcc_for_ordinal_value(b));
+	return tpcc_bool_to_boolean(tpcc_for_ordinal_value(a) == tpcc_for_ordinal_value(b));
 }
 
 template<typename T>
@@ -553,11 +602,11 @@ constexpr T tpcc_for_pred(T value) {
 }
 
 inline t_boolean p_logicalnot(t_boolean a) {
-	return bool_to_boolean(!a);
+	return tpcc_bool_to_boolean(!a);
 }
 
 inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
-	return bool_to_boolean(((a != 0) ^ (b != 0)) != 0);
+	return tpcc_bool_to_boolean(((a != 0) ^ (b != 0)) != 0);
 }
 
 inline t_boolean p_assign(t_boolean b) {
@@ -565,7 +614,7 @@ inline t_boolean p_assign(t_boolean b) {
 }
 
 inline t_boolean p_assigned(const void* p) {
-	return bool_to_boolean(p != nullptr);
+	return tpcc_bool_to_boolean(p != nullptr);
 }
 
 template<typename T, bool = std::is_enum_v<T>>

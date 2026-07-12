@@ -753,9 +753,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			if (!body->lookup_value_local("inheritsfrom")) {
 				fprintf(active, "\tpublic: virtual inline ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
 				if (parent_class_cxx_name.empty()) {
-					fprintf(active, "\t\treturn ::pas::bool_to_boolean(s == this);\n");
+					fprintf(active, "\t\treturn ::pas::tpcc_bool_to_boolean(s == this);\n");
 				} else {
-					fprintf(active, "\t\treturn ::pas::bool_to_boolean(s == this || %s::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn ::pas::tpcc_bool_to_boolean(s == this || %s::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
 				fprintf(active, "\t}\n");
 			}
@@ -1112,7 +1112,7 @@ void Emitter::emit_expression(Node* expr) {
 		auto set_type = dynamic_cast<FixedSetType*>(set->ty);
 		if (!set_type || set_type->item_type == unknown_type())
 			unhandled_node("set literal has no contextual item type", set);
-		fprintf(active, "pas::p_make_set<");
+		fprintf(active, "pas::tpcc_make_set<");
 		emit_type_ref(set_type->item_type);
 		fprintf(active, ">({");
 		for (size_t i = 0; i < set->items.size(); ++i) {
@@ -1120,13 +1120,13 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, ", ");
 			const SetLiteral::Item& item = set->items[i];
 			if (item.upper) {
-				fprintf(active, "pas::p_set_range(");
+				fprintf(active, "pas::tpcc_set_range(");
 				emit_expression(item.lower);
 				fprintf(active, ", ");
 				emit_expression(item.upper);
 				fprintf(active, ")");
 			} else {
-				fprintf(active, "pas::p_set_single(");
+				fprintf(active, "pas::tpcc_set_single(");
 				emit_expression(item.lower);
 				fprintf(active, ")");
 			}
