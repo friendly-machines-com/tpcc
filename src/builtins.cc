@@ -271,6 +271,16 @@ static ConstEvalResult fold_modulus(ConstEvalContext&, Type* result_ty, const st
 	return fold_integer_result(mag, neg, result_ty);
 }
 
+static ConstEvalResult fold_length(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1 || !args[0])
+		return ConstEvalResult::not_constant();
+	if (auto string = dynamic_cast<String*>(args[0]))
+		return ConstEvalResult::success(new Integer(string->value.size(), result_ty));
+	if (auto array = dynamic_cast<FixedArrayType*>(args[0]->ty))
+		return ConstEvalResult::success(new Integer(array->range.length, result_ty));
+	return ConstEvalResult::not_constant();
+}
+
 static ConstEvalResult fold_divide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 2)
 		return ConstEvalResult::not_constant();
@@ -365,7 +375,11 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_str", nullptr},
     {"pas::p_low", nullptr, TypeBoundKind::Low},
     {"pas::p_high", nullptr, TypeBoundKind::High},
-    {"pas::p_length", nullptr},
+    {"pas::p_setlength", nullptr},
+    {
+        .cxx_name = "pas::p_length",
+        .const_fold = fold_length,
+    },
     {"pas::p_index", nullptr},
     {"pas::p_char_to_shortstring", nullptr},
     {"pas::p_assigned", nullptr},
@@ -456,22 +470,10 @@ Builtin* create_builtin_value(std::string cxx_name) {
 const Frame& root_frame() {
 	static const Frame f = []() {
 		Frame ff(nullptr);
-		ff.register_type("cardinal", &k_longword);
-		ff.register_type("longword", &k_longword);
-		ff.register_type("dword", &k_longword);
-
 		auto p_false = new EnumMemberRef("pas::t_boolean::p_false", 0, &k_boolean);
 		ff.register_variable("false", p_false, &k_boolean);
 		auto p_true = new EnumMemberRef("pas::t_boolean::p_true", 1, &k_boolean);
 		ff.register_variable("true", p_true, &k_boolean);
-
-		// Low/High are compiler intrinsics with a type argument (`High(Int64)`),
-		// not ordinary calls with a value argument. Registering them in the value
-		// namespace lets normal Pascal shadowing rules apply; the parser only
-		// special-cases them when this root builtin is the resolved callee.
-		ff.register_variable("low", create_builtin_value("pas::p_low"), nullptr);
-		ff.register_variable("high", create_builtin_value("pas::p_high"), nullptr);
-		ff.register_variable("length", create_builtin_value("pas::p_length"), nullptr);
 		return ff;
 	}();
 	return f;

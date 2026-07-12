@@ -338,11 +338,6 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 			return NameBase{name_component(fn + "(" + render_name_display(tit->second.name) + ")", n.kind.c_str()), ""};
 		}
 	}
-	if (auto l = dynamic_cast<const Length*>(n.node)) {
-		auto ait = value_nodes.find(l->a);
-		if (ait != value_nodes.end() && ait->second.name.assigned)
-			return NameBase{name_component("length(" + render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
-	}
 	if (auto pc = dynamic_cast<const ProcCall*>(n.node)) {
 		auto callee_it = value_nodes.find(pc->callee);
 		if (callee_it != value_nodes.end() && callee_it->second.name.assigned) {

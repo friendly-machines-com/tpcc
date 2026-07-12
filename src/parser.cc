@@ -1256,16 +1256,17 @@ Type* Parser::maybe_resolve_type(std::string name) {
 	return nullptr;
 }
 
-static bool is_builtin_cxx_name(Node* n, std::string_view cxx_name) {
-	auto b = dynamic_cast<Builtin*>(n);
-	return b && b->desc && b->desc->cxx_name == cxx_name;
+static const BuiltinDesc* builtin_desc_for_node(Node* n) {
+	if (auto b = dynamic_cast<Builtin*>(n))
+		return b->desc;
+	if (auto c = dynamic_cast<Callable*>(n))
+		return c->builtin_desc;
+	return nullptr;
 }
 
 static std::optional<TypeBoundKind> type_bound_kind_for_builtin(Node* n) {
-	auto b = dynamic_cast<Builtin*>(n);
-	if (!b || !b->desc)
-		return {};
-	return b->desc->type_bound_kind;
+	const BuiltinDesc* desc = builtin_desc_for_node(n);
+	return desc ? desc->type_bound_kind : std::optional<TypeBoundKind>{};
 }
 
 /** Same as resolve_value but for type-position names.
@@ -1338,25 +1339,6 @@ Node* Parser::parse_value() {
 		consume();
 		return new String(std::move(s), shortstring_type());
 	}
-	// Length is a Pascal predefined intrinsic, not a reserved word. In this
-	// parser's terminology it is directive-like: usable as an ordinary
-	// identifier unless the visible binding is the root builtin and this exact
-	// syntactic form is present. Do not put it in the keyword table.
-	if (peek_directive("length")) {
-		Node* value = maybe_resolve_value("length");
-		if (is_builtin_cxx_name(value, "pas::p_length")) {
-			parse_directive("length");
-			parse_opening_paren();
-			Node* arg = parse_expression();
-			parse_closing_paren();
-
-			Type* arg_ty = arg ? arg->ty : nullptr;
-			if (arg_ty != shortstring_type() && arg_ty != ansistring_type() && !dynamic_cast<FixedArrayType*>(arg_ty))
-				raise_type_kind_mismatch("length() argument", "array or string", arg_ty);
-			return new Length(arg, lookup_builtin_type("pas::t_integer"));
-		}
-	}
-
 	// FIXME: bool literals also belong here (need enum-member support).
 	return parse_value_from_identifier(parse_identifier());
 }
@@ -4246,6 +4228,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 					// These Builtins are all polymorphic and C++ overloads will just have to adjust to us.
 					auto desc = qbuiltin->desc;
 					target->cxx_name = desc->cxx_name;
+					target->builtin_desc = desc;
 				} else {
 					raise_parse_error("unknown intrinsic via external '" + *external_cxx_name + "'");
 				}

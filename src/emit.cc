@@ -22,14 +22,6 @@
 	exit(1);
 }
 
-static bool fixed_array_length(Type* ty, uint64_t* out) {
-	auto arr = dynamic_cast<FixedArrayType*>(ty);
-	if (!arr)
-		return false;
-	*out = arr->range.length;
-	return true;
-}
-
 static void emit_integer_literal(FILE* out, uint64_t value, bool negative) {
 	if (negative) {
 		if (value == (uint64_t{1} << 63))
@@ -1285,16 +1277,6 @@ void Emitter::emit_expression(Node* expr) {
 			}
 		}
 		fprintf(active, ")");
-		return;
-	}
-	if (auto len = dynamic_cast<Length*>(expr)) {
-		uint64_t array_len = 0;
-		if (fixed_array_length(len->a ? len->a->ty : nullptr, &array_len)) {
-			fprintf(active, "%llu", (unsigned long long)array_len);
-		} else {
-			emit_expression(len->a);
-			fprintf(active, ".length");
-		}
 		return;
 	}
 	if (auto tb = dynamic_cast<TypeBound*>(expr)) {

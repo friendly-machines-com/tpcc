@@ -64,7 +64,6 @@ AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
     : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
-Length::Length(Node* value, Type* result_type) : UnaryOperation(value) { this->ty = result_type; }
 
 // Value-identifier ctors: take an OPTIONAL Pascal name. If non-empty, apply
 // the `p_` prefix so the cxx identifier stays clear of C++ reserved words
@@ -210,7 +209,7 @@ ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
 	auto c = dynamic_cast<Callable*>(callee);
 	if (!c)
 		return ConstEvalResult::not_constant();
-	const BuiltinDesc* desc = lookup_builtin_desc(c->cxx_name);
+	const BuiltinDesc* desc = c->builtin_desc;
 	if (!desc || !desc->const_fold)
 		return ConstEvalResult::not_constant();
 	std::vector<Node*> folded;
@@ -372,12 +371,6 @@ void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 ConstEvalResult TypeBound::const_eval(ConstEvalContext&) const { return const_eval_type_bound(kind, operand_type); }
 void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
-}
-
-const char* Length::diagnostic_kind() const { return "length"; }
-ConstEvalResult Length::const_eval(ConstEvalContext&) const { return ConstEvalResult::not_constant(); }
-void Length::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "length(" << ctx->known_value_ref(a) << ") : " << ctx->known_type_ref(ty);
 }
 
 const char* Coerce::diagnostic_kind() const { return "coerce"; }

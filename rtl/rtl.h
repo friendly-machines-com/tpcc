@@ -331,6 +331,9 @@ template<typename T> inline T p_high() {
 }
 inline t_integer p_length(const t_shortstring& s) { return s.length; }
 inline t_integer p_length(const t_ansistring& s) { return s.length; }
+inline void p_setlength(var t_ansistring& s, t_integer value) {
+	s.length = value;
+}
 template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
 template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_integer>(N); }
 
