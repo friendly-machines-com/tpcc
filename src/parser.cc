@@ -2094,7 +2094,7 @@ Property* Parser::default_property_for_type(Type* ty) {
 		    accessor, accessor, true);
 		return array->default_property;
 	}
-	if (ty == shortstring_type()) {
+	if (ty == shortstring_type() || ty == ansistring_type()) {
 		auto accessor = create_builtin_value("pas::p_index");
 		ty->default_property = new Property(
 		    "items", char_type(), {integer_type()},
