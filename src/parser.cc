@@ -26,7 +26,6 @@
 // earlier in the file) reference these before their definitions.
 static Frame* body_frame_of(Type* ty);
 static Type* call_result_type(Node* callee);
-static bool array_index_compatible(FixedArrayType* arr, Node* idx);
 static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error);
 static Type* subrange_range_type(Type* ty);
 
@@ -884,9 +883,11 @@ void Parser::maybe_parse_statement() {
 			Node* arm_condition = nullptr;
 			do {
 				Node* lower = parse_subrange_bound_expression();
+				lower = cast(lower, selector->ty);
 				Node* label_condition;
 				if (maybe_parse_period_period()) {
 					Node* upper = parse_subrange_bound_expression();
+					upper = cast(upper, selector->ty);
 					auto lower_test = mk_compare(">=", selector_slot, lower);
 					auto upper_test = mk_compare("<=", selector_slot, upper);
 					auto both = new ShortCircuitOperation(AND, lower_test, upper_test);
@@ -1162,6 +1163,8 @@ Node* Parser::maybe_resolve_value(std::string name) {
 		if (collected.empty() && !as_call && !as_set) {
 			// First (and terminating) hit is a non-callable value.
 			if (it->unwrap_via) {
+				if (auto property = dynamic_cast<Property*>(hit))
+					return new PropertyAccess(it->unwrap_via, property, {});
 				auto m = new MemberAccess(it->unwrap_via, hit);
 				m->ty = hit->ty;
 				return m;
@@ -1232,6 +1235,8 @@ Node* Parser::resolve_lvalue(std::string name) {
 				}
 			}
 			if (it->unwrap_via) {
+				if (auto property = dynamic_cast<Property*>(hit))
+					return new PropertyAccess(it->unwrap_via, property, {});
 				auto m = new MemberAccess(it->unwrap_via, hit);
 				m->ty = hit->ty;
 				return m;
@@ -1617,6 +1622,15 @@ static bool node_is_bare_callable(Node* n) {
 }
 
 Node* Parser::maybe_auto_call(Node* n) {
+	if (auto property = dynamic_cast<PropertyAccess*>(n)) {
+		if (!property->property->index_types.empty() && property->indexes.empty())
+			raise_parse_error("indexed property '" + property->property->pas_name +
+				"' requires an index argument list");
+		if (!property->property->read_accessor)
+			raise_parse_error("write-only property '" + property->property->pas_name +
+				"' cannot be read");
+		return n;
+	}
 	if (!node_is_bare_callable(n))
 		return n;
 	// finalize_call handles the empty-args case: for a Callable it checks
@@ -1694,7 +1708,11 @@ Node* Parser::parse_designator_tail(Node* result) {
 			// User array properties receive the list as one application;
 			// multidimensional native arrays apply their synthesized
 			// one-argument property once per nested array dimension.
-			result = maybe_auto_call(result);
+			auto pending_property = dynamic_cast<PropertyAccess*>(result);
+			if (!(pending_property &&
+			      !pending_property->property->index_types.empty() &&
+			      pending_property->indexes.empty()))
+				result = maybe_auto_call(result);
 			std::vector<Node*> indexes;
 			indexes.push_back(parse_expression());
 			while (maybe_parse_comma())
@@ -1748,8 +1766,24 @@ bool Parser::is_assignable(Node* n) {
 		return true;
 	if (dynamic_cast<Index*>(n))
 		return true;
-	if (auto property = dynamic_cast<PropertyAccess*>(n))
-		return property->property && property->property->write_accessor;
+	if (auto property = dynamic_cast<PropertyAccess*>(n)) {
+		if (!property->property || !property->property->write_accessor)
+			return false;
+		Node* accessor = property->property->write_accessor;
+		if (dynamic_cast<Builtin*>(accessor)) {
+			// Reference-backed indexing can write only through a stable base.
+			// Packed projections are admitted here solely so the subsequent
+			// is_supported_packed_assignment check can select or reject their
+			// explicit synchronous copyback lowering.
+			return contains_packed_projection(property->receiver) ||
+			       is_referenceable(property->receiver);
+		}
+		if (dynamic_cast<StorageSlot*>(accessor) ||
+		    dynamic_cast<Callable*>(accessor))
+			return (property->receiver->ty && property->receiver->ty->is_reference_type()) ||
+			       is_referenceable(property->receiver);
+		return false;
+	}
 	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
 		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
 	}
@@ -2163,6 +2197,52 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	}
 	if (!read_accessor && !write_accessor)
 		raise_parse_error("property '" + property_name + "' has no accessor");
+
+	auto validate_index_formals = [&](RoutineType* routine, size_t count, const char* which) {
+		if (routine->formals.size() != count)
+			raise_parse_error(std::string(which) + " accessor for property '" + property_name +
+				"' has the wrong number of parameters");
+		for (size_t i = 0; i < index_types.size(); ++i)
+			if (routine->formals[i].ty != index_types[i])
+				raise_type_mismatch(std::string(which) + " property index parameter",
+					index_types[i], routine->formals[i].ty);
+	};
+	if (read_accessor) {
+		if (auto field = dynamic_cast<StorageSlot*>(read_accessor)) {
+			if (!index_types.empty())
+				raise_parse_error("indexed property read accessor must be a method");
+			if (field->ty != property_type)
+				raise_type_mismatch("property read field", property_type, field->ty);
+		} else if (auto getter = dynamic_cast<Callable*>(read_accessor)) {
+			auto routine = static_cast<RoutineType*>(getter->ty);
+			validate_index_formals(routine, index_types.size(), "read");
+			if (routine->return_type != property_type)
+				raise_type_mismatch("property getter return type", property_type, routine->return_type);
+		} else {
+			raise_parse_error("property read accessor must be a field or method");
+		}
+	}
+	if (write_accessor) {
+		if (auto field = dynamic_cast<StorageSlot*>(write_accessor)) {
+			if (!index_types.empty())
+				raise_parse_error("indexed property write accessor must be a method");
+			if (field->ty != property_type)
+				raise_type_mismatch("property write field", property_type, field->ty);
+		} else if (auto setter = dynamic_cast<Callable*>(write_accessor)) {
+			auto routine = static_cast<RoutineType*>(setter->ty);
+			validate_index_formals(routine, index_types.size() + 1, "write");
+			if (routine->return_type != &unit_type())
+				raise_parse_error("property setter must be a procedure");
+			if (routine->formals.back().ty != property_type)
+				raise_type_mismatch("property setter value parameter",
+					property_type, routine->formals.back().ty);
+			auto mode = routine->formals.back().mode;
+			if (mode != ParamMode::Value && mode != ParamMode::Const)
+				raise_parse_error("property setter value parameter must be a value or const parameter");
+		} else {
+			raise_parse_error("property write accessor must be a field or method");
+		}
+	}
 	parse_semicolon();
 
 	bool is_default = false;
@@ -2527,22 +2607,6 @@ static bool is_integer_semantic_type(Type* ty) {
 		return true;
 	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
 	return intrinsic && intrinsic->rank;
-}
-
-static bool array_index_compatible(FixedArrayType* arr, Node* idx) {
-	if (!arr || !idx)
-		return false;
-	Type* expected = subrange_range_type(arr->range.base_type);
-	Type* actual = subrange_range_type(idx->ty);
-	if (expected == actual)
-		return true;
-	if (expected == char_type())
-		return actual == char_type();
-	if (dynamic_cast<EnumType*>(expected))
-		return actual == expected;
-	if (is_integer_semantic_type(expected))
-		return is_integer_semantic_type(actual);
-	return false;
 }
 
 static bool ordinal_bounds_contains(const OrdinalBounds& bounds, bool negative, uint64_t magnitude) {
@@ -3802,9 +3866,13 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		}
 		kind = METHOD;
 	} else {
-		if (dynamic_cast<ClassType*>(owner)) {
-			if (is_class && kind == METHOD)
-				kind = CLASS_METHOD;
+		if (owner) {
+			if (is_class && kind == METHOD) {
+				if (dynamic_cast<ClassType*>(owner))
+					kind = CLASS_METHOD;
+				else
+					raise_type_kind_mismatch("class method owner", "class", owner);
+			}
 		} else {
 			if (kind != ROUTINE) {
 				raise_type_kind_mismatch("expected routine", "routine", owner);
