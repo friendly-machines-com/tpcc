@@ -745,7 +745,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(active, "\t}\n");
 			if (!body->lookup_value_local("classname")) {
 				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
-				fprintf(active, "\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\");\n", class_name.c_str()); // FIXME: escape
+				fprintf(active,
+					"\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\", strlen(\"%s\"));\n",
+					class_name.c_str(), class_name.c_str()); // FIXME: escape
 				fprintf(active, "\t}\n");
 			}
 			if (!body->lookup_value_local("inheritsfrom")) {
@@ -1090,17 +1092,10 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		fprintf(active, "pas::tpcc_shortstring_from_c(");
 		fputc('"', active);
-		for (char ch : s->value) {
-			if (ch == '"' || ch == '\\')
-				fputc('\\', active);
-			if ((unsigned char)ch < 0x20) {
-				fprintf(active, "\\x%02x", (unsigned char)ch);
-			} else {
-				fputc(ch, active);
-			}
-		}
+		for (unsigned char ch : s->value)
+			fprintf(active, "\\%03o", static_cast<unsigned>(ch));
 		fputc('"', active);
-		fprintf(active, ")");
+		fprintf(active, ", %zu)", s->value.size());
 		return;
 	}
 	if (auto a = dynamic_cast<FixedArrayLiteral*>(expr)) {

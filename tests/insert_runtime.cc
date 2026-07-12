@@ -31,7 +31,7 @@ int main() {
 		if (aliased.data[i] != 'a')
 			return 5;
 
-	auto characters = pas::tpcc_shortstring_from_c("ac");
+	auto characters = pas::tpcc_shortstring_from_c("ac", strlen("ac"));
 	pas::p_insert('b', characters, 2);
 	if (characters.length != 3 ||
 	    characters.data[0] != 'a' ||

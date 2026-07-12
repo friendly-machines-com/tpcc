@@ -161,11 +161,13 @@ inline t_char& p_index_write(t_ansistring& value, I index) {
 	return p_index(static_cast<t_shortstring&>(value), index);
 }
 
-inline t_shortstring tpcc_shortstring_from_c(const char* s) {
+inline t_shortstring tpcc_shortstring_from_c(const char* s, std::size_t length) {
 	t_shortstring result{};
-	result.length = std::min(strlen(s), 254ul);
-	memcpy(result.data, s, result.length);
-	result.data[result.length] = 0;
+	const std::size_t stored_length = std::min(length, sizeof(result.data) - 1);
+	result.length = t_char{static_cast<uint8_t>(stored_length)};
+	if (stored_length != 0)
+		memcpy(result.data, s, stored_length);
+	result.data[stored_length] = t_char{0};
 	return result;
 }
 
@@ -536,7 +538,7 @@ struct t_tobject: public m_iobject {
 			return &meta;
 		}
 		virtual t_shortstring p_classname() {
-			return tpcc_shortstring_from_c("tobject");
+			return tpcc_shortstring_from_c("tobject", strlen("tobject"));
 		}
 		virtual bool p_inheritsfrom(struct m_iobject* s) {
 			return s == this;

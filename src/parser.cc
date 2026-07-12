@@ -1329,15 +1329,38 @@ Node* Parser::parse_value() {
 		consume();
 		return new NilLiteral();
 	}
-	if (!input_token.empty() && input_token.front() == '\'') {
+	// FPC scans a consecutive run of quoted fragments and numeric character
+	// fragments as one literal:
+	//
+	//   'A'          -> one byte, Char
+	//   #13          -> one byte, Char
+	//   'A'#0'B'     -> three bytes, string
+	//   #13#10       -> two bytes, string
+	//
+	// tpcc's tokenizer currently returns each fragment separately, so combine
+	// the run here before assigning its semantic type. This also preserves
+	// embedded zero bytes: String::value is length-bearing and emission passes
+	// that explicit length to the RTL instead of using strlen.
+	if (!input_token.empty() &&
+	    (input_token.front() == '\'' || input_token.front() == '#')) {
 		std::string s;
-		for (size_t i = 1; i + 1 < input_token.size(); ++i) {
-			s.push_back(input_token[i]);
-			if (input_token[i] == '\'' && i + 2 < input_token.size() && input_token[i + 1] == '\'')
-				++i;
-		}
-		consume();
-		return new String(std::move(s), shortstring_type());
+		do {
+			if (input_token.front() == '\'') {
+				s += extract_string_literal(input_token);
+			} else {
+				const char* first = input_token.data() + 1;
+				const char* last = input_token.data() + input_token.size();
+				uint64_t value = 0;
+				auto [end, error] = std::from_chars(first, last, value, 10);
+				if (first == last || error != std::errc() || end != last || value > 255)
+					raise_parse_error("malformed character-code literal: " + input_token);
+				s.push_back(static_cast<char>(static_cast<unsigned char>(value)));
+			}
+			consume();
+		} while (!input_token.empty() &&
+		         (input_token.front() == '\'' || input_token.front() == '#'));
+		Type* literal_type = s.size() == 1 ? char_type() : shortstring_type();
+		return new String(std::move(s), literal_type);
 	}
 	// FIXME: bool literals also belong here (need enum-member support).
 	return parse_value_from_identifier(parse_identifier());
