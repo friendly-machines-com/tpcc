@@ -256,6 +256,12 @@ int conversion_cost(Type* from, Type* to) {
 		if (auto to_pointer = dynamic_cast<PointerType*>(to))
 			if (from_pointer->item_type == to_pointer->item_type)
 				return 0;
+	// Pascal's untyped Pointer is assignment-compatible with every typed
+	// object pointer. Cast emission performs the corresponding C++ void*
+	// conversion; no pointer representation is copied bytewise.
+	if ((from == pointer_type() && dynamic_cast<PointerType*>(to)) ||
+	    (dynamic_cast<PointerType*>(from) && to == pointer_type()))
+		return 20;
 	// Subclass-to-superclass: implicit, cost = depth (1 per inheritance step).
 	// Identity handled by `from == to` above.
 	if (from->is_reference_type() && to->is_reference_type()) {
