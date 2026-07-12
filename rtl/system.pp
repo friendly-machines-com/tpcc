@@ -183,6 +183,10 @@ function octstr(value: LongInt; count: Byte): ShortString; overload; external ni
 function octstr(value: Int64; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
 function octstr(value: QWord; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
 function strlen(value: PChar): SizeInt; external nil name 'pas::p_strlen';
+procedure getmem(out destination: Pointer; size: PtrUInt); overload; external nil name 'pas::p_getmem';
+function getmem(size: PtrUInt): Pointer; overload; external nil name 'pas::p_getmem';
+procedure freemem(value: Pointer; size: PtrUInt); overload; external nil name 'pas::p_freemem';
+function freemem(value: Pointer): PtrUInt; overload; external nil name 'pas::p_freemem';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
 function trunc(const x: Extended): Int64; external nil name 'pas::p_trunc';
 function round(const x: Extended): Int64; external nil name 'pas::p_round';
