@@ -151,6 +151,7 @@ procedure inc(var x; n: Integer = 1); external nil name 'pas::p_inc'; // generic
 procedure dec(var x; n: Integer = 1); external nil name 'pas::p_dec'; // generic intrinsic
 procedure str(const x: Int64; var s: ShortString); overload; external nil name 'pas::p_str';
 procedure str(const x: QWord; var s: ShortString); overload; external nil name 'pas::p_str';
+procedure str(const x: Extended; var s: ShortString); overload; external nil name 'pas::p_str';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
 function trunc(const x: Extended): Int64; external nil name 'pas::p_trunc';
 function round(const x: Extended): Int64; external nil name 'pas::p_round';

@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -665,7 +666,9 @@ template<typename T> inline void p_dec(T& x, t_integer n = 1) {
 	x = tpcc_ordinal_step(x, n, true);
 }
 
-template<typename T> inline void p_str(T x, t_shortstring& s) {
+template<typename T>
+requires std::is_integral_v<T>
+inline void p_str(T x, t_shortstring& s) {
 	char buf[128];
 	int n;
 	if constexpr (std::is_signed_v<T>)
@@ -679,6 +682,50 @@ template<typename T> inline void p_str(T x, t_shortstring& s) {
 	s.length = static_cast<uint8_t>(n);
 	memcpy(s.data, buf, s.length);
 	s.data[s.length] = 0;
+}
+
+inline void p_str(t_extended x, t_shortstring& s) {
+	// Str(Extended, ...) uses all 21 significant decimal digits of an 80-bit
+	// Extended and always emits four exponent digits.
+	if (!__builtin_isfinite(x)) {
+		char formatted[29];
+		const bool nan = __builtin_isnan(x);
+		const std::size_t spaces = nan ? 26 : 25;
+		memset(formatted, ' ', spaces);
+		char* output = formatted + spaces;
+		if (!nan)
+			*output++ = __builtin_signbit(x) ? '-' : '+';
+		memcpy(output, nan ? "Nan" : "Inf", 3);
+		s = tpcc_shortstring_from_c(formatted, sizeof(formatted));
+		return;
+	}
+
+	char digits[64];
+	auto [end, error] = std::to_chars(
+	    digits, digits + sizeof(digits), x, std::chars_format::scientific, 20);
+	if (error != std::errc())
+		throw std::runtime_error("Str could not format Extended value");
+
+	char formatted[64];
+	char* output = formatted;
+	if (digits[0] != '-')
+		*output++ = ' ';
+
+	const char* exponent = std::find(digits, end, 'e');
+	if (exponent == end)
+		throw std::runtime_error("Str produced malformed Extended output");
+	memcpy(output, digits, static_cast<std::size_t>(exponent - digits));
+	output += exponent - digits;
+	*output++ = 'E';
+	*output++ = exponent[1];
+	const std::ptrdiff_t exponent_digits = end - (exponent + 2);
+	for (std::ptrdiff_t i = exponent_digits; i < 4; ++i)
+		*output++ = '0';
+	memcpy(output, exponent + 2, static_cast<std::size_t>(exponent_digits));
+	output += exponent_digits;
+
+	s = tpcc_shortstring_from_c(
+	    formatted, static_cast<std::size_t>(output - formatted));
 }
 
 #if 0
