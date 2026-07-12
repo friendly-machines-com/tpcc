@@ -200,6 +200,44 @@ inline t_longint p_pos(t_char needle, const t_shortstring& haystack) {
 	return 0;
 }
 
+inline t_shortstring p_copy(const t_shortstring& value, t_longint index, t_longint count) {
+	t_shortstring result{};
+	if (count <= 0)
+		return result;
+	if (index < 1)
+		index = 1;
+	const std::size_t start = static_cast<std::size_t>(index - 1);
+	const std::size_t source_length = value.length;
+	if (start >= source_length)
+		return result;
+	const std::size_t requested = static_cast<std::size_t>(count);
+	const std::size_t copied = std::min({
+	    requested,
+	    source_length - start,
+	    sizeof(result.data) - 1,
+	});
+	result.length = t_char{static_cast<uint8_t>(copied)};
+	if (copied != 0)
+		std::memcpy(result.data, value.data + start, copied);
+	result.data[copied] = t_char{0};
+	return result;
+}
+
+inline t_ansistring p_copy(const t_ansistring& value, t_longint index, t_longint count) {
+	t_ansistring result{};
+	static_cast<t_shortstring&>(result) =
+	    p_copy(static_cast<const t_shortstring&>(value), index, count);
+	return result;
+}
+
+inline t_shortstring p_copy(t_char value, t_longint index, t_longint count) {
+	t_shortstring source{};
+	source.length = t_char{1};
+	source.data[0] = value;
+	source.data[1] = t_char{0};
+	return p_copy(source, index, count);
+}
+
 inline void p_delete(t_shortstring& value, t_longint index, t_longint count) {
 	if (index < 1 || count <= 0)
 		return;
