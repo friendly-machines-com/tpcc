@@ -4406,6 +4406,30 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 			costs[self_slots + i] = 1000;
 			continue;
 		}
+		if (auto literal = dynamic_cast<String*>(args[i])) {
+			if (literal->value.size() == 1 &&
+			    rty->formals[i].ty == shortstring_type()) {
+				// One-byte quoted literals begin as Char, but Pascal also
+				// permits them in a string context. Keep this worse than an
+				// exact Char overload; cast() pins the selected string type.
+				costs[self_slots + i] = 1;
+				continue;
+			}
+		}
+		auto mode = rty->formals[i].mode;
+		if (mode == ParamMode::Var || mode == ParamMode::Out) {
+			if (from == rty->formals[i].ty) {
+				costs[self_slots + i] = 0;
+				continue;
+			}
+			if (auto subrange = dynamic_cast<SubrangeType*>(from)) {
+				if (subrange->base_type == rty->formals[i].ty) {
+					costs[self_slots + i] = 1;
+					continue;
+				}
+			}
+			return {};
+		}
 		int cc = conversion_cost(from, rty->formals[i].ty);
 		if (cc < 0)
 			return {};
