@@ -214,6 +214,45 @@ inline t_boolean p_in(tpcc_typed_const_storage_ref<Value> value,
 	return p_in(*value.value, *set.value);
 }
 
+// VALUE is intentionally separate from T. The Pascal checker has already
+// verified conversion to the set's item type, but an untyped integer literal
+// is still emitted with its raw C++ literal carrier at an omitted-type call
+// boundary. Convert that carrier here before deriving the ordinal set key.
+template<typename T, typename Value>
+inline void p_include(tpcc_typed_storage_ref<t_set<T>> set,
+    tpcc_typed_const_storage_ref<Value> item) {
+	const T converted = static_cast<T>(*item.value);
+	const int64_t key = tpcc_set_key(converted);
+	// t_set membership is the union of its spans; the carrier does not require
+	// canonical or disjoint spans. Appending a singleton is therefore a
+	// complete Include operation. Exclude below removes KEY from every span.
+	set.value->spans.push_back(tpcc_set_span{key, key});
+}
+
+template<typename T, typename Value>
+inline void p_exclude(tpcc_typed_storage_ref<t_set<T>> set,
+    tpcc_typed_const_storage_ref<Value> item) {
+	const T converted = static_cast<T>(*item.value);
+	const int64_t key = tpcc_set_key(converted);
+	std::vector<tpcc_set_span> remaining;
+	remaining.reserve(set.value->spans.size() + 1);
+	for (const tpcc_set_span& span : set.value->spans) {
+		if (key < span.lower || key > span.upper) {
+			remaining.push_back(span);
+			continue;
+		}
+		// Strict comparisons make the +/- 1 operations safe even at the
+		// int64_t endpoints. Remove KEY from every overlapping span so a
+		// duplicate Include followed by Exclude still has Pascal set
+		// semantics rather than multiset semantics.
+		if (span.lower < key)
+			remaining.push_back(tpcc_set_span{span.lower, key - 1});
+		if (key < span.upper)
+			remaining.push_back(tpcc_set_span{key + 1, span.upper});
+	}
+	set.value->spans = std::move(remaining);
+}
+
 template<typename T, std::size_t length, auto low>
 struct t_fixedarray {
 	T items[length];

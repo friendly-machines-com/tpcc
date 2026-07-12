@@ -26,6 +26,15 @@ enum class BuiltinGenericKind {
 	None,
 	OrdinalValue,
 	OrdinalMutation,
+	// tpcc does not yet support generic Pascal routine declarations, so the
+	// ordinary system.pp declaration cannot express the relationship
+	//
+	//   values: set of T; item: T
+	//
+	// in system.pp. Include/Exclude therefore use omitted-type formals there,
+	// while this semantic category tells call checking that argument one
+	// must be a set and argument two must convert to that set's item type.
+	SetMutation,
 };
 
 enum class BuiltinSyntaxKind {

@@ -387,6 +387,10 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_ord", nullptr, {}, BuiltinGenericKind::OrdinalValue},
     {"pas::p_inc", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
     {"pas::p_dec", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
+    // Both operations have the same generic Pascal signature and type
+    // relationship; only their ordinary RTL function bodies differ.
+    {"pas::p_include", nullptr, {}, BuiltinGenericKind::SetMutation},
+    {"pas::p_exclude", nullptr, {}, BuiltinGenericKind::SetMutation},
     {"pas::p_str", nullptr},
     {"pas::p_val", nullptr},
     {"pas::p_octstr", nullptr},

@@ -4682,6 +4682,29 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				name_for_error + " requires an ordinal argument");
 		}
 	}
+	if (builtin &&
+	    builtin->generic_kind == BuiltinGenericKind::SetMutation) {
+		// Until tpcc supports generic routine declarations, system.pp has to
+		// spell these as `(var values; const item)`. Recover the otherwise
+		// unexpressed `set of T`/`T` relationship from the first argument's
+		// actual FixedSetType.
+		auto set_type = args.empty()
+		    ? nullptr
+		    : dynamic_cast<FixedSetType*>(args[0] ? args[0]->ty : nullptr);
+		if (!set_type) {
+			emit_parse_error_at(error_location,
+			    name_for_error + " requires a set variable as its first argument");
+		}
+		if (args.size() < 2 || !args[1]) {
+			emit_parse_error_at(error_location,
+			    name_for_error + " requires a set element as its second argument");
+		}
+		// FPC converts the element expression to the concrete set element
+		// type before generating the bit mutation. Do that here while the
+		// Pascal type is available; both omitted-type RTL formals can then
+		// retain their exact, related types at the C++ call boundary.
+		args[1] = cast(args[1], set_type->item_type);
+	}
 	for (size_t i = 0; i < args.size(); i++) {
 		auto mode = rty->formals[i].mode;
 		if (mode != ParamMode::Var && mode != ParamMode::Out)
