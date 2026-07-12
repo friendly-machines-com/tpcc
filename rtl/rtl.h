@@ -728,6 +728,178 @@ inline void p_str(t_extended x, t_shortstring& s) {
 	    formatted, static_cast<std::size_t>(output - formatted));
 }
 
+struct tpcc_val_prefix {
+	std::size_t position;
+	unsigned base;
+	bool negative;
+};
+
+inline tpcc_val_prefix tpcc_val_parse_prefix(
+    const t_shortstring& source, t_integer& code) {
+	const std::size_t length = source.length;
+	std::size_t position = 0;
+	while (position < length &&
+	       (source.data[position].value == ' ' || source.data[position].value == '\t'))
+		++position;
+
+	bool negative = false;
+	if (position < length &&
+	    (source.data[position].value == '+' || source.data[position].value == '-')) {
+		negative = source.data[position].value == '-';
+		++position;
+	}
+
+	unsigned base = 10;
+	if (position < length) {
+		switch (source.data[position].value) {
+		case '$':
+		case 'x':
+		case 'X':
+			base = 16;
+			++position;
+			break;
+		case '%':
+			base = 2;
+			++position;
+			break;
+		case '&':
+			base = 8;
+			++position;
+			break;
+		case '0':
+			if (position + 1 < length &&
+			    (source.data[position + 1].value == 'x' ||
+			     source.data[position + 1].value == 'X')) {
+				base = 16;
+				position += 2;
+			}
+			break;
+		}
+	}
+
+	code = static_cast<t_integer>(position + 1);
+	return tpcc_val_prefix{position, base, negative};
+}
+
+inline unsigned tpcc_val_digit(uint8_t character) {
+	if (character >= '0' && character <= '9')
+		return character - '0';
+	if (character >= 'A' && character <= 'F')
+		return character - 'A' + 10;
+	if (character >= 'a' && character <= 'f')
+		return character - 'a' + 10;
+	return 16;
+}
+
+template<typename T>
+requires std::is_integral_v<T> && (!std::is_same_v<T, bool>)
+inline void p_val(const t_shortstring& source, T& destination, t_integer& code) {
+	destination = 0;
+	tpcc_val_prefix prefix = tpcc_val_parse_prefix(source, code);
+	const std::size_t length = source.length;
+	std::size_t position = prefix.position;
+	if (position >= length)
+		return;
+
+	using unsigned_type = std::make_unsigned_t<T>;
+	constexpr unsigned_type unsigned_max = std::numeric_limits<unsigned_type>::max();
+	unsigned_type limit = unsigned_max;
+	if constexpr (std::is_signed_v<T>) {
+		if (prefix.base == 10 || prefix.negative) {
+			const unsigned_type signed_max =
+			    static_cast<unsigned_type>(std::numeric_limits<T>::max());
+			limit = prefix.negative ? signed_max + 1 : signed_max;
+		}
+	} else if (prefix.negative) {
+		return;
+	}
+
+	unsigned_type magnitude = 0;
+	bool saw_digit = false;
+	for (; position < length; ++position) {
+		const uint8_t character = source.data[position].value;
+		if (character == 0)
+			break;
+		const unsigned digit = tpcc_val_digit(character);
+		code = static_cast<t_integer>(position + 1);
+		if (digit >= prefix.base)
+			return;
+		const unsigned_type typed_digit = static_cast<unsigned_type>(digit);
+		if (magnitude > (limit - typed_digit) / prefix.base)
+			return;
+		magnitude = static_cast<unsigned_type>(
+		    magnitude * static_cast<unsigned_type>(prefix.base) + typed_digit);
+		saw_digit = true;
+	}
+	if (!saw_digit)
+		return;
+
+	if constexpr (std::is_signed_v<T>) {
+		if (prefix.negative) {
+			const unsigned_type minimum_magnitude =
+			    static_cast<unsigned_type>(std::numeric_limits<T>::max()) + 1;
+			if (magnitude == minimum_magnitude)
+				destination = std::numeric_limits<T>::min();
+			else
+				destination = static_cast<T>(-static_cast<T>(magnitude));
+		} else if (prefix.base != 10) {
+			destination = std::bit_cast<T>(magnitude);
+		} else {
+			destination = static_cast<T>(magnitude);
+		}
+	} else {
+		destination = static_cast<T>(magnitude);
+	}
+	code = 0;
+}
+
+template<typename T>
+requires std::is_floating_point_v<T>
+inline void p_val(const t_shortstring& source, T& destination, t_integer& code) {
+	destination = 0;
+	const std::size_t length = source.length;
+	std::size_t position = 0;
+	while (position < length &&
+	       (source.data[position].value == ' ' || source.data[position].value == '\t'))
+		++position;
+
+	char text[255];
+	std::size_t text_length = 0;
+	if (position < length && source.data[position].value == '+')
+		++position;
+	for (std::size_t i = position; i < length; ++i) {
+		if (source.data[i].value == 0)
+			break;
+		text[text_length++] = static_cast<char>(source.data[i].value);
+	}
+	code = static_cast<t_integer>(position + 1);
+	if (text_length == 0)
+		return;
+	const std::size_t first_digit =
+	    text[0] == '-' ? 1 : 0;
+	if (first_digit >= text_length ||
+	    !((text[first_digit] >= '0' && text[first_digit] <= '9') ||
+	      text[first_digit] == '.'))
+		return;
+
+	T parsed = 0;
+	auto [end, error] = std::from_chars(
+	    text, text + text_length, parsed, std::chars_format::general);
+	code = static_cast<t_integer>(position + (end - text) + 1);
+	if (error != std::errc() || end != text + text_length)
+		return;
+	destination = parsed;
+	code = 0;
+}
+
+template<typename T>
+requires (std::is_integral_v<T> && (!std::is_same_v<T, bool>)) ||
+         std::is_floating_point_v<T>
+inline void p_val(const t_shortstring& source, T& destination) {
+	t_integer code = 0;
+	p_val(source, destination, code);
+}
+
 #if 0
 // Could be generated by compiler, except that we need to know what t_tobject::m_tobject is here.
 // It would be possible to declare an interface and use that for defining t_tclass--but that's terrible since we would implement a magical private interface for no reason, and only for the metaclass.

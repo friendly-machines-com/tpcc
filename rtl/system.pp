@@ -152,6 +152,30 @@ procedure dec(var x; n: Integer = 1); external nil name 'pas::p_dec'; // generic
 procedure str(const x: Int64; var s: ShortString); overload; external nil name 'pas::p_str';
 procedure str(const x: QWord; var s: ShortString); overload; external nil name 'pas::p_str';
 procedure str(const x: Extended; var s: ShortString); overload; external nil name 'pas::p_str';
+procedure val(const s: ShortString; out value: ShortInt); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: ShortInt; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: SmallInt); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: SmallInt; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: LongInt); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: LongInt; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Int64); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Int64; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Byte); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Byte; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Word); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Word; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: LongWord); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: LongWord; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: QWord); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: QWord; out code: Integer); overload; external nil name 'pas::p_val';
+// FIXME: Add Single and Real once tpcc has those Pascal types.
+procedure val(const s: ShortString; out value: Double); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Double; out code: Integer); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Extended); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Extended; out code: Integer); overload; external nil name 'pas::p_val';
+// FIXME: Add Val support for Comp.
+// FIXME: Add Val support for Currency.
+// FIXME: Add Val support for enumerations.
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
 function trunc(const x: Extended): Int64; external nil name 'pas::p_trunc';
 function round(const x: Extended): Int64; external nil name 'pas::p_round';
