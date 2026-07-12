@@ -51,6 +51,9 @@ test-delete-builtin: mp
 test-insert-builtin: mp
 	sh tests/test_insert_builtin.sh
 
-test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-delete-builtin test-insert-builtin
+test-properties: mp
+	sh tests/test_properties.sh
 
-.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-delete-builtin test-insert-builtin
+test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-delete-builtin test-insert-builtin test-properties
+
+.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-delete-builtin test-insert-builtin test-properties
