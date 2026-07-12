@@ -43,6 +43,10 @@ type
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;
   end;
+
+var
+  // RunError stores its error number in this RTL variable before terminating.
+  ErrorCode: Word external nil name 'pas::p_errorcode';
   
 operator+(a: Cardinal): Cardinal; external nil name 'pas::p_positive';
 operator+(a: Integer): Integer; external nil name 'pas::p_positive';

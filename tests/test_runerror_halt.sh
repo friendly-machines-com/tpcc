@@ -8,6 +8,20 @@ mkdir -p "$tmp"
 
 cd "$root"
 
+./mp -Furtl -o"$tmp/errorcode_builtin.cc" \
+	tests/errorcode_builtin.pp
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	tests/errorcode_builtin_runtime.cc \
+	rtl/system.cc \
+	-o "$tmp/errorcode_builtin"
+ASAN_OPTIONS=detect_leaks=1 "$tmp/errorcode_builtin"
+
 for builtin in halt runerror
 do
 	./mp -Furtl -o"$tmp/${builtin}_builtin.cc" \
@@ -38,4 +52,4 @@ if [ "$runerror_status" -ne 9 ]; then
 	exit 1
 fi
 
-echo "RunError/Halt tests passed"
+echo "ErrorCode/RunError/Halt tests passed"

@@ -3833,11 +3833,26 @@ void Parser::parse_var_block() {
 		}
 		parse_colon();
 		auto ty = parse_type_expression(false);
+		std::optional<std::string> external_cxx_name;
+		if (maybe_parse_directive("external")) {
+			if (names.size() != 1)
+				raise_parse_error(
+				    "an external variable declaration must have exactly one name");
+			parse_keyword("nil");
+			parse_directive("name");
+			external_cxx_name = parse_string_literal();
+		}
 		for (auto iter : names) {
 			auto name = iter;
-			auto slot = new StorageSlot(cxx_value_name(name), ty);
+			// External variables name existing C++ storage, so their Pascal
+			// declaration registers that name but emits no definition.
+			auto slot = new StorageSlot(
+			    external_cxx_name
+			        ? *external_cxx_name
+			        : cxx_value_name(name),
+			    ty);
 			scope->register_variable(name, slot, ty);
-			if (emitter)
+			if (emitter && !external_cxx_name)
 				emitter->emit_var_decl(slot->cxx_name, ty);
 		}
 		parse_semicolon();
