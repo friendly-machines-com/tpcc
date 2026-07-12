@@ -145,6 +145,8 @@ function ord(const x): Cardinal; external nil name 'pas::p_ord'; // generic intr
 function chr(value: Byte): Char; external nil name 'pas::p_chr';
 procedure fillchar(var destination; count: SizeInt; value: Byte); external nil name 'pas::p_fillchar';
 procedure move(const source; var destination; count: SizeInt); external nil name 'pas::p_move';
+function comparebyte(const buf1, buf2; len: SizeInt): SizeInt; external nil name 'pas::p_comparebyte';
+function comparechar(const buf1, buf2; len: SizeInt): SizeInt; external nil name 'pas::p_comparechar';
 function low(const x): Integer; external nil name 'pas::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external nil name 'pas::p_high'; // generic intrinsic: parser supplies the type operand/result
 function length(const x): SizeInt; external nil name 'pas::p_length'; // generic intrinsic

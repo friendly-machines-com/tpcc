@@ -465,6 +465,24 @@ inline void p_move(tpcc_const_storage_ref source,
 	std::memmove(destination.data, source.data, byte_count);
 }
 
+inline t_sizeint p_comparebyte(tpcc_const_storage_ref first,
+    tpcc_const_storage_ref second, t_sizeint count) {
+	if (count <= 0)
+		return 0;
+	const std::size_t byte_count = static_cast<std::size_t>(count);
+	if (byte_count > first.size)
+		throw std::out_of_range("CompareByte exceeds first buffer");
+	if (byte_count > second.size)
+		throw std::out_of_range("CompareByte exceeds second buffer");
+	const int comparison = std::memcmp(first.data, second.data, byte_count);
+	return comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
+}
+
+inline t_sizeint p_comparechar(tpcc_const_storage_ref first,
+    tpcc_const_storage_ref second, t_sizeint count) {
+	return p_comparebyte(first, second, count);
+}
+
 inline t_longint p_pos(const t_shortstring& needle, const t_shortstring& haystack) {
 	if (needle.length == 0)
 		return 1;

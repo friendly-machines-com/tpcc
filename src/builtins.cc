@@ -404,6 +404,8 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_chr", fold_chr},
     {"pas::p_fillchar", nullptr},
     {"pas::p_move", nullptr},
+    {"pas::p_comparebyte", nullptr},
+    {"pas::p_comparechar", nullptr},
     {"pas::p_assigned", nullptr},
     {"pas::p_trunc", fold_trunc},
     {"pas::p_round", fold_round},
