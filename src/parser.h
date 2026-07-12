@@ -365,7 +365,10 @@ protected:
 	void maybe_parse_proc_attributes();
 	RoutineType* parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);
-	Procedure* match_or_create_procedure(const std::string& pas_name, RoutineType* sig, bool had_paren, bool has_overload);
+	Procedure* match_or_create_procedure(
+	    const std::string& pas_name, RoutineType* sig,
+	    bool had_paren, bool has_overload,
+	    bool short_form_implementation);
 	/** Parse `procedure NAME(...);` (is_function=false) or
 	 *  `function NAME(...): T;` (is_function=true). Attribute list (`overload;`)
 	 *  is consumed after the terminating `;`. If followed by a body, parses

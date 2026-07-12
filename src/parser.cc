@@ -4232,7 +4232,10 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 }
 
 // Helper to handle overload matching and short-form implementation resolution
-Procedure* Parser::match_or_create_procedure(const std::string& pas_name, RoutineType* sig, bool had_paren, bool has_overload) {
+Procedure* Parser::match_or_create_procedure(
+    const std::string& pas_name, RoutineType* sig,
+    bool had_paren, bool has_overload,
+    bool short_form_implementation) {
 	Frame* enclosing = const_cast<Frame*>(this->scopes.back().frame);
 	Node* existing = enclosing->lookup_value(pas_name);
 
@@ -4270,10 +4273,11 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 		if (!node || target)
 			return;
 		if (auto ec = dynamic_cast<Callable*>(node)) {
-			if ((!had_paren || sig_matches(ec)) && !ec->has_body)
+			if ((short_form_implementation || sig_matches(ec)) &&
+			    !ec->has_body)
 				target = attach_to(ec);
 		} else if (auto os = dynamic_cast<OverloadSet*>(node)) {
-			if (!had_paren) {
+			if (short_form_implementation) {
 				Callable* pick = nullptr;
 				for (auto* m : os->members) {
 					if (!m->has_body) {
@@ -4308,7 +4312,7 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 		for (auto it = scopes.rbegin(); it != scopes.rend() && !target; ++it)
 			consider_existing(it->frame->lookup_value_local(pas_name));
 	}
-	if (!target && !had_paren && existing)
+	if (!target && short_form_implementation && existing)
 		raise_parse_error("no unimplemented prototype");
 
 	if (!target) {
@@ -4507,7 +4511,6 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// Frame::register_callable globally permissive would silently change method
 		// overload rules. Method prototypes still use their parsed directive bit.
 		has_overload = true;
-		Procedure* target = match_or_create_procedure(first_name, sig, had_paren, has_overload);
 		/*
 		In an INTERFACE section there is this:
 		  function x: Integer;
@@ -4517,6 +4520,15 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		body_follows = body_follows && (peek_keyword("begin") || peek_keyword("label") ||
 						peek_keyword("var") || peek_keyword("const") || peek_keyword("type") ||
 						peek_keyword("procedure") || peek_keyword("function"));
+		// A routine declaration in an interface section has the signature it
+		// writes, including zero parameters when parentheses are absent. Only
+		// an implementation with a body may omit an earlier prototype's
+		// parameter list.
+		const bool short_form_implementation =
+		    !is_decl_only && body_follows && !had_paren;
+		Procedure* target = match_or_create_procedure(
+		    first_name, sig, had_paren, has_overload,
+		    short_form_implementation);
 		if (external_cxx_name) {
 			auto builtin = lookup_external_value(nullptr, *external_cxx_name);
 			if (builtin != nullptr) {
