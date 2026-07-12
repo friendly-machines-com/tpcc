@@ -145,12 +145,18 @@ function sqrt(const x: Extended): Extended; external nil name 'pas::p_sqrt';
 function exp(const x: Extended): Extended; external nil name 'pas::p_exp';
 function ln(const x: Extended): Extended; external nil name 'pas::p_ln';
 function pos(const needle: ShortString; const haystack: ShortString): LongInt; overload; external nil name 'pas::p_pos';
+function pos(const needle: ShortString; const haystack: AnsiString): LongInt; overload; external nil name 'pas::p_pos';
+function pos(const needle: AnsiString; const haystack: AnsiString): LongInt; overload; external nil name 'pas::p_pos';
 function pos(needle: Char; const haystack: ShortString): LongInt; overload; external nil name 'pas::p_pos';
 procedure delete(var value: ShortString; index, count: LongInt); overload; external nil name 'pas::p_delete';
 procedure delete(var value: AnsiString; index, count: LongInt); overload; external nil name 'pas::p_delete';
+procedure insert(const source: ShortString; var destination: ShortString; index: LongInt); overload; external nil name 'pas::p_insert';
+procedure insert(const source: AnsiString; var destination: AnsiString; index: LongInt); overload; external nil name 'pas::p_insert';
 
 operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
 operator not(a: Boolean): Boolean; external nil name 'pas::p_logicalnot';
+
+operator =(a, b: shortstring): Boolean; external nil name 'pas::p_equal';
 
 implementation
 

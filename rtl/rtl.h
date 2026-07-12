@@ -142,6 +142,63 @@ inline void p_delete(t_ansistring& value, t_longint index, t_longint count) {
 	p_delete(static_cast<t_shortstring&>(value), index, count);
 }
 
+inline void p_insert(const t_shortstring& source, t_shortstring& value, t_longint index) {
+	if (source.length == 0)
+		return;
+
+	if (index < 1)
+		index = 1;
+
+	std::size_t start = static_cast<std::size_t>(index - 1);
+	// Pascal Semantics: index > length acts as append
+	if (start > value.length)
+		start = value.length;
+
+	// Handle potential aliasing (e.g., Pascal's `Insert(S, S, 2)`).
+	// Shortstrings are <= 256 bytes, so a stack copy is cheap and prevents memory corruption.
+	t_shortstring temp_source;
+	const t_shortstring* p_src = &source;
+	if (&source == &value) {
+		temp_source = source;
+		p_src = &temp_source;
+	}
+
+	// Truncation logic: Calculate how much of the source we can actually fit
+	std::size_t max_insert = 254 - start;
+	std::size_t copy_count = std::min(static_cast<std::size_t>(p_src->length), max_insert);
+
+	if (copy_count == 0)
+		return;
+
+	std::size_t max_tail = 254 - (start + copy_count);
+	std::size_t tail = value.length - start;
+	std::size_t tail_copy = std::min(tail, max_tail);
+
+	// Shift existing characters to the right to make room (truncates the tail if max_tail is reached)
+	if (tail_copy > 0) {
+		std::memmove(value.data + start + copy_count, value.data + start, tail_copy);
+	}
+
+	// Copy the new characters from the source string into the gap
+	std::memcpy(value.data + start, p_src->data, copy_count);
+
+	// Update length and null-terminate
+	value.length = static_cast<uint8_t>(start + copy_count + tail_copy);
+	value.data[value.length] = 0;
+}
+
+inline void p_insert(t_char source, t_shortstring& destination, t_longint index) {
+	t_shortstring one_character{};
+	one_character.length = 1;
+	one_character.data[0] = source;
+	one_character.data[1] = 0;
+	p_insert(one_character, destination, index);
+}
+
+inline void p_insert(const t_ansistring& source, t_ansistring& destination, t_longint index) {
+	p_insert(static_cast<const t_shortstring&>(source), static_cast<t_shortstring&>(destination), index);
+}
+
 inline t_shortstring p_add(const t_shortstring& a, const t_shortstring& b) {
 	t_shortstring result {};
 	const std::size_t result_length = std::min<std::size_t>(
