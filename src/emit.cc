@@ -275,7 +275,10 @@ void Emitter::emit_statement(Node* stmt) {
 				unhandled_node("assignment to read-only property", property);
 			fprintf(active, "\t");
 			if (auto field = dynamic_cast<StorageSlot*>(accessor)) {
-				if (property->receiver->ty && property->receiver->ty->is_reference_type()) {
+				if (auto dereference = dynamic_cast<Dereference*>(property->receiver)) {
+					emit_expression(dereference->a);
+					fprintf(active, "->");
+				} else if (property->receiver->ty && property->receiver->ty->is_reference_type()) {
 					emit_expression(property->receiver);
 					fprintf(active, "->");
 				} else {
@@ -288,8 +291,13 @@ void Emitter::emit_statement(Node* stmt) {
 				return;
 			}
 			if (auto setter = dynamic_cast<Callable*>(accessor)) {
-				emit_expression(property->receiver);
-				fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+				if (auto dereference = dynamic_cast<Dereference*>(property->receiver)) {
+					emit_expression(dereference->a);
+					fprintf(active, "->");
+				} else {
+					emit_expression(property->receiver);
+					fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+				}
 				fprintf(active, "%s(", callable_cxx_name(setter).c_str());
 				for (size_t i = 0; i < property->indexes.size(); ++i) {
 					if (i)
@@ -1110,14 +1118,24 @@ void Emitter::emit_expression(Node* expr) {
 		if (!accessor)
 			unhandled_node("read from write-only property", property);
 		if (auto field = dynamic_cast<StorageSlot*>(accessor)) {
-			emit_expression(property->receiver);
-			fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+			if (auto dereference = dynamic_cast<Dereference*>(property->receiver)) {
+				emit_expression(dereference->a);
+				fprintf(active, "->");
+			} else {
+				emit_expression(property->receiver);
+				fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+			}
 			fprintf(active, "%s", field->cxx_name.c_str());
 			return;
 		}
 		if (auto getter = dynamic_cast<Callable*>(accessor)) {
-			emit_expression(property->receiver);
-			fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+			if (auto dereference = dynamic_cast<Dereference*>(property->receiver)) {
+				emit_expression(dereference->a);
+				fprintf(active, "->");
+			} else {
+				emit_expression(property->receiver);
+				fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+			}
 			fprintf(active, "%s(", callable_cxx_name(getter).c_str());
 			for (size_t i = 0; i < property->indexes.size(); ++i) {
 				if (i)
