@@ -62,10 +62,20 @@ static_assert(std::is_signed_v<t_ptrint>);
 static_assert(std::is_unsigned_v<t_ptruint>);
 static_assert(std::is_signed_v<t_sizeint>);
 static_assert(std::is_unsigned_v<t_sizeuint>);
-enum t_boolean {
+enum t_boolean : uint8_t {
 	p_false = false,
 	p_true = true,
 };
+static_assert(sizeof(t_byte) == 1);
+static_assert(sizeof(t_shortint) == 1);
+static_assert(sizeof(t_word) == 2);
+static_assert(sizeof(t_smallint) == 2);
+static_assert(sizeof(t_longword) == 4);
+static_assert(sizeof(t_integer) == 4);
+static_assert(sizeof(t_longint) == 4);
+static_assert(sizeof(t_qword) == 8);
+static_assert(sizeof(t_int64) == 8);
+static_assert(sizeof(t_boolean) == 1);
 
 // FPC's Char is an unsigned 8-bit ordinal, but it is nominally distinct from
 // Byte. A wrapper preserves both facts in C++ overloads while remaining an
@@ -710,6 +720,10 @@ template<typename T, std::size_t N, auto Low> inline t_sizeint p_length(const t_
 template<typename T>
 inline t_sizeint p_length(tpcc_typed_const_storage_ref<T> value) {
 	return p_length(*value.value);
+}
+template<typename T>
+inline t_sizeint p_sizeof(tpcc_typed_const_storage_ref<T>) {
+	return static_cast<t_sizeint>(sizeof(T));
 }
 
 #define TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, DIV_RESULT) \

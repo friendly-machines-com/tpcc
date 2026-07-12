@@ -1,8 +1,11 @@
 #include "types.h"
 #include "builtins.h"
 #include "evaluator.h"
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <limits>
+#include <set>
 #include <utility>
 
 Type::Type(SourceLocation source_location) : source_location(std::move(source_location)) {}
@@ -94,6 +97,213 @@ RoutineType::RoutineType(SourceLocation source_location, std::vector<Parameter> 
 	this->formals = std::move(formals);
 	this->return_type = return_type;
 	this->kind = kind;
+}
+
+namespace {
+
+bool checked_add_u64(uint64_t a, uint64_t b, uint64_t* result) {
+	if (b > std::numeric_limits<uint64_t>::max() - a)
+		return false;
+	*result = a + b;
+	return true;
+}
+
+bool checked_multiply_u64(uint64_t a, uint64_t b, uint64_t* result) {
+	if (a != 0 && b > std::numeric_limits<uint64_t>::max() / a)
+		return false;
+	*result = a * b;
+	return true;
+}
+
+bool align_up_u64(uint64_t value, uint64_t alignment, uint64_t* result) {
+	if (alignment == 0)
+		return false;
+	const uint64_t remainder = value % alignment;
+	return remainder == 0
+	    ? (*result = value, true)
+	    : checked_add_u64(value, alignment - remainder, result);
+}
+
+std::optional<TypeLayout> type_layout_impl(
+    Type* ty, std::set<Type*>& visiting);
+
+struct SequentialLayout {
+	uint64_t offset = 0;
+	uint64_t alignment = 1;
+	std::vector<AggregateFieldLayout> fields;
+};
+
+bool append_aligned_field(SequentialLayout& layout,
+    StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
+	auto field_layout = type_layout_impl(ty, visiting);
+	if (!field_layout)
+		return false;
+	uint64_t offset;
+	if (!align_up_u64(layout.offset, field_layout->alignment, &offset))
+		return false;
+	uint64_t end;
+	if (!checked_add_u64(offset, field_layout->size, &end))
+		return false;
+	layout.fields.push_back(
+	    AggregateFieldLayout{slot, ty, offset, field_layout->size});
+	layout.offset = end;
+	layout.alignment = std::max(layout.alignment, field_layout->alignment);
+	return true;
+}
+
+std::optional<RecordLayout> record_layout_impl(
+    RecordType* record, std::set<Type*>& visiting) {
+	if (!visiting.insert(record).second)
+		return std::nullopt;
+
+	SequentialLayout fixed;
+	for (const auto& field : record->fields) {
+		if (!append_aligned_field(
+		        fixed, field.slot, field.ty, visiting)) {
+			visiting.erase(record);
+			return std::nullopt;
+		}
+	}
+	if (record->has_selector &&
+	    !append_aligned_field(
+	        fixed, record->selector_slot,
+	        record->selector_type, visiting)) {
+		visiting.erase(record);
+		return std::nullopt;
+	}
+
+	if (!record->arms.empty()) {
+		uint64_t union_size = 0;
+		uint64_t union_alignment = 1;
+		std::vector<std::vector<AggregateFieldLayout>> arm_fields;
+		for (const auto& arm : record->arms) {
+			SequentialLayout arm_layout;
+			for (const auto& field : arm.fields) {
+				if (!append_aligned_field(
+				        arm_layout, field.slot,
+				        field.ty, visiting)) {
+					visiting.erase(record);
+					return std::nullopt;
+				}
+			}
+			uint64_t arm_size;
+			if (!align_up_u64(
+			        arm_layout.offset == 0 ? 1 : arm_layout.offset,
+			        arm_layout.alignment, &arm_size)) {
+				visiting.erase(record);
+				return std::nullopt;
+			}
+			union_size = std::max(union_size, arm_size);
+			union_alignment =
+			    std::max(union_alignment, arm_layout.alignment);
+			arm_fields.push_back(std::move(arm_layout.fields));
+		}
+
+		uint64_t union_offset;
+		if (!align_up_u64(
+		        fixed.offset, union_alignment, &union_offset) ||
+		    !checked_add_u64(
+		        union_offset, union_size, &fixed.offset)) {
+			visiting.erase(record);
+			return std::nullopt;
+		}
+		fixed.alignment =
+		    std::max(fixed.alignment, union_alignment);
+		for (auto& fields : arm_fields) {
+			for (auto& field : fields) {
+				field.offset += union_offset;
+				fixed.fields.push_back(field);
+			}
+		}
+	}
+
+	uint64_t size;
+	if (!align_up_u64(
+	        fixed.offset == 0 ? 1 : fixed.offset,
+	        fixed.alignment, &size)) {
+		visiting.erase(record);
+		return std::nullopt;
+	}
+	visiting.erase(record);
+	return RecordLayout{
+	    TypeLayout{size, fixed.alignment},
+	    std::move(fixed.fields),
+	};
+}
+
+std::optional<TypeLayout> type_layout_impl(
+    Type* ty, std::set<Type*>& visiting) {
+	while (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
+		if (!incomplete->resolved)
+			return std::nullopt;
+		ty = incomplete->resolved;
+	}
+	if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty))
+		return intrinsic->layout;
+	if (ty == boolean_type())
+		return TypeLayout{1, 1};
+	if (dynamic_cast<EnumType*>(ty))
+		return TypeLayout{4, 4};
+	if (auto subrange = dynamic_cast<SubrangeType*>(ty))
+		return type_layout_impl(subrange->base_type, visiting);
+	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
+		auto item = type_layout_impl(array->item_type, visiting);
+		if (!item)
+			return std::nullopt;
+		uint64_t size;
+		if (!checked_multiply_u64(
+		        item->size, array->range.length, &size))
+			return std::nullopt;
+		return TypeLayout{size, item->alignment};
+	}
+	if (dynamic_cast<FixedSetType*>(ty))
+		return TypeLayout{24, 8};
+	if (dynamic_cast<PointerType*>(ty) ||
+	    dynamic_cast<ClassType*>(ty) ||
+	    dynamic_cast<InterfaceType*>(ty) ||
+	    dynamic_cast<ClassRefType*>(ty))
+		return TypeLayout{8, 8};
+	if (auto record = dynamic_cast<RecordType*>(ty)) {
+		auto layout = record_layout_impl(record, visiting);
+		return layout
+		    ? std::optional<TypeLayout>{layout->type}
+		    : std::nullopt;
+	}
+	if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
+		if (!visiting.insert(packed).second)
+			return std::nullopt;
+		uint64_t size = 0;
+		for (const auto& field : packed->fields) {
+			auto field_layout =
+			    type_layout_impl(field.ty, visiting);
+			if (!field_layout ||
+			    !checked_add_u64(
+			        size, field_layout->size, &size)) {
+				visiting.erase(packed);
+				return std::nullopt;
+			}
+		}
+		visiting.erase(packed);
+		return TypeLayout{size == 0 ? 1 : size, 1};
+	}
+	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
+		if (routine->kind == METHOD)
+			return TypeLayout{32, 8};
+		return TypeLayout{8, 8};
+	}
+	return std::nullopt;
+}
+
+} // namespace
+
+std::optional<TypeLayout> type_layout(Type* ty) {
+	std::set<Type*> visiting;
+	return type_layout_impl(ty, visiting);
+}
+
+std::optional<RecordLayout> record_layout(RecordType* record) {
+	std::set<Type*> visiting;
+	return record_layout_impl(record, visiting);
 }
 
 // Integer widening rank; -1 for non-integer types.

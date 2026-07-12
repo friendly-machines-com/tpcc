@@ -10,11 +10,13 @@
 IntrinsicType::IntrinsicType(SourceLocation source_location,
 			     std::string cxx_name,
 			     std::optional<int> rank,
-			     std::optional<OrdinalBounds> ordinal_bounds)
+			     std::optional<OrdinalBounds> ordinal_bounds,
+			     std::optional<TypeLayout> layout)
     : Type(std::move(source_location)),
       cxx_name(std::move(cxx_name)),
       rank(std::move(rank)),
-      ordinal_bounds(std::move(ordinal_bounds)) {}
+      ordinal_bounds(std::move(ordinal_bounds)),
+      layout(std::move(layout)) {}
 
 Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 
@@ -37,27 +39,27 @@ constexpr OrdinalBounds signed_bounds(unsigned bits) {
 	};
 }
 
-IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0, unsigned_bounds(8));
-IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1, signed_bounds(8));
-IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2, unsigned_bounds(16));
-IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3, signed_bounds(16));
-IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4, unsigned_bounds(32));
-IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5, signed_bounds(32));
-IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6, signed_bounds(32));
-IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7, unsigned_bounds(64));
-IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8, signed_bounds(64));
+IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0, unsigned_bounds(8), TypeLayout{1, 1});
+IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1, signed_bounds(8), TypeLayout{1, 1});
+IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2, unsigned_bounds(16), TypeLayout{2, 2});
+IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3, signed_bounds(16), TypeLayout{2, 2});
+IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4, unsigned_bounds(32), TypeLayout{4, 4});
+IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5, signed_bounds(32), TypeLayout{4, 4});
+IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6, signed_bounds(32), TypeLayout{4, 4});
+IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7, unsigned_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8, signed_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_set(SourceLocation::builtin(), "pas::t_set", {});
-IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}); // FIXME: Why {}
-IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {});
+IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {}, {}, TypeLayout{16, 16});
 EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
-IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_bounds(8));
-IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {});
-IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {});
-IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {});
-IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", 8, signed_bounds(64));
-IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", 7, unsigned_bounds(64));
-IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", 8, signed_bounds(64));
-IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", 7, unsigned_bounds(64));
+IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1});
+IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {}, {}, TypeLayout{256, 1});
+IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {}, {}, TypeLayout{256, 1});
+IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", 8, signed_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", 7, unsigned_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_fixedarray(SourceLocation::builtin(), "pas::t_fixedarray", {});
 IntrinsicType k_unknown(SourceLocation::builtin(), "pas::tpcc_unknown_type", {});
 #if 0
@@ -140,6 +142,7 @@ Type* smallint_type() { return &k_smallint; }
 Type* cardinal_type() { return &k_longword; }
 Type* integer_type() { return &k_integer; }
 Type* longint_type() { return &k_longint; }
+Type* sizeint_type() { return &k_sizeint; }
 Type* qword_type() { return &k_qword; }
 Type* int64_type() { return &k_int64; }
 Type* pointer_type() { return &k_pointer; }
@@ -392,6 +395,11 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_freemem", nullptr},
     {"pas::p_low", nullptr, TypeBoundKind::Low},
     {"pas::p_high", nullptr, TypeBoundKind::High},
+    {
+        .cxx_name = "pas::p_sizeof",
+        .const_fold = nullptr,
+        .syntax_kind = BuiltinSyntaxKind::SizeOf,
+    },
     {"pas::p_setlength", nullptr},
     {"pas::p_uniquestring", nullptr},
     {

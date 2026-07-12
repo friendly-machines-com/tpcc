@@ -193,6 +193,24 @@ static std::string callable_cxx_name(Callable* c) {
 	return c->cxx_name;
 }
 
+static std::optional<std::pair<size_t, size_t>>
+record_variant_path(Type* owner, StorageSlot* slot) {
+	while (auto incomplete = dynamic_cast<IncompleteType*>(owner))
+		owner = incomplete->resolved;
+	auto record = dynamic_cast<RecordType*>(owner);
+	if (!record || !slot)
+		return std::nullopt;
+	for (size_t arm_index = 0;
+	     arm_index < record->arms.size(); ++arm_index) {
+		const auto& arm = record->arms[arm_index];
+		for (size_t field_index = 0;
+		     field_index < arm.fields.size(); ++field_index)
+			if (arm.fields[field_index].slot == slot)
+				return std::pair{arm_index, field_index};
+	}
+	return std::nullopt;
+}
+
 void Emitter::emit_label(std::string cxx_label_name) {
 	if (!active)
 		return;
@@ -820,8 +838,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	//   in memory -- it has no name-lookup or type-checking role.
 	//
 	//   C++ mapping: fixed fields and the optional selector both become
-	//   ordinary struct members; the arms become ONE anonymous union whose
-	//   members all alias (matching Pascal's overlap semantics).
+	//   ordinary struct members. Each Pascal arm becomes a source-ordered C++
+	//   struct, and one union contains those arm structs. Fields within an arm
+	//   are therefore sequential; different arms overlap at the union offset.
 	//
 	//   Slot identity: variant slots are registered in the SAME Frame as
 	//   fixed slots (so name lookup via body_frame_of sees them) AND in
@@ -832,8 +851,13 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		for (auto& arm : rec->arms)
 			for (auto& f : arm.fields)
 				variant_slots.insert(f.slot);
-	// FIXME: Frame's std::map iterates alphabetically; Pascal semantics require
-	// source order for layout.
+	if (rec) {
+		for (const auto& field : rec->fields) {
+			fprintf(active, "\t");
+			emit_type_ref(field.ty);
+			fprintf(active, " %s;\n", field.slot->cxx_name.c_str());
+		}
+	}
 	for (auto& kv : body->values_local()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
@@ -842,6 +866,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				continue;
 			}
 			if (variant_slots.count(slot))
+				continue;
+			if (rec)
 				continue;
 			fprintf(active, "\t");
 			emit_type_ref(slot->ty);
@@ -899,15 +925,26 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(active, " %s;\n", rec->selector_cxx_name.c_str());
 		}
 		if (!rec->arms.empty()) {
-			fprintf(active, "\tunion {\n");
-			for (auto& arm : rec->arms) {
-				for (auto& f : arm.fields) {
+			for (size_t arm_index = 0;
+			     arm_index < rec->arms.size(); ++arm_index) {
+				fprintf(active,
+				    "\tstruct m_variant_arm_%zu_type {\n",
+				    arm_index);
+				for (auto& f : rec->arms[arm_index].fields) {
 					fprintf(active, "\t\t");
 					emit_type_ref(f.ty);
 					fprintf(active, " %s;\n", f.slot->cxx_name.c_str());
 				}
+				fprintf(active, "\t};\n");
 			}
-			fprintf(active, "\t};\n");
+			fprintf(active, "\tunion m_variant_type {\n");
+			for (size_t arm_index = 0;
+			     arm_index < rec->arms.size(); ++arm_index) {
+				fprintf(active,
+				    "\t\tm_variant_arm_%zu_type m_arm_%zu;\n",
+				    arm_index, arm_index);
+			}
+			fprintf(active, "\t} m_variant;\n");
 		}
 	}
 	fprintf(active, "}");
@@ -956,12 +993,14 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 		auto& field = p->fields[i];
 		fprintf(active, "\tm_field_%zu_type m_get_%s() const noexcept {\n", i, field.slot->cxx_name.c_str());
 		fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<m_field_%zu_type>, \"packed field must be trivially copyable\");\n", i);
+		fprintf(active, "\t\tstatic_assert(m_field_%zu_offset + sizeof(m_field_%zu_type) <= m_storage_size, \"packed field exceeds carrier storage\");\n", i, i);
 		fprintf(active, "\t\tm_field_%zu_type value{};\n", i);
 		fprintf(active, "\t\tstd::memcpy(&value, m_storage.data() + m_field_%zu_offset, sizeof value);\n", i);
 		fprintf(active, "\t\treturn value;\n");
 		fprintf(active, "\t}\n");
 		fprintf(active, "\tvoid m_set_%s(const m_field_%zu_type& value) noexcept {\n", field.slot->cxx_name.c_str(), i);
 		fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<m_field_%zu_type>, \"packed field must be trivially copyable\");\n", i);
+		fprintf(active, "\t\tstatic_assert(m_field_%zu_offset + sizeof(m_field_%zu_type) <= m_storage_size, \"packed field exceeds carrier storage\");\n", i, i);
 		fprintf(active, "\t\tstd::memcpy(m_storage.data() + m_field_%zu_offset, &value, sizeof value);\n", i);
 		fprintf(active, "\t}\n");
 	}
@@ -1000,6 +1039,89 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(active, "\n");
 		emit_aggregate_decl(cxx_name, ty);
 		fprintf(active, ";\n");
+		if (auto record = dynamic_cast<RecordType*>(ty)) {
+			auto layout = record_layout(record);
+			if (!layout)
+				unhandled_type(
+				    "ordinary record layout is not known", record);
+			fprintf(active,
+			    "static_assert(std::is_standard_layout_v<%s>, \"ordinary record must have standard layout\");\n",
+			    cxx_name.c_str());
+			auto find_layout =
+			    [&](StorageSlot* slot) -> const AggregateFieldLayout* {
+				for (const auto& field : layout->fields)
+					if (field.slot == slot)
+						return &field;
+				return nullptr;
+			};
+			auto emit_field_assertions =
+			    [&](StorageSlot* slot, const char* member_expression,
+			        const char* type_expression) {
+				const auto* field = find_layout(slot);
+				if (!field)
+					unhandled_node(
+					    "ordinary record field has no layout", slot);
+				fprintf(active,
+				    "static_assert(%s == %llu, \"ordinary-record field offset mismatch\");\n",
+				    member_expression,
+				    (unsigned long long)field->offset);
+				fprintf(active,
+				    "static_assert(sizeof(%s) == %llu, \"ordinary-record field size mismatch\");\n",
+				    type_expression,
+				    (unsigned long long)field->size);
+			};
+			for (const auto& field : record->fields) {
+				std::string offset =
+				    "offsetof(" + cxx_name + ", " +
+				    field.slot->cxx_name + ")";
+				std::string type =
+				    "decltype(" + cxx_name + "::" +
+				    field.slot->cxx_name + ")";
+				emit_field_assertions(
+				    field.slot, offset.c_str(), type.c_str());
+			}
+			if (record->has_selector) {
+				std::string offset =
+				    "offsetof(" + cxx_name + ", " +
+				    record->selector_cxx_name + ")";
+				std::string type =
+				    "decltype(" + cxx_name + "::" +
+				    record->selector_cxx_name + ")";
+				emit_field_assertions(
+				    record->selector_slot,
+				    offset.c_str(), type.c_str());
+			}
+			for (size_t arm_index = 0;
+			     arm_index < record->arms.size(); ++arm_index) {
+				for (const auto& field :
+				     record->arms[arm_index].fields) {
+					std::string offset =
+					    "offsetof(" + cxx_name +
+					    ", m_variant) + offsetof(" +
+					    cxx_name + "::m_variant_arm_" +
+					    std::to_string(arm_index) +
+					    "_type, " +
+					    field.slot->cxx_name + ")";
+					std::string type =
+					    "decltype(" + cxx_name +
+					    "::m_variant_arm_" +
+					    std::to_string(arm_index) +
+					    "_type::" +
+					    field.slot->cxx_name + ")";
+					emit_field_assertions(
+					    field.slot, offset.c_str(),
+					    type.c_str());
+				}
+			}
+			fprintf(active,
+			    "static_assert(sizeof(%s) == %llu, \"ordinary-record total size mismatch\");\n",
+			    cxx_name.c_str(),
+			    (unsigned long long)layout->type.size);
+			fprintf(active,
+			    "static_assert(alignof(%s) == %llu, \"ordinary-record alignment mismatch\");\n",
+			    cxx_name.c_str(),
+			    (unsigned long long)layout->type.alignment);
+		}
 		return;
 	}
 }
@@ -1275,6 +1397,14 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(m->a);
 			fprintf(active, ".");
 		}
+		if (auto slot = dynamic_cast<StorageSlot*>(m->b)) {
+			if (auto path =
+			        record_variant_path(m->a->ty, slot)) {
+				fprintf(active,
+				    "m_variant.m_arm_%zu.",
+				    path->first);
+			}
+		}
 		emit_expression(m->b);
 		return;
 	}
@@ -1394,6 +1524,12 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, tb->kind == TypeBoundKind::Low ? "pas::p_low<" : "pas::p_high<");
 		emit_type_ref(tb->operand_type);
 		fprintf(active, ">()");
+		return;
+	}
+	if (auto size = dynamic_cast<SizeOf*>(expr)) {
+		fprintf(active, "static_cast<pas::t_sizeint>(sizeof(");
+		emit_type_ref(size->operand_type);
+		fprintf(active, "))");
 		return;
 	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {

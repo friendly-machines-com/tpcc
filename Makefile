@@ -78,6 +78,9 @@ test-move-builtin: mp
 test-comparechar-builtin: mp
 	sh tests/test_comparechar_builtin.sh
 
+test-sizeof-layout: mp
+	sh tests/test_sizeof_layout.sh
+
 test-set-literals: mp
 	sh tests/test_set_literals.sh
 
@@ -90,6 +93,6 @@ test-insert-builtin: mp
 test-properties: mp
 	sh tests/test_properties.sh
 
-test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-set-literals test-delete-builtin test-insert-builtin test-properties
+test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-delete-builtin test-insert-builtin test-properties
 
-.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-set-literals test-delete-builtin test-insert-builtin test-properties
+.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-delete-builtin test-insert-builtin test-properties

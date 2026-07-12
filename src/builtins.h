@@ -28,11 +28,17 @@ enum class BuiltinGenericKind {
 	OrdinalMutation,
 };
 
+enum class BuiltinSyntaxKind {
+	None,
+	SizeOf,
+};
+
 struct BuiltinDesc {
 	std::string_view cxx_name;    // e.g. "pas::p_ord"
 	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
 	std::optional<TypeBoundKind> type_bound_kind = {};
 	BuiltinGenericKind generic_kind = BuiltinGenericKind::None;
+	BuiltinSyntaxKind syntax_kind = BuiltinSyntaxKind::None;
 };
 
 struct IntrinsicTypeDesc {
@@ -51,10 +57,12 @@ public:
 	std::string cxx_name;
 	std::optional<int> rank;
 	std::optional<OrdinalBounds> ordinal_bounds;
+	std::optional<TypeLayout> layout;
 	IntrinsicType(SourceLocation source_location,
 	              std::string cxx_name,
 	              std::optional<int> rank,
-	              std::optional<OrdinalBounds> ordinal_bounds = {});
+	              std::optional<OrdinalBounds> ordinal_bounds = {},
+	              std::optional<TypeLayout> layout = {});
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -93,6 +101,7 @@ Type* smallint_type();
 Type* cardinal_type();
 Type* integer_type();
 Type* longint_type();
+Type* sizeint_type();
 Type* qword_type();
 Type* int64_type();
 Type* pointer_type();

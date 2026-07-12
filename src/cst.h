@@ -307,6 +307,19 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Pascal `SizeOf(T)` / `SizeOf(expression)`, normalized to the operand's
+ * static type. Constant evaluation can query the compiler layout while the
+ * original node remains available to emit C++ `sizeof(emitted-type)`. */
+class SizeOf: public Node {
+public:
+	Type* operand_type;
+	explicit SizeOf(Type* operand_type);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 class Coerce: public BinaryOperation {
 public:
 	Coerce(Node* a, Node* b);

@@ -64,6 +64,8 @@ AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
     : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
+SizeOf::SizeOf(Type* operand_type)
+    : operand_type(operand_type) { this->ty = sizeint_type(); }
 
 // Value-identifier ctors: take an OPTIONAL Pascal name. If non-empty, apply
 // the `p_` prefix so the cxx identifier stays clear of C++ reserved words
@@ -415,6 +417,24 @@ void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 ConstEvalResult TypeBound::const_eval(ConstEvalContext&) const { return const_eval_type_bound(kind, operand_type); }
 void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
+}
+
+const char* SizeOf::diagnostic_kind() const { return "sizeof"; }
+ConstEvalResult SizeOf::const_eval(ConstEvalContext&) const {
+	auto layout = type_layout(operand_type);
+	if (!layout)
+		return ConstEvalResult::not_constant();
+	return ConstEvalResult::success(
+	    new Integer(layout->size, sizeint_type()));
+}
+void SizeOf::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(operand_type);
+}
+void SizeOf::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
+	out << "sizeof(" << ctx->known_type_ref(operand_type)
+	    << ") : " << ctx->known_type_ref(ty);
 }
 
 const char* Coerce::diagnostic_kind() const { return "coerce"; }

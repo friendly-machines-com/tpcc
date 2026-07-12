@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -10,6 +11,11 @@ class Node;
 class StorageSlot;
 class Property;
 class ErrorLetContext;
+
+struct TypeLayout {
+	uint64_t size;
+	uint64_t alignment;
+};
 
 struct SourceLocation {
 	std::string file_name;
@@ -137,10 +143,19 @@ struct EnumType: public Type {
 };
 
 struct RecordType: public Type {
+	struct Field {
+		std::string pas_name;
+		StorageSlot* slot;
+		Type* ty;
+	};
+
 	Frame* children;
 	// C++ identifier emitted for this record. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
+	// Pascal declaration order. Frame remains lookup-only: its map ordering
+	// must never influence C++ member emission or layout reconstruction.
+	std::vector<Field> fields;
 
 	// Variant part. Pascal allows AT MOST ONE variant part, declared last
 	// in the record body as `case [<sel_name> ':'] <TagType> of <arms>`:
@@ -161,6 +176,7 @@ struct RecordType: public Type {
 	std::string selector_name;
 	std::string selector_cxx_name;
 	Type* selector_type = nullptr;
+	StorageSlot* selector_slot = nullptr;
 	std::vector<VariantArm> arms;
 
 	RecordType(SourceLocation source_location, Frame* children);
@@ -197,6 +213,23 @@ struct PackedRecordType: public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
+
+struct AggregateFieldLayout {
+	StorageSlot* slot;
+	Type* ty;
+	uint64_t offset;
+	uint64_t size;
+};
+
+struct RecordLayout {
+	TypeLayout type;
+	std::vector<AggregateFieldLayout> fields;
+};
+
+// Compiler-side target layout used by SizeOf constant evaluation and by the
+// independent assertions emitted for ordinary C++ records.
+std::optional<TypeLayout> type_layout(Type* ty);
+std::optional<RecordLayout> record_layout(RecordType* record);
 
 struct InterfaceType: public Type {
 	Frame* children;

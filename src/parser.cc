@@ -1283,6 +1283,11 @@ static std::optional<TypeBoundKind> type_bound_kind_for_builtin(Node* n) {
 	return desc ? desc->type_bound_kind : std::optional<TypeBoundKind>{};
 }
 
+static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
+	const BuiltinDesc* desc = builtin_desc_for_node(n);
+	return desc ? desc->syntax_kind : BuiltinSyntaxKind::None;
+}
+
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
  *  IncompleteType under NAME in current_type_block and return it. That is
@@ -1468,6 +1473,22 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			Type* target_ty = parse_type_expression(false);
 			parse_closing_paren();
 			return new TypeBound(*kind, target_ty);
+		}
+		if (syntax_kind_for_builtin(value) == BuiltinSyntaxKind::SizeOf &&
+		    input_token == "(") {
+			parse_opening_paren();
+			Type* operand_type = nullptr;
+			if (Type* named_type = maybe_resolve_type(input_token);
+			    named_type && !maybe_resolve_value(input_token)) {
+				operand_type = parse_type_expression(false);
+			} else {
+				Node* operand = parse_expression();
+				operand_type = operand ? operand->ty : nullptr;
+			}
+			parse_closing_paren();
+			if (!operand_type)
+				raise_parse_error("SizeOf operand has no type");
+			return new SizeOf(operand_type);
 		}
 		return value;
 	}
@@ -2418,8 +2439,34 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			if (is_class) {
 				raise_parse_error("class var unsupported");
 			}
-			parse_var_block();
+			parse_keyword("var");
+			// This is an aggregate field section, not a declaration-scope var
+			// block.  Keep every field in Pascal declaration order so RecordType
+			// layout reconstruction and emitted C++ field order use the same
+			// authoritative sequence.
+			while (auto first_name = maybe_parse_identifier()) {
+				std::vector<std::string> member_names{*first_name};
+				while (maybe_parse_comma())
+					member_names.push_back(parse_identifier());
+				parse_colon();
+				auto ty = parse_type_expression(false);
+				if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+				    dynamic_cast<PackedRecordType*>(owner_class) &&
+				    intrinsic && intrinsic->cxx_name == "pas::t_ansistring") {
+					raise_parse_error("managed fields inside packed records are not implemented");
+				}
+				for (const auto& member_name : member_names) {
+					auto slot = new StorageSlot(cxx_value_name(member_name), ty);
+					body->register_variable(member_name, slot, ty);
+					if (auto packed = dynamic_cast<PackedRecordType*>(owner_class))
+						packed->fields.push_back({member_name, slot, ty});
+					else if (auto record = dynamic_cast<RecordType*>(owner_class))
+						record->fields.push_back({member_name, slot, ty});
+				}
+				parse_semicolon();
+			}
 			is_class = false;
+			continue;
 		} else if (peek_keyword("class")) {
 			if (is_class) {
 				raise_parse_error("internal error: someone forgot to consume 'class'");
@@ -2475,6 +2522,8 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				body->register_variable(member_name, slot, ty);
 				if (auto packed = dynamic_cast<PackedRecordType*>(owner_class))
 					packed->fields.push_back({member_name, slot, ty});
+				else if (auto record = dynamic_cast<RecordType*>(owner_class))
+					record->fields.push_back({member_name, slot, ty});
 			}
 		}
 		if (input_token.size() && input_token != "end") {
@@ -2509,6 +2558,7 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 
 		auto slot = new StorageSlot(rt->selector_cxx_name, tag_type);
 		body->register_variable(first, slot, tag_type);
+		rt->selector_slot = slot;
 	} else {
 		tag_type = resolve_type(first, false);
 	}
@@ -3331,6 +3381,11 @@ struct TypeBlockResolver {
 				return false;
 			n->ty = n->operand_type;
 		}
+		if (auto n = dynamic_cast<SizeOf*>(node)) {
+			if (!normalize_type(n->operand_type))
+				return false;
+			n->ty = sizeint_type();
+		}
 		if (auto n = dynamic_cast<UnaryOperation*>(node)) {
 			if (!normalize_node(n->a))
 				return false;
@@ -3462,6 +3517,14 @@ struct TypeBlockResolver {
 			if (!normalize_type(r->selector_type) ||
 			    !normalize_frame(r->children))
 				return false;
+			for (auto& field : r->fields) {
+				if (!normalize_type(field.ty))
+					return false;
+				if (field.slot)
+					field.slot->ty = field.ty;
+				if (!normalize_node(field.slot))
+					return false;
+			}
 			for (auto& arm : r->arms) {
 				for (auto& field : arm.fields) {
 					if (!normalize_type(field.ty))

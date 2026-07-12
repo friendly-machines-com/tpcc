@@ -147,6 +147,7 @@ procedure fillchar(var destination; count: SizeInt; value: Byte); external nil n
 procedure move(const source; var destination; count: SizeInt); external nil name 'pas::p_move';
 function comparebyte(const buf1, buf2; len: SizeInt): SizeInt; external nil name 'pas::p_comparebyte';
 function comparechar(const buf1, buf2; len: SizeInt): SizeInt; external nil name 'pas::p_comparechar';
+function sizeof(const x): SizeInt; external nil name 'pas::p_sizeof';
 function low(const x): Integer; external nil name 'pas::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external nil name 'pas::p_high'; // generic intrinsic: parser supplies the type operand/result
 function length(const x): SizeInt; external nil name 'pas::p_length'; // generic intrinsic
