@@ -4027,13 +4027,16 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, Routin
 }
 
 void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
-	Frame* enclosing = owner_frame ? owner_frame : const_cast<Frame*>(this->scopes.back().frame);
-	Frame* body_frame = new Frame(enclosing);
+	// Lexical lookup is represented by Parser::scopes. Giving the body frame
+	// the owner frame as a structural parent would let members win before
+	// formals (notably `property Value` versus a setter parameter named
+	// `Value`). Keep it parentless and push the implicit-Self member scope
+	// below the body scope instead.
+	Frame* body_frame = new Frame(nullptr);
 	target->body_frame = body_frame;
 	Callable* saved_routine = current_routine;
 	bool nested_lambda = saved_routine && dynamic_cast<Procedure*>(target);
 	current_routine = target;
-	push_scope(body_frame);
 	StorageSlot* self_slot = nullptr;
 	if (auto m = dynamic_cast<Method*>(target)) {
 		// Pascal class-method Self is the class reference, not an instance.
@@ -4055,6 +4058,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		body_frame->register_variable("self", self_slot, self_ty);
 		push_with_scope(owner_frame, self_slot);
 	}
+	push_scope(body_frame);
 	if (target->ty->return_type != &unit_type()) { // function
 		auto result_slot = new StorageSlot("p_result", target->ty->return_type);
 		body_frame->register_variable("result", result_slot, target->ty->return_type);
@@ -4075,9 +4079,9 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		emitter->emit_procedure_close(target, nested_lambda);
 	for (size_t i = 0; i < pushed; i++)
 		pop_scope();
+	pop_scope(); // pop body_frame
 	if (self_slot)
 		pop_scope(); // pop the with_scope
-	pop_scope();	     // pop body_frame
 	current_routine = saved_routine;
 }
 
