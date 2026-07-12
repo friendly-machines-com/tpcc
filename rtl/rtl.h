@@ -221,6 +221,10 @@ inline t_shortstring p_char_to_shortstring(t_char value) {
 	return result;
 }
 
+inline t_char p_chr(t_byte value) {
+	return t_char{value};
+}
+
 inline t_longint p_pos(const t_shortstring& needle, const t_shortstring& haystack) {
 	if (needle.length == 0)
 		return 1;

@@ -366,6 +366,17 @@ static ConstEvalResult fold_pos(ConstEvalContext&, Type* result_ty, const std::v
 	return fold_integer_result(pascal_index, false, result_ty);
 }
 
+static ConstEvalResult fold_chr(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 1)
+		return ConstEvalResult::not_constant();
+	auto value = dynamic_cast<const Integer*>(args[0]);
+	if (!value || value->negative || value->value > 255)
+		return ConstEvalResult::not_constant();
+	return ConstEvalResult::success(new String(
+	    std::string(1, static_cast<char>(static_cast<unsigned char>(value->value))),
+	    result_ty));
+}
+
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const BuiltinDesc k_builtins[] = {
@@ -384,6 +395,7 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_index", nullptr},
     {"pas::p_index_write", nullptr},
     {"pas::p_char_to_shortstring", nullptr},
+    {"pas::p_chr", fold_chr},
     {"pas::p_assigned", nullptr},
     {"pas::p_trunc", fold_trunc},
     {"pas::p_round", fold_round},
