@@ -565,8 +565,11 @@ void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Posi
 				fprintf(active, ", ");
 			auto& f = ty->formals[i];
 			if (f.ty == unknown_type() &&
-			    (f.mode == ParamMode::Var || f.mode == ParamMode::Out)) {
-				fprintf(active, "pas::tpcc_storage_ref");
+			    (f.mode == ParamMode::Var || f.mode == ParamMode::Out ||
+			     f.mode == ParamMode::Const)) {
+				fprintf(active, f.mode == ParamMode::Const
+				    ? "pas::tpcc_const_storage_ref"
+				    : "pas::tpcc_storage_ref");
 			} else {
 				if (f.mode == ParamMode::Const)
 					fprintf(active, "const ");
@@ -592,8 +595,11 @@ void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Posi
 			fprintf(active, ", ");
 		auto& f = ty->formals[i];
 		if (f.ty == unknown_type() &&
-		    (f.mode == ParamMode::Var || f.mode == ParamMode::Out)) {
-			fprintf(active, "pas::tpcc_storage_ref");
+		    (f.mode == ParamMode::Var || f.mode == ParamMode::Out ||
+		     f.mode == ParamMode::Const)) {
+			fprintf(active, f.mode == ParamMode::Const
+			    ? "pas::tpcc_const_storage_ref"
+			    : "pas::tpcc_storage_ref");
 		} else {
 			if (f.mode == ParamMode::Const)
 				fprintf(active, "const ");
@@ -1072,6 +1078,24 @@ void Emitter::emit_storage_ref(Node* expr) {
 	fprintf(active, ")");
 }
 
+void Emitter::emit_const_storage_ref(Node* expr) {
+	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
+		if (dynamic_cast<Builtin*>(property->property->read_accessor)) {
+			fprintf(active, "pas::tpcc_make_const_storage_ref(");
+			emit_expression(property->receiver);
+			for (Node* index : property->indexes) {
+				fprintf(active, ", ");
+				emit_expression(index);
+			}
+			fprintf(active, ")");
+			return;
+		}
+	}
+	fprintf(active, "pas::tpcc_make_const_storage_ref(");
+	emit_expression(expr);
+	fprintf(active, ")");
+}
+
 static const char* cxx_unary_operator(UnaryOperation* op) {
 	if (dynamic_cast<AddrOf*>(op))
 		return "&";
@@ -1325,14 +1349,10 @@ void Emitter::emit_expression(Node* expr) {
 			// historical class currently shadows Node::ty), so recover it
 			// through the concrete callee rather than reading Node::ty.
 			RoutineType* call_ty = nullptr;
-			const BuiltinDesc* builtin_desc = nullptr;
 			if (auto callable = dynamic_cast<Callable*>(pc->callee)) {
 				call_ty = callable->ty;
-				builtin_desc = callable->builtin_desc;
 			} else {
 				call_ty = dynamic_cast<RoutineType*>(pc->callee->ty);
-				if (auto builtin = dynamic_cast<Builtin*>(pc->callee))
-					builtin_desc = builtin->desc;
 			}
 			if (call_ty && i < call_ty->formals.size() &&
 			    call_ty->formals[i].mode == ParamMode::Value &&
@@ -1351,11 +1371,13 @@ void Emitter::emit_expression(Node* expr) {
 				emit_expression(arg);
 				fprintf(active, ")");
 			} else if (call_ty && i < call_ty->formals.size() &&
+				   call_ty->formals[i].mode == ParamMode::Const &&
+				   call_ty->formals[i].ty == unknown_type()) {
+				emit_const_storage_ref(arg);
+			} else if (call_ty && i < call_ty->formals.size() &&
 				   (call_ty->formals[i].mode == ParamMode::Var ||
 				    call_ty->formals[i].mode == ParamMode::Out) &&
-				   call_ty->formals[i].ty == unknown_type() &&
-				   (!builtin_desc ||
-				    builtin_desc->generic_kind != BuiltinGenericKind::OrdinalMutation)) {
+				   call_ty->formals[i].ty == unknown_type()) {
 				emit_storage_ref(arg);
 			} else if (call_ty && i < call_ty->formals.size() &&
 				   (call_ty->formals[i].mode == ParamMode::Var ||

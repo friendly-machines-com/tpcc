@@ -96,13 +96,62 @@ struct tpcc_storage_ref {
 	std::size_t size;
 };
 
+// Inside an emitted Pascal routine, an omitted-type formal contains only the
+// storage address and remaining byte extent. At a call site, the builders
+// return a derived view that also retains the selected C++ value type, allowing
+// typed RTL templates to use the value without changing the storage interface.
+struct tpcc_const_storage_ref {
+	const std::byte* data;
+	std::size_t size;
+};
+
 template<typename T>
-inline tpcc_storage_ref tpcc_make_storage_ref(T& value) {
-	static_assert(std::is_trivially_copyable_v<T>,
-	    "untyped var storage must be trivially copyable");
-	return tpcc_storage_ref{
-	    reinterpret_cast<std::byte*>(std::addressof(value)),
-	    sizeof(T),
+struct tpcc_typed_storage_ref : tpcc_storage_ref {
+	T* value;
+};
+
+template<typename T>
+struct tpcc_typed_const_storage_ref : tpcc_const_storage_ref {
+	const T* value;
+};
+
+template<typename T>
+inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(T& value) {
+	return tpcc_typed_storage_ref<T>{
+	    {
+	        reinterpret_cast<std::byte*>(std::addressof(value)),
+	        sizeof(T),
+	    },
+	    std::addressof(value),
+	};
+}
+
+template<typename T>
+inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
+    const T& value) {
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+	        reinterpret_cast<const std::byte*>(std::addressof(value)),
+	        sizeof(T),
+	    },
+	    std::addressof(value),
+	};
+}
+
+inline tpcc_storage_ref tpcc_make_storage_ref(tpcc_storage_ref value) {
+	return value;
+}
+
+inline tpcc_const_storage_ref tpcc_make_const_storage_ref(
+    tpcc_const_storage_ref value) {
+	return value;
+}
+
+inline tpcc_const_storage_ref tpcc_make_const_storage_ref(
+    tpcc_storage_ref value) {
+	return tpcc_const_storage_ref{
+	    value.data,
+	    value.size,
 	};
 }
 
@@ -149,6 +198,12 @@ inline t_boolean p_in(Value value, const t_set<T>& set) {
 	return p_false;
 }
 
+template<typename Value, typename T>
+inline t_boolean p_in(tpcc_typed_const_storage_ref<Value> value,
+    tpcc_typed_const_storage_ref<t_set<T>> set) {
+	return p_in(*value.value, *set.value);
+}
+
 template<typename T, std::size_t length, auto low>
 struct t_fixedarray {
 	T items[length];
@@ -185,18 +240,39 @@ inline const T& p_index(const t_fixedarray<T, length, low>& value, I index) {
 }
 
 template<typename T, std::size_t length, auto low, typename I>
-inline tpcc_storage_ref tpcc_make_storage_ref(t_fixedarray<T, length, low>& value, I index) {
-	static_assert(std::is_trivially_copyable_v<T>,
-	    "untyped array-element storage must be trivially copyable");
+inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(
+    t_fixedarray<T, length, low>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
 	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
 		throw std::out_of_range("Pascal fixed-array storage index out of range");
 	const std::size_t offset = static_cast<std::size_t>(actual - first);
 	auto* bytes = reinterpret_cast<std::byte*>(std::addressof(value.items));
-	return tpcc_storage_ref{
-	    bytes + offset * sizeof(T),
-	    (length - offset) * sizeof(T),
+	return tpcc_typed_storage_ref<T>{
+	    {
+	        bytes + offset * sizeof(T),
+	        (length - offset) * sizeof(T),
+	    },
+	    std::addressof(value.items[offset]),
+	};
+}
+
+template<typename T, std::size_t length, auto low, typename I>
+inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
+    const t_fixedarray<T, length, low>& value, I index) {
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
+	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
+		throw std::out_of_range("Pascal fixed-array storage index out of range");
+	const std::size_t offset = static_cast<std::size_t>(actual - first);
+	const auto* bytes =
+	    reinterpret_cast<const std::byte*>(std::addressof(value.items));
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+	        bytes + offset * sizeof(T),
+	        (length - offset) * sizeof(T),
+	    },
+	    std::addressof(value.items[offset]),
 	};
 }
 
@@ -221,20 +297,90 @@ inline const t_char& p_index(const t_shortstring& value, I index) {
 }
 
 template<typename I>
-inline tpcc_storage_ref tpcc_make_storage_ref(t_shortstring& value, I index) {
+inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
+    t_shortstring& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	if (actual < 0 || actual > 255)
 		throw std::out_of_range("Pascal ShortString storage index out of range");
 	if (actual == 0)
-		return tpcc_storage_ref{
-		    reinterpret_cast<std::byte*>(std::addressof(value.length)),
-		    sizeof(value.length),
+		return tpcc_typed_storage_ref<t_char>{
+		    {
+		        reinterpret_cast<std::byte*>(std::addressof(value.length)),
+		        sizeof(value.length),
+		    },
+		    std::addressof(value.length),
 		};
 	const std::size_t offset = static_cast<std::size_t>(actual - 1);
 	auto* bytes = reinterpret_cast<std::byte*>(std::addressof(value.data));
-	return tpcc_storage_ref{
-	    bytes + offset * sizeof(t_char),
-	    (sizeof(value.data) - 1) - offset,
+	return tpcc_typed_storage_ref<t_char>{
+	    {
+	        bytes + offset * sizeof(t_char),
+	        (sizeof(value.data) - 1) - offset,
+	    },
+	    std::addressof(value.data[offset]),
+	};
+}
+
+template<typename I>
+inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
+    const t_shortstring& value, I index) {
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 || actual > 255)
+		throw std::out_of_range("Pascal ShortString storage index out of range");
+	if (actual == 0)
+		return tpcc_typed_const_storage_ref<t_char>{
+		    {
+		        reinterpret_cast<const std::byte*>(
+		            std::addressof(value.length)),
+		        sizeof(value.length),
+		    },
+		    std::addressof(value.length),
+		};
+	const std::size_t offset = static_cast<std::size_t>(actual - 1);
+	const auto* bytes =
+	    reinterpret_cast<const std::byte*>(std::addressof(value.data));
+	return tpcc_typed_const_storage_ref<t_char>{
+	    {
+	        bytes + offset * sizeof(t_char),
+	        (sizeof(value.data) - 1) - offset,
+	    },
+	    std::addressof(value.data[offset]),
+	};
+}
+
+template<typename T, typename I>
+inline T& p_index(T* value, I index) {
+	if (!value)
+		throw std::out_of_range("Pascal pointer index through nil");
+	return value[static_cast<std::ptrdiff_t>(index)];
+}
+
+template<typename T, typename I>
+inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(T* value, I index) {
+	if (!value)
+		throw std::out_of_range("Pascal pointer storage index through nil");
+	T* selected = value + static_cast<std::ptrdiff_t>(index);
+	return tpcc_typed_storage_ref<T>{
+	    {
+	        reinterpret_cast<std::byte*>(selected),
+	        std::numeric_limits<std::size_t>::max(),
+	    },
+	    selected,
+	};
+}
+
+template<typename T, typename I>
+inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
+    const T* value, I index) {
+	if (!value)
+		throw std::out_of_range("Pascal pointer storage index through nil");
+	const T* selected = value + static_cast<std::ptrdiff_t>(index);
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+	        reinterpret_cast<const std::byte*>(selected),
+	        std::numeric_limits<std::size_t>::max(),
+	    },
+	    selected,
 	};
 }
 
@@ -257,9 +403,17 @@ inline void p_uniquestring(t_ansistring&) {
 }
 
 template<typename I>
-inline tpcc_storage_ref tpcc_make_storage_ref(t_ansistring& value, I index) {
+inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
+    t_ansistring& value, I index) {
 	p_uniquestring(value);
 	return tpcc_make_storage_ref(static_cast<t_shortstring&>(value), index);
+}
+
+template<typename I>
+inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
+    const t_ansistring& value, I index) {
+	return tpcc_make_const_storage_ref(
+	    static_cast<const t_shortstring&>(value), index);
 }
 
 template<typename I>
@@ -297,6 +451,18 @@ inline void p_fillchar(tpcc_storage_ref destination, t_sizeint count, t_byte val
 	if (byte_count > destination.size)
 		throw std::out_of_range("FillChar exceeds destination storage");
 	std::memset(destination.data, value, byte_count);
+}
+
+inline void p_move(tpcc_const_storage_ref source,
+    tpcc_storage_ref destination, t_sizeint count) {
+	if (count <= 0)
+		return;
+	const std::size_t byte_count = static_cast<std::size_t>(count);
+	if (byte_count > source.size)
+		throw std::out_of_range("Move exceeds source storage");
+	if (byte_count > destination.size)
+		throw std::out_of_range("Move exceeds destination storage");
+	std::memmove(destination.data, source.data, byte_count);
 }
 
 inline t_longint p_pos(const t_shortstring& needle, const t_shortstring& haystack) {
@@ -492,6 +658,11 @@ inline t_boolean p_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean
 inline t_boolean p_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
 
 template<typename T> inline t_longword p_ord(T x) { return static_cast<t_longword>(x); }
+
+template<typename T>
+inline t_longword p_ord(tpcc_typed_const_storage_ref<T> x) {
+	return p_ord(*x.value);
+}
 template<typename T> inline T p_low() {
 	if constexpr (std::is_same_v<T, t_char>)
 		return t_char{0};
@@ -518,6 +689,10 @@ inline void p_setlength(t_ansistring& s, t_integer value) {
 }
 template<typename T, std::size_t N> inline t_sizeint p_length(const T (&)[N]) { return static_cast<t_sizeint>(N); }
 template<typename T, std::size_t N, auto Low> inline t_sizeint p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_sizeint>(N); }
+template<typename T>
+inline t_sizeint p_length(tpcc_typed_const_storage_ref<T> value) {
+	return p_length(*value.value);
+}
 
 #define TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, DIV_RESULT) \
 	inline T p_add(T a, T b) { return a + b; } \
@@ -673,6 +848,16 @@ template<typename T> inline void p_inc(T& x, t_integer n = 1) {
 
 template<typename T> inline void p_dec(T& x, t_integer n = 1) {
 	x = tpcc_ordinal_step(x, n, true);
+}
+
+template<typename T>
+inline void p_inc(tpcc_typed_storage_ref<T> x, t_integer n = 1) {
+	p_inc(*x.value, n);
+}
+
+template<typename T>
+inline void p_dec(tpcc_typed_storage_ref<T> x, t_integer n = 1) {
+	p_dec(*x.value, n);
 }
 
 template<typename T>

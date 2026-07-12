@@ -2223,6 +2223,13 @@ Property* Parser::default_property_for_type(Type* ty) {
 		    read_accessor, write_accessor, true);
 		return ty->default_property;
 	}
+	if (auto pointer = dynamic_cast<PointerType*>(ty)) {
+		auto accessor = create_builtin_value("pas::p_index");
+		pointer->default_property = new Property(
+		    "items", pointer->item_type, {integer_type()},
+		    accessor, accessor, true);
+		return pointer->default_property;
+	}
 
 	// FPC selects the nearest default property from the expression's static
 	// type hierarchy. It does not dynamically dispatch property declarations.
@@ -4408,7 +4415,9 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
 		if (rty->formals[i].ty == unknown_type()) {
-			if (builtin && builtin->generic_kind != BuiltinGenericKind::None) {
+			if (builtin &&
+			    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
+			     builtin->generic_kind == BuiltinGenericKind::OrdinalMutation)) {
 				if (!is_ordinal_intrinsic_argument(from))
 					return {};
 			}
@@ -4602,7 +4611,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
 	}
 	const BuiltinDesc* builtin = lookup_builtin_desc(chosen->cxx_name);
-	if (builtin && builtin->generic_kind != BuiltinGenericKind::None) {
+	if (builtin &&
+	    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
+	     builtin->generic_kind == BuiltinGenericKind::OrdinalMutation)) {
 		if (args.empty() || !is_ordinal_intrinsic_argument(args[0] ? args[0]->ty : nullptr)) {
 			emit_parse_error_at(error_location,
 				name_for_error + " requires an ordinal argument");

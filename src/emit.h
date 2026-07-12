@@ -180,5 +180,6 @@ public:
 	// subobject. Built-in indexed properties preserve their container and
 	// index here so the RTL can compute the remaining extent safely.
 	void emit_storage_ref(Node* expr);
+	void emit_const_storage_ref(Node* expr);
 	void emit_template_value_arg(Node* expr);
 };
