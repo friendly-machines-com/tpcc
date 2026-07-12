@@ -13,6 +13,8 @@
 // from Pascal source.
 #pragma once
 
+// FIXME: Probably shouldn't NUL terminate shortstrings.
+
 #include <algorithm>
 #include <array>
 #include <bit>
