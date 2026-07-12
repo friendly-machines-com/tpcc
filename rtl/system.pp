@@ -175,6 +175,7 @@ operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
 operator not(a: Boolean): Boolean; external nil name 'pas::p_logicalnot';
 
 operator =(a, b: shortstring): Boolean; external nil name 'pas::p_equal';
+operator +(a, b: shortstring): shortstring; external nil name 'pas::p_add';
 operator :=(a: shortstring): ansistring; external nil name 'pas::p_assign';
 
 procedure SetLength(var destination: AnsiString; value: LongInt); external nil name 'pas::p_setlength';
