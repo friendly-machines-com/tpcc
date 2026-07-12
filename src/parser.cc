@@ -300,6 +300,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 							  std::string name,
 							  Node* receiver,
 							  const std::vector<Node*>& args,
+							  Type* expected_return_type,
 							  const std::vector<Callable*>& candidates,
 							  const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
 							  const std::vector<Callable*>& non_dominated,
@@ -311,6 +312,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	if (receiver) {
 		sst << "\n  receiver: " << ctx.value_ref(receiver) << " : " << ctx.type_ref(receiver->ty);
 	}
+	if (expected_return_type)
+		sst << "\n  expected return type: " << ctx.type_ref(expected_return_type);
 	for (size_t i = 0; i < args.size(); ++i) {
 		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
@@ -4374,7 +4377,7 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		auto fn = resolve_value(":=");
 		std::vector<Node*> args;
 		args.push_back(a);
-		auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
+		auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), target_ty);
 		auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
 		call->ty = call_result_type(fc.callee);
 		return call;
@@ -4383,7 +4386,11 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	}
 }
 
-Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error, SourceLocation error_location) {
+Parser::FinalizedCall Parser::finalize_call(Node* target,
+					   std::vector<Node*>& args,
+					   std::string name_for_error,
+					   SourceLocation error_location,
+					   Type* expected_return_type) {
 	// Peel MemberAccess: if the member is callable, its container is the
 	// receiver and the member is the effective callee.
 	Node* receiver = nullptr;
@@ -4397,6 +4404,14 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	if (auto c = dynamic_cast<Callable*>(target)) {
 		if (name_for_error.empty() && !c->pas_name.empty()) {
 			name_for_error = c->pas_name;
+		}
+		if (expected_return_type &&
+		    static_cast<RoutineType*>(c->ty)->return_type != expected_return_type) {
+			std::vector<Callable*> candidates{c};
+			std::vector<std::pair<Callable*, std::vector<int>>> viable;
+			std::vector<Callable*> none;
+			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
+				expected_return_type, candidates, viable, none, false);
 		}
 		chosen = c;
 	} else if (auto os = dynamic_cast<OverloadSet*>(target)) {
@@ -4412,7 +4427,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		}
 		if (viable.empty()) {
 			std::vector<Callable*> none;
-			raise_overload_resolution_error(error_location, name_for_error, receiver, args, candidates, viable, none, false);
+			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
+				expected_return_type, candidates, viable, none, false);
 		}
 		std::vector<Callable*> non_dominated;
 		for (size_t i = 0; i < viable.size(); i++) {
@@ -4427,7 +4443,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 				non_dominated.push_back(viable[i].first);
 		}
 		if (non_dominated.size() != 1) {
-			raise_overload_resolution_error(error_location, name_for_error, receiver, args, candidates, viable, non_dominated, true);
+			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
+				expected_return_type, candidates, viable, non_dominated, true);
 		}
 		chosen = non_dominated[0];
 	} else {

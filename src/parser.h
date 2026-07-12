@@ -327,7 +327,11 @@ protected:
 	 *  to extract a receiver, run overload ranking if the target is a set,
 	 *  materialize defaults, and insert Cast coercions where needed. Errors
 	 *  on no-match, ambiguous overload, or bad args. */
-	FinalizedCall finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error, SourceLocation error_location);
+	FinalizedCall finalize_call(Node* target,
+	                           std::vector<Node*>& args,
+	                           std::string name_for_error,
+	                           SourceLocation error_location,
+	                           Type* expected_return_type = nullptr);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();
@@ -379,6 +383,7 @@ protected:
 	                                                  std::string name,
 	                                                  Node* receiver,
 	                                                  const std::vector<Node*>& args,
+	                                                  Type* expected_return_type,
 	                                                  const std::vector<Callable*>& candidates,
 	                                                  const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
 	                                                  const std::vector<Callable*>& non_dominated,
