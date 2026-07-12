@@ -7,6 +7,12 @@ type
     Middle: Integer;
     Last: Word;
   end;
+  TVarSectionPadded = record
+  var
+    Zed: Byte;
+    Alpha: Integer;
+    Omega: Word;
+  end;
   TVariant = record
     Prefix: Byte;
     case Byte of

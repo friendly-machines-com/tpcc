@@ -26,6 +26,10 @@ for expected in \
 	'offsetof(t_tpadded, p_last) == 8' \
 	'sizeof(t_tpadded) == 12' \
 	'alignof(t_tpadded) == 4' \
+	'offsetof(t_tvarsectionpadded, p_zed) == 0' \
+	'offsetof(t_tvarsectionpadded, p_alpha) == 4' \
+	'offsetof(t_tvarsectionpadded, p_omega) == 8' \
+	'sizeof(t_tvarsectionpadded) == 12' \
 	'offsetof(t_tvariant, m_variant) + offsetof(t_tvariant::m_variant_arm_0_type, p_number) == 12' \
 	'sizeof(t_tvariant) == 16' \
 	'alignof(t_tvariant) == 8' \
