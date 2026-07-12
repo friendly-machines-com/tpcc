@@ -55,6 +55,7 @@ EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true")
 IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1});
 IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {}, {}, TypeLayout{256, 1});
 IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {}, {}, TypeLayout{256, 1});
+IntrinsicType k_text(SourceLocation::builtin(), "pas::t_text", {}, {}, TypeLayout{8, 8});
 IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {}, {}, TypeLayout{8, 8});
 IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8});
@@ -114,6 +115,7 @@ Type* const k_all_intrinsics[] = {
     &k_char,
     &k_shortstring,
     &k_ansistring,
+    &k_text,
     &k_pointer,
     &k_ptrint,
     &k_ptruint,
@@ -150,6 +152,7 @@ Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
 Type* ansistring_type() { return &k_ansistring; }
+Type* text_type() { return &k_text; }
 Type* double_type() { return &k_double; }
 Type* extended_type() { return &k_extended; }
 Type* set_type() { return &k_set; }
@@ -403,6 +406,16 @@ static const BuiltinDesc k_builtins[] = {
         .cxx_name = "pas::p_sizeof",
         .const_fold = nullptr,
         .syntax_kind = BuiltinSyntaxKind::SizeOf,
+    },
+    {
+        .cxx_name = "pas::p_write",
+        .const_fold = nullptr,
+        .syntax_kind = BuiltinSyntaxKind::Write,
+    },
+    {
+        .cxx_name = "pas::p_writeln",
+        .const_fold = nullptr,
+        .syntax_kind = BuiltinSyntaxKind::WriteLn,
     },
     {"pas::p_setlength", nullptr},
     {"pas::p_uniquestring", nullptr},

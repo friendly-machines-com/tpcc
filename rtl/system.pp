@@ -24,6 +24,7 @@ type
   SizeInt = external nil name 'pas::t_sizeint';
   SizeUInt = external nil name 'pas::t_sizeuint';
   shortstring = external nil name 'pas::t_shortstring';
+  Text = external nil name 'pas::t_text';
   PShortString = ^shortstring;
   PChar = ^Char;
   AnsiString = external nil name 'pas::t_ansistring';
@@ -148,11 +149,20 @@ procedure move(const source; var destination; count: SizeInt); external nil name
 function comparebyte(const buf1, buf2; len: SizeInt): SizeInt; external nil name 'pas::p_comparebyte';
 function comparechar(const buf1, buf2; len: SizeInt): SizeInt; external nil name 'pas::p_comparechar';
 function sizeof(const x): SizeInt; external nil name 'pas::p_sizeof';
+// Write/WriteLn have compiler grammar for a variable number of values and
+// `value:width:precision`; these parameterless declarations provide normal
+// name lookup and shadowing while BuiltinSyntaxKind parses the actual call.
+procedure write; external nil name 'pas::p_write';
+procedure writeln; external nil name 'pas::p_writeln';
 function low(const x): Integer; external nil name 'pas::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external nil name 'pas::p_high'; // generic intrinsic: parser supplies the type operand/result
 function length(const x): SizeInt; external nil name 'pas::p_length'; // generic intrinsic
 procedure inc(var x; n: Integer = 1); external nil name 'pas::p_inc'; // generic intrinsic
 procedure dec(var x; n: Integer = 1); external nil name 'pas::p_dec'; // generic intrinsic
+// Omitted types express the part Pascal can declare; SetMutation metadata
+// checks the missing relationship `values: set of T; item: T`.
+procedure include(var values; const item); external nil name 'pas::p_include'; // generic set intrinsic
+procedure exclude(var values; const item); external nil name 'pas::p_exclude'; // generic set intrinsic
 procedure str(const x: Int64; var s: ShortString); overload; external nil name 'pas::p_str';
 procedure str(const x: QWord; var s: ShortString); overload; external nil name 'pas::p_str';
 procedure str(const x: Extended; var s: ShortString); overload; external nil name 'pas::p_str';

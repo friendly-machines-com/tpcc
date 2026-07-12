@@ -32,6 +32,9 @@ BinaryOperation::BinaryOperation(Node* a, Node* b) {
 
 ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
     : receiver(receiver), callee(callee), args(std::move(args)) {}
+WriteCall::WriteCall(
+    bool newline, Node* file, std::vector<Item> items)
+    : newline(newline), file(file), items(std::move(items)) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 ShortCircuitOperation::ShortCircuitOperation(enum ShortCircuitOperationKind kind, Node* a, Node* b) : BinaryOperation(a, b) {
 	this->kind = kind;
@@ -244,6 +247,39 @@ void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 	}
 	ctx->indent(out, indent + 1);
 	out << "returns: " << ctx->known_type_ref(ty);
+}
+
+const char* WriteCall::diagnostic_kind() const {
+	return newline ? "writeln" : "write";
+}
+void WriteCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(file);
+	for (const Item& item : items) {
+		ctx->add_value_edge(item.value);
+		ctx->add_value_edge(item.width);
+		ctx->add_value_edge(item.precision);
+	}
+}
+void WriteCall::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << diagnostic_kind();
+	if (file) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "file: " << ctx->known_value_ref(file);
+	}
+	for (const Item& item : items) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "item: " << ctx->known_value_ref(item.value);
+		if (item.width)
+			out << " width " << ctx->known_value_ref(item.width);
+		if (item.precision)
+			out << " precision " <<
+			    ctx->known_value_ref(item.precision);
+	}
 }
 
 const char* InheritedCall::diagnostic_kind() const { return "inherited_call"; }

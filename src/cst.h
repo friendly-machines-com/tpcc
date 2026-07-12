@@ -84,6 +84,29 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** One Pascal Write/WriteLn invocation. These routines have compiler grammar,
+ * not an ordinary RoutineType signature: the optional first Text argument and
+ * every value's `:width[:precision]` qualifiers must remain grouped. */
+class WriteCall: public Node {
+public:
+	struct Item {
+		Node* value;
+		Node* width;
+		Node* precision;
+	};
+
+	bool newline;
+	Node* file;
+	std::vector<Item> items;
+
+	WriteCall(bool newline, Node* file, std::vector<Item> items);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
 /** `inherited Name(args)`. Calls the parent-type method the parser resolved
  *  at parse time (single-pass compiler -- emit doesn't re-resolve).
  *

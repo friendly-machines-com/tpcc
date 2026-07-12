@@ -28,12 +28,16 @@
 #include <memory>
 #include <stdexcept>
 #include <cstdio>
+#include <iomanip>
 #include <initializer_list>
 #include <limits>
+#include <sstream>
+#include <string>
 #include <vector>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <utility>
 #include <cstddef> // for std::byte
 
 namespace pas {
@@ -100,6 +104,16 @@ struct t_shortstring {
 	t_char length;
 	t_char data[255];
 };
+
+// A Pascal Text variable currently stores the stream used by Write/WriteLn.
+// The pointer is non-owning and null means that the Text variable is unopened.
+// Write/WriteLn without an explicit Text argument write to std::cout directly.
+// Assign/Rewrite/Close and owned file streams are not implemented yet.
+struct t_text {
+	std::ostream* stream = nullptr;
+};
+static_assert(sizeof(t_text) == sizeof(void*));
+static_assert(alignof(t_text) == alignof(void*));
 
 struct tpcc_storage_ref {
 	std::byte* data;
@@ -467,6 +481,143 @@ struct t_dynamicarray {
 // type from t_shortstring so Pascal overloads on string vs AnsiString do not
 // collapse, even though this runtime does not implement real managed strings yet.
 struct t_ansistring : t_shortstring {};
+
+template<typename T>
+struct tpcc_write_arg {
+	T value;
+	bool has_width;
+	t_sizeint width;
+	bool has_precision;
+	t_sizeint precision;
+};
+
+template<typename T>
+inline auto tpcc_make_write_arg(T&& value) {
+	using value_type = std::remove_cvref_t<T>;
+	return tpcc_write_arg<value_type>{
+	    std::forward<T>(value), false, 0, false, 0};
+}
+
+template<typename T>
+inline auto tpcc_make_write_arg(T&& value, t_sizeint width) {
+	using value_type = std::remove_cvref_t<T>;
+	return tpcc_write_arg<value_type>{
+	    std::forward<T>(value), true, width, false, 0};
+}
+
+template<typename T>
+inline auto tpcc_make_write_arg(
+    T&& value, t_sizeint width, t_sizeint precision) {
+	using value_type = std::remove_cvref_t<T>;
+	return tpcc_write_arg<value_type>{
+	    std::forward<T>(value), true, width, true, precision};
+}
+
+template<typename>
+inline constexpr bool tpcc_dependent_false = false;
+
+template<typename T>
+inline std::string tpcc_render_write_value(
+    const T& value, bool has_precision, t_sizeint precision) {
+	std::ostringstream out;
+	if constexpr (std::is_same_v<T, t_shortstring> ||
+	              std::is_same_v<T, t_ansistring>) {
+		const std::size_t length = value.length.value;
+		std::string result;
+		result.reserve(length);
+		for (std::size_t i = 0; i < length; ++i)
+			result.push_back(
+			    static_cast<char>(value.data[i].value));
+		return result;
+	} else if constexpr (std::is_same_v<T, t_char>) {
+		return std::string(
+		    1, static_cast<char>(value.value));
+	} else if constexpr (std::is_same_v<T, t_boolean>) {
+		return value == p_true ? "TRUE" : "FALSE";
+	} else if constexpr (std::is_integral_v<T>) {
+		// uint8_t/int8_t stream as characters, so widen every Pascal
+		// integer carrier before insertion.
+		if constexpr (std::is_signed_v<T>)
+			out << static_cast<long long>(value);
+		else
+			out << static_cast<unsigned long long>(value);
+	} else if constexpr (std::is_floating_point_v<T>) {
+		if (has_precision)
+			out << std::fixed << std::setprecision(
+			    static_cast<int>(
+			        std::max<t_sizeint>(0, precision)));
+		out << value;
+	} else {
+		static_assert(
+		    tpcc_dependent_false<T>,
+		    "unsupported Pascal Write/WriteLn value type");
+	}
+	return out.str();
+}
+
+template<typename T>
+inline void tpcc_write_one(
+    std::ostream& out, const tpcc_write_arg<T>& argument) {
+	std::string rendered = tpcc_render_write_value(
+	    argument.value, argument.has_precision,
+	    argument.precision);
+	if (argument.has_width &&
+	    argument.width > 0 &&
+	    static_cast<std::make_unsigned_t<t_sizeint>>(
+	        argument.width) > rendered.size()) {
+		const std::size_t padding =
+		    static_cast<std::size_t>(argument.width) -
+		    rendered.size();
+		for (std::size_t i = 0; i < padding; ++i)
+			out.put(' ');
+	}
+	out.write(
+	    rendered.data(),
+	    static_cast<std::streamsize>(rendered.size()));
+}
+
+template<typename... Values>
+inline void tpcc_write_many(
+    std::ostream& out,
+    const tpcc_write_arg<Values>&... arguments) {
+	(tpcc_write_one(out, arguments), ...);
+}
+
+inline std::ostream& tpcc_text_stream(t_text& file) {
+	if (!file.stream)
+		throw std::logic_error(
+		    "Write/WriteLn on an unopened Pascal Text file");
+	return *file.stream;
+}
+
+template<typename... Values>
+inline void p_write(
+    const tpcc_write_arg<Values>&... arguments) {
+	tpcc_write_many(std::cout, arguments...);
+}
+
+template<typename... Values>
+inline void p_write(
+    t_text& file,
+    const tpcc_write_arg<Values>&... arguments) {
+	tpcc_write_many(tpcc_text_stream(file), arguments...);
+}
+
+template<typename... Values>
+inline void p_writeln(
+    const tpcc_write_arg<Values>&... arguments) {
+	tpcc_write_many(std::cout, arguments...);
+	std::cout.put('\n');
+}
+
+template<typename... Values>
+inline void p_writeln(
+    t_text& file,
+    const tpcc_write_arg<Values>&... arguments) {
+	std::ostream& out = tpcc_text_stream(file);
+	tpcc_write_many(out, arguments...);
+	out.put('\n');
+}
 
 // Mutation of an AnsiString element must detach shared storage before a
 // writable character reference escapes. The temporary inline representation

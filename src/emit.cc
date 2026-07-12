@@ -399,6 +399,39 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(active, ";\n");
 		return;
 	}
+	if (auto write = dynamic_cast<WriteCall*>(stmt)) {
+		fprintf(active, "\tpas::%s(",
+		    write->newline ? "p_writeln" : "p_write");
+		bool need_comma = false;
+		if (write->file) {
+			emit_writable_expression(write->file);
+			need_comma = true;
+		}
+		for (const WriteCall::Item& item : write->items) {
+			if (need_comma)
+				fprintf(active, ", ");
+			fprintf(active, "pas::tpcc_make_write_arg(");
+			fprintf(active, "static_cast<");
+			emit_type_ref(item.value->ty);
+			fprintf(active, ">(");
+			emit_expression(item.value);
+			fprintf(active, ")");
+			if (item.width) {
+				fprintf(active, ", static_cast<pas::t_sizeint>(");
+				emit_expression(item.width);
+				fprintf(active, ")");
+			}
+			if (item.precision) {
+				fprintf(active, ", static_cast<pas::t_sizeint>(");
+				emit_expression(item.precision);
+				fprintf(active, ")");
+			}
+			fprintf(active, ")");
+			need_comma = true;
+		}
+		fprintf(active, ");\n");
+		return;
+	}
 	if (auto pc = dynamic_cast<ProcCall*>(stmt)) {
 		fprintf(active, "\t");
 		emit_expression(pc);

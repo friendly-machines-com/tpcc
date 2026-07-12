@@ -1474,6 +1474,63 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			parse_closing_paren();
 			return new TypeBound(*kind, target_ty);
 		}
+		BuiltinSyntaxKind syntax_kind = syntax_kind_for_builtin(value);
+		if (syntax_kind == BuiltinSyntaxKind::Write ||
+		    syntax_kind == BuiltinSyntaxKind::WriteLn) {
+			std::vector<WriteCall::Item> items;
+			if (maybe_parse_opening_paren()) {
+				if (input_token != ")") {
+					do {
+						Node* item = parse_expression();
+						// Unlike an ordinary call, Write has no formal
+						// parameter to give an untyped integer literal its
+						// default Pascal carrier.
+						if (item->ty == &untyped_integer_type())
+							item = cast(item, integer_type());
+						Node* width = nullptr;
+						Node* precision = nullptr;
+						if (maybe_parse_colon()) {
+							width = cast(parse_expression(), sizeint_type());
+							if (maybe_parse_colon())
+								precision = cast(
+								    parse_expression(),
+								    sizeint_type());
+						}
+						if (precision &&
+						    item->ty != double_type() &&
+						    item->ty != extended_type()) {
+							raise_parse_error(
+							    "a second Write/WriteLn colon qualifier "
+							    "requires a real value");
+						}
+						items.push_back(
+						    WriteCall::Item{
+						        item, width, precision});
+					} while (maybe_parse_comma());
+				}
+				parse_closing_paren();
+			}
+
+			Node* file = nullptr;
+			if (!items.empty() &&
+			    items.front().value->ty == text_type()) {
+				if (items.front().width ||
+				    items.front().precision) {
+					raise_parse_error(
+					    "a Write/WriteLn text-file argument "
+					    "cannot have formatting qualifiers");
+				}
+				file = items.front().value;
+				if (!is_referenceable(file))
+					raise_parse_error(
+					    "Write/WriteLn text-file argument "
+					    "must be storage-backed");
+				items.erase(items.begin());
+			}
+			return new WriteCall(
+			    syntax_kind == BuiltinSyntaxKind::WriteLn,
+			    file, std::move(items));
+		}
 		if (syntax_kind_for_builtin(value) == BuiltinSyntaxKind::SizeOf &&
 		    input_token == "(") {
 			parse_opening_paren();
@@ -3422,6 +3479,15 @@ struct TypeBlockResolver {
 				return false;
 			for (auto* arg : n->args)
 				if (!normalize_node(arg))
+					return false;
+		}
+		if (auto n = dynamic_cast<WriteCall*>(node)) {
+			if (!normalize_node(n->file))
+				return false;
+			for (auto& item : n->items)
+				if (!normalize_node(item.value) ||
+				    !normalize_node(item.width) ||
+				    !normalize_node(item.precision))
 					return false;
 		}
 		if (auto n = dynamic_cast<InheritedCall*>(node)) {

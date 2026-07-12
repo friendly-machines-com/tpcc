@@ -40,6 +40,8 @@ enum class BuiltinGenericKind {
 enum class BuiltinSyntaxKind {
 	None,
 	SizeOf,
+	Write,
+	WriteLn,
 };
 
 struct BuiltinDesc {
@@ -118,6 +120,7 @@ Type* boolean_type();
 Type* char_type();
 Type* shortstring_type();
 Type* ansistring_type();
+Type* text_type();
 Type* double_type();
 Type* extended_type();
 Type* set_type();
