@@ -57,6 +57,9 @@ test-str-builtin: mp
 test-val-builtin: mp
 	sh tests/test_val_builtin.sh
 
+test-octstr-builtin: mp
+	sh tests/test_octstr_builtin.sh
+
 test-set-literals: mp
 	sh tests/test_set_literals.sh
 
@@ -69,6 +72,6 @@ test-insert-builtin: mp
 test-properties: mp
 	sh tests/test_properties.sh
 
-test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-set-literals test-delete-builtin test-insert-builtin test-properties
+test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-set-literals test-delete-builtin test-insert-builtin test-properties
 
-.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-set-literals test-delete-builtin test-insert-builtin test-properties
+.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-set-literals test-delete-builtin test-insert-builtin test-properties

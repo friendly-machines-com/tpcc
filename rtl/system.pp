@@ -168,14 +168,20 @@ procedure val(const s: ShortString; out value: LongWord); overload; external nil
 procedure val(const s: ShortString; out value: LongWord; out code: Integer); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: QWord); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: QWord; out code: Integer); overload; external nil name 'pas::p_val';
-// FIXME: Add Single and Real once tpcc has those Pascal types.
+// FIXME: Single and Real are absent because tpcc does not model either
+// Pascal type yet, so no distinct overload can be declared or selected.
 procedure val(const s: ShortString; out value: Double); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: Double; out code: Integer); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: Extended); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: Extended; out code: Integer); overload; external nil name 'pas::p_val';
-// FIXME: Add Val support for Comp.
-// FIXME: Add Val support for Currency.
-// FIXME: Add Val support for enumerations.
+// FIXME: Comp is absent because tpcc has no Pascal Comp type or carrier.
+// FIXME: Currency is absent because tpcc has no Pascal Currency type or
+// fixed-scale representation.
+// FIXME: Enumeration Val needs generated name-to-ordinal metadata; tpcc
+// currently emits enum values but no runtime lookup table for their names.
+function octstr(value: LongInt; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
+function octstr(value: Int64; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
+function octstr(value: QWord; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
 function trunc(const x: Extended): Int64; external nil name 'pas::p_trunc';
 function round(const x: Extended): Int64; external nil name 'pas::p_round';
