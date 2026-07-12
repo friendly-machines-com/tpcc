@@ -227,6 +227,24 @@ void Emitter::emit_statement(Node* stmt) {
 	if (!active)
 		return;
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
+		if (auto cast = dynamic_cast<Cast*>(a->a)) {
+			// An assignable explicit ordinal cast is a same-sized view of an
+			// existing Pascal place. Keep it out of ordinary C++ cast syntax:
+			// a static_cast expression is not an lvalue, and reinterpret_cast
+			// would create aliasing/lifetime hazards. The RTL helper bit-copies
+			// the target value into a real source-carrier value, then assigns
+			// that value through the typed storage view.
+			fprintf(active, "\tpas::tpcc_store_writable_cast<");
+			emit_type_ref(cast->ty);
+			fprintf(active, ">(");
+			emit_storage_ref(cast->a);
+			fprintf(active, ", static_cast<");
+			emit_type_ref(cast->ty);
+			fprintf(active, ">(");
+			emit_expression(a->b);
+			fprintf(active, "));\n");
+			return;
+		}
 		// Writable packed overlay, array-field element:
 		//
 		//   TPacked(source).bytes[index] := rhs

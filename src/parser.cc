@@ -1887,6 +1887,29 @@ bool Parser::is_assignable(Node* n) {
 	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
 		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
 	}
+	if (auto cast = dynamic_cast<Cast*>(n)) {
+		// FPC treats an explicit ordinal cast as a view of its operand's
+		// storage when both ordinal carriers have the same size. Restrict this
+		// to tpcc intrinsic ordinal carriers: C++ enum/Boolean objects cannot
+		// safely hold every bit pattern that FPC permits through such a view.
+		auto intrinsic_ordinal_carrier = [](Type* ty) -> IntrinsicType* {
+			while (auto subrange = dynamic_cast<SubrangeType*>(ty))
+				ty = subrange->base_type;
+			auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+			return intrinsic && intrinsic->ordinal_bounds
+			    ? intrinsic
+			    : nullptr;
+		};
+		if (!intrinsic_ordinal_carrier(cast->a ? cast->a->ty : nullptr) ||
+		    !intrinsic_ordinal_carrier(cast->ty))
+			return false;
+		auto source_layout = type_layout(cast->a->ty);
+		auto target_layout = type_layout(cast->ty);
+		return source_layout && target_layout &&
+		       source_layout->size == target_layout->size &&
+		       is_referenceable(cast->a) &&
+		       !contains_packed_projection(cast->a);
+	}
 	return false;
 }
 

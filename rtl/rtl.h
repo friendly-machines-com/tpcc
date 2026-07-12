@@ -136,6 +136,30 @@ inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(T& value) {
 	};
 }
 
+// Permit assignment through an explicit ordinal cast when the source and
+// target carriers have equal size. Do not form a C++ reference to the target
+// type: no target object exists in SOURCE's storage. Instead construct a real
+// SOURCE value with the target representation and assign it through SOURCE's
+// correctly typed pointer. The parser admits only intrinsic ordinal carriers;
+// these static assertions keep the emitted contract independently auditable.
+template<typename Target, typename Source>
+inline void tpcc_store_writable_cast(
+    tpcc_typed_storage_ref<Source> destination, Target value) {
+	static_assert(
+	    sizeof(Target) == sizeof(Source),
+	    "writable Pascal cast requires equal-size carriers");
+	static_assert(
+	    std::is_trivially_copyable_v<Target>,
+	    "writable Pascal cast target must be trivially copyable");
+	static_assert(
+	    std::is_trivially_copyable_v<Source>,
+	    "writable Pascal cast source must be trivially copyable");
+	if (destination.size < sizeof(Source))
+		throw std::length_error(
+		    "writable Pascal cast exceeds its storage view");
+	*destination.value = std::bit_cast<Source>(value);
+}
+
 template<typename T>
 inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
     const T& value) {
