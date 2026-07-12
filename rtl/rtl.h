@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -955,6 +956,26 @@ inline t_sizeint p_strlen(const t_char* value) {
 	while (value[length].value != 0)
 		++length;
 	return length;
+}
+
+template<typename T>
+requires std::is_object_v<T> || std::is_void_v<T>
+inline void p_getmem(T*& destination, t_ptruint size) {
+	destination = static_cast<T*>(std::malloc(static_cast<std::size_t>(size)));
+}
+
+inline t_pointer p_getmem(t_ptruint size) {
+	return std::malloc(static_cast<std::size_t>(size));
+}
+
+inline void p_freemem(t_pointer value, t_ptruint size) {
+	(void)size;
+	std::free(value);
+}
+
+inline t_ptruint p_freemem(t_pointer value) {
+	std::free(value);
+	return 0;
 }
 
 #if 0

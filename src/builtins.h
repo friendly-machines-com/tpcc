@@ -95,6 +95,7 @@ Type* integer_type();
 Type* longint_type();
 Type* qword_type();
 Type* int64_type();
+Type* pointer_type();
 Type* boolean_type();
 Type* char_type();
 Type* shortstring_type();

@@ -4433,6 +4433,14 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 				costs[self_slots + i] = 0;
 				continue;
 			}
+			if (rty->formals[i].ty == pointer_type() &&
+			    dynamic_cast<PointerType*>(from)) {
+				// FPC's GetMem(out Pointer, ...) accepts storage of any
+				// typed pointer. Preserve that storage type for C++ template
+				// deduction instead of casting the out argument to void*&.
+				costs[self_slots + i] = 1;
+				continue;
+			}
 			if (auto subrange = dynamic_cast<SubrangeType*>(from)) {
 				if (subrange->base_type == rty->formals[i].ty) {
 					costs[self_slots + i] = 1;
@@ -4627,6 +4635,12 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			if (auto subrange = dynamic_cast<SubrangeType*>(args[i]->ty))
 				if (subrange->base_type == t)
 					continue;
+			// FPC permits a typed pointer variable for an out Pointer formal.
+			// The RTL template receives T*& and performs a real C++ pointer
+			// conversion from malloc's void* result.
+			if (t == pointer_type() &&
+			    dynamic_cast<PointerType*>(args[i]->ty))
+				continue;
 		}
 		args[i] = cast(args[i], t);
 	}

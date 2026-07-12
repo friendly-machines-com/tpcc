@@ -142,6 +142,7 @@ Type* integer_type() { return &k_integer; }
 Type* longint_type() { return &k_longint; }
 Type* qword_type() { return &k_qword; }
 Type* int64_type() { return &k_int64; }
+Type* pointer_type() { return &k_pointer; }
 Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
@@ -387,6 +388,8 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_val", nullptr},
     {"pas::p_octstr", nullptr},
     {"pas::p_strlen", nullptr},
+    {"pas::p_getmem", nullptr},
+    {"pas::p_freemem", nullptr},
     {"pas::p_low", nullptr, TypeBoundKind::Low},
     {"pas::p_high", nullptr, TypeBoundKind::High},
     {"pas::p_setlength", nullptr},
