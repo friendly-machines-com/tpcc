@@ -49,6 +49,13 @@ int main() {
 	pas::p_val(source, integer, code);
 	if (integer != 0 || code != 3)
 		return EXIT_FAILURE;
+	pas::t_byte byte_code = 0;
+	pas::p_val(
+	    source,
+	    integer,
+	    pas::tpcc_make_storage_ref(byte_code));
+	if (integer != 0 || byte_code != 3)
+		return EXIT_FAILURE;
 
 	source = pas::tpcc_shortstring_from_c("", 0);
 	pas::t_double real = 42;

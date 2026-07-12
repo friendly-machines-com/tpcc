@@ -1104,6 +1104,17 @@ inline void p_val(const t_shortstring& source, T& destination, t_integer& code) 
 	code = 0;
 }
 
+template<typename T, typename Code>
+requires ((std::is_integral_v<T> && (!std::is_same_v<T, bool>)) ||
+          std::is_floating_point_v<T>) &&
+         std::is_integral_v<Code> && (!std::is_same_v<Code, bool>)
+inline void p_val(const t_shortstring& source, T& destination,
+    tpcc_typed_storage_ref<Code> code) {
+	t_integer parsed_code = 0;
+	p_val(source, destination, parsed_code);
+	*code.value = static_cast<Code>(parsed_code);
+}
+
 template<typename T>
 requires (std::is_integral_v<T> && (!std::is_same_v<T, bool>)) ||
          std::is_floating_point_v<T>
