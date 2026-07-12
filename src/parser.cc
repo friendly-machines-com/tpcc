@@ -4288,13 +4288,13 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 	}
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
-		if (rty->formals[i].ty == unknown_type() &&
-		    builtin && builtin->generic_kind != BuiltinGenericKind::None) {
-			if (!is_ordinal_intrinsic_argument(from))
-				return {};
+		if (rty->formals[i].ty == unknown_type()) {
+			if (builtin && builtin->generic_kind != BuiltinGenericKind::None) {
+				if (!is_ordinal_intrinsic_argument(from))
+					return {};
+			}
 			// This is a constrained generic match. It is viable for every
-			// ordinal type but should lose to a concrete exact overload if one
-			// is ever added alongside the intrinsic.
+			// accepted type but should lose to a concrete exact overload.
 			costs[self_slots + i] = 1000;
 			continue;
 		}
