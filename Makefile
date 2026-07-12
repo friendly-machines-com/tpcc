@@ -45,6 +45,9 @@ test-generic-intrinsics: mp
 test-pos-builtin: mp
 	sh tests/test_pos_builtin.sh
 
-test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin
+test-delete-builtin: mp
+	sh tests/test_delete_builtin.sh
 
-.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin
+test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-delete-builtin
+
+.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-generic-intrinsics test-pos-builtin test-delete-builtin
