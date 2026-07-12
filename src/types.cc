@@ -235,6 +235,15 @@ int conversion_cost(Type* from, Type* to) {
 		return 0;
 	if (from == &untyped_integer_type())
 		return 0; // literal adapts to any int
+	// Set types are structural in their ordinal item type. Empty set literals
+	// carry unknown_type() until context supplies the destination item type.
+	if (auto from_set = dynamic_cast<FixedSetType*>(from)) {
+		if (auto to_set = dynamic_cast<FixedSetType*>(to)) {
+			if (from_set->item_type == unknown_type())
+				return 0;
+			return conversion_cost(from_set->item_type, to_set->item_type);
+		}
+	}
 	// Pointer types are structural in Pascal. Independently-created `^T`
 	// nodes with the same target are assignment-compatible.
 	if (auto from_pointer = dynamic_cast<PointerType*>(from))

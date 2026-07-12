@@ -165,6 +165,7 @@ private:
 	Type* lookup_external_type(const char* lib, std::string cxx_name);
 	Node* mk_arith(std::string id, Node* a, Node* b);
 	Node* mk_compare(std::string id, Node* a, Node* b);
+	Node* mk_membership(Node* item, Node* set);
 	Node* mk_unary_same(std::string id, Node* x);
 	Node* mk_assign(Node* a, Node* b);
 	Node* cast(Node* a, Type* target_ty);
@@ -192,6 +193,7 @@ protected:
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
 	Node* parse_numeral();
+	Node* parse_set_literal();
 	Node* parse_typed_const_initializer(Type* ty);
 	Node* resolve_lvalue(std::string name);
 	Node* maybe_resolve_value(std::string name);

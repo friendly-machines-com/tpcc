@@ -423,6 +423,7 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_equal", nullptr},
     {"pas::p_greaterthan", nullptr},
     {"pas::p_greaterthanorequal", nullptr},
+    {"pas::p_in", nullptr},
     {"pas::p_supports", nullptr},
 
     {"pas::t_boolean::p_true", nullptr},

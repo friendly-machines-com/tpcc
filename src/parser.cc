@@ -1318,9 +1318,69 @@ static Node* lookup_method_in_ancestors(std::string name, Type* starting_at) {
 	return nullptr;
 }
 
+static bool is_set_item_type(Type* ty) {
+	while (auto subrange = dynamic_cast<SubrangeType*>(ty))
+		ty = subrange->base_type;
+	if (dynamic_cast<EnumType*>(ty))
+		return true;
+	OrdinalBounds bounds;
+	return intrinsic_ordinal_bounds(ty, &bounds);
+}
+
+Node* Parser::parse_set_literal() {
+	parse_opening_bracket();
+	std::vector<SetLiteral::Item> items;
+	if (input_token != "]") {
+		do {
+			Node* lower = parse_expression();
+			Node* upper = nullptr;
+			if (maybe_parse_period_period())
+				upper = parse_expression();
+			items.push_back(SetLiteral::Item{lower, upper});
+		} while (maybe_parse_comma());
+	}
+	parse_closing_bracket();
+
+	// An empty set acquires its item type from assignment, a formal parameter,
+	// or the left operand of `in`. Non-empty constructors infer one common
+	// ordinal item type, then convert every bound to it.
+	Type* item_type = unknown_type();
+	for (const SetLiteral::Item& item : items) {
+		for (Node* bound : {item.lower, item.upper}) {
+			if (!bound)
+				continue;
+			Type* bound_type = bound->ty == &untyped_integer_type()
+			    ? integer_type()
+			    : bound->ty;
+			if (!is_set_item_type(bound_type))
+				raise_parse_error("set literal item is not ordinal");
+			if (item_type == unknown_type()) {
+				item_type = bound_type;
+			} else {
+				Type* common = common_arith_type(item_type, bound_type);
+				if (!common)
+					raise_type_mismatch("set literal items with a common ordinal type",
+						item_type, bound_type);
+				item_type = common;
+			}
+		}
+	}
+	if (item_type != unknown_type()) {
+		for (SetLiteral::Item& item : items) {
+			item.lower = cast(item.lower, item_type);
+			if (item.upper)
+				item.upper = cast(item.upper, item_type);
+		}
+	}
+	return new SetLiteral(std::move(items),
+	    new FixedSetType(current_location(), item_type));
+}
+
 Node* Parser::parse_value() {
 	if (peek_keyword("inherited"))
 		return parse_inherited();
+	if (input_token == "[")
+		return parse_set_literal();
 	if (maybe_parse_opening_paren()) { // grouping paren
 		auto result = parse_expression();
 		parse_closing_paren();
@@ -1918,6 +1978,28 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	return call;
 }
 
+Node* Parser::mk_membership(Node* item, Node* set) {
+	auto set_type = dynamic_cast<FixedSetType*>(set ? set->ty : nullptr);
+	if (!set_type)
+		raise_parse_error("right operand of 'in' is not a set");
+	if (set_type->item_type == unknown_type()) {
+		if (!is_set_item_type(item->ty))
+			raise_parse_error("left operand of 'in' is not ordinal");
+		set = cast(set, new FixedSetType(current_location(), item->ty));
+		set_type = static_cast<FixedSetType*>(set->ty);
+	}
+
+	std::vector<Node*> args{
+	    cast(item, set_type->item_type),
+	    set,
+	};
+	Node* fn = resolve_value("in");
+	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
+	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
+	call->ty = call_result_type(fc.callee);
+	return call;
+}
+
 Node* Parser::mk_unary_same(std::string id, Node* x) {
 	if (auto i = dynamic_cast<Integer*>(x)) {
 		if (x->ty == &untyped_integer_type()) {
@@ -2082,7 +2164,7 @@ Node* Parser::parse_comparison_tail(Node* result) {
 		} else if (maybe_parse_greater_equal()) {
 			result = mk_compare(">=", result, parse_sum());
 		} else if (maybe_parse_keyword("in")) {
-			result = mk_compare("in", result, parse_sum());
+			result = mk_membership(result, parse_sum());
 		} else {
 			break;
 		}
@@ -4342,6 +4424,19 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 			return a;
 		}
 		raise_parse_error("'nil' is only valid in a reference-type context");
+	}
+	if (auto literal = dynamic_cast<SetLiteral*>(a)) {
+		if (auto target_set = dynamic_cast<FixedSetType*>(target_ty)) {
+			if (!is_set_item_type(target_set->item_type))
+				raise_parse_error("set target item type is not ordinal");
+			for (SetLiteral::Item& item : literal->items) {
+				item.lower = cast(item.lower, target_set->item_type);
+				if (item.upper)
+					item.upper = cast(item.upper, target_set->item_type);
+			}
+			literal->ty = target_ty;
+			return literal;
+		}
 	}
 	if (a->ty == target_ty) {
 		return a;

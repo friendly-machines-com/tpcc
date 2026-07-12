@@ -102,6 +102,11 @@ FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty)
 	this->ty = ty;
 }
 
+SetLiteral::SetLiteral(std::vector<Item> items, Type* ty)
+    : items(std::move(items)) {
+	this->ty = ty;
+}
+
 Callable::Callable(std::string cxx_name,
 		   std::string pas_name,
 		   RoutineType* ty,
@@ -357,6 +362,45 @@ void FixedArrayLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::o
 		out << "\n";
 		ctx->indent(out, indent + 1);
 		out << "element: " << ctx->known_value_ref(element);
+	}
+}
+
+const char* SetLiteral::diagnostic_kind() const { return "set_literal"; }
+ConstEvalResult SetLiteral::const_eval(ConstEvalContext& ctx) const {
+	std::vector<Item> folded;
+	folded.reserve(items.size());
+	for (const Item& item : items) {
+		ConstEvalResult lower = item.lower
+		    ? item.lower->const_eval(ctx)
+		    : ConstEvalResult::not_constant();
+		if (lower.kind != ConstEvalResult::Kind::Success)
+			return lower;
+		Node* upper_node = nullptr;
+		if (item.upper) {
+			ConstEvalResult upper = item.upper->const_eval(ctx);
+			if (upper.kind != ConstEvalResult::Kind::Success)
+				return upper;
+			upper_node = upper.node;
+		}
+		folded.push_back(Item{lower.node, upper_node});
+	}
+	return ConstEvalResult::success(new SetLiteral(std::move(folded), ty));
+}
+void SetLiteral::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	for (const Item& item : items) {
+		ctx->add_value_edge(item.lower);
+		ctx->add_value_edge(item.upper);
+	}
+}
+void SetLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "set literal : " << ctx->known_type_ref(ty);
+	for (const Item& item : items) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "item: " << ctx->known_value_ref(item.lower);
+		if (item.upper)
+			out << " .. " << ctx->known_value_ref(item.upper);
 	}
 }
 

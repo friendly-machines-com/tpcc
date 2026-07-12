@@ -7,11 +7,8 @@
 // tighter, set membership tests the result), and `x in S` is available
 // wherever a Boolean expression is expected.
 //
-// Pinned case: `n in [1, 2, 3]` parses with `in` at the relational level.
-// (Set-literal syntax `[1, 2, 3]` is not yet wired in mini-pascal; this
-// test pins the `in` operator's syntactic placement regardless of
-// right-hand-side resolution. When set literals land, this test
-// exercises the membership check end-to-end.)
+// Pinned case: `n in [1, 2, 3]` parses with `in` at the relational level
+// and lowers the typed set constructor plus membership test through the RTL.
 program p;
 var
   n: Integer;

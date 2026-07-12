@@ -1108,6 +1108,32 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, "}}");
 		return;
 	}
+	if (auto set = dynamic_cast<SetLiteral*>(expr)) {
+		auto set_type = dynamic_cast<FixedSetType*>(set->ty);
+		if (!set_type || set_type->item_type == unknown_type())
+			unhandled_node("set literal has no contextual item type", set);
+		fprintf(active, "pas::p_make_set<");
+		emit_type_ref(set_type->item_type);
+		fprintf(active, ">({");
+		for (size_t i = 0; i < set->items.size(); ++i) {
+			if (i)
+				fprintf(active, ", ");
+			const SetLiteral::Item& item = set->items[i];
+			if (item.upper) {
+				fprintf(active, "pas::p_set_range(");
+				emit_expression(item.lower);
+				fprintf(active, ", ");
+				emit_expression(item.upper);
+				fprintf(active, ")");
+			} else {
+				fprintf(active, "pas::p_set_single(");
+				emit_expression(item.lower);
+				fprintf(active, ")");
+			}
+		}
+		fprintf(active, "})");
+		return;
+	}
 	if (auto s = dynamic_cast<StorageSlot*>(expr)) {
 		fprintf(active, "%s", s->cxx_name.c_str());
 		return;
@@ -1531,7 +1557,9 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto s = dynamic_cast<FixedSetType*>(ty)) {
-		emit_type_ref(set_type());
+		fprintf(active, "pas::t_set<");
+		emit_type_ref(s->item_type);
+		fprintf(active, ">");
 		return;
 	}
 	if (auto s = dynamic_cast<FixedArrayType*>(ty)) {

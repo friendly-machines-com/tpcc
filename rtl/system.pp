@@ -139,6 +139,7 @@ operator <=(a, b: Extended): Boolean; external nil name 'pas::p_lessthanorequal'
 operator =(a, b: Extended): Boolean; external nil name 'pas::p_equal';
 operator >(a, b: Extended): Boolean; external nil name 'pas::p_greaterthan';
 operator >=(a, b: Extended): Boolean; external nil name 'pas::p_greaterthanorequal';
+operator in(const item; const values): Boolean; external nil name 'pas::p_in';
 
 function ord(const x): Cardinal; external nil name 'pas::p_ord'; // generic intrinsic
 function low(const x): Integer; external nil name 'pas::p_low'; // generic intrinsic: parser supplies the type operand/result

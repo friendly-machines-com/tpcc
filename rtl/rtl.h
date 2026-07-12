@@ -26,7 +26,9 @@
 #include <memory>
 #include <stdexcept>
 #include <cstdio>
+#include <initializer_list>
 #include <limits>
+#include <vector>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
@@ -79,8 +81,48 @@ struct t_shortstring {
 	t_char data[255];
 };
 
-struct t_set {
+struct t_set_span {
+	int64_t lower;
+	int64_t upper;
 };
+
+template<typename T>
+struct t_set {
+	std::vector<t_set_span> spans;
+};
+
+template<typename T>
+inline int64_t p_set_key(T value) {
+	if constexpr (std::is_same_v<T, t_char>)
+		return static_cast<int64_t>(value.value);
+	else
+		return static_cast<int64_t>(value);
+}
+
+template<typename T>
+inline t_set_span p_set_single(T value) {
+	const int64_t key = p_set_key(value);
+	return t_set_span{key, key};
+}
+
+template<typename T>
+inline t_set_span p_set_range(T lower, T upper) {
+	return t_set_span{p_set_key(lower), p_set_key(upper)};
+}
+
+template<typename T>
+inline t_set<T> p_make_set(std::initializer_list<t_set_span> spans) {
+	return t_set<T>{std::vector<t_set_span>(spans)};
+}
+
+template<typename Value, typename T>
+inline t_boolean p_in(Value value, const t_set<T>& set) {
+	const int64_t key = p_set_key(value);
+	for (const t_set_span& span : set.spans)
+		if (span.lower <= key && key <= span.upper)
+			return p_true;
+	return p_false;
+}
 
 template<typename T, std::size_t length, auto low>
 struct t_fixedarray {

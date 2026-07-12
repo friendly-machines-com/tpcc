@@ -265,6 +265,23 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Pascal set constructor. Each item is either a singleton (upper == nullptr)
+ *  or an inclusive range. Node::ty is a FixedSetType whose item_type is the
+ *  common ordinal type of all bounds, or is supplied contextually for `[]`. */
+class SetLiteral: public Node {
+public:
+	struct Item {
+		Node* lower;
+		Node* upper;
+	};
+	std::vector<Item> items;
+	SetLiteral(std::vector<Item> items, Type* ty);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 /** Pascal `nil`. Constructed without a type: its type is fixed up by cast()
  *  to the surrounding reference-type target during assignment / argument
  *  passing. Emits as C++ `nullptr`. */
