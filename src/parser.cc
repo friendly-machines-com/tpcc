@@ -1344,7 +1344,7 @@ Node* Parser::parse_value() {
 			parse_closing_paren();
 
 			Type* arg_ty = arg ? arg->ty : nullptr;
-			if (arg_ty != shortstring_type() && !dynamic_cast<FixedArrayType*>(arg_ty))
+			if (arg_ty != shortstring_type() && arg_ty != ansistring_type() && !dynamic_cast<FixedArrayType*>(arg_ty))
 				raise_type_kind_mismatch("length() argument", "array or string", arg_ty);
 			return new Length(arg, lookup_builtin_type("pas::t_integer"));
 		}

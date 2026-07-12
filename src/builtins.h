@@ -98,6 +98,7 @@ Type* int64_type();
 Type* boolean_type();
 Type* char_type();
 Type* shortstring_type();
+Type* ansistring_type();
 Type* double_type();
 Type* extended_type();
 Type* set_type();

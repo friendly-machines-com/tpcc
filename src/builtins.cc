@@ -145,6 +145,7 @@ Type* int64_type() { return &k_int64; }
 Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
+Type* ansistring_type() { return &k_ansistring; }
 Type* double_type() { return &k_double; }
 Type* extended_type() { return &k_extended; }
 Type* set_type() { return &k_set; }
