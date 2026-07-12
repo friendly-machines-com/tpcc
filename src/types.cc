@@ -235,6 +235,12 @@ int conversion_cost(Type* from, Type* to) {
 		return 0;
 	if (from == &untyped_integer_type())
 		return 0; // literal adapts to any int
+	// Char and Byte remain nominally distinct (so exact overloads can
+	// distinguish them), but Pascal permits ordinal conversion between their
+	// identical unsigned eight-bit ranges.
+	if ((from == char_type() && to == byte_type()) ||
+	    (from == byte_type() && to == char_type()))
+		return 20;
 	// Set types are structural in their ordinal item type. Empty set literals
 	// carry unknown_type() until context supplies the destination item type.
 	if (auto from_set = dynamic_cast<FixedSetType*>(from)) {
