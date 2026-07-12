@@ -4444,9 +4444,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* t = rty->formals[i].ty;
-		if (t == unknown_type() &&
-		    builtin && builtin->generic_kind != BuiltinGenericKind::None)
-			continue; // preserve the generic argument's exact Pascal type
+		if (t == unknown_type())
+			continue; // untyped formal preserves the argument's exact Pascal type
 		args[i] = cast(args[i], t);
 	}
 	return FinalizedCall{receiver, chosen};
