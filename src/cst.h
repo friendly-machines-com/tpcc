@@ -144,6 +144,42 @@ public:
 	const char* diagnostic_kind() const override;
 };
 
+/** A Pascal property declaration. Accessors are ordinary semantic symbols:
+ *  a StorageSlot for a field, a Callable for a getter/setter, or a Builtin
+ *  for a compiler-synthesized RTL accessor. */
+class Property: public Node {
+public:
+	std::string pas_name;
+	std::vector<Type*> index_types;
+	Node* read_accessor;
+	Node* write_accessor;
+	bool is_default;
+
+	Property(std::string pas_name,
+	         Type* property_type,
+	         std::vector<Type*> index_types,
+	         Node* read_accessor,
+	         Node* write_accessor,
+	         bool is_default);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+/** Application of a named or omitted-name property. Once constructed there
+ *  is no semantic distinction between `object.Items[i]` and `object[i]`. */
+class PropertyAccess: public Node {
+public:
+	Node* receiver;
+	Property* property;
+	std::vector<Node*> indexes;
+
+	PropertyAccess(Node* receiver, Property* property, std::vector<Node*> indexes);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 /** array[index]. `a` is the array value; `b` is the index expression.
  *  Result type (Node::ty) is the array's element type, set by the parser at
  *  construction. */

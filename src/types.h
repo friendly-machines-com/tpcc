@@ -8,6 +8,7 @@
 class Frame;
 class Node;
 class StorageSlot;
+class Property;
 class ErrorLetContext;
 
 struct SourceLocation {
@@ -33,6 +34,10 @@ struct SourceLocation {
 class Type {
 public:
 	SourceLocation source_location;
+	// The one FPC-style default indexed property declared by this type.
+	// Descendant lookup walks the static type hierarchy when this is null.
+	// Built-in indexable types receive a compiler-synthesized property lazily.
+	Property* default_property = nullptr;
 
 	explicit Type(SourceLocation source_location);
 	virtual ~Type() = default;

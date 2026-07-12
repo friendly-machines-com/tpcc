@@ -55,7 +55,9 @@ enum t_boolean {
 	p_true = true,
 };
 
-using t_char     = char;
+// FPC's Char in this RTL is an unsigned 8-bit ordinal. It is not C++ char:
+// plain char has implementation-defined signedness and is a distinct type.
+using t_char     = uint8_t;
 using unknown_type = void*;
 
 inline t_boolean bool_to_boolean(bool value) {
@@ -63,7 +65,7 @@ inline t_boolean bool_to_boolean(bool value) {
 }
 
 struct t_shortstring {
-	uint8_t length;
+	t_char length;
 	t_char data[255];
 };
 
@@ -84,6 +86,46 @@ struct t_fixedarray {
 		return items[static_cast<std::ptrdiff_t>(index) - static_cast<std::ptrdiff_t>(low)];
 	}
 };
+
+// Pascal indexing is always emitted as an RTL call. The compiler never needs
+// to know a container's C++ representation or lower bound.
+template<typename T, std::size_t length, auto low, typename I>
+inline T& p_index(t_fixedarray<T, length, low>& value, I index) {
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
+	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
+		throw std::out_of_range("Pascal fixed-array index out of range");
+	return value.items[static_cast<std::size_t>(actual - first)];
+}
+
+template<typename T, std::size_t length, auto low, typename I>
+inline const T& p_index(const t_fixedarray<T, length, low>& value, I index) {
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
+	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
+		throw std::out_of_range("Pascal fixed-array index out of range");
+	return value.items[static_cast<std::size_t>(actual - first)];
+}
+
+template<typename I>
+inline t_char& p_index(t_shortstring& value, I index) {
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 || actual > 255)
+		throw std::out_of_range("Pascal ShortString index out of range");
+	if (actual == 0)
+		return value.length;
+	return value.data[static_cast<std::size_t>(actual - 1)];
+}
+
+template<typename I>
+inline const t_char& p_index(const t_shortstring& value, I index) {
+	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 || actual > 255)
+		throw std::out_of_range("Pascal ShortString index out of range");
+	if (actual == 0)
+		return value.length;
+	return value.data[static_cast<std::size_t>(actual - 1)];
+}
 
 template<typename T>
 struct t_dynamicarray {

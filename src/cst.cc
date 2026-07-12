@@ -37,6 +37,23 @@ ShortCircuitOperation::ShortCircuitOperation(enum ShortCircuitOperationKind kind
 	this->kind = kind;
 }
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
+Property::Property(std::string pas_name,
+		   Type* property_type,
+		   std::vector<Type*> index_types,
+		   Node* read_accessor,
+		   Node* write_accessor,
+		   bool is_default)
+    : pas_name(std::move(pas_name)),
+      index_types(std::move(index_types)),
+      read_accessor(read_accessor),
+      write_accessor(write_accessor),
+      is_default(is_default) {
+	this->ty = property_type;
+}
+PropertyAccess::PropertyAccess(Node* receiver, Property* property, std::vector<Node*> indexes)
+    : receiver(receiver), property(property), indexes(std::move(indexes)) {
+	this->ty = property ? property->ty : nullptr;
+}
 Index::Index(Node* a, Node* b) : BinaryOperation(a, b) {}
 Coerce::Coerce(Node* a, Node* b) : BinaryOperation(a, b) {}
 CoerceCheck::CoerceCheck(Node* a, Node* b) : BinaryOperation(a, b) {}
@@ -268,6 +285,31 @@ void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream&
 
 const char* StorageSlot::diagnostic_kind() const { return "slot"; }
 void StorageSlot::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "slot : " << ctx->known_type_ref(ty); }
+
+const char* Property::diagnostic_kind() const { return "property"; }
+void Property::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(read_accessor);
+	ctx->add_value_edge(write_accessor);
+	for (Type* index_type : index_types)
+		ctx->add_type_edge(index_type);
+}
+void Property::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
+	out << "property " << pas_name << " : " << ctx->known_type_ref(ty);
+}
+
+const char* PropertyAccess::diagnostic_kind() const { return "property_access"; }
+void PropertyAccess::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(receiver);
+	ctx->add_value_edge(property);
+	for (Node* index : indexes)
+		ctx->add_value_edge(index);
+}
+void PropertyAccess::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
+	out << "property access " << ctx->known_value_ref(property) << " on "
+	    << ctx->known_value_ref(receiver);
+}
 
 const char* EnumMemberRef::diagnostic_kind() const { return "enum_member"; }
 ConstEvalResult EnumMemberRef::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new EnumMemberRef(cxx_name, value, ty)); }

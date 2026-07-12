@@ -226,8 +226,18 @@ void Emitter::emit_statement(Node* stmt) {
 		// field, put that field back, then synchronously copy the entire carrier
 		// back to SOURCE. No reference to packed bytes is ever formed and no
 		// temporary view can lose a delayed write.
+		PropertyAccess* indexed_property = dynamic_cast<PropertyAccess*>(a->a);
+		Node* indexed_receiver = indexed_property ? indexed_property->receiver : nullptr;
+		Node* indexed_argument =
+		    indexed_property && indexed_property->indexes.size() == 1
+		        ? indexed_property->indexes.front()
+		        : nullptr;
 		if (auto ix = dynamic_cast<Index*>(a->a)) {
-			if (auto m = dynamic_cast<MemberAccess*>(ix->a)) {
+			indexed_receiver = ix->a;
+			indexed_argument = ix->b;
+		}
+		if (indexed_receiver && indexed_argument) {
+			if (auto m = dynamic_cast<MemberAccess*>(indexed_receiver)) {
 				if (auto overlay = dynamic_cast<Cast*>(m->a)) {
 					if (auto packed = dynamic_cast<PackedRecordType*>(overlay->ty)) {
 						auto field = dynamic_cast<StorageSlot*>(m->b);
@@ -246,9 +256,9 @@ void Emitter::emit_statement(Node* stmt) {
 						fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
 						fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source));\n");
 						fprintf(active, "\t\tauto tpcc_overlay_field = tpcc_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
-						fprintf(active, "\t\ttpcc_overlay_field[");
-						emit_expression(ix->b);
-						fprintf(active, "] = ");
+						fprintf(active, "\t\tpas::p_index(tpcc_overlay_field, ");
+						emit_expression(indexed_argument);
+						fprintf(active, ") = ");
 						emit_expression(a->b);
 						fprintf(active, ";\n");
 						fprintf(active, "\t\ttpcc_overlay_value.m_set_%s(tpcc_overlay_field);\n", field->cxx_name.c_str());
@@ -258,6 +268,53 @@ void Emitter::emit_statement(Node* stmt) {
 					}
 				}
 			}
+		}
+		if (auto property = dynamic_cast<PropertyAccess*>(a->a)) {
+			Node* accessor = property->property->write_accessor;
+			if (!accessor)
+				unhandled_node("assignment to read-only property", property);
+			fprintf(active, "\t");
+			if (auto field = dynamic_cast<StorageSlot*>(accessor)) {
+				if (property->receiver->ty && property->receiver->ty->is_reference_type()) {
+					emit_expression(property->receiver);
+					fprintf(active, "->");
+				} else {
+					emit_expression(property->receiver);
+					fprintf(active, ".");
+				}
+				fprintf(active, "%s = ", field->cxx_name.c_str());
+				emit_expression(a->b);
+				fprintf(active, ";\n");
+				return;
+			}
+			if (auto setter = dynamic_cast<Callable*>(accessor)) {
+				emit_expression(property->receiver);
+				fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+				fprintf(active, "%s(", callable_cxx_name(setter).c_str());
+				for (size_t i = 0; i < property->indexes.size(); ++i) {
+					if (i)
+						fprintf(active, ", ");
+					emit_expression(property->indexes[i]);
+				}
+				if (!property->indexes.empty())
+					fprintf(active, ", ");
+				emit_expression(a->b);
+				fprintf(active, ");\n");
+				return;
+			}
+			if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
+				fprintf(active, "%.*s(", (int)builtin->desc->cxx_name.size(), builtin->desc->cxx_name.data());
+				emit_expression(property->receiver);
+				for (Node* index : property->indexes) {
+					fprintf(active, ", ");
+					emit_expression(index);
+				}
+				fprintf(active, ") = ");
+				emit_expression(a->b);
+				fprintf(active, ";\n");
+				return;
+			}
+			unhandled_node("unsupported property write accessor", accessor);
 		}
 		if (auto m = dynamic_cast<MemberAccess*>(a->a)) {
 			if (dynamic_cast<PackedRecordType*>(m->a->ty)) {
@@ -1041,6 +1098,40 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, "%s", c->cxx_name.c_str());
 		return;
 	}
+	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
+		Node* accessor = property->property->read_accessor;
+		if (!accessor)
+			unhandled_node("read from write-only property", property);
+		if (auto field = dynamic_cast<StorageSlot*>(accessor)) {
+			emit_expression(property->receiver);
+			fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+			fprintf(active, "%s", field->cxx_name.c_str());
+			return;
+		}
+		if (auto getter = dynamic_cast<Callable*>(accessor)) {
+			emit_expression(property->receiver);
+			fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
+			fprintf(active, "%s(", callable_cxx_name(getter).c_str());
+			for (size_t i = 0; i < property->indexes.size(); ++i) {
+				if (i)
+					fprintf(active, ", ");
+				emit_expression(property->indexes[i]);
+			}
+			fprintf(active, ")");
+			return;
+		}
+		if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
+			fprintf(active, "%.*s(", (int)builtin->desc->cxx_name.size(), builtin->desc->cxx_name.data());
+			emit_expression(property->receiver);
+			for (Node* index : property->indexes) {
+				fprintf(active, ", ");
+				emit_expression(index);
+			}
+			fprintf(active, ")");
+			return;
+		}
+		unhandled_node("unsupported property read accessor", accessor);
+	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
 		if (auto packed = dynamic_cast<PackedRecordType*>(m->a->ty)) {
 			(void)packed;
@@ -1092,10 +1183,11 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto ix = dynamic_cast<Index*>(expr)) {
+		fprintf(active, "pas::p_index(");
 		emit_expression(ix->a);
-		fprintf(active, "[");
+		fprintf(active, ", ");
 		emit_expression(ix->b);
-		fprintf(active, "]");
+		fprintf(active, ")");
 		return;
 	}
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {

@@ -1053,6 +1053,8 @@ void Parser::maybe_parse_statement() {
 			MemberAccess* overlay_member = dynamic_cast<MemberAccess*>(lhs);
 			if (auto ix = dynamic_cast<Index*>(lhs))
 				overlay_member = dynamic_cast<MemberAccess*>(ix->a);
+			if (auto property = dynamic_cast<PropertyAccess*>(lhs))
+				overlay_member = dynamic_cast<MemberAccess*>(property->receiver);
 			if (overlay_member) {
 				if (auto overlay = dynamic_cast<Cast*>(overlay_member->a))
 					if (dynamic_cast<PackedRecordType*>(overlay->ty))
@@ -1663,9 +1665,13 @@ Node* Parser::parse_designator_tail(Node* result) {
 			Node* member = members->lookup_value(member_name);
 			if (!member)
 				raise_parse_error("no member '" + member_name + "'");
-			auto ma = new MemberAccess(result, member);
-			ma->ty = member->ty;
-			result = ma;
+			if (auto property = dynamic_cast<Property*>(member)) {
+				result = new PropertyAccess(result, property, {});
+			} else {
+				auto ma = new MemberAccess(result, member);
+				ma->ty = member->ty;
+				result = ma;
+			}
 		} else if (input_token == "(") {
 			SourceLocation call_location = current_location();
 			parse_opening_paren();
@@ -1684,23 +1690,37 @@ Node* Parser::parse_designator_tail(Node* result) {
 			result = call;
 			continue;
 		} else if (maybe_parse_opening_bracket()) {
-			// Bracketed: RHS is one or more comma-separated index expressions.
-			// Each comma dimension is a nested fixed-array index. Auto-call bare
-			// callable LHS first (indexing into a callable reference is nonsense).
+			// Parse the complete bracket argument list before resolving it.
+			// User array properties receive the list as one application;
+			// multidimensional native arrays apply their synthesized
+			// one-argument property once per nested array dimension.
 			result = maybe_auto_call(result);
-			do {
-				Node* idx = parse_expression();
-				Type* ct = result->ty;
-				auto arr = dynamic_cast<FixedArrayType*>(ct);
-				if (!arr)
-					raise_parse_error("index on non-array type");
-				if (!array_index_compatible(arr, idx))
-					raise_type_mismatch("array index expression compatible with index type", arr->range.base_type, idx->ty);
-				auto ix = new Index(result, idx);
-				ix->ty = arr->item_type;
-				result = ix;
-			} while (maybe_parse_comma());
+			std::vector<Node*> indexes;
+			indexes.push_back(parse_expression());
+			while (maybe_parse_comma())
+				indexes.push_back(parse_expression());
 			parse_closing_bracket();
+
+			if (auto pending = dynamic_cast<PropertyAccess*>(result);
+			    pending && !pending->property->index_types.empty() && pending->indexes.empty()) {
+				result = apply_property(pending->receiver, pending->property, std::move(indexes));
+				continue;
+			}
+
+			if (dynamic_cast<FixedArrayType*>(result->ty) && indexes.size() > 1) {
+				for (Node* index : indexes) {
+					Property* property = default_property_for_type(result->ty);
+					if (!property)
+						raise_parse_error("index on type without a default property");
+					result = apply_property(result, property, {index});
+				}
+				continue;
+			}
+
+			Property* property = default_property_for_type(result->ty);
+			if (!property)
+				raise_parse_error("index on type without a default property");
+			result = apply_property(result, property, std::move(indexes));
 		} else if (maybe_parse_circumflex()) {
 			// Postfix: no RHS. Auto-call bare callable LHS first (deref of a
 			// callable reference is nonsense).
@@ -1728,8 +1748,43 @@ bool Parser::is_assignable(Node* n) {
 		return true;
 	if (dynamic_cast<Index*>(n))
 		return true;
+	if (auto property = dynamic_cast<PropertyAccess*>(n))
+		return property->property && property->property->write_accessor;
 	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
 		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
+	}
+	return false;
+}
+
+bool Parser::property_read_is_place(PropertyAccess* access) {
+	if (!access || !access->property || !access->property->read_accessor)
+		return false;
+	Node* accessor = access->property->read_accessor;
+	if (dynamic_cast<StorageSlot*>(accessor))
+		return access->receiver->ty && access->receiver->ty->is_reference_type()
+		    ? true
+		    : is_referenceable(access->receiver);
+	if (auto builtin = dynamic_cast<Builtin*>(accessor))
+		return builtin->desc && builtin->desc->cxx_name == "pas::p_index" &&
+		       is_referenceable(access->receiver);
+	return false; // ordinary Pascal getter calls return values
+}
+
+bool Parser::is_referenceable(Node* n) {
+	if (!n)
+		return false;
+	if (dynamic_cast<StorageSlot*>(n) || dynamic_cast<Dereference*>(n))
+		return true;
+	if (auto property = dynamic_cast<PropertyAccess*>(n))
+		return property_read_is_place(property);
+	if (auto index = dynamic_cast<Index*>(n))
+		return is_referenceable(index->a);
+	if (auto member = dynamic_cast<MemberAccess*>(n)) {
+		if (!dynamic_cast<StorageSlot*>(member->b))
+			return false;
+		if (member->a->ty && member->a->ty->is_reference_type())
+			return true;
+		return is_referenceable(member->a);
 	}
 	return false;
 }
@@ -1744,6 +1799,8 @@ bool Parser::contains_packed_projection(Node* n) {
 	}
 	if (auto ix = dynamic_cast<Index*>(n))
 		return contains_packed_projection(ix->a);
+	if (auto property = dynamic_cast<PropertyAccess*>(n))
+		return contains_packed_projection(property->receiver);
 	if (dynamic_cast<Dereference*>(n))
 		return false;
 	if (auto ca = dynamic_cast<Cast*>(n))
@@ -1761,6 +1818,14 @@ bool Parser::is_supported_packed_assignment(Node* n) {
 	}
 	if (auto ix = dynamic_cast<Index*>(n)) {
 		auto ma = dynamic_cast<MemberAccess*>(ix->a);
+		if (!ma || !ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty))
+			return false;
+		auto overlay = dynamic_cast<Cast*>(ma->a);
+		return overlay && is_assignable(overlay->a) &&
+		       !contains_packed_projection(overlay->a);
+	}
+	if (auto property = dynamic_cast<PropertyAccess*>(n)) {
+		auto ma = dynamic_cast<MemberAccess*>(property->receiver);
 		if (!ma || !ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty))
 			return false;
 		auto overlay = dynamic_cast<Cast*>(ma->a);
@@ -1847,6 +1912,8 @@ Node* Parser::parse_power() {
 		auto x = parse_power();
 		if (contains_packed_projection(x))
 			raise_parse_error("address of a packed-record field is not available");
+		if (!is_referenceable(x))
+			raise_parse_error("address requires a storage-backed expression");
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(current_location(), x->ty)) : nullptr;
 		return n;
@@ -1994,6 +2061,129 @@ Node* Parser::parse_expression() {
 	return parse_comparison();
 }
 
+Property* Parser::default_property_for_type(Type* ty) {
+	if (!ty)
+		return nullptr;
+	if (auto incomplete = dynamic_cast<IncompleteType*>(ty))
+		return incomplete->resolved ? default_property_for_type(incomplete->resolved) : nullptr;
+	if (ty->default_property)
+		return ty->default_property;
+
+	// Built-in containers participate through the same Property node used by
+	// source declarations. Their accessor is the RTL reference operation.
+	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
+		auto accessor = create_builtin_value("pas::p_index");
+		array->default_property = new Property(
+		    "items", array->item_type, {array->range.base_type},
+		    accessor, accessor, true);
+		return array->default_property;
+	}
+	if (ty == shortstring_type()) {
+		auto accessor = create_builtin_value("pas::p_index");
+		ty->default_property = new Property(
+		    "items", char_type(), {integer_type()},
+		    accessor, accessor, true);
+		return ty->default_property;
+	}
+
+	// FPC selects the nearest default property from the expression's static
+	// type hierarchy. It does not dynamically dispatch property declarations.
+	if (auto c = dynamic_cast<ClassType*>(ty))
+		return c->super ? default_property_for_type(c->super) : nullptr;
+	if (auto o = dynamic_cast<ObjectType*>(ty))
+		return o->super ? default_property_for_type(o->super) : nullptr;
+	if (auto i = dynamic_cast<InterfaceType*>(ty)) {
+		for (auto* parent : i->super_interfaces)
+			if (auto* property = default_property_for_type(parent))
+				return property;
+	}
+	return nullptr;
+}
+
+PropertyAccess* Parser::apply_property(Node* receiver, Property* property, std::vector<Node*> indexes) {
+	if (!property)
+		raise_parse_error("internal error: missing property");
+	if (indexes.size() != property->index_types.size()) {
+		std::ostringstream message;
+		message << "property '" << property->pas_name << "' expects "
+		        << property->index_types.size() << " index argument(s), got "
+		        << indexes.size();
+		raise_parse_error(message.str());
+	}
+	for (size_t i = 0; i < indexes.size(); ++i) {
+		if (conversion_cost(indexes[i]->ty, property->index_types[i]) < 0)
+			raise_type_mismatch("property index argument", property->index_types[i], indexes[i]->ty);
+		indexes[i] = cast(indexes[i], property->index_types[i]);
+	}
+	return new PropertyAccess(receiver, property, std::move(indexes));
+}
+
+void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
+	parse_keyword("property");
+	std::string property_name = parse_identifier();
+	std::vector<Type*> index_types;
+	if (maybe_parse_opening_bracket()) {
+		if (input_token == "]")
+			raise_parse_error("property index parameter list cannot be empty");
+		do {
+			// FPC accepts normal value and const index parameters. Their mode is
+			// checked against the accessor signature later; property resolution
+			// itself needs only the declared index types.
+			maybe_parse_keyword("const");
+			std::vector<std::string> names;
+			names.push_back(parse_identifier());
+			while (maybe_parse_comma())
+				names.push_back(parse_identifier());
+			parse_colon();
+			Type* index_type = parse_type_expression(false);
+			for (size_t i = 0; i < names.size(); ++i)
+				index_types.push_back(index_type);
+		} while (maybe_parse_semicolon());
+		parse_closing_bracket();
+	}
+	parse_colon();
+	Type* property_type = parse_type_expression(false);
+
+	Node* read_accessor = nullptr;
+	Node* write_accessor = nullptr;
+	while (input_token != ";") {
+		if (maybe_parse_directive("read")) {
+			std::string name = parse_identifier();
+			read_accessor = body->lookup_value(name);
+			if (!read_accessor)
+				raise_parse_error("unknown read accessor '" + name + "' for property '" + property_name + "'");
+		} else if (maybe_parse_directive("write")) {
+			std::string name = parse_identifier();
+			write_accessor = body->lookup_value(name);
+			if (!write_accessor)
+				raise_parse_error("unknown write accessor '" + name + "' for property '" + property_name + "'");
+		} else {
+			raise_parse_error("expected read or write accessor in property '" + property_name + "'");
+		}
+	}
+	if (!read_accessor && !write_accessor)
+		raise_parse_error("property '" + property_name + "' has no accessor");
+	parse_semicolon();
+
+	bool is_default = false;
+	if (maybe_parse_directive("default")) {
+		is_default = true;
+		if (index_types.empty())
+			raise_parse_error("default property must have index parameters");
+		if (owner_type->default_property)
+			raise_parse_error("only one default property may be declared per type");
+		parse_semicolon();
+	}
+
+	auto property = new Property(
+	    property_name, property_type, std::move(index_types),
+	    read_accessor, write_accessor, is_default);
+	if (!body->register_variable(property_name, property, property_type))
+		raise_parse_error("duplicate property '" + property_name + "'");
+	if (is_default)
+		owner_type->default_property = property;
+}
+
 /** Parse the body of a class/record/object. When `owner_class` is non-null,
  *  procedure/function declarations inside are parsed as method prototypes
  *  and registered with owner_class as their owner. */
@@ -2056,6 +2246,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			parse_method_prototype(body, owner_class, peek_keyword("function"), peek_keyword("destructor"), peek_keyword("constructor"), is_class);
 			is_class = false;
 			continue; // parse_method_prototype consumes its terminating ';'
+		} else if (peek_keyword("property")) {
+			if (is_class)
+				raise_parse_error("'class property' is not implemented");
+			parse_property_declaration(body, owner_class);
+			continue; // property parser consumes its terminating semicolon(s)
 		} else if (peek_keyword("case")) {
 			auto rt = dynamic_cast<RecordType*>(owner_class);
 			if (dynamic_cast<PackedRecordType*>(owner_class))
@@ -4168,9 +4363,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		auto mode = rty->formals[i].mode;
 		if (mode != ParamMode::Var && mode != ParamMode::Out)
 			continue;
-		if (!is_assignable(args[i])) {
+		if (!is_referenceable(args[i])) {
 			emit_parse_error_at(error_location,
-				"argument for var/out parameter '" + rty->formals[i].pas_name + "' is not assignable");
+				"argument for var/out parameter '" + rty->formals[i].pas_name + "' is not a storage-backed expression");
 		}
 		if (contains_packed_projection(args[i])) {
 			emit_parse_error_at(error_location,

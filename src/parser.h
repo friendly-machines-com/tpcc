@@ -22,6 +22,8 @@ struct Parameter;
 class RoutineType;
 class Procedure;
 class Callable;
+class Property;
+class PropertyAccess;
 class Builtin;
 
 /** Shared compiler-wide options set from the command line and consulted by
@@ -267,6 +269,11 @@ protected:
 	Node* parse_expression();
 	void parse_statement();
 	Frame* parse_aggregate_type_body(Type* owner_class);
+	void parse_property_declaration(Frame* body, Type* owner_type);
+	Property* default_property_for_type(Type* ty);
+	PropertyAccess* apply_property(Node* receiver, Property* property, std::vector<Node*> indexes);
+	bool property_read_is_place(PropertyAccess* access);
+	bool is_referenceable(Node* n);
 	void parse_record_variant(RecordType* rt, Frame* body);
 	/** Parse a method prototype inside a class/record/object body. Registers
 	 *  the Method in BODY under its Pascal name (via register_callable, so
