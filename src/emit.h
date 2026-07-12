@@ -175,5 +175,10 @@ public:
 	// (var/out, address-of). Compiler-synthesized properties can use a
 	// different accessor here, for example AnsiString's uniqueness barrier.
 	void emit_writable_expression(Node* expr);
+	// Untyped var/out parameters receive a bounded view of the underlying
+	// Pascal storage rather than a C++ reference to only the selected
+	// subobject. Built-in indexed properties preserve their container and
+	// index here so the RTL can compute the remaining extent safely.
+	void emit_storage_ref(Node* expr);
 	void emit_template_value_arg(Node* expr);
 };
