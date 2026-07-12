@@ -58,7 +58,7 @@ static const char* diagnostic_param_mode_text(ParamMode mode) {
 }
 
 static std::string routine_signature_detail(ErrorLetContext* ctx, const RoutineType* rt) {
-	std::string r = "(";
+	std::string r = "((";
 	for (size_t i = 0; i < rt->formals.size(); ++i) {
 		if (i)
 			r += "; ";
@@ -75,6 +75,7 @@ static std::string routine_signature_detail(ErrorLetContext* ctx, const RoutineT
 		r += ": ";
 		r += ctx->known_type_display(rt->return_type);
 	}
+	r += ")";
 	return r;
 }
 
