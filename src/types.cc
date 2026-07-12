@@ -235,6 +235,12 @@ int conversion_cost(Type* from, Type* to) {
 		return 0;
 	if (from == &untyped_integer_type())
 		return 0; // literal adapts to any int
+	// Pointer types are structural in Pascal. Independently-created `^T`
+	// nodes with the same target are assignment-compatible.
+	if (auto from_pointer = dynamic_cast<PointerType*>(from))
+		if (auto to_pointer = dynamic_cast<PointerType*>(to))
+			if (from_pointer->item_type == to_pointer->item_type)
+				return 0;
 	// Subclass-to-superclass: implicit, cost = depth (1 per inheritance step).
 	// Identity handled by `from == to` above.
 	if (from->is_reference_type() && to->is_reference_type()) {
