@@ -857,7 +857,18 @@ void Parser::maybe_parse_statement() {
 		parse_keyword("then");
 		if (emitter)
 			emitter->emit_if_prologue(condition);
-		parse_statement();
+		// Match FPC's pstatmnt.if_statement: a token in `endtokens`
+		// means the then branch is absent. Leave the delimiter unconsumed
+		// for the surrounding if, block, repeat, or exception parser.
+		const bool empty_then =
+		    input_token == ";" ||
+		    peek_keyword("end") ||
+		    peek_keyword("else") ||
+		    peek_keyword("until") ||
+		    peek_keyword("except") ||
+		    peek_keyword("finally");
+		if (!empty_then)
+			parse_statement();
 		if (maybe_parse_keyword("else")) {
 			if (emitter)
 				emitter->emit_if_else();
