@@ -364,7 +364,11 @@ inline t_boolean p_greaterthanorequal(const t_shortstring& a, const t_shortstrin
 }
 
 inline t_char p_assign(t_char value) { return value; }
-inline t_ansistring p_assign(t_shortstring value) { return value; }
+inline t_ansistring p_assign(t_shortstring value) {
+	t_ansistring result{};
+	static_cast<t_shortstring&>(result) = value;
+	return result;
+}
 inline t_boolean p_lessthan(t_char a, t_char b) { return bool_to_boolean(a.value < b.value); }
 inline t_boolean p_lessthanorequal(t_char a, t_char b) { return bool_to_boolean(a.value <= b.value); }
 inline t_boolean p_equal(t_char a, t_char b) { return bool_to_boolean(a.value == b.value); }
@@ -388,7 +392,14 @@ template<typename T> inline T p_high() {
 inline t_integer p_length(const t_shortstring& s) { return s.length; }
 inline t_integer p_length(const t_ansistring& s) { return s.length; }
 inline void p_setlength(t_ansistring& s, t_integer value) {
-	s.length = value;
+	const std::size_t old_length = s.length;
+	const std::size_t new_length =
+	    value <= 0 ? 0 : std::min<std::size_t>(
+		static_cast<std::size_t>(value), sizeof(s.data) - 1);
+	if (new_length > old_length)
+		std::fill(s.data + old_length, s.data + new_length, t_char{0});
+	s.length = t_char{static_cast<uint8_t>(new_length)};
+	s.data[new_length] = t_char{0};
 }
 template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
 template<typename T, std::size_t N, auto Low> inline t_integer p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_integer>(N); }

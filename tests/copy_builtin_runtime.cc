@@ -24,5 +24,21 @@ int main() {
 		return 6;
 	if (!equals(p_trimmed, "abc", 3))
 		return 7;
+	auto assigned = pas::p_assign(
+	    pas::tpcc_shortstring_from_c("abc", strlen("abc")));
+	if (!equals(assigned, "abc", 3))
+		return 8;
+	pas::p_setlength(assigned, 5);
+	if (assigned.length != 5 ||
+	    assigned.data[3] != 0 ||
+	    assigned.data[4] != 0 ||
+	    assigned.data[5] != 0)
+		return 9;
+	pas::p_setlength(assigned, -1);
+	if (assigned.length != 0 || assigned.data[0] != 0)
+		return 10;
+	pas::p_setlength(assigned, 1000);
+	if (assigned.length != 254 || assigned.data[254] != 0)
+		return 11;
 	return 0;
 }
