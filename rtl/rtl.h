@@ -200,6 +200,9 @@ inline t_longint p_pos(t_char needle, const t_shortstring& haystack) {
 	return 0;
 }
 
+// Pascal Copy uses one-based indices. Preserve the RTL's ShortString
+// invariant on every return path: at most 254 payload bytes followed by the
+// reserved zero terminator.
 inline t_shortstring p_copy(const t_shortstring& value, t_longint index, t_longint count) {
 	t_shortstring result{};
 	if (count <= 0)
@@ -384,7 +387,7 @@ template<typename T> inline T p_high() {
 }
 inline t_integer p_length(const t_shortstring& s) { return s.length; }
 inline t_integer p_length(const t_ansistring& s) { return s.length; }
-inline void p_setlength(var t_ansistring& s, t_integer value) {
+inline void p_setlength(t_ansistring& s, t_integer value) {
 	s.length = value;
 }
 template<typename T, std::size_t N> inline t_integer p_length(const T (&)[N]) { return static_cast<t_integer>(N); }
