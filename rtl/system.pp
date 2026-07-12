@@ -182,6 +182,7 @@ procedure val(const s: ShortString; out value: Extended; out code: Integer); ove
 function octstr(value: LongInt; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
 function octstr(value: Int64; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
 function octstr(value: QWord; count: Byte): ShortString; overload; external nil name 'pas::p_octstr';
+function strlen(value: PChar): SizeInt; external nil name 'pas::p_strlen';
 function assigned(const x: Pointer): Boolean; external nil name 'pas::p_assigned';
 function trunc(const x: Extended): Int64; external nil name 'pas::p_trunc';
 function round(const x: Extended): Int64; external nil name 'pas::p_round';

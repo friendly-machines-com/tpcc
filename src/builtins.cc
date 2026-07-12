@@ -386,6 +386,7 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_str", nullptr},
     {"pas::p_val", nullptr},
     {"pas::p_octstr", nullptr},
+    {"pas::p_strlen", nullptr},
     {"pas::p_low", nullptr, TypeBoundKind::Low},
     {"pas::p_high", nullptr, TypeBoundKind::High},
     {"pas::p_setlength", nullptr},
