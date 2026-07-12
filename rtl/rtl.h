@@ -280,6 +280,15 @@ inline t_char p_chr(t_byte value) {
 	return t_char{value};
 }
 
+inline void p_fillchar(tpcc_storage_ref destination, t_sizeint count, t_byte value) {
+	if (count <= 0)
+		return;
+	const std::size_t byte_count = static_cast<std::size_t>(count);
+	if (byte_count > destination.size)
+		throw std::out_of_range("FillChar exceeds destination storage");
+	std::memset(destination.data, value, byte_count);
+}
+
 inline t_longint p_pos(const t_shortstring& needle, const t_shortstring& haystack) {
 	if (needle.length == 0)
 		return 1;

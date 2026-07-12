@@ -56,10 +56,10 @@ IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {});
 IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {});
 IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", {});
 IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", {});
-IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", {});
-IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", {});
+IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", 8, signed_bounds(64));
+IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", 7, unsigned_bounds(64));
 IntrinsicType k_fixedarray(SourceLocation::builtin(), "pas::t_fixedarray", {});
-IntrinsicType k_unknown(SourceLocation::builtin(), "pas::unknown_type", {});
+IntrinsicType k_unknown(SourceLocation::builtin(), "pas::tpcc_unknown_type", {});
 #if 0
 // Note: I don't think it's useful to have actual user-visible interfaces implemented on the metaclass.
 //InterfaceType k_m_iobject("pas::m_iobject", new Frame(nullptr), std::vector<InterfaceType*>());
@@ -393,9 +393,10 @@ static const BuiltinDesc k_builtins[] = {
         .const_fold = fold_length,
     },
     {"pas::p_index", nullptr},
-    {"pas::p_index_write", nullptr},
+    {"pas::tpcc_index_write", nullptr},
     {"pas::p_char_to_shortstring", nullptr},
     {"pas::p_chr", fold_chr},
+    {"pas::p_fillchar", nullptr},
     {"pas::p_assigned", nullptr},
     {"pas::p_trunc", fold_trunc},
     {"pas::p_round", fold_round},
