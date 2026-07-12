@@ -15,7 +15,7 @@ if rg -q 'p_[a-zA-Z0-9_]+\[' "$tmp/properties.cc"; then
 	exit 1
 fi
 
-if [ "$(rg -c 'pas::p_index_write\(p_longs, 1ull\)' "$tmp/properties.cc")" -ne 3 ]; then
+if [ "$(rg -c 'pas::tpcc_index_write\(p_longs, 1ull\)' "$tmp/properties.cc")" -ne 3 ]; then
 	echo "AnsiString assignment, var argument, and address-of must use the uniqueness barrier" >&2
 	exit 1
 fi

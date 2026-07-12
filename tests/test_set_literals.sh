@@ -13,7 +13,7 @@ if ! rg -q 'pas::t_set<pas::t_char>' "$tmp/set_literals.cc"; then
 	echo "Char set lost its item type" >&2
 	exit 1
 fi
-if ! rg -q 'pas::p_set_range' "$tmp/set_literals.cc"; then
+if ! rg -q 'pas::tpcc_set_range' "$tmp/set_literals.cc"; then
 	echo "set range did not lower through the RTL" >&2
 	exit 1
 fi
