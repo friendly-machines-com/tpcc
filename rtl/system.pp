@@ -151,6 +151,7 @@ function pos(needle: Char; const haystack: ShortString): LongInt; overload; exte
 procedure delete(var value: ShortString; index, count: LongInt); overload; external nil name 'pas::p_delete';
 procedure delete(var value: AnsiString; index, count: LongInt); overload; external nil name 'pas::p_delete';
 procedure insert(const source: ShortString; var destination: ShortString; index: LongInt); overload; external nil name 'pas::p_insert';
+procedure insert(source: Char; var destination: ShortString; index: LongInt); overload; external nil name 'pas::p_insert';
 procedure insert(const source: AnsiString; var destination: AnsiString; index: LongInt); overload; external nil name 'pas::p_insert';
 
 operator xor(a, b: Boolean): Boolean; external nil name 'pas::p_logicalxor';
