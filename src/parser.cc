@@ -2095,10 +2095,13 @@ Property* Parser::default_property_for_type(Type* ty) {
 		return array->default_property;
 	}
 	if (ty == shortstring_type() || ty == ansistring_type()) {
-		auto accessor = create_builtin_value("pas::p_index");
+		Node* read_accessor = create_builtin_value("pas::p_index");
+		Node* write_accessor = ty == ansistring_type()
+		    ? create_builtin_value("pas::p_index_write")
+		    : read_accessor;
 		ty->default_property = new Property(
 		    "items", char_type(), {integer_type()},
-		    accessor, accessor, true);
+		    read_accessor, write_accessor, true);
 		return ty->default_property;
 	}
 

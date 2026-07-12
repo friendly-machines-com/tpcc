@@ -15,6 +15,19 @@ if rg -q 'p_[a-zA-Z0-9_]+\[' "$tmp/properties.cc"; then
 	exit 1
 fi
 
+if [ "$(rg -c 'pas::p_index_write\\(p_longs, 1ull\\)' "$tmp/properties.cc")" -ne 3 ]; then
+	echo "AnsiString assignment, var argument, and address-of must use the uniqueness barrier" >&2
+	exit 1
+fi
+if ! rg -q 'p_ac = pas::p_index\\(p_longs, 1ull\\)' "$tmp/properties.cc"; then
+	echo "ordinary AnsiString reads must not invoke the uniqueness barrier" >&2
+	exit 1
+fi
+if ! rg -q 'pas::p_uniquestring\\(p_longs\\)' "$tmp/properties.cc"; then
+	echo "System.UniqueString must lower as an ordinary RTL call" >&2
+	exit 1
+fi
+
 "${CXX:-g++}" \
 	-std=c++20 \
 	-Wall \

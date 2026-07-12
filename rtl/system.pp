@@ -172,6 +172,7 @@ operator =(a, b: shortstring): Boolean; external nil name 'pas::p_equal';
 operator :=(a: shortstring): ansistring; external nil name 'pas::p_assign';
 
 procedure SetLength(var destination: AnsiString; value: LongInt); external nil name 'pas::p_setlength';
+procedure UniqueString(var value: AnsiString); external nil name 'pas::p_uniquestring';
 
 implementation
 

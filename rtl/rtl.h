@@ -148,6 +148,19 @@ struct t_dynamicarray {
 // collapse, even though this runtime does not implement real managed strings yet.
 struct t_ansistring : t_shortstring {};
 
+// Mutation of an AnsiString element must detach shared storage before a
+// writable character reference escapes. The temporary inline representation
+// is already unique, so this becomes a real copy-on-write barrier when
+// t_ansistring acquires managed storage.
+inline void p_uniquestring(t_ansistring&) {
+}
+
+template<typename I>
+inline t_char& p_index_write(t_ansistring& value, I index) {
+	p_uniquestring(value);
+	return p_index(static_cast<t_shortstring&>(value), index);
+}
+
 inline t_shortstring tpcc_shortstring_from_c(const char* s) {
 	t_shortstring result{};
 	result.length = std::min(strlen(s), 254ul);

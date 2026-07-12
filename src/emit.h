@@ -171,5 +171,9 @@ public:
 	// ObjectType receivers (by-value capture would copy a value-typed object,
 	// diverging from Pascal TMethod's pointer-to-instance semantics).
 	void emit_method_pointer_lambda(Node* obj_expr, Method* method);
+	// Emit an expression in a context which may mutate the referenced place
+	// (var/out, address-of). Compiler-synthesized properties can use a
+	// different accessor here, for example AnsiString's uniqueness barrier.
+	void emit_writable_expression(Node* expr);
 	void emit_template_value_arg(Node* expr);
 };

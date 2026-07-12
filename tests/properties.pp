@@ -35,7 +35,10 @@ var
   Grid: TGrid;
   A: array[1..2] of Integer;
   S: ShortString;
+  LongS: AnsiString;
   C: Char;
+  AC: Char;
+  CP: ^Char;
   P: ^Integer;
   X: Integer;
   SeenByte: Integer;
@@ -109,6 +112,11 @@ begin
   C := S[1];
   S[2] := S[1];
   MutateChar(S[1]);
+  UniqueString(LongS);
+  LongS[1] := S[1];
+  MutateChar(LongS[1]);
+  CP := @LongS[1];
+  AC := LongS[1];
   Mark(Byte(1));
   Mark(S[1]);
 

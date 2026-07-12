@@ -1018,6 +1018,30 @@ void Emitter::emit_method_pointer_lambda(Node* obj_expr, Method* method) {
 	fprintf(active, "); }");
 }
 
+void Emitter::emit_writable_expression(Node* expr) {
+	auto property = dynamic_cast<PropertyAccess*>(expr);
+	if (!property) {
+		emit_expression(expr);
+		return;
+	}
+	auto builtin = dynamic_cast<Builtin*>(property->property->write_accessor);
+	if (!builtin) {
+		// Field-backed properties already emit their underlying place through
+		// the normal expression path. Method-backed properties are not
+		// referenceable and therefore cannot reach this function.
+		emit_expression(expr);
+		return;
+	}
+	fprintf(active, "%.*s(", (int)builtin->desc->cxx_name.size(),
+		builtin->desc->cxx_name.data());
+	emit_expression(property->receiver);
+	for (Node* index : property->indexes) {
+		fprintf(active, ", ");
+		emit_expression(index);
+	}
+	fprintf(active, ")");
+}
+
 static const char* cxx_unary_operator(UnaryOperation* op) {
 	if (dynamic_cast<AddrOf*>(op))
 		return "&";
@@ -1272,6 +1296,10 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, ">(");
 				emit_expression(arg);
 				fprintf(active, ")");
+			} else if (call_ty && i < call_ty->formals.size() &&
+				   (call_ty->formals[i].mode == ParamMode::Var ||
+				    call_ty->formals[i].mode == ParamMode::Out)) {
+				emit_writable_expression(arg);
 			} else {
 				emit_expression(arg);
 			}
@@ -1361,7 +1389,10 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		if (const char* op = cxx_unary_operator(u)) {
 			fprintf(active, "%s", op);
-			emit_expression(u->a);
+			if (dynamic_cast<AddrOf*>(u))
+				emit_writable_expression(u->a);
+			else
+				emit_expression(u->a);
 			return;
 		}
 	}

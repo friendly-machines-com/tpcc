@@ -376,11 +376,13 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_low", nullptr, TypeBoundKind::Low},
     {"pas::p_high", nullptr, TypeBoundKind::High},
     {"pas::p_setlength", nullptr},
+    {"pas::p_uniquestring", nullptr},
     {
         .cxx_name = "pas::p_length",
         .const_fold = fold_length,
     },
     {"pas::p_index", nullptr},
+    {"pas::p_index_write", nullptr},
     {"pas::p_char_to_shortstring", nullptr},
     {"pas::p_assigned", nullptr},
     {"pas::p_trunc", fold_trunc},
