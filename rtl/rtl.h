@@ -308,6 +308,7 @@ inline t_boolean p_greaterthanorequal(const t_shortstring& a, const t_shortstrin
 }
 
 inline t_char p_assign(t_char value) { return value; }
+inline t_ansistring p_assign(t_shortstring value) { return value; }
 inline t_boolean p_lessthan(t_char a, t_char b) { return bool_to_boolean(a.value < b.value); }
 inline t_boolean p_lessthanorequal(t_char a, t_char b) { return bool_to_boolean(a.value <= b.value); }
 inline t_boolean p_equal(t_char a, t_char b) { return bool_to_boolean(a.value == b.value); }
