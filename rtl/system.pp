@@ -154,6 +154,10 @@ function sizeof(const x): SizeInt; external nil name 'pas::p_sizeof';
 // name lookup and shadowing while BuiltinSyntaxKind parses the actual call.
 procedure write; external nil name 'pas::p_write';
 procedure writeln; external nil name 'pas::p_writeln';
+procedure halt(value: LongInt); overload; noreturn; external nil name 'pas::p_halt';
+procedure halt; overload; noreturn; external nil name 'pas::p_halt';
+procedure runerror(value: Word); overload; noreturn; external nil name 'pas::p_runerror';
+procedure runerror; overload; noreturn; external nil name 'pas::p_runerror';
 function low(const x): Integer; external nil name 'pas::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external nil name 'pas::p_high'; // generic intrinsic: parser supplies the type operand/result
 function length(const x): SizeInt; external nil name 'pas::p_length'; // generic intrinsic
