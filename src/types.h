@@ -168,10 +168,10 @@ struct RecordType: public Type {
 	//     false: (uvalue: QWord);
 	//     true:  (svalue: Int64);
 	//
-	// The variant arms overlap in memory (C++ anon-union). The selector,
-	// when present, is just an ordinary field the program can read/write;
-	// we emit it as a regular struct member ahead of the union. The arms
-	// themselves don't influence layout beyond "these slots overlap".
+	// Each variant arm is a sequential C++ struct; one union contains those
+	// arm structs, so different arms overlap while fields within an arm retain
+	// Pascal declaration order. The selector, when present, is an ordinary
+	// field emitted ahead of that union.
 	bool has_selector = false;
 	std::string selector_name;
 	std::string selector_cxx_name;
