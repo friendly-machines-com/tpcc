@@ -7,7 +7,9 @@ Unit::Unit(std::string name, Frame* interface_frame, Frame* implementation_frame
     : name(name),
       interface_frame(interface_frame),
       implementation_frame(implementation_frame),
-      phase(UnitPhase::Unparsed) {}
+      phase(UnitPhase::Unparsed),
+      initialization_cxx_name("tpcc_initialize_" + name),
+      finalization_cxx_name("tpcc_finalize_" + name) {}
 
 Unit* UnitRegistry::register_new(std::string name, Frame* interface_frame, Frame* implementation_frame) {
 	if (units.count(name)) {
@@ -24,4 +26,19 @@ Unit* UnitRegistry::lookup(std::string name) const {
 	if (it == units.end())
 		return nullptr;
 	return it->second;
+}
+
+void UnitRegistry::record_completed(Unit* unit) {
+	if (!unit || unit->phase != UnitPhase::Done) {
+		fprintf(stderr, "internal compiler error: recording an incomplete unit\n");
+		abort();
+	}
+	for (Unit* existing : completed) {
+		if (existing == unit) {
+			fprintf(stderr, "internal compiler error: unit '%s' completed twice\n",
+			        unit->name.c_str());
+			abort();
+		}
+	}
+	completed.push_back(unit);
 }

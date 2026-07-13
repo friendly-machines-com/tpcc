@@ -174,6 +174,7 @@ private:
 protected:
 	std::string input_token;
 	void parse_block_body();
+	void parse_unit_statement_sequence(bool stop_at_finalization);
 	void maybe_parse_const_block();
 	void maybe_parse_type_block(bool delphi_auto_end);
 	void maybe_parse_var_block();

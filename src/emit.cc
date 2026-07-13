@@ -108,6 +108,9 @@ void Emitter::emit_program_prologue(std::vector<std::string> used_unit_h_files) 
 	if (!active)
 		return;
 	fprintf(active, "#include \"rtl.h\"\n");
+	fprintf(active, "#include <array>\n");
+	fprintf(active, "#include <cstdlib>\n");
+	fprintf(active, "#include <exception>\n");
 	fprintf(active, "#include <functional>\n");
 	for (auto& h : used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
@@ -117,6 +120,7 @@ void Emitter::emit_program_prologue(std::vector<std::string> used_unit_h_files) 
 void Emitter::emit_unit_interface_prologue(std::vector<std::string> used_unit_h_files) {
 	if (!active)
 		return;
+	fprintf(active, "#pragma once\n");
 	fprintf(active, "#include \"rtl.h\"\n");
 	fprintf(active, "#include <functional>\n");
 	for (auto& h : used_unit_h_files)
@@ -133,6 +137,18 @@ void Emitter::emit_unit_implementation_prologue(std::string this_unit_h_file, st
 	for (auto& h : impl_used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
 	fprintf(active, "\n");
+}
+
+void Emitter::emit_unit_lifecycle_open(std::string cxx_name) {
+	if (!active)
+		return;
+	fprintf(active, "\nvoid %s() {\n", cxx_name.c_str());
+}
+
+void Emitter::emit_unit_lifecycle_close() {
+	if (!active)
+		return;
+	fprintf(active, "}\n");
 }
 
 void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
@@ -152,16 +168,67 @@ void Emitter::emit_const_decl(std::string cxx_name, Type* ty, Node* initializer)
 	fprintf(active, ";\n");
 }
 
-void Emitter::emit_main_prologue() {
+void Emitter::emit_main_prologue(
+    const std::vector<std::pair<std::string, std::string>>&
+        unit_lifecycle_hooks) {
 	if (!active)
 		return;
-	fprintf(active, "\nint main() {\n");
+	fprintf(active, "\n");
+	for (const auto& [initialize, finalize] :
+	     unit_lifecycle_hooks) {
+		fprintf(active, "void %s();\n", initialize.c_str());
+		fprintf(active, "void %s();\n", finalize.c_str());
+	}
+	fprintf(active, "\nnamespace {\n");
+	fprintf(active, "struct tpcc_unit_entry {\n");
+	fprintf(active, "\tvoid (*initialize)();\n");
+	fprintf(active, "\tvoid (*finalize)();\n");
+	fprintf(active, "};\n\n");
+	fprintf(active,
+	        "constexpr std::array<tpcc_unit_entry, %zu> tpcc_units{{\n",
+	        unit_lifecycle_hooks.size());
+	for (const auto& [initialize, finalize] : unit_lifecycle_hooks)
+		fprintf(active, "\t{%s, %s},\n",
+		        initialize.c_str(), finalize.c_str());
+	fprintf(active, "}};\n");
+	fprintf(active, "std::size_t tpcc_initialized_unit_count = 0;\n");
+	fprintf(active, "bool tpcc_finalization_started = false;\n\n");
+	fprintf(active,
+	        "void tpcc_finalize_initialized_units() noexcept {\n");
+	fprintf(active, "\tif (tpcc_finalization_started)\n");
+	fprintf(active, "\t\treturn;\n");
+	fprintf(active, "\ttpcc_finalization_started = true;\n");
+	fprintf(active, "\twhile (tpcc_initialized_unit_count != 0) {\n");
+	fprintf(active, "\t\t--tpcc_initialized_unit_count;\n");
+	fprintf(active,
+	        "\t\tauto finalize = "
+	        "tpcc_units[tpcc_initialized_unit_count].finalize;\n");
+	fprintf(active, "\t\tif (finalize)\n");
+	fprintf(active, "\t\t\tfinalize();\n");
+	fprintf(active, "\t}\n");
+	fprintf(active, "}\n");
+	fprintf(active, "}\n\n");
+	fprintf(active, "int main() {\n");
+	fprintf(active,
+	        "\tif (std::atexit(tpcc_finalize_initialized_units) != 0)\n");
+	fprintf(active, "\t\tstd::terminate();\n");
+	fprintf(active, "\ttry {\n");
+	fprintf(active, "\t\tfor (const auto& unit : tpcc_units) {\n");
+	fprintf(active, "\t\t\tif (unit.initialize)\n");
+	fprintf(active, "\t\t\t\tunit.initialize();\n");
+	fprintf(active, "\t\t\t++tpcc_initialized_unit_count;\n");
+	fprintf(active, "\t\t}\n");
 }
 
 void Emitter::emit_main_epilogue() {
 	if (!active)
 		return;
-	fprintf(active, "\treturn 0;\n}\n");
+	fprintf(active, "\t\treturn 0;\n");
+	fprintf(active, "\t} catch (...) {\n");
+	fprintf(active, "\t\ttpcc_finalize_initialized_units();\n");
+	fprintf(active, "\t\tthrow;\n");
+	fprintf(active, "\t}\n");
+	fprintf(active, "}\n");
 }
 
 // The cxx_name of the type that owns a Method, or empty if none.

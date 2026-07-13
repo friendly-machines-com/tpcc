@@ -3292,6 +3292,22 @@ void Parser::parse_block_body() {
 		}
 	}
 }
+
+void Parser::parse_unit_statement_sequence(bool stop_at_finalization) {
+	while (!input_token.empty() &&
+	       !peek_keyword("end") &&
+	       !(stop_at_finalization &&
+	         peek_keyword("finalization"))) {
+		maybe_parse_statement();
+		if (peek_keyword("end") ||
+		    (stop_at_finalization &&
+		     peek_keyword("finalization")))
+			break;
+		if (!maybe_parse_semicolon())
+			break;
+	}
+}
+
 void Parser::parse_label_block() {
 	parse_keyword("label");
 	do {
@@ -4762,7 +4778,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				name_for_error = c->pas_name;
 			}
 			auto costs = per_arg_costs(c, receiver, args);
-			if (!costs.empty())
+			if (!costs.empty() &&
+			    (!expected_return_type ||
+			     static_cast<RoutineType*>(c->ty)->return_type == expected_return_type))
 				viable.push_back({c, std::move(costs)});
 		}
 		if (viable.empty()) {
@@ -4990,7 +5008,35 @@ void Parser::parse_unit_body() {
 	// parse_procedure_or_function.
 	size_t impl_decls = parse_decl_blocks(false);
 
-	parse_keyword("end");
+	bool consumed_end = false;
+	if (emitter)
+		emitter->emit_unit_lifecycle_open(
+		    unit->initialization_cxx_name);
+	if (maybe_parse_keyword("begin")) {
+		unit->has_initialization = true;
+		parse_unit_statement_sequence(false);
+		parse_keyword("end");
+		consumed_end = true;
+	} else if (maybe_parse_keyword("initialization")) {
+		unit->has_initialization = true;
+		parse_unit_statement_sequence(true);
+	}
+	if (emitter)
+		emitter->emit_unit_lifecycle_close();
+
+	if (emitter)
+		emitter->emit_unit_lifecycle_open(
+		    unit->finalization_cxx_name);
+	if (!consumed_end &&
+	    maybe_parse_keyword("finalization")) {
+		unit->has_finalization = true;
+		parse_unit_statement_sequence(false);
+	}
+	if (emitter)
+		emitter->emit_unit_lifecycle_close();
+
+	if (!consumed_end)
+		parse_keyword("end");
 	parse_period();
 
 	// Pop in reverse push order: impl-side decl blocks, impl-side uses,
@@ -5007,6 +5053,7 @@ void Parser::parse_unit_body() {
 	pop_scope(); // iface
 
 	unit->phase = UnitPhase::Done;
+	unit_registry->record_completed(unit);
 }
 
 void Parser::parse_program_or_unit() {
@@ -5047,8 +5094,20 @@ void Parser::parse_program_or_unit() {
 		// about (it's also called from procedure bodies).
 		size_t pushed = parse_decl_blocks(false);
 		parse_keyword("begin");
-		if (emitter)
-			emitter->emit_main_prologue();
+		if (emitter) {
+			std::vector<std::pair<std::string, std::string>>
+			    lifecycle_hooks;
+			for (Unit* used :
+			     unit_registry->completed_units()) {
+				if (!used->has_initialization &&
+				    !used->has_finalization)
+					continue;
+				lifecycle_hooks.emplace_back(
+				    used->initialization_cxx_name,
+				    used->finalization_cxx_name);
+			}
+			emitter->emit_main_prologue(lifecycle_hooks);
+		}
 		parse_block_body();
 		parse_keyword("end");
 		if (emitter)
