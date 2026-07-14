@@ -1486,6 +1486,65 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, "}}");
 		return;
 	}
+	if (auto record = dynamic_cast<RecordLiteral*>(expr)) {
+		Type* record_type = record->ty;
+		while (auto incomplete =
+		           dynamic_cast<IncompleteType*>(record_type))
+			record_type = incomplete->resolved;
+		const bool packed =
+		    dynamic_cast<PackedRecordType*>(record_type);
+		if (!packed &&
+		    !dynamic_cast<RecordType*>(record_type))
+			unhandled_node(
+			    "record literal has non-record type", record);
+
+		if (record->fields.empty()) {
+			emit_type_ref(record_type);
+			fprintf(active, "{}");
+			return;
+		}
+
+		// Pass the recursively-emitted field expressions as lambda
+		// arguments. A captureless lambda is valid both at namespace scope
+		// and inside a routine, while still allowing a local field
+		// expression to be evaluated at the call site.
+		fprintf(active, "[](");
+		for (size_t i = 0; i < record->fields.size(); ++i) {
+			if (i)
+				fprintf(active, ", ");
+			emit_type_ref(record->fields[i].slot->ty);
+			fprintf(active, " tpcc_field_%zu", i);
+		}
+		fprintf(active, ") { ");
+		emit_type_ref(record_type);
+		fprintf(active, " tpcc_record{}; ");
+		for (size_t i = 0; i < record->fields.size(); ++i) {
+			StorageSlot* slot = record->fields[i].slot;
+			if (packed) {
+				fprintf(active,
+				    "tpcc_record.m_set_%s(tpcc_field_%zu); ",
+				    slot->cxx_name.c_str(), i);
+			} else {
+				fprintf(active, "tpcc_record.");
+				if (auto path =
+				        record_variant_path(
+				            record_type, slot))
+					fprintf(active,
+					    "m_variant.m_arm_%zu.",
+					    path->first);
+				fprintf(active, "%s = tpcc_field_%zu; ",
+				    slot->cxx_name.c_str(), i);
+			}
+		}
+		fprintf(active, "return tpcc_record; }(");
+		for (size_t i = 0; i < record->fields.size(); ++i) {
+			if (i)
+				fprintf(active, ", ");
+			emit_expression(record->fields[i].value);
+		}
+		fprintf(active, ")");
+		return;
+	}
 	if (auto set = dynamic_cast<SetLiteral*>(expr)) {
 		auto set_type = dynamic_cast<FixedSetType*>(set->ty);
 		if (!set_type || set_type->item_type == unknown_type())

@@ -3475,6 +3475,14 @@ static bool ordinal_constant_matches_range_type(Type* base_type, const FoldedSub
 }
 
 Node* Parser::parse_typed_const_initializer(Type* ty) {
+	while (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
+		if (!incomplete->resolved)
+			raise_parse_error(
+			    "typed constant uses unresolved type '" +
+			    incomplete->name + "'");
+		ty = incomplete->resolved;
+	}
+
 	if (auto arr = dynamic_cast<FixedArrayType*>(ty)) {
 		parse_opening_paren();
 		std::vector<Node*> elements;
@@ -3491,6 +3499,58 @@ Node* Parser::parse_typed_const_initializer(Type* ty) {
 		}
 		return new FixedArrayLiteral(std::move(elements), ty);
 	}
+
+	auto parse_record =
+	    [&](const auto& declared_fields) -> Node* {
+		parse_opening_paren();
+		std::vector<RecordLiteral::Field> fields;
+		std::size_t next_field = 0;
+		while (input_token != ")") {
+			const std::string name = parse_identifier();
+			auto found = std::find_if(
+			    declared_fields.begin(), declared_fields.end(),
+			    [&](const auto& field) {
+				    return field.pas_name == name;
+			    });
+			if (found == declared_fields.end())
+				raise_parse_error(
+				    "unknown record initializer field '" +
+				    name + "'");
+			const std::size_t field_index =
+			    static_cast<std::size_t>(
+			        found - declared_fields.begin());
+			if (field_index < next_field)
+				raise_parse_error(
+				    "record initializer field '" + name +
+				    "' is repeated or out of declaration order");
+			if (field_index > next_field)
+				raise_parse_error(
+				    "record initializer skips field(s) before '" +
+				    name + "'");
+
+			parse_colon();
+			fields.push_back(RecordLiteral::Field{
+			    found->slot,
+			    parse_typed_const_initializer(found->ty),
+			});
+			next_field = field_index + 1;
+
+			if (input_token != ")")
+				parse_semicolon();
+		}
+		parse_closing_paren();
+		return new RecordLiteral(std::move(fields), ty);
+	};
+
+	if (auto record = dynamic_cast<RecordType*>(ty)) {
+		if (record->has_selector || !record->arms.empty())
+			raise_parse_error(
+			    "variant record constant initializers are not "
+			    "implemented");
+		return parse_record(record->fields);
+	}
+	if (auto record = dynamic_cast<PackedRecordType*>(ty))
+		return parse_record(record->fields);
 
 	Node* expr = parse_expression();
 	ConstEvalContext ctx;
@@ -3640,6 +3700,20 @@ struct TypeBlockResolver {
 				return false;
 			n->ty = sizeint_type();
 		}
+		if (auto n = dynamic_cast<FixedArrayLiteral*>(node))
+			for (Node* element : n->elements)
+				if (!normalize_node(element))
+					return false;
+		if (auto n = dynamic_cast<RecordLiteral*>(node))
+			for (auto& field : n->fields)
+				if (!normalize_node(field.slot) ||
+				    !normalize_node(field.value))
+					return false;
+		if (auto n = dynamic_cast<SetLiteral*>(node))
+			for (auto& item : n->items)
+				if (!normalize_node(item.lower) ||
+				    !normalize_node(item.upper))
+					return false;
 		if (auto n = dynamic_cast<UnaryOperation*>(node)) {
 			if (!normalize_node(n->a))
 				return false;

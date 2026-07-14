@@ -288,6 +288,28 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** A type-directed Pascal record constant `(field: value; ...)`.
+ *
+ * Field names are resolved while parsing, so later phases use StorageSlot
+ * identity rather than repeating record-member lookup. Values are recursively
+ * parsed against the corresponding field type; this is what disambiguates
+ * nested record constants from parenthesized expressions. */
+class RecordLiteral: public Node {
+public:
+	struct Field {
+		StorageSlot* slot;
+		Node* value;
+	};
+	std::vector<Field> fields;
+	RecordLiteral(std::vector<Field> fields, Type* ty);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
 /** Pascal set constructor. Each item is either a singleton (upper == nullptr)
  *  or an inclusive range. Node::ty is a FixedSetType whose item_type is the
  *  common ordinal type of all bounds, or is supplied contextually for `[]`. */

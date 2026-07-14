@@ -115,6 +115,11 @@ FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty)
 	this->ty = ty;
 }
 
+RecordLiteral::RecordLiteral(std::vector<Field> fields, Type* ty)
+    : fields(std::move(fields)) {
+	this->ty = ty;
+}
+
 SetLiteral::SetLiteral(std::vector<Item> items, Type* ty)
     : items(std::move(items)) {
 	this->ty = ty;
@@ -412,6 +417,44 @@ void FixedArrayLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::o
 		out << "\n";
 		ctx->indent(out, indent + 1);
 		out << "element: " << ctx->known_value_ref(element);
+	}
+}
+
+const char* RecordLiteral::diagnostic_kind() const {
+	return "record_literal";
+}
+ConstEvalResult RecordLiteral::const_eval(
+    ConstEvalContext& ctx) const {
+	std::vector<Field> folded;
+	folded.reserve(fields.size());
+	for (const Field& field : fields) {
+		ConstEvalResult value = field.value
+		    ? field.value->const_eval(ctx)
+		    : ConstEvalResult::not_constant();
+		if (value.kind != ConstEvalResult::Kind::Success)
+			return value;
+		folded.push_back(Field{field.slot, value.node});
+	}
+	return ConstEvalResult::success(
+	    new RecordLiteral(std::move(folded), ty));
+}
+void RecordLiteral::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	for (const Field& field : fields) {
+		ctx->add_value_edge(field.slot);
+		ctx->add_value_edge(field.value);
+	}
+}
+void RecordLiteral::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "record literal : " << ctx->known_type_ref(ty);
+	for (const Field& field : fields) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << ctx->known_value_ref(field.slot) << ": "
+		    << ctx->known_value_ref(field.value);
 	}
 }
 
