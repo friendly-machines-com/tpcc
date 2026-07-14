@@ -2898,7 +2898,7 @@ Type* Parser::parse_class_type() {
 		// FIXME: return lookup_builtin_type("pas::m_iobject");
 		// return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
 	}
-	ClassType* super_ty = nullptr; // FIXME: TObject--but how?
+	ClassType* super_ty = nullptr;
 	std::vector<InterfaceType*> implemented_interfaces;
 	if (maybe_parse_opening_paren()) {
 		auto s_ty = parse_type_expression(false);
@@ -2922,11 +2922,69 @@ Type* Parser::parse_class_type() {
 			}
 		}
 		parse_closing_paren();
+	} else {
+		// TObject is the sole root class. Every other bare `class` gets its
+		// implicit parent from the System unit itself, rather than whichever
+		// lexical scope might happen to contain a shadowing `TObject`.
+		bool defining_system_tobject =
+		    current_unit && current_unit->name == "system" &&
+		    current_type_declaration_name == "tobject";
+		if (!defining_system_tobject)
+			super_ty = lookup_implicit_tobject_superclass();
 	}
 	auto ct = new ClassType(current_location(), nullptr, std::move(implemented_interfaces), super_ty);
 	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
 	return ct;
+}
+
+ClassType* Parser::lookup_implicit_tobject_superclass() {
+	Unit* system_unit =
+	    unit_registry ? unit_registry->lookup("system") : nullptr;
+	if (!system_unit) {
+		raise_type_parse_error(
+		    "implicit class inheritance requires the System unit");
+		return nullptr;
+	}
+
+	Frame* system_interface = system_unit->interface_frame;
+	if (!system_interface) {
+		raise_type_parse_error(
+		    "implicit class inheritance requires an interface frame on the System unit");
+		return nullptr;
+	}
+
+	Type* tobject_type = system_interface->lookup_type("tobject");
+	if (!tobject_type) {
+		raise_type_parse_error(
+		    "implicit class inheritance requires System.TObject");
+		return nullptr;
+	}
+
+	std::unordered_set<IncompleteType*> seen;
+	while (auto incomplete =
+	           dynamic_cast<IncompleteType*>(tobject_type)) {
+		if (!seen.insert(incomplete).second) {
+			raise_type_parse_error(
+			    "System.TObject has a cyclic type definition");
+			return nullptr;
+		}
+		if (!incomplete->resolved) {
+			raise_type_parse_error(
+			    "System.TObject is unresolved while applying implicit class inheritance");
+			return nullptr;
+		}
+		tobject_type = incomplete->resolved;
+	}
+
+	auto tobject_class = dynamic_cast<ClassType*>(tobject_type);
+	if (!tobject_class) {
+		raise_type_kind_mismatch(
+		    "System.TObject used for implicit class inheritance is not a class",
+		    "class", tobject_type);
+		return nullptr;
+	}
+	return tobject_class;
 }
 
 Type* Parser::parse_interface_type() {
@@ -4121,7 +4179,12 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			lhs_placeholder = new IncompleteType(current_location(), name);
 			scope->register_type(name, lhs_placeholder);
 		}
+		std::string saved_type_declaration_name =
+		    std::move(current_type_declaration_name);
+		current_type_declaration_name = name;
 		Type* rhs = parse_type_expression(true);
+		current_type_declaration_name =
+		    std::move(saved_type_declaration_name);
 		// Publish a completed declaration before parsing the next one.
 		// References already holding this placeholder remain valid and are
 		// normalized at block end; fresh lookups peel the resolved placeholder

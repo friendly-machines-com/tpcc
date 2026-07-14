@@ -34,7 +34,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	tests/single_type_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/single_type"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/single_type"
 

@@ -11,6 +11,17 @@ cd "$root"
 ./mp -Furtl -o"$tmp/type_block_publication.cc" \
 	tests/type_block_publication.pp
 
+if ! rg -Fq 'struct t_tbase : public t_tobject' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "bare class did not implicitly inherit System.TObject" >&2
+	exit 1
+fi
+if rg -q '^struct t_tobject :' "$tmp/system.h"
+then
+	echo "System.TObject incorrectly received an implicit superclass" >&2
+	exit 1
+fi
 if ! rg -Fq 'struct t_tchild : public t_tbase' \
 	"$tmp/type_block_publication.cc"
 then
@@ -34,7 +45,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/type_block_publication.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/type_block_publication"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/type_block_publication"
 
@@ -50,6 +61,23 @@ if ! rg -Fq \
 	"$tmp/stderr"
 then
 	echo "wrong diagnostic for unresolved forward superclass" >&2
+	sed -n '1,20p' "$tmp/stderr" >&2
+	exit 1
+fi
+
+if ./mp -Futests/system_without_tobject \
+	-o"$tmp/missing_tobject.cc" \
+	tests/system_without_tobject/implicit_class.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted implicit inheritance without System.TObject" >&2
+	exit 1
+fi
+if ! rg -Fq \
+	"implicit class inheritance requires System.TObject" \
+	"$tmp/stderr"
+then
+	echo "wrong diagnostic for missing System.TObject" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2
 	exit 1
 fi

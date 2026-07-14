@@ -48,7 +48,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	tests/function_pointers_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/function_pointers"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/function_pointers"
 

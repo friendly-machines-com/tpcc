@@ -115,6 +115,12 @@ private:
 	// frame for all declaration scopes; this flag narrows placeholder creation
 	// to the period where parse_type_block is actually consuming RHS types.
 	bool parsing_type_block = false;
+	// LHS name whose type expression is currently being parsed. Class parsing
+	// uses this to distinguish the one root declaration `System.TObject =
+	// class ... end` from every other bare class, which implicitly inherits
+	// System.TObject. Saved/restored around each RHS because aggregate bodies
+	// may contain nested type blocks.
+	std::string current_type_declaration_name;
 	// The Callable whose body is currently being parsed, or nullptr outside
 	// any routine body. Set in parse_routine_body; used by parse_value's
 	// `inherited` branch to walk the parent type's method table and to decide
@@ -178,6 +184,7 @@ private:
 	RoutineRef* resolve_routine_code_reference(
 	    RoutineRef* reference);
 	Type* reuse_subrange_type(Node* lower_bound, Node* upper_bound);
+	ClassType* lookup_implicit_tobject_superclass();
 	Node* active_function_result_lvalue(Callable* c) const;
 protected:
 	std::string input_token;
