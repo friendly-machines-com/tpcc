@@ -1817,7 +1817,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto co = dynamic_cast<CoerceCheck*>(expr)) {
-		fprintf(active, "(dynamic_cast<");
+		fprintf(active, "pas::tpcc_bool_to_boolean(dynamic_cast<");
 		emit_type_ref(co->target_type);
 		fprintf(active, ">(");
 		emit_expression(co->a);
