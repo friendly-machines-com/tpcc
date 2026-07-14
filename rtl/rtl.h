@@ -56,6 +56,7 @@ using t_ptrint = intptr_t;
 using t_ptruint = uintptr_t;
 using t_sizeint = ssize_t;
 using t_sizeuint = size_t;
+using t_single = float;
 using t_double = double;
 using t_extended = long double;
 
@@ -207,6 +208,8 @@ static_assert(sizeof(t_longint) == 4);
 static_assert(sizeof(t_qword) == 8);
 static_assert(sizeof(t_int64) == 8);
 static_assert(sizeof(t_boolean) == 1);
+static_assert(sizeof(t_single) == 4);
+static_assert(sizeof(t_double) == 8);
 
 [[noreturn]] inline void p_halt(t_longint value) {
 	std::exit(static_cast<int>(value));
@@ -1120,6 +1123,7 @@ TPCC_DEFINE_INTEGRAL_OPERATIONS(t_longword)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_integer)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_int64)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_qword)
+TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_single, t_single)
 TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_double, t_double)
 TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended)
 

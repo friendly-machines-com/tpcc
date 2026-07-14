@@ -124,6 +124,7 @@ Type* char_type();
 Type* shortstring_type();
 Type* ansistring_type();
 Type* text_type();
+Type* single_type();
 Type* double_type();
 Type* extended_type();
 Type* set_type();

@@ -16,6 +16,7 @@ type
   Int64 = external nil name 'pas::t_int64';
   Boolean = external nil name 'pas::t_boolean';
   Char = external nil name 'pas::t_char';
+  Single = external nil name 'pas::t_single';
   Double = external nil name 'pas::t_double';
   Extended = external nil name 'pas::t_extended';
   Pointer = external nil name 'pas::t_pointer';
@@ -53,6 +54,7 @@ operator+(a: Cardinal): Cardinal; external nil name 'pas::p_positive';
 operator+(a: Integer): Integer; external nil name 'pas::p_positive';
 operator+(a: QWord): QWord; external nil name 'pas::p_positive';
 operator+(a: Int64): Int64; external nil name 'pas::p_positive';
+operator+(a: Single): Single; external nil name 'pas::p_positive';
 operator+(a: Double): Double; external nil name 'pas::p_positive';
 operator+(a: Extended): Extended; external nil name 'pas::p_positive';
 
@@ -60,6 +62,7 @@ operator+(a, b: Cardinal): Cardinal; external nil name 'pas::p_add';
 operator+(a, b: Integer): Integer; external nil name 'pas::p_add';
 operator+(a, b: QWord): QWord; external nil name 'pas::p_add';
 operator+(a, b: Int64): Int64; external nil name 'pas::p_add';
+operator+(a, b: Single): Single; external nil name 'pas::p_add';
 operator+(a, b: Double): Double; external nil name 'pas::p_add';
 operator+(a, b: Extended): Extended; external nil name 'pas::p_add';
 
@@ -67,6 +70,7 @@ operator-(a: Cardinal): Cardinal; external nil name 'pas::p_negative';
 operator-(a: Integer): Integer; external nil name 'pas::p_negative';
 operator-(a: QWord): QWord; external nil name 'pas::p_negative';
 operator-(a: Int64): Int64; external nil name 'pas::p_negative';
+operator-(a: Single): Single; external nil name 'pas::p_negative';
 operator-(a: Double): Double; external nil name 'pas::p_negative';
 operator-(a: Extended): Extended; external nil name 'pas::p_negative';
 
@@ -74,6 +78,7 @@ operator-(a, b: Cardinal): Cardinal; external nil name 'pas::p_subtract';
 operator-(a, b: Integer): Integer; external nil name 'pas::p_subtract';
 operator-(a, b: QWord): QWord; external nil name 'pas::p_subtract';
 operator-(a, b: Int64): Int64; external nil name 'pas::p_subtract';
+operator-(a, b: Single): Single; external nil name 'pas::p_subtract';
 operator-(a, b: Double): Double; external nil name 'pas::p_subtract';
 operator-(a, b: Extended): Extended; external nil name 'pas::p_subtract';
 
@@ -81,6 +86,7 @@ operator*(a, b: Cardinal): Cardinal; external nil name 'pas::p_multiply';
 operator*(a, b: Integer): Integer; external nil name 'pas::p_multiply';
 operator*(a, b: QWord): QWord; external nil name 'pas::p_multiply';
 operator*(a, b: Int64): Int64; external nil name 'pas::p_multiply';
+operator*(a, b: Single): Single; external nil name 'pas::p_multiply';
 operator*(a, b: Double): Double; external nil name 'pas::p_multiply';
 operator*(a, b: Extended): Extended; external nil name 'pas::p_multiply';
 
@@ -88,6 +94,7 @@ operator/(a, b: Cardinal): Double; external nil name 'pas::p_divide';
 operator/(a, b: Integer): Double; external nil name 'pas::p_divide';
 operator/(a, b: QWord): Double; external nil name 'pas::p_divide';
 operator/(a, b: Int64): Double; external nil name 'pas::p_divide';
+operator/(a, b: Single): Single; external nil name 'pas::p_divide';
 operator/(a, b: Double): Double; external nil name 'pas::p_divide';
 operator/(a, b: Extended): Extended; external nil name 'pas::p_divide';
 
@@ -133,6 +140,12 @@ operator xor(a, b: Int64): Cardinal; external nil name 'pas::p_bitwisexor';
 
 operator shl(a, b: Int64): Cardinal; external nil name 'pas::p_leftshift';
 operator shr(a, b: Int64): Cardinal; external nil name 'pas::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
+
+operator <(a, b: Single): Boolean; external nil name 'pas::p_lessthan';
+operator <=(a, b: Single): Boolean; external nil name 'pas::p_lessthanorequal';
+operator =(a, b: Single): Boolean; external nil name 'pas::p_equal';
+operator >(a, b: Single): Boolean; external nil name 'pas::p_greaterthan';
+operator >=(a, b: Single): Boolean; external nil name 'pas::p_greaterthanorequal';
 
 operator <(a, b: Double): Boolean; external nil name 'pas::p_lessthan';
 operator <=(a, b: Double): Boolean; external nil name 'pas::p_lessthanorequal';
@@ -191,8 +204,10 @@ procedure val(const s: ShortString; out value: LongWord); overload; external nil
 procedure val(const s: ShortString; out value: LongWord; out code); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: QWord); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: QWord; out code); overload; external nil name 'pas::p_val';
-// FIXME: Single and Real are absent because tpcc does not model either
-// Pascal type yet, so no distinct overload can be declared or selected.
+// FIXME: Real is absent because tpcc does not model its target-dependent
+// Pascal carrier yet.
+procedure val(const s: ShortString; out value: Single); overload; external nil name 'pas::p_val';
+procedure val(const s: ShortString; out value: Single; out code); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: Double); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: Double; out code); overload; external nil name 'pas::p_val';
 procedure val(const s: ShortString; out value: Extended); overload; external nil name 'pas::p_val';

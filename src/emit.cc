@@ -1803,22 +1803,22 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto co = dynamic_cast<Coerce*>(expr)) {
-		// FIXME: operator:= like ::cast ? I'm not sure what the difference between cast and coerce is in Pascal.
-		// FIXME: emit assert(p_supports(co->a, co->ty))
-		// FIXME: emit dynamic cast maybe ?
-		fprintf(active, "dynamic_cast<");
-		emit_type_ref(co->ty);
+		bool numeric =
+		    co->target_type == single_type() ||
+		    co->target_type == double_type() ||
+		    co->target_type == extended_type();
+		fprintf(active, numeric
+		    ? "static_cast<"
+		    : "dynamic_cast<");
+		emit_type_ref(co->target_type);
 		fprintf(active, ">(");
 		emit_expression(co->a);
 		fprintf(active, ")");
 		return;
 	}
 	if (auto co = dynamic_cast<CoerceCheck*>(expr)) {
-		// FIXME: operator:= like ::cast ? I'm not sure what the difference between cast and coerce is in Pascal.
-		// FIXME: emit assert(p_supports(co->a, co->ty))
-		// FIXME: emit dynamic cast maybe ?
 		fprintf(active, "(dynamic_cast<");
-		emit_type_ref(co->ty);
+		emit_type_ref(co->target_type);
 		fprintf(active, ">(");
 		emit_expression(co->a);
 		fprintf(active, ") != nullptr)");

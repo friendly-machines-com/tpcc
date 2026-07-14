@@ -343,16 +343,24 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-class Coerce: public BinaryOperation {
+class Coerce: public UnaryOperation {
 public:
-	Coerce(Node* a, Node* b);
+	Type* target_type;
+	Coerce(Node* value, Type* target_type);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 };
 
-class CoerceCheck: public BinaryOperation {
+class CoerceCheck: public UnaryOperation {
 public:
-	CoerceCheck(Node* a, Node* b);
+	Type* target_type;
+	CoerceCheck(Node* value, Type* target_type);
 	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
 };
 
 class AddrOf: public UnaryOperation {

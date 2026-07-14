@@ -49,6 +49,7 @@ IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6, signed_b
 IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7, unsigned_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8, signed_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_set(SourceLocation::builtin(), "pas::t_set", {});
+IntrinsicType k_single(SourceLocation::builtin(), "pas::t_single", {}, {}, TypeLayout{4, 4});
 IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}, {}, TypeLayout{8, 8});
 IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {}, {}, TypeLayout{16, 16});
 EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
@@ -97,6 +98,7 @@ Type* const k_all_intrinsics[] = {
     &k_qword,
     &k_int64,
     &k_set,
+    &k_single,
     &k_double,
     &k_extended,
     &k_boolean,
@@ -142,6 +144,7 @@ Type* char_type() { return &k_char; }
 Type* shortstring_type() { return &k_shortstring; }
 Type* ansistring_type() { return &k_ansistring; }
 Type* text_type() { return &k_text; }
+Type* single_type() { return &k_single; }
 Type* double_type() { return &k_double; }
 Type* extended_type() { return &k_extended; }
 Type* set_type() { return &k_set; }

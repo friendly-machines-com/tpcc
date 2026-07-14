@@ -322,10 +322,12 @@ static int integer_widening_rank(Type* ty) {
 // rank stored on IntrinsicType: those ranks describe ordinal overloads and
 // bounds, while real widening has different semantics.
 static int real_widening_rank(Type* ty) {
-	if (ty == double_type())
+	if (ty == single_type())
 		return 0;
-	if (ty == extended_type())
+	if (ty == double_type())
 		return 1;
+	if (ty == extended_type())
+		return 2;
 	return -1;
 }
 
@@ -482,8 +484,12 @@ int conversion_cost(Type* from, Type* to) {
 		    ? 0
 		    : -1;
 	}
-	if (from == &untyped_integer_type())
-		return 0; // literal adapts to any int
+	if (from == &untyped_integer_type()) {
+		int real_to = real_widening_rank(to);
+		if (real_to >= 0)
+			return 500 + real_to;
+		return 0; // literal adapts exactly to concrete integer carriers
+	}
 	// Char and Byte remain nominally distinct (so exact overloads can
 	// distinguish them), but Pascal permits ordinal conversion between their
 	// identical unsigned eight-bit ranges.
@@ -551,8 +557,9 @@ int conversion_cost(Type* from, Type* to) {
 	// Pascal permits integer-to-real assignment/conversion. This can be lossy:
 	// large Int64/QWord values are not all exactly representable. Any viable
 	// integer overload must beat a real overload for integer operands, so keep
-	// this in a cost band above even widening to Int64/QWord. Double still beats
-	// Extended when both real overloads are otherwise candidates.
+	// this in a cost band above even widening to Int64/QWord. Single beats
+	// Double, which beats Extended, when real overloads are otherwise
+	// candidates.
 	if (rfrom >= 0 && real_to >= 0)
 		return 500 + real_to;
 	return -1;

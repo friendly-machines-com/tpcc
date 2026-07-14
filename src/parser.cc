@@ -1511,6 +1511,7 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 								    sizeint_type());
 						}
 						if (precision &&
+						    item->ty != single_type() &&
 						    item->ty != double_type() &&
 						    item->ty != extended_type()) {
 							raise_parse_error(
@@ -2313,18 +2314,35 @@ Node* Parser::parse_product_tail(Node* result) {
 		} else if (maybe_parse_keyword("shr")) {
 			result = mk_arith("shr", result, parse_power());
 		} else if (maybe_parse_keyword("as")) {
-			// `x as T`: b is the parsed type-position expression whose ty is
-			// the target. Result type is that target.
-			auto rhs = parse_power();
-			auto n = new Coerce(result, rhs);
-			n->ty = rhs->ty;
-			result = n;
+			Type* target = parse_type_expression(false);
+			bool numeric =
+			    target == single_type() ||
+			    target == double_type() ||
+			    target == extended_type();
+			bool checked_reference =
+			    (dynamic_cast<ClassType*>(result->ty) ||
+			     dynamic_cast<InterfaceType*>(result->ty)) &&
+			    (dynamic_cast<ClassType*>(target) ||
+			     dynamic_cast<InterfaceType*>(target));
+			if ((!numeric ||
+			     conversion_cost(result->ty, target) < 0) &&
+			    !checked_reference)
+				raise_parse_error(
+				    "'as' requires compatible real-number "
+				    "or class/interface types");
+			result = new Coerce(result, target);
 		} else if (maybe_parse_keyword("is")) {
 			// FPC RELEASED BUG: `_OP_IS` sits in opmultiply in FPC 3.x,
 			// making `is` bind tighter than `+` (a Delphi-compatibility bug,
 			// fixed in FPC trunk). Match FPC 3.2.x behavior here for parity.
-			auto rhs = parse_power();
-			auto n = new CoerceCheck(result, rhs);
+			Type* target = parse_type_expression(false);
+			if (!(dynamic_cast<ClassType*>(result->ty) ||
+			      dynamic_cast<InterfaceType*>(result->ty)) ||
+			    !(dynamic_cast<ClassType*>(target) ||
+			      dynamic_cast<InterfaceType*>(target)))
+				raise_parse_error(
+				    "'is' requires class/interface types");
+			auto n = new CoerceCheck(result, target);
 			n->ty = boolean_type();
 			result = n;
 		} else if (maybe_parse_less_less()) {

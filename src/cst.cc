@@ -58,8 +58,12 @@ PropertyAccess::PropertyAccess(Node* receiver, Property* property, std::vector<N
 	this->ty = property ? property->ty : nullptr;
 }
 Index::Index(Node* a, Node* b) : BinaryOperation(a, b) {}
-Coerce::Coerce(Node* a, Node* b) : BinaryOperation(a, b) {}
-CoerceCheck::CoerceCheck(Node* a, Node* b) : BinaryOperation(a, b) {}
+Coerce::Coerce(Node* value, Type* target_type)
+    : UnaryOperation(value), target_type(target_type) {
+	this->ty = target_type;
+}
+CoerceCheck::CoerceCheck(Node* value, Type* target_type)
+    : UnaryOperation(value), target_type(target_type) {}
 
 Dereference::Dereference(Node* a) : UnaryOperation(a) {}
 Return::Return(Node* a) : UnaryOperation(a) {}
@@ -321,8 +325,12 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	if (auto i = dynamic_cast<Integer*>(r.node))
 		return const_convert_integer(i->value, i->negative, i->ty, ty);
 	if (auto real = dynamic_cast<Real*>(r.node)) {
-		if ((real->ty == double_type() || real->ty == extended_type()) &&
-		    (ty == double_type() || ty == extended_type()))
+		if ((real->ty == single_type() ||
+		     real->ty == double_type() ||
+		     real->ty == extended_type()) &&
+		    (ty == single_type() ||
+		     ty == double_type() ||
+		     ty == extended_type()))
 			return ConstEvalResult::success(new Real(real->value, ty));
 	}
 	return ConstEvalResult::not_constant();
@@ -478,7 +486,23 @@ void SizeOf::print_diagnostic_definition(
 }
 
 const char* Coerce::diagnostic_kind() const { return "coerce"; }
+ConstEvalResult Coerce::const_eval(
+    ConstEvalContext& ctx) const {
+	return Cast(a, target_type).const_eval(ctx);
+}
 const char* CoerceCheck::diagnostic_kind() const { return "coerce_check"; }
+void CoerceCheck::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	UnaryOperation::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(target_type);
+}
+void CoerceCheck::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned) const {
+	out << "coerce_check " << ctx->known_value_ref(a)
+	    << " is " << ctx->known_type_ref(target_type)
+	    << " : " << ctx->known_type_ref(ty);
+}
 const char* AddrOf::diagnostic_kind() const { return "addr_of"; }
 
 const char* RoutineRef::diagnostic_kind() const {
