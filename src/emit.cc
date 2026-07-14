@@ -303,13 +303,16 @@ void Emitter::emit_statement(Node* stmt) {
 				auto routine =
 				    dynamic_cast<RoutineType*>(
 				        view->a ? view->a->ty : nullptr);
+				bool is_code =
+				    field == tmethod_code_field();
+				bool is_data =
+				    field == tmethod_data_field();
 				if (view->ty == tmethod_type() &&
 				    field && routine &&
 				    routine->kind == METHOD &&
-				    (field->cxx_name == "p_code" ||
-				     field->cxx_name == "p_data")) {
+				    (is_code || is_data)) {
 					fprintf(active,
-					    field->cxx_name == "p_code"
+					    is_code
 					        ? "\tpas::m_store_tmethod_code("
 					        : "\tpas::m_store_tmethod_data(");
 					emit_writable_expression(view->a);

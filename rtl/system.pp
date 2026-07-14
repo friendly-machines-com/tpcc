@@ -19,6 +19,7 @@ type
   Double = external nil name 'pas::t_double';
   Extended = external nil name 'pas::t_extended';
   Pointer = external nil name 'pas::t_pointer';
+  TMethod = external nil name 'pas::t_tmethod';
   PtrInt = external nil name 'pas::t_ptrint';
   PtrUInt = external nil name 'pas::t_ptruint';
   SizeInt = external nil name 'pas::t_sizeint';

@@ -130,6 +130,8 @@ Type* set_type();
 Type* fixedarray_type();
 Type* unknown_type();
 RecordType* tmethod_type();
+StorageSlot* tmethod_code_field();
+StorageSlot* tmethod_data_field();
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out);
 bool integer_bounds(Type* ty, OrdinalBounds* out);

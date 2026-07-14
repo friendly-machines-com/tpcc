@@ -58,6 +58,132 @@ using t_sizeint = ssize_t;
 using t_sizeuint = size_t;
 using t_double = double;
 using t_extended = long double;
+
+// Pascal's public, untyped method-pointer view. The compiler registers these
+// members under the Pascal spellings Code and Data; their C++ spellings follow
+// the RTL p_<name> convention for Pascal-visible values.
+struct t_tmethod {
+	t_pointer p_code;
+	t_pointer p_data;
+};
+
+template<typename Signature>
+using m_proc = Signature*;
+
+template<typename FunctionPointer>
+inline t_pointer m_function_to_code_pointer(
+    FunctionPointer value) noexcept {
+	static_assert(std::is_pointer_v<FunctionPointer>);
+	static_assert(std::is_function_v<
+	    std::remove_pointer_t<FunctionPointer>>);
+	static_assert(sizeof(FunctionPointer) == sizeof(t_pointer),
+	    "the target ABI must fit a function pointer in TMethod.Code");
+	return std::bit_cast<t_pointer>(value);
+}
+
+template<typename FunctionPointer>
+inline FunctionPointer m_code_pointer_to_function(
+    t_pointer value) noexcept {
+	static_assert(std::is_pointer_v<FunctionPointer>);
+	static_assert(std::is_function_v<
+	    std::remove_pointer_t<FunctionPointer>>);
+	static_assert(sizeof(FunctionPointer) == sizeof(t_pointer),
+	    "the target ABI must fit a function pointer in TMethod.Code");
+	return std::bit_cast<FunctionPointer>(value);
+}
+
+template<typename Signature>
+struct m_method;
+
+template<typename Result, typename... Args>
+struct m_method<Result(Args...)> {
+	t_pointer p_code;
+	t_pointer p_data;
+
+	Result operator()(Args... args) const {
+		using invoke_type = Result (*)(void*, Args...);
+		auto invoke =
+		    m_code_pointer_to_function<invoke_type>(p_code);
+		return invoke(p_data, std::forward<Args>(args)...);
+	}
+};
+
+template<auto Method>
+struct m_method_adapter;
+
+template<typename Owner, typename Result, typename... Args,
+         Result (Owner::*Method)(Args...)>
+struct m_method_adapter<Method> {
+	using owner_type = Owner;
+	using signature_type = Result(Args...);
+
+	static Result invoke(void* data, Args... args) {
+		return (static_cast<Owner*>(data)->*Method)(
+		    std::forward<Args>(args)...);
+	}
+};
+
+template<auto Method, typename Object>
+inline auto m_bind_method(Object* object) noexcept {
+	using adapter = m_method_adapter<Method>;
+	using owner = typename adapter::owner_type;
+	using signature = typename adapter::signature_type;
+	owner* adjusted = static_cast<owner*>(object);
+	return m_method<signature>{
+	    m_function_to_code_pointer(&adapter::invoke),
+	    static_cast<void*>(adjusted),
+	};
+}
+
+static_assert(std::is_standard_layout_v<t_tmethod>);
+static_assert(std::is_trivially_copyable_v<t_tmethod>);
+static_assert(std::is_standard_layout_v<m_method<void()>>);
+static_assert(std::is_trivially_copyable_v<m_method<void()>>);
+static_assert(offsetof(t_tmethod, p_code) ==
+    offsetof(m_method<void()>, p_code));
+static_assert(offsetof(t_tmethod, p_data) ==
+    offsetof(m_method<void()>, p_data));
+static_assert(sizeof(t_tmethod) == sizeof(m_method<void()>));
+static_assert(alignof(t_tmethod) == alignof(m_method<void()>));
+
+template<typename Signature>
+inline t_tmethod m_method_to_tmethod(
+    m_method<Signature> value) noexcept {
+	static_assert(sizeof(m_method<Signature>) == sizeof(t_tmethod));
+	static_assert(alignof(m_method<Signature>) == alignof(t_tmethod));
+	static_assert(std::is_trivially_copyable_v<m_method<Signature>>);
+	return std::bit_cast<t_tmethod>(value);
+}
+
+template<typename Signature>
+inline m_method<Signature> m_tmethod_to_method(
+    t_tmethod value) noexcept {
+	static_assert(sizeof(m_method<Signature>) == sizeof(t_tmethod));
+	static_assert(alignof(m_method<Signature>) == alignof(t_tmethod));
+	static_assert(std::is_trivially_copyable_v<m_method<Signature>>);
+	return std::bit_cast<m_method<Signature>>(value);
+}
+
+template<typename Signature>
+inline void m_store_tmethod_code(
+    m_method<Signature>& destination, t_pointer value) noexcept {
+	t_tmethod public_value =
+	    m_method_to_tmethod(destination);
+	public_value.p_code = value;
+	destination =
+	    m_tmethod_to_method<Signature>(public_value);
+}
+
+template<typename Signature>
+inline void m_store_tmethod_data(
+    m_method<Signature>& destination, t_pointer value) noexcept {
+	t_tmethod public_value =
+	    m_method_to_tmethod(destination);
+	public_value.p_data = value;
+	destination =
+	    m_tmethod_to_method<Signature>(public_value);
+}
+
 inline t_word p_errorcode = 0;
 static_assert(sizeof(t_ptrint) == 8);
 static_assert(sizeof(t_ptruint) == 8);
@@ -1073,6 +1199,31 @@ inline t_boolean p_assign(t_boolean b) {
 
 inline t_boolean p_assigned(const void* p) {
 	return tpcc_bool_to_boolean(p != nullptr);
+}
+
+template<typename Signature>
+inline t_boolean p_assigned(m_proc<Signature> p) {
+	return tpcc_bool_to_boolean(p != nullptr);
+}
+
+template<typename Signature>
+inline t_boolean p_assigned(const m_method<Signature>& p) {
+	return tpcc_bool_to_boolean(p.p_code != nullptr);
+}
+
+template<typename Signature>
+inline t_boolean m_equal(
+    m_proc<Signature> a, m_proc<Signature> b) {
+	return tpcc_bool_to_boolean(a == b);
+}
+
+template<typename Signature>
+inline t_boolean m_equal(
+    const m_method<Signature>& a,
+    const m_method<Signature>& b) {
+	// FPC's method-routine equality compares the code word. Data is copied
+	// but is not part of this operation.
+	return tpcc_bool_to_boolean(a.p_code == b.p_code);
 }
 
 template<typename T, bool = std::is_enum_v<T>>

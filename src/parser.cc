@@ -2006,8 +2006,11 @@ bool Parser::is_assignable(Node* n) {
 	}
 	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
 		if (auto view = dynamic_cast<Cast*>(ma->a)) {
+			auto field =
+			    dynamic_cast<StorageSlot*>(ma->b);
 			if (view->ty == tmethod_type() &&
-			    dynamic_cast<StorageSlot*>(ma->b)) {
+			    (field == tmethod_code_field() ||
+			     field == tmethod_data_field())) {
 				auto routine = dynamic_cast<RoutineType*>(
 				    view->a ? view->a->ty : nullptr);
 				return routine &&

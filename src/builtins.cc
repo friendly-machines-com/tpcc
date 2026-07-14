@@ -65,14 +65,24 @@ IntrinsicType k_fixedarray(SourceLocation::builtin(), "pas::t_fixedarray", {});
 IntrinsicType k_unknown(SourceLocation::builtin(), "pas::tpcc_unknown_type", {});
 Frame* k_tmethod_children = new Frame(nullptr);
 RecordType k_tmethod(SourceLocation::builtin(), k_tmethod_children);
+StorageSlot* k_tmethod_code_field = nullptr;
+StorageSlot* k_tmethod_data_field = nullptr;
 const bool k_tmethod_initialized = []() {
 	k_tmethod.cxx_name = "pas::t_tmethod";
-	auto code = new StorageSlot("p_code", &k_pointer);
-	auto data = new StorageSlot("p_data", &k_pointer);
-	k_tmethod.children->register_variable("code", code, &k_pointer);
-	k_tmethod.children->register_variable("data", data, &k_pointer);
-	k_tmethod.fields.push_back(RecordType::Field{"code", code, &k_pointer});
-	k_tmethod.fields.push_back(RecordType::Field{"data", data, &k_pointer});
+	k_tmethod_code_field =
+	    new StorageSlot("p_code", &k_pointer);
+	k_tmethod_data_field =
+	    new StorageSlot("p_data", &k_pointer);
+	k_tmethod.children->register_variable(
+	    "code", k_tmethod_code_field, &k_pointer);
+	k_tmethod.children->register_variable(
+	    "data", k_tmethod_data_field, &k_pointer);
+	k_tmethod.fields.push_back(
+	    RecordType::Field{
+	        "code", k_tmethod_code_field, &k_pointer});
+	k_tmethod.fields.push_back(
+	    RecordType::Field{
+	        "data", k_tmethod_data_field, &k_pointer});
 	return true;
 }();
 #if 0
@@ -174,6 +184,14 @@ Type* unknown_type() { return &k_unknown; }
 RecordType* tmethod_type() {
 	(void)k_tmethod_initialized;
 	return &k_tmethod;
+}
+StorageSlot* tmethod_code_field() {
+	(void)k_tmethod_initialized;
+	return k_tmethod_code_field;
+}
+StorageSlot* tmethod_data_field() {
+	(void)k_tmethod_initialized;
+	return k_tmethod_data_field;
 }
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
