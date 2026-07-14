@@ -706,6 +706,20 @@ struct t_ansistring {
 		    : data[static_cast<std::size_t>(actual - 1)];
 	}
 
+	template<typename I>
+	std::size_t storage_extent(I index) const {
+		const std::ptrdiff_t actual =
+		    static_cast<std::ptrdiff_t>(index);
+		if (actual < 0 ||
+		    actual > static_cast<std::ptrdiff_t>(capacity))
+			throw std::out_of_range(
+			    "Pascal AnsiString storage index out of range");
+		return actual == 0
+		    ? sizeof(length)
+		    : capacity -
+		          static_cast<std::size_t>(actual - 1);
+	}
+
 	template<std::size_t SourceCapacity>
 	void assign(const t_shortstring<SourceCapacity>& source) {
 		const std::size_t copied = std::min(
@@ -967,111 +981,48 @@ inline void p_uniquestring(t_ansistring&) {
 template<typename I>
 inline t_char& p_index(t_ansistring& value, I index) {
 	p_uniquestring(value);
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 ||
-	    actual > static_cast<std::ptrdiff_t>(
-	        t_ansistring::capacity))
-		throw std::out_of_range(
-		    "Pascal AnsiString index out of range");
-	if (actual == 0)
-		return value.length;
-	return value.data[static_cast<std::size_t>(actual - 1)];
+	return value.index(index);
 }
 
 template<typename I>
 inline const t_char& p_index(
     const t_ansistring& value, I index) {
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 ||
-	    actual > static_cast<std::ptrdiff_t>(
-	        t_ansistring::capacity))
-		throw std::out_of_range(
-		    "Pascal AnsiString index out of range");
-	if (actual == 0)
-		return value.length;
-	return value.data[static_cast<std::size_t>(actual - 1)];
+	return value.index(index);
 }
 
 template<typename I>
 inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
     t_ansistring& value, I index) {
 	p_uniquestring(value);
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 ||
-	    actual > static_cast<std::ptrdiff_t>(
-	        t_ansistring::capacity))
-		throw std::out_of_range(
-		    "Pascal AnsiString storage index out of range");
-	if (actual == 0)
-		return tpcc_typed_storage_ref<t_char>{
-		    {
-		        reinterpret_cast<std::byte*>(
-		            std::addressof(value.length)),
-		        sizeof(value.length),
-		    },
-		    std::addressof(value.length),
-		};
-	const std::size_t offset =
-	    static_cast<std::size_t>(actual - 1);
-	auto* bytes = reinterpret_cast<std::byte*>(
-	    std::addressof(value.data));
+	t_char& selected = value.index(index);
 	return tpcc_typed_storage_ref<t_char>{
 	    {
-	        bytes + offset,
-	        t_ansistring::capacity - offset,
+	        reinterpret_cast<std::byte*>(
+	            std::addressof(selected)),
+	        value.storage_extent(index),
 	    },
-	    std::addressof(value.data[offset]),
+	    std::addressof(selected),
 	};
 }
 
 template<typename I>
 inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
     const t_ansistring& value, I index) {
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 ||
-	    actual > static_cast<std::ptrdiff_t>(
-	        t_ansistring::capacity))
-		throw std::out_of_range(
-		    "Pascal AnsiString storage index out of range");
-	if (actual == 0)
-		return tpcc_typed_const_storage_ref<t_char>{
-		    {
-		        reinterpret_cast<const std::byte*>(
-		            std::addressof(value.length)),
-		        sizeof(value.length),
-		    },
-		    std::addressof(value.length),
-		};
-	const std::size_t offset =
-	    static_cast<std::size_t>(actual - 1);
-	const auto* bytes = reinterpret_cast<const std::byte*>(
-	    std::addressof(value.data));
+	const t_char& selected = value.index(index);
 	return tpcc_typed_const_storage_ref<t_char>{
 	    {
-	        bytes + offset,
-	        t_ansistring::capacity - offset,
+	        reinterpret_cast<const std::byte*>(
+	            std::addressof(selected)),
+	        value.storage_extent(index),
 	    },
-	    std::addressof(value.data[offset]),
+	    std::addressof(selected),
 	};
 }
 
 template<typename I>
 inline t_char& tpcc_index_write(t_ansistring& value, I index) {
 	p_uniquestring(value);
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 ||
-	    actual > static_cast<std::ptrdiff_t>(
-	        t_ansistring::capacity))
-		throw std::out_of_range(
-		    "Pascal AnsiString index out of range");
-	if (actual == 0)
-		return value.length;
-	return value.data[static_cast<std::size_t>(actual - 1)];
+	return value.index(index);
 }
 
 template<std::size_t Capacity = 255>
@@ -1196,27 +1147,7 @@ inline t_shortstring<255> p_copy(
 }
 
 inline t_ansistring p_copy(const t_ansistring& value, t_longint index, t_longint count) {
-	t_ansistring result{};
-	if (count <= 0)
-		return result;
-	if (index < 1)
-		index = 1;
-	const std::size_t start =
-	    static_cast<std::size_t>(index - 1);
-	const std::size_t source_length = value.length;
-	if (start >= source_length)
-		return result;
-	const std::size_t copied = std::min({
-	    static_cast<std::size_t>(count),
-	    source_length - start,
-	    t_ansistring::capacity,
-	});
-	result.length = t_char{static_cast<uint8_t>(copied)};
-	if (copied != 0)
-		std::memcpy(
-		    result.data, value.data + start, copied);
-	result.data[copied] = t_char{0};
-	return result;
+	return value.slice(index, count);
 }
 
 inline t_shortstring<255> p_copy(
@@ -1245,23 +1176,7 @@ inline void p_delete(
 }
 
 inline void p_delete(t_ansistring& value, t_longint index, t_longint count) {
-	if (index < 1 || count <= 0)
-		return;
-	const std::size_t start =
-	    static_cast<std::size_t>(index - 1);
-	const std::size_t length = value.length;
-	if (start >= length)
-		return;
-	const std::size_t removed = std::min(
-	    static_cast<std::size_t>(count), length - start);
-	const std::size_t tail =
-	    length - start - removed;
-	std::memmove(
-	    value.data + start,
-	    value.data + start + removed, tail);
-	value.length =
-	    t_char{static_cast<uint8_t>(length - removed)};
-	value.data[value.length.value] = t_char{0};
+	value.erase(index, count);
 }
 
 template<std::size_t SourceCapacity, std::size_t DestinationCapacity>
@@ -1321,37 +1236,7 @@ inline void p_insert(
 }
 
 inline void p_insert(const t_ansistring& source, t_ansistring& destination, t_longint index) {
-	if (source.length == 0)
-		return;
-	if (index < 1)
-		index = 1;
-	std::size_t start =
-	    static_cast<std::size_t>(index - 1);
-	if (start > destination.length)
-		start = destination.length;
-
-	t_ansistring temp_source = source;
-	const std::size_t copy_count = std::min(
-	    static_cast<std::size_t>(temp_source.length),
-	    t_ansistring::capacity - start);
-	if (copy_count == 0)
-		return;
-	const std::size_t max_tail =
-	    t_ansistring::capacity - (start + copy_count);
-	const std::size_t tail =
-	    destination.length - start;
-	const std::size_t tail_copy =
-	    std::min(tail, max_tail);
-	if (tail_copy != 0)
-		std::memmove(
-		    destination.data + start + copy_count,
-		    destination.data + start, tail_copy);
-	std::memcpy(
-	    destination.data + start,
-	    temp_source.data, copy_count);
-	destination.length = t_char{static_cast<uint8_t>(
-	    start + copy_count + tail_copy)};
-	destination.data[destination.length.value] = t_char{0};
+	destination.insert(source, index);
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
@@ -1420,14 +1305,7 @@ inline t_char p_assign(t_char value) { return value; }
 template<std::size_t Capacity>
 inline t_ansistring p_assign(t_shortstring<Capacity> value) {
 	t_ansistring result{};
-	const std::size_t copied = std::min(
-	    static_cast<std::size_t>(value.length),
-	    t_ansistring::capacity);
-	result.length =
-	    t_char{static_cast<uint8_t>(copied)};
-	if (copied != 0)
-		std::memcpy(result.data, value.data, copied);
-	result.data[copied] = t_char{0};
+	result.assign(value);
 	return result;
 }
 inline t_boolean p_lessthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value < b.value); }
@@ -1460,14 +1338,7 @@ inline t_sizeint p_length(const t_shortstring<Capacity>& s) {
 }
 inline t_sizeint p_length(const t_ansistring& s) { return s.length; }
 inline void p_setlength(t_ansistring& s, t_integer value) {
-	const std::size_t old_length = s.length;
-	const std::size_t new_length =
-	    value <= 0 ? 0 : std::min<std::size_t>(
-		static_cast<std::size_t>(value), sizeof(s.data) - 1);
-	if (new_length > old_length)
-		std::fill(s.data + old_length, s.data + new_length, t_char{0});
-	s.length = t_char{static_cast<uint8_t>(new_length)};
-	s.data[new_length] = t_char{0};
+	s.resize(value);
 }
 template<typename T, std::size_t N> inline t_sizeint p_length(const T (&)[N]) { return static_cast<t_sizeint>(N); }
 template<typename T, std::size_t N, auto Low> inline t_sizeint p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_sizeint>(N); }
