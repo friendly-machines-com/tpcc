@@ -252,30 +252,8 @@ struct t_shortstring {
 	    "Pascal ShortString capacity must be in 1..255");
 	static constexpr std::size_t capacity = Capacity;
 
-	t_char length{};
-	t_char data[Capacity]{};
-
-	constexpr t_shortstring() = default;
-
-	template<std::size_t SourceCapacity>
-	constexpr t_shortstring(
-	    const t_shortstring<SourceCapacity>& source) {
-		*this = source;
-	}
-
-	template<std::size_t SourceCapacity>
-	constexpr t_shortstring& operator=(
-	    const t_shortstring<SourceCapacity>& source) {
-		const std::size_t copied = std::min({
-		    static_cast<std::size_t>(source.length.value),
-		    SourceCapacity,
-		    Capacity,
-		});
-		length = t_char{static_cast<uint8_t>(copied)};
-		for (std::size_t i = 0; i < copied; ++i)
-			data[i] = source.data[i];
-		return *this;
-	}
+	t_char length;
+	t_char data[Capacity];
 };
 
 template<typename T>
@@ -291,6 +269,29 @@ inline constexpr bool tpcc_is_shortstring_v =
 
 static_assert(sizeof(t_shortstring<255>) == 256);
 static_assert(alignof(t_shortstring<255>) == 1);
+static_assert(std::is_aggregate_v<t_shortstring<255>>);
+static_assert(
+    std::is_trivially_default_constructible_v<
+        t_shortstring<255>>);
+static_assert(std::is_trivially_copyable_v<t_shortstring<255>>);
+
+template<std::size_t DestinationCapacity,
+         std::size_t SourceCapacity>
+constexpr t_shortstring<DestinationCapacity>
+tpcc_shortstring_cast(
+    const t_shortstring<SourceCapacity>& source) {
+	t_shortstring<DestinationCapacity> result{};
+	const std::size_t copied = std::min({
+	    static_cast<std::size_t>(source.length.value),
+	    SourceCapacity,
+	    DestinationCapacity,
+	});
+	result.length =
+	    t_char{static_cast<uint8_t>(copied)};
+	for (std::size_t i = 0; i < copied; ++i)
+		result.data[i] = source.data[i];
+	return result;
+}
 
 // A Pascal Text variable currently stores the stream used by Write/WriteLn.
 // The pointer is non-owning and null means that the Text variable is unopened.
@@ -669,11 +670,155 @@ struct t_dynamicarray {
 	T* items;
 };
 
-// Placeholder carrier for Pascal AnsiString. It is deliberately a distinct C++
-// type from every t_shortstring<N> so Pascal overloads on ShortString versus
-// AnsiString do not collapse, even though this runtime does not implement real
-// managed strings yet.
-struct t_ansistring : t_shortstring<255> {};
+// Placeholder carrier for Pascal AnsiString. It remains inline until managed
+// strings are implemented, but it is deliberately independent of
+// t_shortstring<N>: data[0..253] are payload and data[length] is always the
+// PChar-compatible zero terminator.
+struct t_ansistring {
+	static constexpr std::size_t capacity =
+	    std::numeric_limits<uint8_t>::max() - 1;
+	t_char length;
+	t_char data[capacity + 1];
+
+	template<typename I>
+	t_char& index(I index) {
+		const std::ptrdiff_t actual =
+		    static_cast<std::ptrdiff_t>(index);
+		if (actual < 0 ||
+		    actual > static_cast<std::ptrdiff_t>(capacity))
+			throw std::out_of_range(
+			    "Pascal AnsiString index out of range");
+		return actual == 0
+		    ? length
+		    : data[static_cast<std::size_t>(actual - 1)];
+	}
+
+	template<typename I>
+	const t_char& index(I index) const {
+		const std::ptrdiff_t actual =
+		    static_cast<std::ptrdiff_t>(index);
+		if (actual < 0 ||
+		    actual > static_cast<std::ptrdiff_t>(capacity))
+			throw std::out_of_range(
+			    "Pascal AnsiString index out of range");
+		return actual == 0
+		    ? length
+		    : data[static_cast<std::size_t>(actual - 1)];
+	}
+
+	template<std::size_t SourceCapacity>
+	void assign(const t_shortstring<SourceCapacity>& source) {
+		const std::size_t copied = std::min(
+		    static_cast<std::size_t>(source.length),
+		    capacity);
+		if (copied != 0)
+			std::memcpy(data, source.data, copied);
+		set_length(copied);
+	}
+
+	void set_length(std::size_t new_length) {
+		const std::size_t bounded =
+		    std::min(new_length, capacity);
+		length = t_char{static_cast<uint8_t>(bounded)};
+		data[bounded] = t_char{0};
+	}
+
+	void resize(t_integer requested_length) {
+		const std::size_t old_length = length;
+		const std::size_t new_length =
+		    requested_length <= 0
+		        ? 0
+		        : std::min(
+		              static_cast<std::size_t>(
+		                  requested_length),
+		              capacity);
+		if (new_length > old_length)
+			std::fill(
+			    data + old_length,
+			    data + new_length, t_char{0});
+		set_length(new_length);
+	}
+
+	t_ansistring slice(
+	    t_longint index, t_longint count) const {
+		t_ansistring result{};
+		if (count <= 0)
+			return result;
+		if (index < 1)
+			index = 1;
+		const std::size_t start =
+		    static_cast<std::size_t>(index - 1);
+		const std::size_t source_length = length;
+		if (start >= source_length)
+			return result;
+		const std::size_t copied = std::min({
+		    static_cast<std::size_t>(count),
+		    source_length - start,
+		    capacity,
+		});
+		if (copied != 0)
+			std::memcpy(
+			    result.data, data + start, copied);
+		result.set_length(copied);
+		return result;
+	}
+
+	void erase(t_longint index, t_longint count) {
+		if (index < 1 || count <= 0)
+			return;
+		const std::size_t start =
+		    static_cast<std::size_t>(index - 1);
+		const std::size_t old_length = length;
+		if (start >= old_length)
+			return;
+		const std::size_t removed = std::min(
+		    static_cast<std::size_t>(count),
+		    old_length - start);
+		const std::size_t tail =
+		    old_length - start - removed;
+		std::memmove(
+		    data + start, data + start + removed, tail);
+		set_length(old_length - removed);
+	}
+
+	void insert(
+	    const t_ansistring& source, t_longint index) {
+		if (source.length == 0)
+			return;
+		if (index < 1)
+			index = 1;
+		std::size_t start =
+		    static_cast<std::size_t>(index - 1);
+		if (start > length)
+			start = length;
+
+		const t_ansistring stable_source = source;
+		const std::size_t copied = std::min(
+		    static_cast<std::size_t>(
+		        stable_source.length),
+		    capacity - start);
+		if (copied == 0)
+			return;
+		const std::size_t remaining =
+		    capacity - (start + copied);
+		const std::size_t tail = std::min(
+		    static_cast<std::size_t>(length) - start,
+		    remaining);
+		if (tail != 0)
+			std::memmove(
+			    data + start + copied,
+			    data + start, tail);
+		std::memcpy(
+		    data + start, stable_source.data, copied);
+		set_length(start + copied + tail);
+	}
+};
+static_assert(sizeof(t_ansistring) == 256);
+static_assert(alignof(t_ansistring) == 1);
+static_assert(std::is_aggregate_v<t_ansistring>);
+static_assert(
+    std::is_trivially_default_constructible_v<t_ansistring>);
+static_assert(std::is_trivially_copyable_v<t_ansistring>);
 
 template<typename T>
 struct tpcc_write_arg {
@@ -820,24 +965,113 @@ inline void p_uniquestring(t_ansistring&) {
 }
 
 template<typename I>
+inline t_char& p_index(t_ansistring& value, I index) {
+	p_uniquestring(value);
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(
+	        t_ansistring::capacity))
+		throw std::out_of_range(
+		    "Pascal AnsiString index out of range");
+	if (actual == 0)
+		return value.length;
+	return value.data[static_cast<std::size_t>(actual - 1)];
+}
+
+template<typename I>
+inline const t_char& p_index(
+    const t_ansistring& value, I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(
+	        t_ansistring::capacity))
+		throw std::out_of_range(
+		    "Pascal AnsiString index out of range");
+	if (actual == 0)
+		return value.length;
+	return value.data[static_cast<std::size_t>(actual - 1)];
+}
+
+template<typename I>
 inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
     t_ansistring& value, I index) {
 	p_uniquestring(value);
-	return tpcc_make_storage_ref(
-	    static_cast<t_shortstring<255>&>(value), index);
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(
+	        t_ansistring::capacity))
+		throw std::out_of_range(
+		    "Pascal AnsiString storage index out of range");
+	if (actual == 0)
+		return tpcc_typed_storage_ref<t_char>{
+		    {
+		        reinterpret_cast<std::byte*>(
+		            std::addressof(value.length)),
+		        sizeof(value.length),
+		    },
+		    std::addressof(value.length),
+		};
+	const std::size_t offset =
+	    static_cast<std::size_t>(actual - 1);
+	auto* bytes = reinterpret_cast<std::byte*>(
+	    std::addressof(value.data));
+	return tpcc_typed_storage_ref<t_char>{
+	    {
+	        bytes + offset,
+	        t_ansistring::capacity - offset,
+	    },
+	    std::addressof(value.data[offset]),
+	};
 }
 
 template<typename I>
 inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
     const t_ansistring& value, I index) {
-	return tpcc_make_const_storage_ref(
-	    static_cast<const t_shortstring<255>&>(value), index);
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(
+	        t_ansistring::capacity))
+		throw std::out_of_range(
+		    "Pascal AnsiString storage index out of range");
+	if (actual == 0)
+		return tpcc_typed_const_storage_ref<t_char>{
+		    {
+		        reinterpret_cast<const std::byte*>(
+		            std::addressof(value.length)),
+		        sizeof(value.length),
+		    },
+		    std::addressof(value.length),
+		};
+	const std::size_t offset =
+	    static_cast<std::size_t>(actual - 1);
+	const auto* bytes = reinterpret_cast<const std::byte*>(
+	    std::addressof(value.data));
+	return tpcc_typed_const_storage_ref<t_char>{
+	    {
+	        bytes + offset,
+	        t_ansistring::capacity - offset,
+	    },
+	    std::addressof(value.data[offset]),
+	};
 }
 
 template<typename I>
 inline t_char& tpcc_index_write(t_ansistring& value, I index) {
 	p_uniquestring(value);
-	return p_index(static_cast<t_shortstring<255>&>(value), index);
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(
+	        t_ansistring::capacity))
+		throw std::out_of_range(
+		    "Pascal AnsiString index out of range");
+	if (actual == 0)
+		return value.length;
+	return value.data[static_cast<std::size_t>(actual - 1)];
 }
 
 template<std::size_t Capacity = 255>
@@ -901,10 +1135,14 @@ inline t_sizeint p_comparechar(tpcc_const_storage_ref first,
 	return p_comparebyte(first, second, count);
 }
 
-template<std::size_t NeedleCapacity, std::size_t HaystackCapacity>
+template<typename Needle, typename Haystack>
+requires
+    (tpcc_is_shortstring_v<Needle> ||
+     std::is_same_v<Needle, t_ansistring>) &&
+    (tpcc_is_shortstring_v<Haystack> ||
+     std::is_same_v<Haystack, t_ansistring>)
 inline t_longint p_pos(
-    const t_shortstring<NeedleCapacity>& needle,
-    const t_shortstring<HaystackCapacity>& haystack) {
+    const Needle& needle, const Haystack& haystack) {
 	if (needle.length == 0)
 		return 1;
 	if (needle.length > haystack.length)
@@ -917,9 +1155,12 @@ inline t_longint p_pos(
 	return 0;
 }
 
-template<std::size_t Capacity>
+template<typename Haystack>
+requires
+    tpcc_is_shortstring_v<Haystack> ||
+    std::is_same_v<Haystack, t_ansistring>
 inline t_longint p_pos(
-    t_char needle, const t_shortstring<Capacity>& haystack) {
+    t_char needle, const Haystack& haystack) {
 	for (std::size_t offset = 0; offset < haystack.length; ++offset) {
 		if (haystack.data[offset] == needle)
 			return static_cast<t_longint>(offset + 1);
@@ -956,8 +1197,25 @@ inline t_shortstring<255> p_copy(
 
 inline t_ansistring p_copy(const t_ansistring& value, t_longint index, t_longint count) {
 	t_ansistring result{};
-	static_cast<t_shortstring<255>&>(result) =
-	    p_copy(static_cast<const t_shortstring<255>&>(value), index, count);
+	if (count <= 0)
+		return result;
+	if (index < 1)
+		index = 1;
+	const std::size_t start =
+	    static_cast<std::size_t>(index - 1);
+	const std::size_t source_length = value.length;
+	if (start >= source_length)
+		return result;
+	const std::size_t copied = std::min({
+	    static_cast<std::size_t>(count),
+	    source_length - start,
+	    t_ansistring::capacity,
+	});
+	result.length = t_char{static_cast<uint8_t>(copied)};
+	if (copied != 0)
+		std::memcpy(
+		    result.data, value.data + start, copied);
+	result.data[copied] = t_char{0};
 	return result;
 }
 
@@ -987,7 +1245,23 @@ inline void p_delete(
 }
 
 inline void p_delete(t_ansistring& value, t_longint index, t_longint count) {
-	p_delete(static_cast<t_shortstring<255>&>(value), index, count);
+	if (index < 1 || count <= 0)
+		return;
+	const std::size_t start =
+	    static_cast<std::size_t>(index - 1);
+	const std::size_t length = value.length;
+	if (start >= length)
+		return;
+	const std::size_t removed = std::min(
+	    static_cast<std::size_t>(count), length - start);
+	const std::size_t tail =
+	    length - start - removed;
+	std::memmove(
+	    value.data + start,
+	    value.data + start + removed, tail);
+	value.length =
+	    t_char{static_cast<uint8_t>(length - removed)};
+	value.data[value.length.value] = t_char{0};
 }
 
 template<std::size_t SourceCapacity, std::size_t DestinationCapacity>
@@ -1032,7 +1306,7 @@ inline void p_insert(
 	// Copy the new characters from the source string into the gap
 	std::memcpy(value.data + start, p_src->data, copy_count);
 
-	// Update the Pascal length byte. ShortString has no terminator byte.
+	// Update the Pascal length byte.
 	value.length = static_cast<uint8_t>(start + copy_count + tail_copy);
 }
 
@@ -1047,9 +1321,37 @@ inline void p_insert(
 }
 
 inline void p_insert(const t_ansistring& source, t_ansistring& destination, t_longint index) {
-	p_insert(
-	    static_cast<const t_shortstring<255>&>(source),
-	    static_cast<t_shortstring<255>&>(destination), index);
+	if (source.length == 0)
+		return;
+	if (index < 1)
+		index = 1;
+	std::size_t start =
+	    static_cast<std::size_t>(index - 1);
+	if (start > destination.length)
+		start = destination.length;
+
+	t_ansistring temp_source = source;
+	const std::size_t copy_count = std::min(
+	    static_cast<std::size_t>(temp_source.length),
+	    t_ansistring::capacity - start);
+	if (copy_count == 0)
+		return;
+	const std::size_t max_tail =
+	    t_ansistring::capacity - (start + copy_count);
+	const std::size_t tail =
+	    destination.length - start;
+	const std::size_t tail_copy =
+	    std::min(tail, max_tail);
+	if (tail_copy != 0)
+		std::memmove(
+		    destination.data + start + copy_count,
+		    destination.data + start, tail_copy);
+	std::memcpy(
+	    destination.data + start,
+	    temp_source.data, copy_count);
+	destination.length = t_char{static_cast<uint8_t>(
+	    start + copy_count + tail_copy)};
+	destination.data[destination.length.value] = t_char{0};
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
@@ -1118,7 +1420,14 @@ inline t_char p_assign(t_char value) { return value; }
 template<std::size_t Capacity>
 inline t_ansistring p_assign(t_shortstring<Capacity> value) {
 	t_ansistring result{};
-	static_cast<t_shortstring<255>&>(result) = value;
+	const std::size_t copied = std::min(
+	    static_cast<std::size_t>(value.length),
+	    t_ansistring::capacity);
+	result.length =
+	    t_char{static_cast<uint8_t>(copied)};
+	if (copied != 0)
+		std::memcpy(result.data, value.data, copied);
+	result.data[copied] = t_char{0};
 	return result;
 }
 inline t_boolean p_lessthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value < b.value); }
