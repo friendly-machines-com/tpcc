@@ -64,6 +64,10 @@ CoerceCheck::CoerceCheck(Node* a, Node* b) : BinaryOperation(a, b) {}
 Dereference::Dereference(Node* a) : UnaryOperation(a) {}
 Return::Return(Node* a) : UnaryOperation(a) {}
 AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
+RoutineRef::RoutineRef(Node* receiver, Node* candidates)
+    : receiver(receiver), candidates(candidates) {}
+RoutineEqual::RoutineEqual(Node* a, Node* b)
+    : BinaryOperation(a, b) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
     : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
@@ -73,7 +77,7 @@ SizeOf::SizeOf(Type* operand_type)
 // Value-identifier ctors: take an OPTIONAL Pascal name. If non-empty, apply
 // the `p_` prefix so the cxx identifier stays clear of C++ reserved words
 // (`new`, `class`, `false`, ...). If empty (anonymous entity -- nameless
-// parameter in a prototype, compiler temporary, procedural-type declaration
+// parameter in a prototype, compiler temporary, routine-type declaration
 // `procedure of object`, etc.), cxx_name stays empty and emission skips it.
 StorageSlot::StorageSlot(std::string cxx_name, Type* ty) {
 	this->cxx_name = cxx_name;
@@ -476,6 +480,44 @@ void SizeOf::print_diagnostic_definition(
 const char* Coerce::diagnostic_kind() const { return "coerce"; }
 const char* CoerceCheck::diagnostic_kind() const { return "coerce_check"; }
 const char* AddrOf::diagnostic_kind() const { return "addr_of"; }
+
+const char* RoutineRef::diagnostic_kind() const {
+	return "routine_ref";
+}
+void RoutineRef::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(receiver);
+	ctx->add_value_edge(candidates);
+	ctx->add_value_edge(resolved);
+}
+void RoutineRef::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "routine_ref : " << ctx->known_type_ref(ty);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "candidates: " << ctx->known_value_ref(candidates);
+	if (receiver) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "receiver: " << ctx->known_value_ref(receiver);
+	}
+	if (resolved) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "resolved: " << ctx->known_value_ref(resolved);
+	}
+	if (code_only) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "code_only: true";
+	}
+}
+
+const char* RoutineEqual::diagnostic_kind() const {
+	return "routine_equal";
+}
 
 static bool diagnostic_pas_ident_char(char ch) {
 	unsigned char c = static_cast<unsigned char>(ch);

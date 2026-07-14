@@ -1572,6 +1572,52 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			// Pascal typecast syntax is `Type(expr)`. This is an explicit cast,
 			// not a value call and not the implicit-conversion helper `cast()`, so
 			// it must be parsed from the type namespace and represented directly.
+			if (target_ty == pointer_type()) {
+				if (auto reference =
+				        dynamic_cast<RoutineRef*>(value))
+					return resolve_routine_code_reference(
+					    reference);
+			}
+			if (auto target_routine =
+			        dynamic_cast<RoutineType*>(target_ty)) {
+				if (auto reference =
+				        dynamic_cast<RoutineRef*>(value))
+					return resolve_routine_reference(
+					    reference, target_routine);
+				if (dynamic_cast<NilLiteral*>(value))
+					return cast(value, target_routine);
+				if (value->ty == tmethod_type()) {
+					if (target_routine->kind != METHOD)
+						raise_parse_error(
+						    "TMethod can only be cast to an "
+						    "of-object routine type");
+					return new Cast(value, target_routine);
+				}
+				if (auto source_routine =
+				        dynamic_cast<RoutineType*>(
+				            value->ty)) {
+					if (!routine_types_compatible(
+					        source_routine,
+					        target_routine))
+						raise_parse_error(
+						    "explicit cast between "
+						    "incompatible routine types");
+					return value;
+				}
+				raise_parse_error(
+				    "explicit routine-type cast requires a "
+				    "routine value, TMethod, nil, or routine "
+				    "reference");
+			}
+			if (target_ty == tmethod_type()) {
+				auto source_routine =
+				    dynamic_cast<RoutineType*>(value->ty);
+				if (!source_routine ||
+				    source_routine->kind != METHOD)
+					raise_parse_error(
+					    "TMethod can only view an of-object "
+					    "routine value");
+			}
 			return new Cast(value, target_ty);
 		}
 	}
@@ -1775,6 +1821,9 @@ bool Parser::maybe_parse_greater_equal() {
 static Type* call_result_type(Node* callee) {
 	if (auto c = dynamic_cast<Callable*>(callee))
 		return static_cast<RoutineType*>(c->ty)->return_type;
+	if (callee)
+		if (auto ty = dynamic_cast<RoutineType*>(callee->ty))
+			return ty->return_type;
 	return nullptr;
 }
 
@@ -1956,6 +2005,16 @@ bool Parser::is_assignable(Node* n) {
 		return false;
 	}
 	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
+		if (auto view = dynamic_cast<Cast*>(ma->a)) {
+			if (view->ty == tmethod_type() &&
+			    dynamic_cast<StorageSlot*>(ma->b)) {
+				auto routine = dynamic_cast<RoutineType*>(
+				    view->a ? view->a->ty : nullptr);
+				return routine &&
+				       routine->kind == METHOD &&
+				       is_assignable(view->a);
+			}
+		}
 		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
 	}
 	if (auto cast = dynamic_cast<Cast*>(n)) {
@@ -2085,6 +2144,29 @@ Node* Parser::mk_assign(Node* a, Node* b) {
 }
 
 Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
+	RoutineType* a_routine =
+	    a ? dynamic_cast<RoutineType*>(a->ty) : nullptr;
+	RoutineType* b_routine =
+	    b ? dynamic_cast<RoutineType*>(b->ty) : nullptr;
+	if (!a_routine && dynamic_cast<NilLiteral*>(a) && b_routine) {
+		a = cast(a, b_routine);
+		a_routine = b_routine;
+	}
+	if (!b_routine && dynamic_cast<NilLiteral*>(b) && a_routine) {
+		b = cast(b, a_routine);
+		b_routine = a_routine;
+	}
+	if (a_routine || b_routine) {
+		if (id != "=" || !a_routine || !b_routine ||
+		    !routine_types_compatible(a_routine, b_routine))
+			raise_parse_error(
+			    "routine values can only be compared for equality "
+			    "with a compatible routine type");
+		auto equal = new RoutineEqual(a, b);
+		equal->ty = boolean_type();
+		return equal;
+	}
+
 	auto fn = resolve_value(id);
 	std::vector<Node*> args;
 	auto common_ty = common_arith_type(a->ty, b->ty);
@@ -2159,14 +2241,40 @@ Node* Parser::parse_power() {
 	if (maybe_parse_keyword("not")) {
 		return mk_unary_same("not", parse_power());
 	} else if (maybe_parse_at()) {
-		auto x = parse_power();
+		// Do not let parse_power_tail turn a routine designator into an
+		// implicit no-argument call. A routine address is contextual: its
+		// destination type selects both the overload and plain-vs-of-object
+		// representation.
+		auto x = parse_designator();
+		if (node_is_bare_callable(x)) {
+			Node* receiver = nullptr;
+			Node* candidates = x;
+			if (auto member = dynamic_cast<MemberAccess*>(x)) {
+				candidates = member->b;
+				bool has_instance_method =
+				    dynamic_cast<Method*>(candidates);
+				if (auto overloads =
+				        dynamic_cast<OverloadSet*>(
+				            candidates))
+					for (Callable* candidate :
+					     overloads->members)
+						has_instance_method =
+						    has_instance_method ||
+						    dynamic_cast<Method*>(
+						        candidate);
+				if (has_instance_method)
+					receiver = member->a;
+			}
+			return parse_power_tail(
+			    new RoutineRef(receiver, candidates));
+		}
 		if (contains_packed_projection(x))
 			raise_parse_error("address of a packed-record field is not available");
 		if (!is_referenceable(x))
 			raise_parse_error("address requires a storage-backed expression");
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(current_location(), x->ty)) : nullptr;
-		return n;
+		return parse_power_tail(n);
 	} else if (maybe_parse_minus()) {
 		return mk_unary_same("-", parse_power());
 	} else if (maybe_parse_plus()) {
@@ -4166,27 +4274,37 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		parse_colon();
 		ret_ty = parse_type_expression(false);
 	}
-	if (allow_of_object && peek_keyword("of")) {
-		parse_keyword("of");
-		parse_keyword("object");
-		if (kind != METHOD) { // definitely not: CONSTRUCTOR, DESTRUCTOR, CLASS_METHOD
-			raise_type_kind_mismatch("expected method", "method", owner);
+
+	// A routine TYPE has no category until its late optional `of object`
+	// suffix has been consumed. Routine declarations take the other path:
+	// their category comes from the declaration grammar and they never accept
+	// this suffix.
+	if (allow_of_object) {
+		if (owner || kind != ROUTINE)
+			raise_type_kind_mismatch(
+			    "routine type signature", "routine", owner);
+		if (peek_keyword("of")) {
+			parse_keyword("of");
+			parse_keyword("object");
+			kind = METHOD;
 		}
-		kind = METHOD;
+		return new RoutineType(
+		    current_location(), std::move(formals), ret_ty, kind);
+	}
+
+	if (owner) {
+		if (is_class && kind == METHOD) {
+			if (dynamic_cast<ClassType*>(owner))
+				kind = CLASS_METHOD;
+			else
+				raise_type_kind_mismatch(
+				    "class method owner", "class", owner);
+		}
 	} else {
-		if (owner) {
-			if (is_class && kind == METHOD) {
-				if (dynamic_cast<ClassType*>(owner))
-					kind = CLASS_METHOD;
-				else
-					raise_type_kind_mismatch("class method owner", "class", owner);
-			}
-		} else {
-			if (kind != ROUTINE) {
-				raise_type_kind_mismatch("expected routine", "routine", owner);
-			}
-			kind = ROUTINE;
-		}
+		if (kind != ROUTINE)
+			raise_type_kind_mismatch(
+			    "expected routine", "routine", owner);
+		kind = ROUTINE;
 	}
 	return new RoutineType(current_location(), std::move(formals), ret_ty, kind);
 }
@@ -4623,6 +4741,14 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 	}
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
+		if (builtin &&
+		    builtin->generic_kind == BuiltinGenericKind::Assigned &&
+		    i == 0 &&
+		    (dynamic_cast<RoutineType*>(from) ||
+		     (from && from->is_reference_type()))) {
+			costs[self_slots + i] = 0;
+			continue;
+		}
 		if (rty->formals[i].ty == unknown_type()) {
 			if (builtin &&
 			    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
@@ -4676,15 +4802,27 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
-	// `nil` literal: legal in any reference-type position (class/interface/^T).
-	// Adopt the surrounding target's type so emission and downstream checks
-	// see a concrete pointer type instead of a typeless literal.
+	// `nil` literal: legal for reference types and both routine-value
+	// categories. Adopt the surrounding target so emission can choose nullptr
+	// for a plain procedure or a two-null-word method value.
 	if (dynamic_cast<NilLiteral*>(a)) {
-		if (target_ty && target_ty->is_reference_type()) {
+		if (target_ty &&
+		    (target_ty->is_reference_type() ||
+		     dynamic_cast<RoutineType*>(target_ty))) {
 			a->ty = target_ty;
 			return a;
 		}
-		raise_parse_error("'nil' is only valid in a reference-type context");
+		raise_parse_error(
+		    "'nil' is only valid in a reference or routine-value context");
+	}
+	if (auto reference = dynamic_cast<RoutineRef*>(a)) {
+		if (target_ty == pointer_type())
+			return resolve_routine_code_reference(reference);
+		auto routine = dynamic_cast<RoutineType*>(target_ty);
+		if (!routine)
+			raise_parse_error(
+			    "a routine reference requires a routine-type context");
+		return resolve_routine_reference(reference, routine);
 	}
 	if (auto literal = dynamic_cast<SetLiteral*>(a)) {
 		if (auto target_set = dynamic_cast<FixedSetType*>(target_ty)) {
@@ -4742,6 +4880,115 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	}
 }
 
+static std::vector<Callable*> routine_reference_candidates(
+    Node* candidates_node) {
+	if (auto callable =
+	        dynamic_cast<Callable*>(candidates_node))
+		return {callable};
+	if (auto overloads =
+	        dynamic_cast<OverloadSet*>(candidates_node))
+		return overloads->members;
+	return {};
+}
+
+RoutineRef* Parser::resolve_routine_reference(
+    RoutineRef* reference, RoutineType* target_ty) {
+	if (!reference || !target_ty)
+		raise_parse_error("invalid contextual routine reference");
+	if (target_ty->kind != ROUTINE && target_ty->kind != METHOD)
+		raise_parse_error(
+		    "routine reference target is not a routine-value type");
+
+	std::vector<Callable*> candidates =
+	    routine_reference_candidates(
+	        reference->candidates);
+	if (candidates.empty())
+		raise_parse_error(
+		    "routine reference does not name a routine or method");
+
+	std::vector<Callable*> compatible;
+	for (Callable* candidate : candidates) {
+		bool category_matches = false;
+		if (target_ty->kind == ROUTINE) {
+			category_matches =
+			    dynamic_cast<Procedure*>(candidate) &&
+			    candidate->ty->kind == ROUTINE &&
+			    reference->receiver == nullptr;
+		} else {
+			category_matches =
+			    dynamic_cast<Method*>(candidate) &&
+			    candidate->ty->kind == METHOD &&
+			    reference->receiver != nullptr;
+		}
+		if (category_matches &&
+		    routine_types_compatible(candidate->ty, target_ty))
+			compatible.push_back(candidate);
+	}
+
+	if (compatible.empty()) {
+		std::string category = target_ty->kind == METHOD
+		    ? "procedure/function of object"
+		    : "plain procedure/function";
+		raise_parse_error(
+		    "no overload of the routine reference is compatible with " +
+		    category + " target");
+	}
+	if (compatible.size() != 1)
+		raise_parse_error(
+		    "routine reference is ambiguous for the destination "
+		    "routine type");
+	if (target_ty->kind == METHOD &&
+	    reference->receiver &&
+	    !(reference->receiver->ty &&
+	      reference->receiver->ty->is_reference_type()) &&
+	    !is_referenceable(reference->receiver))
+		raise_parse_error(
+		    "an of-object routine reference requires a stable "
+		    "object receiver");
+
+	reference->resolved = compatible.front();
+	reference->ty = target_ty;
+	return reference;
+}
+
+RoutineRef* Parser::resolve_routine_code_reference(
+    RoutineRef* reference) {
+	if (!reference)
+		raise_parse_error("invalid routine code reference");
+	std::vector<Callable*> candidates =
+	    routine_reference_candidates(
+	        reference->candidates);
+	if (candidates.size() != 1)
+		raise_parse_error(
+		    "a Pointer routine reference requires one "
+		    "non-overloaded routine");
+	Callable* candidate = candidates.front();
+	bool valid_plain =
+	    dynamic_cast<Procedure*>(candidate) &&
+	    candidate->ty->kind == ROUTINE &&
+	    reference->receiver == nullptr;
+	bool valid_method =
+	    dynamic_cast<Method*>(candidate) &&
+	    candidate->ty->kind == METHOD &&
+	    reference->receiver != nullptr;
+	if (!valid_plain && !valid_method)
+		raise_parse_error(
+		    "Pointer routine reference does not name a plain "
+		    "routine or bound instance method");
+	if (valid_method &&
+	    !(reference->receiver->ty &&
+	      reference->receiver->ty->is_reference_type()) &&
+	    !is_referenceable(reference->receiver))
+		raise_parse_error(
+		    "a bound method code reference requires a stable "
+		    "object receiver");
+
+	reference->resolved = candidate;
+	reference->code_only = true;
+	reference->ty = pointer_type();
+	return reference;
+}
+
 Parser::FinalizedCall Parser::finalize_call(Node* target,
 					   std::vector<Node*>& args,
 					   std::string name_for_error,
@@ -4757,6 +5004,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 	}
 	Callable* chosen = nullptr;
+	RoutineType* value_rty = nullptr;
 	if (auto c = dynamic_cast<Callable*>(target)) {
 		if (name_for_error.empty() && !c->pas_name.empty()) {
 			name_for_error = c->pas_name;
@@ -4806,11 +5054,23 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 		chosen = non_dominated[0];
 	} else {
-		// Builtin or other opaque callable -- no ranking / defaults / coercion.
-		return FinalizedCall{receiver, target};
+		value_rty = target
+		    ? dynamic_cast<RoutineType*>(target->ty)
+		    : nullptr;
+		if (!value_rty) {
+			// Builtin or other opaque callable -- no ranking/default checks.
+			return FinalizedCall{receiver, target};
+		}
+		if (expected_return_type &&
+		    value_rty->return_type != expected_return_type)
+			emit_parse_error_at(
+			    error_location,
+			    "routine value has the wrong result type");
 	}
 	// Materialize missing args from defaults.
-	auto rty = static_cast<RoutineType*>(chosen->ty);
+	auto rty = chosen
+	    ? static_cast<RoutineType*>(chosen->ty)
+	    : value_rty;
 	while (args.size() < rty->formals.size()) {
 		auto& p = rty->formals[args.size()];
 		if (!p.default_value) {
@@ -4821,7 +5081,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	if (args.size() > rty->formals.size()) {
 		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
 	}
-	const BuiltinDesc* builtin = lookup_builtin_desc(chosen->cxx_name);
+	const BuiltinDesc* builtin = chosen
+	    ? lookup_builtin_desc(chosen->cxx_name)
+	    : nullptr;
 	if (builtin &&
 	    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
 	     builtin->generic_kind == BuiltinGenericKind::OrdinalMutation)) {
@@ -4854,6 +5116,32 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		args[1] = cast(args[1], set_type->item_type);
 	}
 	for (size_t i = 0; i < args.size(); i++) {
+		if (!chosen) {
+			Type* from = args[i] ? args[i]->ty : nullptr;
+			Type* to = rty->formals[i].ty;
+			ParamMode mode = rty->formals[i].mode;
+			bool compatible =
+			    dynamic_cast<NilLiteral*>(args[i]) ||
+			    (dynamic_cast<RoutineRef*>(args[i]) &&
+			     dynamic_cast<RoutineType*>(to));
+			if (mode == ParamMode::Var ||
+			    mode == ParamMode::Out) {
+				compatible = from == to;
+				if (auto subrange =
+				        dynamic_cast<SubrangeType*>(from))
+					compatible =
+					    subrange->base_type == to;
+			} else if (!compatible) {
+				compatible =
+				    conversion_cost(from, to) >= 0;
+			}
+			if (!compatible)
+				emit_parse_error_at(
+				    error_location,
+				    "argument for routine value parameter '" +
+				    rty->formals[i].pas_name +
+				    "' has an incompatible type");
+		}
 		auto mode = rty->formals[i].mode;
 		if (mode != ParamMode::Var && mode != ParamMode::Out)
 			continue;
@@ -4870,6 +5158,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* t = rty->formals[i].ty;
+		if (builtin &&
+		    builtin->generic_kind == BuiltinGenericKind::Assigned &&
+		    args[i] &&
+		    (dynamic_cast<RoutineType*>(args[i]->ty) ||
+		     (args[i]->ty &&
+		      args[i]->ty->is_reference_type())))
+			continue;
 		if (t == unknown_type())
 			continue; // untyped formal preserves the argument's exact Pascal type
 		auto mode = rty->formals[i].mode;
@@ -4889,7 +5184,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 		args[i] = cast(args[i], t);
 	}
-	return FinalizedCall{receiver, chosen};
+	return FinalizedCall{
+	    receiver, chosen ? static_cast<Node*>(chosen) : target};
 }
 
 Unit* Parser::load_or_get_unit(std::string name) {

@@ -294,6 +294,32 @@ void Emitter::emit_statement(Node* stmt) {
 	if (!active)
 		return;
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
+		if (auto member =
+		        dynamic_cast<MemberAccess*>(a->a)) {
+			if (auto view =
+			        dynamic_cast<Cast*>(member->a)) {
+				auto field =
+				    dynamic_cast<StorageSlot*>(member->b);
+				auto routine =
+				    dynamic_cast<RoutineType*>(
+				        view->a ? view->a->ty : nullptr);
+				if (view->ty == tmethod_type() &&
+				    field && routine &&
+				    routine->kind == METHOD &&
+				    (field->cxx_name == "p_code" ||
+				     field->cxx_name == "p_data")) {
+					fprintf(active,
+					    field->cxx_name == "p_code"
+					        ? "\tpas::m_store_tmethod_code("
+					        : "\tpas::m_store_tmethod_data(");
+					emit_writable_expression(view->a);
+					fprintf(active, ", ");
+					emit_expression(a->b);
+					fprintf(active, ");\n");
+					return;
+				}
+			}
+		}
 		if (auto cast = dynamic_cast<Cast*>(a->a)) {
 			// An assignable explicit ordinal cast is a same-sized view of an
 			// existing Pascal place. Keep it out of ordinary C++ cast syntax:
@@ -691,31 +717,49 @@ void Emitter::emit_loop_control(bool is_break) {
 	fprintf(active, is_break ? "\tbreak;\n" : "\tcontinue;\n");
 }
 
+void Emitter::emit_formal_parameter(
+    const Parameter& formal, bool with_name) {
+	if (formal.ty == unknown_type() &&
+	    (formal.mode == ParamMode::Var ||
+	     formal.mode == ParamMode::Out ||
+	     formal.mode == ParamMode::Const)) {
+		fprintf(active, formal.mode == ParamMode::Const
+		    ? "pas::tpcc_const_storage_ref"
+		    : "pas::tpcc_storage_ref");
+	} else {
+		if (formal.mode == ParamMode::Const)
+			fprintf(active, "const ");
+		emit_type_ref(formal.ty);
+		if (formal.mode == ParamMode::Var ||
+		    formal.mode == ParamMode::Out ||
+		    formal.mode == ParamMode::Const)
+			fprintf(active, "&");
+	}
+	if (with_name)
+		fprintf(active, " %s", formal.cxx_name.c_str());
+}
+
+void Emitter::emit_formal_parameters(
+    RoutineType* ty, bool with_names) {
+	fprintf(active, "(");
+	for (size_t i = 0; i < ty->formals.size(); i++) {
+		if (i > 0)
+			fprintf(active, ", ");
+		emit_formal_parameter(ty->formals[i], with_names);
+	}
+	fprintf(active, ")");
+}
+
+void Emitter::emit_function_type(RoutineType* ty) {
+	emit_type_ref(ty->return_type);
+	emit_formal_parameters(ty, false);
+}
+
 void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Position pos, std::string owner_qualifier) {
 	if (!active)
 		return;
 	if (pos == Position::DeclarationFormalsOnly) {
-		fprintf(active, "(");
-		for (size_t i = 0; i < ty->formals.size(); i++) {
-			if (i > 0)
-				fprintf(active, ", ");
-			auto& f = ty->formals[i];
-			if (f.ty == unknown_type() &&
-			    (f.mode == ParamMode::Var || f.mode == ParamMode::Out ||
-			     f.mode == ParamMode::Const)) {
-				fprintf(active, f.mode == ParamMode::Const
-				    ? "pas::tpcc_const_storage_ref"
-				    : "pas::tpcc_storage_ref");
-			} else {
-				if (f.mode == ParamMode::Const)
-					fprintf(active, "const ");
-				emit_type_ref(f.ty);
-				if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
-					fprintf(active, "&");
-			}
-			fprintf(active, " %s", f.cxx_name.c_str());
-		}
-		fprintf(active, ")");
+		emit_formal_parameters(ty, true);
 		return;
 	}
 	bool is_destructor = (ty->kind == DESTRUCTOR);
@@ -725,27 +769,8 @@ void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Posi
 	} else if (ty->return_type != &unit_type()) {
 		unhandled_type("non-unit return type on destructor is not allowed", ty);
 	}
-	fprintf(active, "%s%s(", owner_qualifier.c_str(), cxx_text.c_str());
-	for (size_t i = 0; i < ty->formals.size(); i++) {
-		if (i > 0)
-			fprintf(active, ", ");
-		auto& f = ty->formals[i];
-		if (f.ty == unknown_type() &&
-		    (f.mode == ParamMode::Var || f.mode == ParamMode::Out ||
-		     f.mode == ParamMode::Const)) {
-			fprintf(active, f.mode == ParamMode::Const
-			    ? "pas::tpcc_const_storage_ref"
-			    : "pas::tpcc_storage_ref");
-		} else {
-			if (f.mode == ParamMode::Const)
-				fprintf(active, "const ");
-			emit_type_ref(f.ty);
-			if (f.mode == ParamMode::Var || f.mode == ParamMode::Out || f.mode == ParamMode::Const)
-				fprintf(active, "&");
-		}
-		fprintf(active, " %s", f.cxx_name.c_str());
-	}
-	fprintf(active, ")");
+	fprintf(active, "%s%s", owner_qualifier.c_str(), cxx_text.c_str());
+	emit_formal_parameters(ty, true);
 }
 
 void Emitter::emit_callable_signature(Callable* c, Position pos, std::string owner_qualifier) {
@@ -1128,6 +1153,12 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	if (!active)
 		return;
+	if (dynamic_cast<RoutineType*>(ty)) {
+		fprintf(active, "using %s = ", cxx_name.c_str());
+		emit_type_ref(ty);
+		fprintf(active, ";\n");
+		return;
+	}
 	if (auto e = dynamic_cast<EnumType*>(ty)) {
 		// Pascal default is UNSCOPED enums: member identifiers leak into
 		// the surrounding scope (where the type is declared) so a use like
@@ -1250,30 +1281,64 @@ void Emitter::emit_type_alias(std::string cxx_name, std::string aliased_cxx_name
 	fprintf(active, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
 }
 
-void Emitter::emit_method_pointer_lambda(Node* obj_expr, Method* method) {
-	auto rt = method->ty;
-	// Reject ObjectType receivers. Class-type Self passes by pointer
-	// (t_foo*), so by-value capture stores the pointer -- matches Pascal
-	// TMethod.Data. ObjectType is value-typed; by-value capture would copy
-	// the object, diverging from TMethod (which stores an address). Raise
-	// rather than emit wrong code silently.
-	if (obj_expr->ty && dynamic_cast<ObjectType*>(obj_expr->ty))
-		unhandled_node("method-pointer capture of ObjectType receiver not supported (use a class type)", obj_expr);
-	fprintf(active, "[");
-	emit_expression(obj_expr);
-	fprintf(active, "]");
-	emit_routine_signature(rt, "", Position::DeclarationFormalsOnly, "");
-	fprintf(active, " mutable { ");
-	if (rt->return_type != &unit_type())
-		fprintf(active, "return ");
-	emit_expression(obj_expr);
-	fprintf(active, "->%s(", callable_cxx_name(method).c_str());
-	for (size_t i = 0; i < rt->formals.size(); i++) {
-		if (i > 0)
-			fprintf(active, ", ");
-		fprintf(active, "%s", rt->formals[i].cxx_name.c_str());
+void Emitter::emit_routine_reference(
+    RoutineRef* reference) {
+	if (!reference || !reference->resolved)
+		unhandled_node(
+		    "unresolved routine reference reached emission",
+		    reference);
+	if (auto procedure =
+	        dynamic_cast<Procedure*>(reference->resolved)) {
+		if (reference->receiver)
+			unhandled_node(
+			    "standalone routine reference has a receiver",
+			    reference);
+		if (reference->code_only) {
+			fprintf(active,
+			    "pas::m_function_to_code_pointer(static_cast<");
+			emit_type_ref(procedure->ty->return_type);
+			fprintf(active, " (*)");
+			emit_formal_parameters(procedure->ty, false);
+			fprintf(active, ">(&%s))",
+			    callable_cxx_name(procedure).c_str());
+		} else {
+			fprintf(active, "&%s",
+			    callable_cxx_name(procedure).c_str());
+		}
+		return;
 	}
-	fprintf(active, "); }");
+
+	auto method =
+	    dynamic_cast<Method*>(reference->resolved);
+	if (!method || !reference->receiver ||
+	    method->ty->kind != METHOD)
+		unhandled_node(
+		    "method routine reference is not a bound instance method",
+		    reference);
+	std::string owner =
+	    owner_cxx_name(method->owner_class);
+	if (owner.empty())
+		unhandled_type(
+		    "method routine reference owner has no C++ name",
+		    method->owner_class);
+
+	fprintf(active, "pas::m_bind_method<static_cast<");
+	emit_type_ref(method->ty->return_type);
+	fprintf(active, " (%s::*)", owner.c_str());
+	emit_formal_parameters(method->ty, false);
+	fprintf(active, ">(&%s::%s)>(",
+	    owner.c_str(), callable_cxx_name(method).c_str());
+	if (reference->receiver->ty &&
+	    reference->receiver->ty->is_reference_type()) {
+		emit_expression(reference->receiver);
+	} else {
+		fprintf(active, "std::addressof(");
+		emit_expression(reference->receiver);
+		fprintf(active, ")");
+	}
+	fprintf(active, ")");
+	if (reference->code_only)
+		fprintf(active, ".p_code");
 }
 
 void Emitter::emit_writable_expression(Node* expr) {
@@ -1347,8 +1412,19 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 void Emitter::emit_expression(Node* expr) {
 	if (!active)
 		return;
-	if (dynamic_cast<NilLiteral*>(expr)) {
-		fprintf(active, "nullptr");
+	if (auto nil = dynamic_cast<NilLiteral*>(expr)) {
+		auto routine =
+		    dynamic_cast<RoutineType*>(nil->ty);
+		if (routine && routine->kind == METHOD) {
+			emit_type_ref(routine);
+			fprintf(active, "{}");
+		} else if (routine && routine->kind == ROUTINE) {
+			fprintf(active, "static_cast<");
+			emit_type_ref(routine);
+			fprintf(active, ">(nullptr)");
+		} else {
+			fprintf(active, "nullptr");
+		}
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
@@ -1436,6 +1512,11 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto b = dynamic_cast<Builtin*>(expr)) {
 		fprintf(active, "%.*s", (int)b->desc->cxx_name.size(), b->desc->cxx_name.data());
+		return;
+	}
+	if (auto reference =
+	        dynamic_cast<RoutineRef*>(expr)) {
+		emit_routine_reference(reference);
 		return;
 	}
 	if (auto c = dynamic_cast<Callable*>(expr)) {
@@ -1542,6 +1623,14 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		emit_expression(o->b);
 		fprintf(active, "))");
+		return;
+	}
+	if (auto equal = dynamic_cast<RoutineEqual*>(expr)) {
+		fprintf(active, "pas::m_equal(");
+		emit_expression(equal->a);
+		fprintf(active, ", ");
+		emit_expression(equal->b);
+		fprintf(active, ")");
 		return;
 	}
 	if (auto ix = dynamic_cast<Index*>(expr)) {
@@ -1651,6 +1740,28 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
+		auto source_routine = dynamic_cast<RoutineType*>(
+		    ca->a ? ca->a->ty : nullptr);
+		auto target_routine =
+		    dynamic_cast<RoutineType*>(ca->ty);
+		if (source_routine &&
+		    source_routine->kind == METHOD &&
+		    ca->ty == tmethod_type()) {
+			fprintf(active, "pas::m_method_to_tmethod(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+			return;
+		}
+		if (ca->a && ca->a->ty == tmethod_type() &&
+		    target_routine &&
+		    target_routine->kind == METHOD) {
+			fprintf(active, "pas::m_tmethod_to_method<");
+			emit_function_type(target_routine);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+			return;
+		}
 		if (auto packed = dynamic_cast<PackedRecordType*>(ca->ty)) {
 			if (packed->cxx_name.empty())
 				unhandled_type("anonymous packed overlay", packed);
@@ -1711,19 +1822,6 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
-		// `@obj.method` for a `procedure of object`-typed LHS: render as a
-		// lambda capturing obj by value and dispatching to the method. The
-		// lambda converts implicitly to std::function<Ret(Args)> at the
-		// assignment site. Plain `&expr` (function pointers, address-of a
-		// standalone Callable) falls through to cxx_unary_operator.
-		if (auto ao = dynamic_cast<AddrOf*>(u)) {
-			if (auto ma = dynamic_cast<MemberAccess*>(ao->a)) {
-				if (auto method = dynamic_cast<Method*>(ma->b)) {
-					emit_method_pointer_lambda(ma->a, method);
-					return;
-				}
-			}
-		}
 		if (const char* op = cxx_unary_operator(u)) {
 			fprintf(active, "%s", op);
 			if (dynamic_cast<AddrOf*>(u))
@@ -1854,22 +1952,16 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto rt = dynamic_cast<RoutineType*>(ty)) {
-		// `procedure of object` (kind=METHOD): Pascal TMethod is a (Code, Data)
-		// pair. std::function<Ret(Args)> type-erases that pair into a callable;
-		// call site is uniform `m(args)` with function pointers. Wrapper emits
-		// `std::function<` ... `>` around emit_routine_signature(name=""),
-		// which produces `Ret (formals)`.
-		//
-		// Function pointer (kind=ROUTINE): `Ret (*)(Args)`. The `(*)` is the
-		// pointer decoration, analogous to ClassType emitting as `t_foo*`.
-		// Pass name="(*)" so emit_routine_signature emits `Ret (*)(formals)`.
-		if (rt->kind == METHOD) {
-			fprintf(active, "std::function<");
-			emit_routine_signature(rt, "", Position::Declaration, "");
-			fprintf(active, ">");
-		} else {
-			emit_routine_signature(rt, "(*)", Position::Declaration, "");
-		}
+		if (rt->kind == METHOD)
+			fprintf(active, "pas::m_method<");
+		else if (rt->kind == ROUTINE)
+			fprintf(active, "pas::m_proc<");
+		else
+			unhandled_type(
+			    "declaration-only routine kind used as a routine value",
+			    rt);
+		emit_function_type(rt);
+		fprintf(active, ">");
 		return;
 	}
 	if (auto s = dynamic_cast<FixedSetType*>(ty)) {

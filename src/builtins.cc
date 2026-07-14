@@ -63,6 +63,18 @@ IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", 8, signed_b
 IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", 7, unsigned_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_fixedarray(SourceLocation::builtin(), "pas::t_fixedarray", {});
 IntrinsicType k_unknown(SourceLocation::builtin(), "pas::tpcc_unknown_type", {});
+Frame* k_tmethod_children = new Frame(nullptr);
+RecordType k_tmethod(SourceLocation::builtin(), k_tmethod_children);
+const bool k_tmethod_initialized = []() {
+	k_tmethod.cxx_name = "pas::t_tmethod";
+	auto code = new StorageSlot("p_code", &k_pointer);
+	auto data = new StorageSlot("p_data", &k_pointer);
+	k_tmethod.children->register_variable("code", code, &k_pointer);
+	k_tmethod.children->register_variable("data", data, &k_pointer);
+	k_tmethod.fields.push_back(RecordType::Field{"code", code, &k_pointer});
+	k_tmethod.fields.push_back(RecordType::Field{"data", data, &k_pointer});
+	return true;
+}();
 #if 0
 // Note: I don't think it's useful to have actual user-visible interfaces implemented on the metaclass.
 //InterfaceType k_m_iobject("pas::m_iobject", new Frame(nullptr), std::vector<InterfaceType*>());
@@ -123,6 +135,7 @@ Type* const k_all_intrinsics[] = {
     &k_sizeuint,
     &k_fixedarray,
     &k_unknown,
+    &k_tmethod,
     //    &k_m_iobject,
 };
 } // namespace
@@ -158,6 +171,10 @@ Type* extended_type() { return &k_extended; }
 Type* set_type() { return &k_set; }
 Type* fixedarray_type() { return &k_fixedarray; }
 Type* unknown_type() { return &k_unknown; }
+RecordType* tmethod_type() {
+	(void)k_tmethod_initialized;
+	return &k_tmethod;
+}
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
 	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
@@ -433,7 +450,7 @@ static const BuiltinDesc k_builtins[] = {
     {"pas::p_move", nullptr},
     {"pas::p_comparebyte", nullptr},
     {"pas::p_comparechar", nullptr},
-    {"pas::p_assigned", nullptr},
+    {"pas::p_assigned", nullptr, {}, BuiltinGenericKind::Assigned},
     {"pas::p_trunc", fold_trunc},
     {"pas::p_round", fold_round},
     {"pas::p_frac", fold_frac},
@@ -490,6 +507,10 @@ Type* lookup_builtin_type(std::string cxx_name) {
 				return q;
 			}
 		} else if (auto q = dynamic_cast<EnumType*>(t)) {
+			if (q->cxx_name == cxx_name) {
+				return q;
+			}
+		} else if (auto q = dynamic_cast<RecordType*>(t)) {
 			if (q->cxx_name == cxx_name) {
 				return q;
 			}

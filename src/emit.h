@@ -11,6 +11,8 @@ class PackedRecordType;
 class Callable;
 class Method;
 class RoutineType;
+class RoutineRef;
+struct Parameter;
 
 /** No public name-mangling entry point. Prefixing (`t_` for type identifiers,
  *  `p_` for value identifiers) is applied inside Type / Node constructors
@@ -128,9 +130,7 @@ public:
 	//
 	// cxx_text carries the C++ spelling of the token that sits between
 	// return-type and `(formals)`: a real cxx_name like `p_foo` or `~t_foo`
-	// for callable cases, `(*)` for function-pointer type aliases, empty
-	// for std::function-wrapped method-pointer aliases and for
-	// DeclarationFormalsOnly.
+	// for callable cases, or empty for DeclarationFormalsOnly.
 	// owner_qualifier is `Foo::` or empty (namespace only -- orthogonal to
 	// prototype-vs-definition, which is expressed at the function level via
 	// which wrapper the caller invokes).
@@ -151,6 +151,15 @@ public:
 	void emit_type_ref(Type* ty);
 
     private:
+	// The parameter-type spelling is shared by declarations, routine-value
+	// types, and method-adapter pointer-to-member casts. `with_name` controls
+	// only whether the Pascal formal's generated C++ identifier follows it.
+	void emit_formal_parameter(const Parameter& formal, bool with_name);
+	void emit_formal_parameters(RoutineType* ty, bool with_names);
+	// Emit the function type `Result(Args...)` (not a pointer and not a
+	// declaration). m_proc and m_method both take this as their template
+	// argument.
+	void emit_function_type(RoutineType* ty);
 	// Emit a full enum declaration body: `enum [NAME] { a, b, c }` -- no
 	// leading newline, no trailing semicolon. Caller frames those. Used by
 	// emit_type_definition (named, at type-block scope) and emit_type_ref's
@@ -170,12 +179,10 @@ public:
 	// spells the cxx name.
 	void emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta = false);
 
-	// emit_method_pointer_lambda renders `cb := @obj.method` as a lambda
-	// capturing obj by value, dispatching to the method. The lambda converts
-	// implicitly to std::function<Ret(Args)> at the assignment site. Rejects
-	// ObjectType receivers (by-value capture would copy a value-typed object,
-	// diverging from Pascal TMethod's pointer-to-instance semantics).
-	void emit_method_pointer_lambda(Node* obj_expr, Method* method);
+	// Emit a resolved @routine value. Global routines become ordinary function
+	// pointers; methods use the common m_bind_method pointer-to-member template
+	// adapter and retain their receiver in the Data word.
+	void emit_routine_reference(RoutineRef* reference);
 	// Emit an expression in a context which may mutate the referenced place
 	// (var/out, address-of). Compiler-synthesized properties can use a
 	// different accessor here, for example AnsiString's uniqueness barrier.

@@ -74,7 +74,7 @@ public:
 	// values).
 	Node* receiver;
 	// Any expression that yields a callable at compile time or at runtime.
-	// Compile-time: a Callable*. Runtime (future): a procedural value.
+	// Compile-time: a Callable*. Runtime: a routine value.
 	Node* callee;
 	std::vector<Node*> args;
 	ProcCall(Node* receiver, Node* callee, std::vector<Node*> args);
@@ -361,6 +361,37 @@ public:
 	const char* diagnostic_kind() const override;
 };
 
+/** `@Routine` or `@Receiver.Method`.
+ *
+ * A routine name is not a storage address and must remain unresolved until a
+ * destination routine type supplies both its category (plain vs of-object)
+ * and its full signature. `candidates` is a Callable or OverloadSet;
+ * `resolved` is filled exactly once by Parser::cast.
+ */
+class RoutineRef: public Node {
+public:
+	Node* receiver;
+	Node* candidates;
+	Callable* resolved = nullptr;
+	// Pointer context asks for only the ABI code word. Routine-type context
+	// leaves this false and emits the complete m_proc/m_method value.
+	bool code_only = false;
+	RoutineRef(Node* receiver, Node* candidates);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** Equality of compatible routine values. Method routine equality
+ * follows FPC and compares Code only; the RTL implements that distinction. */
+class RoutineEqual: public BinaryOperation {
+public:
+	RoutineEqual(Node* a, Node* b);
+	const char* diagnostic_kind() const override;
+};
+
 /** Shared base of standalone procedures/functions and methods. Holds
  *  everything call resolution and emission needs regardless of which of the
  *  two the callable is. `return_type` is unit_type() for procedures (Pascal
@@ -394,7 +425,7 @@ public:
 
 /** Standalone procedure or function (Pascal `procedure`/`function` at
  *  unit/program scope). Carries no extra state beyond Callable; its identity
- *  is what distinguishes it from Method for type-checking against procedural
+ *  is what distinguishes it from Method for type-checking against routine
  *  pointer types. */
 class Procedure: public Callable {
 public:

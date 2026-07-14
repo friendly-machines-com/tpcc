@@ -368,6 +368,12 @@ public:
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+// Routine values are structural within one representation category.
+// Parameter names/defaults are deliberately excluded; modes, parameter types,
+// result type, and plain-vs-of-object category are included.
+bool routine_types_compatible(
+    const RoutineType* from, const RoutineType* to);
+
 class SubrangeType : public Type {
 public:
 	Node* lower_bound; // its type is base_type

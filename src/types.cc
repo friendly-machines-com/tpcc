@@ -288,7 +288,7 @@ std::optional<TypeLayout> type_layout_impl(
 	}
 	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
 		if (routine->kind == METHOD)
-			return TypeLayout{32, 8};
+			return TypeLayout{16, 8};
 		return TypeLayout{8, 8};
 	}
 	return std::nullopt;
@@ -408,6 +408,38 @@ static int integer_conversion_cost(Type* from, Type* to) {
 	return cost;
 }
 
+static bool routine_signature_type_equal(
+    Type* a, Type* b) {
+	if (a == b)
+		return true;
+	return conversion_cost(a, b) == 0 &&
+	       conversion_cost(b, a) == 0;
+}
+
+bool routine_types_compatible(
+    const RoutineType* from, const RoutineType* to) {
+	if (!from || !to || from->kind != to->kind)
+		return false;
+	if (from->kind != ROUTINE && from->kind != METHOD)
+		return false;
+	if (!routine_signature_type_equal(
+	        from->return_type, to->return_type) ||
+	    from->formals.size() != to->formals.size())
+		return false;
+	for (size_t i = 0; i < from->formals.size(); ++i) {
+		const Parameter& a = from->formals[i];
+		const Parameter& b = to->formals[i];
+		if (a.mode != b.mode)
+			return false;
+		// Pointer and nested routine types can be independently parsed but
+		// structurally identical. Require zero-cost compatibility both ways;
+		// widening and other implicit conversions are not signature identity.
+		if (!routine_signature_type_equal(a.ty, b.ty))
+			return false;
+	}
+	return true;
+}
+
 Type* common_arith_type(Type* a, Type* b) {
 	if (!a || !b)
 		return nullptr;
@@ -443,6 +475,13 @@ int conversion_cost(Type* from, Type* to) {
 		return -1;
 	if (from == to)
 		return 0;
+	if (auto from_routine = dynamic_cast<RoutineType*>(from)) {
+		auto to_routine = dynamic_cast<RoutineType*>(to);
+		return to_routine &&
+		       routine_types_compatible(from_routine, to_routine)
+		    ? 0
+		    : -1;
+	}
 	if (from == &untyped_integer_type())
 		return 0; // literal adapts to any int
 	// Char and Byte remain nominally distinct (so exact overloads can
@@ -830,17 +869,19 @@ void RoutineType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 }
 
 void RoutineType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
-	if (kind == CONSTRUCTOR || kind == DESTRUCTOR || kind == CLASS_METHOD) {
-		out << "\n";
-		ctx->indent(out, indent + 1);
-		out << "kind: ";
-		if (kind == CONSTRUCTOR)
-			out << "constructor";
-		else if (kind == DESTRUCTOR)
-			out << "destructor";
-		else
-			out << "class_method";
-	}
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "kind: ";
+	if (kind == CONSTRUCTOR)
+		out << "constructor";
+	else if (kind == DESTRUCTOR)
+		out << "destructor";
+	else if (kind == METHOD)
+		out << "method";
+	else if (kind == ROUTINE)
+		out << "routine";
+	else
+		out << "class_method";
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "signature: (";

@@ -35,6 +35,9 @@ enum class BuiltinGenericKind {
 	// while this semantic category tells call checking that argument one
 	// must be a set and argument two must convert to that set's item type.
 	SetMutation,
+	// Assigned accepts object pointers, plain routine values, and method
+	// routine values. system.pp can only spell its Pointer overload.
+	Assigned,
 };
 
 enum class BuiltinSyntaxKind {
@@ -126,6 +129,7 @@ Type* extended_type();
 Type* set_type();
 Type* fixedarray_type();
 Type* unknown_type();
+RecordType* tmethod_type();
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out);
 bool integer_bounds(Type* ty, OrdinalBounds* out);

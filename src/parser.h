@@ -25,6 +25,7 @@ class Callable;
 class Property;
 class PropertyAccess;
 class Builtin;
+class RoutineRef;
 
 /** Shared compiler-wide options set from the command line and consulted by
  *  the tokenizer's directive handling and by unit/include file lookup. One
@@ -169,6 +170,10 @@ private:
 	Node* mk_unary_same(std::string id, Node* x);
 	Node* mk_assign(Node* a, Node* b);
 	Node* cast(Node* a, Type* target_ty);
+	RoutineRef* resolve_routine_reference(
+	    RoutineRef* reference, RoutineType* target_ty);
+	RoutineRef* resolve_routine_code_reference(
+	    RoutineRef* reference);
 	Type* reuse_subrange_type(Node* lower_bound, Node* upper_bound);
 	Node* active_function_result_lvalue(Callable* c) const;
 protected:
