@@ -57,6 +57,7 @@ IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_boun
 ShortStringType k_shortstring(SourceLocation::builtin(), 255);
 IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {}, {}, TypeLayout{256, 1});
 IntrinsicType k_text(SourceLocation::builtin(), "pas::t_text", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_file(SourceLocation::builtin(), "pas::t_file", {}, {}, TypeLayout{8, 8});
 IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {}, {}, TypeLayout{8, 8});
 IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8});
@@ -106,6 +107,7 @@ Type* const k_all_intrinsics[] = {
     &k_shortstring,
     &k_ansistring,
     &k_text,
+    &k_file,
     &k_pointer,
     &k_ptrint,
     &k_ptruint,
@@ -152,6 +154,7 @@ ShortStringType* shortstring_type(uint8_t capacity) {
 }
 Type* ansistring_type() { return &k_ansistring; }
 Type* text_type() { return &k_text; }
+Type* file_type() { return &k_file; }
 Type* single_type() { return &k_single; }
 Type* double_type() { return &k_double; }
 Type* extended_type() { return &k_extended; }
@@ -548,6 +551,10 @@ const Frame& root_frame() {
 		ff.register_variable("false", p_false, &k_boolean);
 		auto p_true = new EnumMemberRef("pas::t_boolean::p_true", 1, &k_boolean);
 		ff.register_variable("true", p_true, &k_boolean);
+		// File is a reserved type-forming keyword, not a declaration in
+		// System. Registering its singleton here also lets type-or-expression
+		// syntax such as SizeOf(File) recognize it as a type.
+		ff.register_type("file", &k_file);
 		return ff;
 	}();
 	return f;

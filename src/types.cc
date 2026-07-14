@@ -68,6 +68,11 @@ FixedSetType::FixedSetType(SourceLocation source_location, Type* item_type)
 	this->item_type = item_type;
 }
 
+TypedFileType::TypedFileType(
+    SourceLocation source_location, Type* item_type)
+    : Type(std::move(source_location)), item_type(item_type) {
+}
+
 PointerType::PointerType(SourceLocation source_location, Type* item_type)
     : Type(std::move(source_location)) {
 	this->item_type = item_type;
@@ -287,6 +292,8 @@ std::optional<TypeLayout> type_layout_impl(
 	}
 	if (dynamic_cast<FixedSetType*>(ty))
 		return TypeLayout{24, 8};
+	if (dynamic_cast<TypedFileType*>(ty))
+		return TypeLayout{8, 8};
 	if (dynamic_cast<PointerType*>(ty) ||
 	    dynamic_cast<ClassType*>(ty) ||
 	    dynamic_cast<InterfaceType*>(ty) ||
@@ -471,6 +478,88 @@ bool routine_types_compatible(
 	return true;
 }
 
+static bool file_item_types_equal(Type* a, Type* b) {
+	if (a == b)
+		return true;
+	while (auto incomplete = dynamic_cast<IncompleteType*>(a)) {
+		if (!incomplete->resolved)
+			return false;
+		a = incomplete->resolved;
+	}
+	while (auto incomplete = dynamic_cast<IncompleteType*>(b)) {
+		if (!incomplete->resolved)
+			return false;
+		b = incomplete->resolved;
+	}
+	if (a == b)
+		return true;
+	if (auto a_string = dynamic_cast<ShortStringType*>(a)) {
+		auto b_string = dynamic_cast<ShortStringType*>(b);
+		return b_string &&
+		       a_string->capacity == b_string->capacity;
+	}
+	if (auto a_pointer = dynamic_cast<PointerType*>(a)) {
+		auto b_pointer = dynamic_cast<PointerType*>(b);
+		return b_pointer &&
+		       file_item_types_equal(
+		           a_pointer->item_type, b_pointer->item_type);
+	}
+	if (auto a_set = dynamic_cast<FixedSetType*>(a)) {
+		auto b_set = dynamic_cast<FixedSetType*>(b);
+		return b_set &&
+		       file_item_types_equal(
+		           a_set->item_type, b_set->item_type);
+	}
+	if (auto a_array = dynamic_cast<FixedArrayType*>(a)) {
+		auto b_array = dynamic_cast<FixedArrayType*>(b);
+		return b_array &&
+		       a_array->range.lower_ordinal.negative ==
+		           b_array->range.lower_ordinal.negative &&
+		       a_array->range.lower_ordinal.magnitude ==
+		           b_array->range.lower_ordinal.magnitude &&
+		       a_array->range.upper_ordinal.negative ==
+		           b_array->range.upper_ordinal.negative &&
+		       a_array->range.upper_ordinal.magnitude ==
+		           b_array->range.upper_ordinal.magnitude &&
+		       file_item_types_equal(
+		           a_array->range.base_type,
+		           b_array->range.base_type) &&
+		       file_item_types_equal(
+		           a_array->item_type, b_array->item_type);
+	}
+	if (auto a_classref = dynamic_cast<ClassRefType*>(a)) {
+		auto b_classref = dynamic_cast<ClassRefType*>(b);
+		return b_classref &&
+		       file_item_types_equal(
+		           a_classref->target, b_classref->target);
+	}
+	if (auto a_routine = dynamic_cast<RoutineType*>(a)) {
+		auto b_routine = dynamic_cast<RoutineType*>(b);
+		return b_routine &&
+		       routine_types_compatible(a_routine, b_routine);
+	}
+	if (auto a_file = dynamic_cast<TypedFileType*>(a)) {
+		auto b_file = dynamic_cast<TypedFileType*>(b);
+		return b_file &&
+		       file_item_types_equal(
+		           a_file->item_type, b_file->item_type);
+	}
+	return false;
+}
+
+TypedFileType* typed_file_type(
+    SourceLocation source_location, Type* item_type) {
+	static std::vector<TypedFileType*> types;
+	for (TypedFileType* type : types)
+		if (file_item_types_equal(
+		        type->item_type, item_type))
+			return type;
+	auto result = new TypedFileType(
+	    std::move(source_location), item_type);
+	types.push_back(result);
+	return result;
+}
+
 Type* common_arith_type(Type* a, Type* b) {
 	if (!a || !b)
 		return nullptr;
@@ -521,6 +610,14 @@ int conversion_cost(Type* from, Type* to) {
 	if (dynamic_cast<ShortStringType*>(from) &&
 	    dynamic_cast<ShortStringType*>(to))
 		return 0;
+	if (auto from_file = dynamic_cast<TypedFileType*>(from)) {
+		auto to_file = dynamic_cast<TypedFileType*>(to);
+		return to_file &&
+		       file_item_types_equal(
+		           from_file->item_type, to_file->item_type)
+		    ? 0
+		    : -1;
+	}
 	if (from == &untyped_integer_type()) {
 		int real_to = real_widening_rank(to);
 		if (real_to >= 0)
@@ -715,6 +812,21 @@ void FixedArrayType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstr
 const char* FixedSetType::diagnostic_kind() const { return "set"; }
 void FixedSetType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
 void FixedSetType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "item: " << ctx->known_type_ref(item_type);
+}
+
+const char* TypedFileType::diagnostic_kind() const {
+	return "file";
+}
+void TypedFileType::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	ctx->add_type_edge(item_type);
+}
+void TypedFileType::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "item: " << ctx->known_type_ref(item_type);

@@ -2057,6 +2057,12 @@ void Emitter::emit_type_ref(Type* ty) {
 		fprintf(active, "*");
 		return;
 	}
+	if (auto f = dynamic_cast<TypedFileType*>(ty)) {
+		fprintf(active, "pas::t_typedfile<");
+		emit_type_ref(f->item_type);
+		fprintf(active, ">");
+		return;
+	}
 	if (auto rt = dynamic_cast<RoutineType*>(ty)) {
 		if (rt->kind == METHOD)
 			fprintf(active, "pas::m_method<");

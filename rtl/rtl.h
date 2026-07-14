@@ -303,6 +303,36 @@ struct t_text {
 static_assert(sizeof(t_text) == sizeof(void*));
 static_assert(alignof(t_text) == alignof(void*));
 
+// Text, untyped binary files, and typed binary files are incompatible Pascal
+// types even though all three currently carry one runtime-state pointer.
+// Binary state is deliberately opaque here: file operations own its concrete
+// handle, filename, mode, and record-size representation.
+struct binary_file_state;
+
+struct t_file {
+	binary_file_state* state = nullptr;
+};
+
+template<typename Element>
+struct t_typedfile {
+	using element_type = Element;
+	binary_file_state* state = nullptr;
+};
+
+static_assert(sizeof(t_file) == sizeof(void*));
+static_assert(alignof(t_file) == alignof(void*));
+static_assert(std::is_aggregate_v<t_file>);
+static_assert(std::is_standard_layout_v<t_file>);
+static_assert(std::is_trivially_copyable_v<t_file>);
+static_assert(sizeof(t_typedfile<t_byte>) == sizeof(void*));
+static_assert(alignof(t_typedfile<t_byte>) == alignof(void*));
+static_assert(std::is_aggregate_v<t_typedfile<t_byte>>);
+static_assert(std::is_standard_layout_v<t_typedfile<t_byte>>);
+static_assert(std::is_trivially_copyable_v<t_typedfile<t_byte>>);
+static_assert(!std::is_same_v<t_file, t_text>);
+static_assert(!std::is_same_v<t_file, t_typedfile<t_byte>>);
+static_assert(!std::is_same_v<t_text, t_typedfile<t_byte>>);
+
 struct tpcc_storage_ref {
 	std::byte* data;
 	std::size_t size;

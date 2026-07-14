@@ -124,6 +124,7 @@ Type* char_type();
 ShortStringType* shortstring_type(uint8_t capacity = 255);
 Type* ansistring_type();
 Type* text_type();
+Type* file_type();
 Type* single_type();
 Type* double_type();
 Type* extended_type();

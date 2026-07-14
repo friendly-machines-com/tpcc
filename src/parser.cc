@@ -59,6 +59,7 @@ static std::unordered_set<std::string> keywords = {
     "dynamic", // FIXME
     "else",
     "end",
+    "file",
     "forward", // FIXME directive ?
     "for",
     "function",
@@ -3454,6 +3455,12 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		parse_keyword("set");
 		parse_keyword("of");
 		return new FixedSetType(current_location(), parse_type_expression(true));
+	} else if (peek_keyword("file")) {
+		parse_keyword("file");
+		if (!maybe_parse_keyword("of"))
+			return file_type();
+		return typed_file_type(
+		    current_location(), parse_type_expression(true));
 	} else if (peek_keyword("array")) {
 		return parse_array_type();
 	} else if (peek_keyword("object")) {
@@ -3751,8 +3758,16 @@ struct TypeBlockResolver {
 		visiting_types.insert(ty);
 		bool ok = normalize_type_contents(ty);
 		visiting_types.erase(ty);
-		if (ok)
+		if (ok) {
 			done_types.insert(ty);
+			if (auto file =
+			        dynamic_cast<TypedFileType*>(ty)) {
+				ty = typed_file_type(
+				    file->source_location,
+				    file->item_type);
+				done_types.insert(ty);
+			}
+		}
 		return ok;
 	}
 
@@ -3919,6 +3934,8 @@ struct TypeBlockResolver {
 		}
 		if (auto s = dynamic_cast<FixedSetType*>(ty))
 			return normalize_type(s->item_type);
+		if (auto f = dynamic_cast<TypedFileType*>(ty))
+			return normalize_type(f->item_type);
 		if (auto p = dynamic_cast<PointerType*>(ty))
 			return normalize_type(p->item_type);
 		if (auto r = dynamic_cast<ClassRefType*>(ty)) {

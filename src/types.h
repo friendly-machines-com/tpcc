@@ -123,6 +123,27 @@ struct FixedSetType: public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** A Pascal typed binary file, written `file of T`.
+ *
+ * Untyped `File` is a separate intrinsic type, and text files use the
+ * existing Text intrinsic. Keeping this construction distinct prevents any
+ * of those three incompatible Pascal file categories from collapsing merely
+ * because their runtime handles have the same size.
+ */
+struct TypedFileType: public Type {
+	Type* item_type;
+	TypedFileType(SourceLocation source_location, Type* item_type);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+// Canonical constructor for `file of T`. Equivalent element constructions
+// (for example, two independently parsed `^Integer` types) share one typed
+// file Type*, while incompatible element types remain distinct.
+TypedFileType* typed_file_type(
+    SourceLocation source_location, Type* item_type);
+
 struct VariantArm {
 	struct Field {
 		std::string pas_name;
