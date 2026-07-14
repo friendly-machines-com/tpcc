@@ -20,14 +20,34 @@ EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::
     : Type(std::move(source_location)), cxx_name(std::move(p_cxx_name)) {
 	members.push_back(Member{
 	    .pas_name = a,
-	    .cxx_name = a,
+	    .cxx_name = cxx_name + "::p_" + a,
 	    .value = 0,
 	});
 	members.push_back(Member{
 	    .pas_name = b,
-	    .cxx_name = b,
+	    .cxx_name = cxx_name + "::p_" + b,
 	    .value = 1,
 	});
+}
+
+const EnumType::Member* EnumType::min_member() const {
+	if (members.empty())
+		return nullptr;
+	return &*std::min_element(
+	    members.begin(), members.end(),
+	    [](const Member& a, const Member& b) {
+		    return a.value < b.value;
+	    });
+}
+
+const EnumType::Member* EnumType::max_member() const {
+	if (members.empty())
+		return nullptr;
+	return &*std::max_element(
+	    members.begin(), members.end(),
+	    [](const Member& a, const Member& b) {
+		    return a.value < b.value;
+	    });
 }
 
 FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type)

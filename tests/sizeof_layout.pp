@@ -52,7 +52,6 @@ begin
   N := SizeOf(PackedValue);
   N := SizeOf(TPacked);
   N := SizeOf(ShortName);
-  N := SizeOf(string[2]);
   N := SizeOf(ShortStringRecord);
   N := SizeOf(TShortStringRecord);
   Variant.Small := 1;

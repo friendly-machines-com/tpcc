@@ -16,6 +16,7 @@
 #include <cstring>
 #include <format>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -2951,18 +2952,84 @@ Type* Parser::parse_enum_type() {
 	do {
 		auto pas = parse_identifier();
 		auto cxx = cxx_value_name(pas);
-		// FIXME: explicit member values (`Red = 5`) accepted by ISO/FPC are
-		// not parsed here -- every member takes next_value, then increments.
-		et->members.push_back({pas, cxx, next_value});
+		int64_t value = next_value;
+		bool explicit_value = false;
+		if (input_token == ":=" || input_token == "=") {
+			explicit_value = true;
+			consume();
+			Node* expression = parse_expression();
+			ConstEvalContext ctx;
+			ConstEvalResult folded =
+			    expression->const_eval(ctx);
+			if (folded.kind ==
+			    ConstEvalResult::Kind::NotConstant)
+				raise_parse_error(
+				    "explicit enum value must be constant");
+			if (folded.kind ==
+			    ConstEvalResult::Kind::Error)
+				raise_parse_error(folded.message);
+
+			if (auto integer =
+			        dynamic_cast<Integer*>(folded.node)) {
+				const uint64_t maximum =
+				    integer->negative
+				    ? uint64_t{
+				          static_cast<uint64_t>(
+				              std::numeric_limits<
+				                  int32_t>::max()) +
+				          1}
+				    : static_cast<uint64_t>(
+				          std::numeric_limits<
+				              int32_t>::max());
+				if (integer->value > maximum)
+					raise_parse_error(
+					    "explicit enum value is outside "
+					    "signed 32-bit range");
+				value = integer->negative
+				    ? -static_cast<int64_t>(
+				          integer->value)
+				    : static_cast<int64_t>(
+				          integer->value);
+			} else if (auto member =
+			               dynamic_cast<EnumMemberRef*>(
+			                   folded.node)) {
+				if (member->ty != et)
+					raise_parse_error(
+					    "explicit enum value uses a member "
+					    "of another enum type");
+				value = member->value;
+			} else if (auto character =
+			               dynamic_cast<String*>(
+			                   folded.node);
+			           character &&
+			           character->ty == char_type() &&
+			           character->value.size() == 1) {
+				value = static_cast<unsigned char>(
+				    character->value[0]);
+			} else {
+				raise_parse_error(
+				    "explicit enum value must be an integer, "
+				    "character, or member of the same enum");
+			}
+		} else if (
+		    next_value >
+		    std::numeric_limits<int32_t>::max()) {
+			raise_parse_error(
+			    "implicit enum value is outside signed 32-bit "
+			    "range");
+		}
+
+		et->members.push_back(
+		    {pas, cxx, value, explicit_value});
 		// Register the member as a value in the enclosing scope so bare uses
 		// (`c := Red`) resolve. Pascal's default is unscoped enum members:
 		// they live in the same scope as the enum type itself, NOT inside
 		// the type. (A future compiler might add `{$scopedenums+}` and route
 		// them through the type; that is not this compiler.)
-		auto ref = new EnumMemberRef(cxx, next_value, et);
+		auto ref = new EnumMemberRef(cxx, value, et);
 		if (!current_type_block->register_variable(pas, ref, et))
 			raise_parse_error("duplicate identifier: " + pas);
-		++next_value;
+		next_value = value + 1;
 		if (!maybe_parse_comma())
 			break;
 	} while (true);
@@ -3188,18 +3255,18 @@ static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* err
 					  error);
 	}
 	if (auto e = dynamic_cast<EnumType*>(ty)) {
-		if (e->members.empty()) {
+		const auto* lo = e->min_member();
+		const auto* hi = e->max_member();
+		if (!lo || !hi) {
 			*error = "array enum index type has no members";
 			return false;
 		}
-		const auto& lo = e->members.front();
-		const auto& hi = e->members.back();
 		return make_ordinal_range(ty,
 					  ty,
-					  new EnumMemberRef(lo.cxx_name, lo.value, ty),
-					  new EnumMemberRef(hi.cxx_name, hi.value, ty),
-					  ordinal_value(lo.value),
-					  ordinal_value(hi.value),
+					  new EnumMemberRef(lo->cxx_name, lo->value, ty),
+					  new EnumMemberRef(hi->cxx_name, hi->value, ty),
+					  ordinal_value(lo->value),
+					  ordinal_value(hi->value),
 					  out,
 					  error);
 	}

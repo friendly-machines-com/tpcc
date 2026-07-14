@@ -139,15 +139,18 @@ struct EnumType: public Type {
 	struct Member {
 		std::string pas_name;
 		std::string cxx_name;
-		// FIXME: explicit member values (`Red = 5`) are not parsed yet --
-		// every member takes the next sequential value from 0. Add an
-		// optional `= <const-expr>` after the member name and evaluate it
-		// at type-block end.
 		int64_t value;
+		// True for source forms `Member := constant` and
+		// `Member = constant`. The emitter only has to spell those values;
+		// following implicit C++ enumerators advance from them naturally.
+		bool explicit_value = false;
 	};
-	// Source order, not sorted -- the default value of member N is N, and
-	// emission preserves declaration order.
+	// Source order, not ordinal order. Explicit values may jump, decrease, or
+	// repeat; emission preserves declaration order while Low/High and enum
+	// index ranges query min_member()/max_member().
 	std::vector<Member> members;
+	const Member* min_member() const;
+	const Member* max_member() const;
 	EnumType(SourceLocation source_location, std::string cxx_name, std::string a, std::string b);
 	EnumType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;

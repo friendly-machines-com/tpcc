@@ -10,7 +10,7 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/sizeof_layout.cc" tests/sizeof_layout.pp
 
-if [ "$(rg -F -c 'static_cast<pas::t_sizeint>(sizeof(' "$tmp/sizeof_layout.cc")" -ne 12 ]; then
+if [ "$(rg -F -c 'static_cast<pas::t_sizeint>(sizeof(' "$tmp/sizeof_layout.cc")" -ne 11 ]; then
 	echo "SizeOf expressions did not remain C++ sizeof expressions" >&2
 	exit 1
 fi

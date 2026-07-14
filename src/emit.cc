@@ -54,7 +54,11 @@ void Emitter::emit_enum_decl(EnumType* e) {
 	for (size_t i = 0; i < e->members.size(); i++) {
 		if (i)
 			fprintf(active, ", ");
-		fprintf(active, "%s", e->members[i].cxx_name.c_str());
+		const auto& member = e->members[i];
+		fprintf(active, "%s", member.cxx_name.c_str());
+		if (member.explicit_value)
+			fprintf(active, " = %lld",
+			    static_cast<long long>(member.value));
 	}
 	fprintf(active, " }");
 }
@@ -1797,6 +1801,20 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto tb = dynamic_cast<TypeBound*>(expr)) {
+		if (auto enum_type =
+		        dynamic_cast<EnumType*>(
+		            tb->operand_type)) {
+			const auto* member =
+			    tb->kind == TypeBoundKind::Low
+			    ? enum_type->min_member()
+			    : enum_type->max_member();
+			if (!member)
+				unhandled_node(
+				    "low/high of empty enum type", tb);
+			fprintf(active, "%s",
+			    member->cxx_name.c_str());
+			return;
+		}
 		fprintf(active, tb->kind == TypeBoundKind::Low ? "pas::p_low<" : "pas::p_high<");
 		emit_type_ref(tb->operand_type);
 		fprintf(active, ">()");

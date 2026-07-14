@@ -36,10 +36,14 @@ ConstEvalResult const_eval_type_bound(TypeBoundKind kind, Type* ty) {
 		return (kind == TypeBoundKind::Low ? s->lower_bound : s->upper_bound)->const_eval(ctx);
 	}
 	if (auto e = dynamic_cast<EnumType*>(ty)) {
-		if (e->members.empty())
+		const auto* member = kind == TypeBoundKind::Low
+		    ? e->min_member()
+		    : e->max_member();
+		if (!member)
 			return ConstEvalResult::error("low/high of empty enum type");
-		const auto& member = kind == TypeBoundKind::Low ? e->members.front() : e->members.back();
-		return ConstEvalResult::success(new EnumMemberRef(member.cxx_name, member.value, ty));
+		return ConstEvalResult::success(
+		    new EnumMemberRef(
+		        member->cxx_name, member->value, ty));
 	}
 	OrdinalBounds b;
 	if (!intrinsic_ordinal_bounds(ty, &b))
