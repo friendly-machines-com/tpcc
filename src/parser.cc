@@ -1279,7 +1279,21 @@ Node* Parser::resolve_lvalue(std::string name) {
 
 Type* Parser::maybe_resolve_type(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Type* hit = it->frame->lookup_type(name))
+		Type* hit = it->frame->lookup_type(name);
+		if (!hit)
+			continue;
+		std::unordered_set<IncompleteType*> seen;
+		while (auto incomplete =
+		           dynamic_cast<IncompleteType*>(hit)) {
+			if (!incomplete->resolved)
+				return incomplete;
+			if (!seen.insert(incomplete).second)
+				raise_parse_error(
+				    "cyclic resolved type alias involving '" +
+				    incomplete->name + "'");
+			hit = incomplete->resolved;
+		}
+		if (hit)
 			return hit;
 	}
 	return nullptr;
@@ -2846,6 +2860,13 @@ Type* Parser::parse_class_type() {
 		auto s_ty = parse_type_expression(false);
 		super_ty = dynamic_cast<ClassType*>(s_ty);
 		if (super_ty == nullptr) {
+			if (auto incomplete =
+			        dynamic_cast<IncompleteType*>(s_ty);
+			    incomplete && !incomplete->resolved)
+				raise_parse_error(
+				    "superclass forward declaration '" +
+				    incomplete->name +
+				    "' must be resolved before it is inherited");
 			raise_type_kind_mismatch("parse_class_type: superclass is not a class", "class", s_ty);
 		}
 		while (maybe_parse_comma()) {
@@ -4022,7 +4043,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		IncompleteType* lhs_placeholder = nullptr;
 		if (existing) {
 			lhs_placeholder = dynamic_cast<IncompleteType*>(existing);
-			if (!lhs_placeholder) {
+			if (!lhs_placeholder ||
+			    lhs_placeholder->resolved) {
 				raise_type_parse_error("duplicate type name: " + name);
 			}
 		} else {
@@ -4030,17 +4052,20 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			scope->register_type(name, lhs_placeholder);
 		}
 		Type* rhs = parse_type_expression(true);
+		// Publish a completed declaration before parsing the next one.
+		// References already holding this placeholder remain valid and are
+		// normalized at block end; fresh lookups peel the resolved placeholder
+		// in maybe_resolve_type(). This is essential for inheritance, whose
+		// parser needs the earlier class body immediately.
+		lhs_placeholder->resolved = rhs;
 		pending.push_back(PendingTypeDecl{name, cxx_type_name(name), lhs_placeholder, rhs});
 		parse_semicolon();
 	} while (true);
 	parsing_type_block = saved_parsing_type_block;
 
-	// Fill every LHS placeholder before resolving any RHS. This is the part
-	// that lets an earlier declaration mention a later declaration without
-	// forcing the emitter to guess through IncompleteType.
-	for (auto& decl : pending)
-		decl.lhs_placeholder->resolved = decl.rhs;
-
+	// Every completed declaration was published during the parse loop. Resolve
+	// the forward references carried inside their RHS types now that the whole
+	// block has been seen, and reject missing or cyclic definitions.
 	TypeBlockResolver resolver;
 	for (auto& decl : pending) {
 		if (!resolver.normalize_type(decl.rhs))
