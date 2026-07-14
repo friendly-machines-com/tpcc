@@ -1904,7 +1904,7 @@ struct t_tobject: public m_iobject {
 			static m_meta meta{};
 			return &meta;
 		}
-			virtual t_shortstring<255> p_classname() {
+		virtual t_shortstring<255> p_classname() {
 			return tpcc_shortstring_from_c("tobject", strlen("tobject"));
 		}
 		virtual bool p_inheritsfrom(struct m_iobject* s) {
@@ -1913,7 +1913,7 @@ struct t_tobject: public m_iobject {
 		virtual m_iobject* p_classparent() {
 			return nullptr;
 		}
-    };
+	};
 
 	//private inline static m_meta meta{};
 	//std::unique_ptr<m_iobject> meta = std::make_unique<m_meta>();

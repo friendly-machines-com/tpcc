@@ -921,10 +921,12 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				unhandled_type("parent class name unknown", c);
 			}
 			std::string classref_api_cxx = classref_api_cxx_for(c);
-			fprintf(active, "\tpublic: inline static m_meta* m_meta_instance() {\n");
+			fprintf(active,
+			    "\tpublic: inline static m_meta* p_classtype() {\n");
 			// This will basically NEVER be possible in Pascal.
 			// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
-			fprintf(active, "\t\tstatic %s meta{};\n", cxx_name.c_str());
+			fprintf(active, "\t\tstatic %s meta{};\n",
+			    cxx_name.c_str());
 			fprintf(active, "\t\treturn &meta;\n");
 			fprintf(active, "\t}\n");
 			if (!body->lookup_value_local("classname")) {
@@ -948,7 +950,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				if (parent_class_cxx_name.empty()) {
 					fprintf(active, "\t\treturn nullptr;\n");
 				} else {
-					fprintf(active, "\t\treturn %s::m_meta::m_meta_instance();\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
 				fprintf(active, "\t}\n");
 			}
@@ -962,20 +964,24 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		std::string classref_api_cxx = classref_api_cxx_for(c);
 		emit_aggregate_decl("m_meta", ty, true);
 		fprintf(active, ";\n");
+		fprintf(active,
+		    "\tpublic: inline static m_meta* p_classtype() {\n");
+		fprintf(active, "\t\treturn m_meta::p_classtype();\n");
+		fprintf(active, "\t}\n");
 		// Generate wrapper proxies in the regular class.  Those all have to be generated each time since they are static.
 		if (!body->lookup_value_local("classname")) {
 			fprintf(active, "\tpublic: inline static ::pas::t_shortstring<255> p_classname() {\n");
-			fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_classname();\n");
+			fprintf(active, "\t\treturn p_classtype()->p_classname();\n");
 			fprintf(active, "\t}\n");
 		}
 		if (!body->lookup_value_local("inheritsfrom")) {
 			fprintf(active, "\tpublic: inline static ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
-			fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_inheritsfrom(s);\n");
+			fprintf(active, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
 			fprintf(active, "\t}\n");
 		}
 		if (!body->lookup_value_local("classparent")) {
 			fprintf(active, "\tpublic: inline static %s p_classparent() {\n", classref_api_cxx.c_str());
-			fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_classparent();\n");
+			fprintf(active, "\t\treturn p_classtype()->p_classparent();\n");
 			fprintf(active, "\t}\n");
 		}
 		// fallthrough
@@ -1023,6 +1029,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			emit_type_ref(slot->ty);
 			fprintf(active, " %s;\n", slot->cxx_name.c_str());
 		} else if (auto call = dynamic_cast<Callable*>(v)) {
+			// An external method's C++ declaration and implementation are
+			// supplied outside the emitted Pascal aggregate.
+			if (call->is_external)
+				continue;
 			if (in_meta && call->ty->kind != CLASS_METHOD)
 				continue;
 			fprintf(active, "\t");
@@ -1044,7 +1054,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method.
 					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
 					fprintf(active, " {\n");
-					fprintf(active, "\t%s m_meta::m_meta_instance()->%s(",
+					fprintf(active, "\t%s p_classtype()->%s(",
 						call->ty->return_type == &unit_type() ? "" : "return",
 						call->cxx_name.c_str()); // TODO: escape
 					for (size_t i = 0; i < call->ty->formals.size(); i++) {

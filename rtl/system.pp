@@ -41,7 +41,7 @@ type
     // Class methods live on the generated m_meta class.  The regular class
     // emits static proxies so TObject.ClassName and obj.ClassName both dispatch
     // through the metaclass instance.
-    class function ClassType: TClass; virtual; external nil name 'p_classtype';
+    class function ClassType: TClass; virtual;
     class function ClassName: shortstring; virtual;
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;
