@@ -99,6 +99,9 @@ test-runerror-halt: mp
 test-unit-lifecycle: mp
 	sh tests/test_unit_lifecycle.sh
 
+test-unit-uses-scope: mp
+	sh tests/test_unit_uses_scope.sh
+
 test-delete-builtin: mp
 	sh tests/test_delete_builtin.sh
 
@@ -135,6 +138,6 @@ test-classtype-emission: mp
 test-metaclass-lifecycle: mp
 	sh tests/test_metaclass_lifecycle.sh
 
-test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle
+test: test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle
 
-.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle
+.PHONY: all clean distclean test test-packed-record test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle

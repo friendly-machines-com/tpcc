@@ -5574,7 +5574,6 @@ std::vector<Unit*> Parser::parse_uses_clause(bool in_interface, std::string curr
 		if (in_interface && used->phase == UnitPhase::InterfaceInProgress) {
 			raise_parse_error("circular interface dependency between '" + current_name + "' and '" + name + "'");
 		}
-		push_scope(used->interface_frame);
 		loaded.push_back(used);
 		if (!maybe_parse_comma())
 			break;
@@ -5585,9 +5584,7 @@ std::vector<Unit*> Parser::parse_uses_clause(bool in_interface, std::string curr
 Unit* Parser::implicit_uses(std::string user_name) {
 	if (strcasecmp(user_name.c_str(), "system") == 0)
 		return nullptr;
-	Unit* sys = load_or_get_unit("system");
-	push_scope(sys->interface_frame);
-	return sys;
+	return load_or_get_unit("system");
 }
 
 void Parser::parse_unit_body() {
@@ -5608,10 +5605,12 @@ void Parser::parse_unit_body() {
 	unit->phase = UnitPhase::InterfaceInProgress;
 
 	parse_keyword("interface");
-	push_scope(iface);
-	// Implicit `system` first, so built-ins (Boolean, True, False, ...) resolve
-	// in every unit's interface section. Stays on the scope stack through the
-	// implementation section too (interface-side uses pop only at unit end).
+	// A uses clause contributes lookup scopes; it does not change which symbol
+	// table owns the declarations that follow it. Install System and explicit
+	// interface uses first, in source order, then put this unit's interface
+	// frame on top. Reverse scope lookup therefore sees this unit first, the
+	// last used unit next, and System last. Since only IFACE is exported by a
+	// later `uses X`, none of these lookup scopes are re-exported through X.
 	std::vector<Unit*> iface_units;
 	if (Unit* sys = implicit_uses(name))
 		iface_units.push_back(sys);
@@ -5621,6 +5620,9 @@ void Parser::parse_unit_body() {
 			iface_units.push_back(u);
 		parse_semicolon();
 	}
+	for (Unit* used : iface_units)
+		push_scope(used->interface_frame);
+	push_scope(iface);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Header);
 		std::vector<std::string> h_files;
@@ -5633,13 +5635,24 @@ void Parser::parse_unit_body() {
 	unit->phase = UnitPhase::InterfaceDone;
 
 	parse_keyword("implementation");
-	push_scope(impl);
 	unit->phase = UnitPhase::ImplementationInProgress;
 	std::vector<Unit*> impl_units;
 	if (maybe_parse_keyword("uses")) {
 		impl_units = parse_uses_clause(false, name);
 		parse_semicolon();
 	}
+	// Implementation uses must be visible below both of this unit's own
+	// symbol tables but above interface uses. The interface frame was the
+	// innermost scope while its declarations were parsed; remove it, install
+	// the implementation-only lookup scopes, then restore it and finally put
+	// the private implementation frame on top.
+	for (size_t i = 0; i < iface_decls; i++)
+		pop_scope();
+	pop_scope(); // iface
+	for (Unit* used : impl_units)
+		push_scope(used->interface_frame);
+	push_scope(iface);
+	push_scope(impl);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Implementation);
 		std::vector<std::string> h_files;
@@ -5689,18 +5702,16 @@ void Parser::parse_unit_body() {
 		parse_keyword("end");
 	parse_period();
 
-	// Pop in reverse push order: impl-side decl blocks, impl-side uses,
-	// impl frame, iface-side decl blocks, iface-side uses, iface frame.
+	// Pop in reverse lookup order: private implementation frame, restored
+	// interface frame, implementation uses, then interface uses.
 	for (size_t i = 0; i < impl_decls; i++)
 		pop_scope();
-	for (size_t i = 0; i < impl_units.size(); i++)
-		pop_scope();
 	pop_scope(); // impl
-	for (size_t i = 0; i < iface_decls; i++)
+	pop_scope(); // iface
+	for (size_t i = 0; i < impl_units.size(); i++)
 		pop_scope();
 	for (size_t i = 0; i < iface_units.size(); i++)
 		pop_scope();
-	pop_scope(); // iface
 
 	unit->phase = UnitPhase::Done;
 	unit_registry->record_completed(unit);
@@ -5719,12 +5730,9 @@ void Parser::parse_program_or_unit() {
 		Unit* unit = unit_registry->register_new(name, nullptr, impl);
 		current_unit = unit;
 		unit->phase = UnitPhase::InterfaceInProgress;
-		push_scope(impl);
-		// Program-body `uses`: same shape as a unit's implementation-side
-		// `uses` (no interface phase to worry about). Each named unit's
-		// interface_frame gets pushed so its exports are visible to the
-		// program body. Implicit `system` goes first so built-ins resolve
-		// even with no `uses` clause.
+		// Load dependencies before installing the program's own frame. Used
+		// units are lookup sources, not declaration destinations; the program
+		// frame must be innermost while its declarations are parsed.
 		std::vector<Unit*> prog_units;
 		if (Unit* sys = implicit_uses(name))
 			prog_units.push_back(sys);
@@ -5734,6 +5742,9 @@ void Parser::parse_program_or_unit() {
 				prog_units.push_back(u);
 			parse_semicolon();
 		}
+		for (Unit* used : prog_units)
+			push_scope(used->interface_frame);
+		push_scope(impl);
 		if (emitter) {
 			std::vector<std::string> h_files;
 			for (Unit* u : prog_units)
@@ -5770,10 +5781,10 @@ void Parser::parse_program_or_unit() {
 			emitter->emit_main_epilogue();
 		for (size_t i = 0; i < pushed; i++)
 			pop_scope();
+		pop_scope(); // program
 		for (size_t i = 0; i < prog_units.size(); i++)
 			pop_scope();
 		parse_period();
-		pop_scope();
 		unit->phase = UnitPhase::Done;
 	} else if (maybe_parse_keyword("unit")) {
 		parse_unit_body();

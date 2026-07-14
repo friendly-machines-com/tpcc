@@ -307,20 +307,16 @@ protected:
 
 	void parse_unit_body();
 	/** Parse a comma-separated `uses A, B, C` list (the `uses` keyword must
-	 *  have been consumed by the caller). Loads each named unit if not already
-	 *  in the registry, checks the phase rules (interface-position use of an
-	 *  InterfaceInProgress unit is a circular-dep error), and pushes each
-	 *  loaded unit's interface_frame onto the scope stack. Returns the loaded
-	 *  Units (in source order) so the caller can both pop the same number of
-	 *  scopes at section end and emit `#include "<name>.h"` for each. */
+	 *  have been consumed by the caller). Loads each named unit if necessary
+	 *  and returns the Units in source order. This does not mutate `scopes`:
+	 *  uses makes another unit available for lookup, but does not make that
+	 *  unit the owner of declarations which follow the uses clause. The caller
+	 *  installs the returned interface frames below its own declaration frame. */
 	std::vector<Unit*> parse_uses_clause(bool in_interface, std::string current_name);
-	/** Implicitly load and push the `system` unit's interface frame at the
-	 *  front of the uses list so built-in identifiers (Boolean, True, False,
-	 *  etc.) resolve in every program and unit. USER_NAME is the unit/program
-	 *  being parsed; if it case-insensitively equals "system" we're parsing
-	 *  system itself and must not recurse into another load. Returns the
-	 *  loaded Unit (nullptr if user_name == "system"). The push happens BEFORE
-	 *  any user-written `uses` clause so user-named units can shadow system. */
+	/** Implicitly load the `system` unit. USER_NAME is the unit/program being
+	 *  parsed; if it case-insensitively equals "system" we're parsing system
+	 *  itself and must not recurse. Like parse_uses_clause, this returns a
+	 *  lookup source without installing it in `scopes`. */
 	Unit* implicit_uses(std::string user_name);
 	/** Return the Unit for NAME, loading its source from disk if it isn't
 	 *  already registered. Search order for the file: directory of the current
