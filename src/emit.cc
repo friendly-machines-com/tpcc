@@ -1750,6 +1750,20 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
+		auto source_shortstring =
+		    dynamic_cast<ShortStringType*>(
+		        ca->a ? ca->a->ty : nullptr);
+		auto target_shortstring =
+		    dynamic_cast<ShortStringType*>(ca->ty);
+		if (source_shortstring && target_shortstring) {
+			fprintf(active,
+			    "pas::tpcc_shortstring_cast<%u>(",
+			    static_cast<unsigned>(
+			        target_shortstring->capacity));
+			emit_expression(ca->a);
+			fprintf(active, ")");
+			return;
+		}
 		auto source_routine = dynamic_cast<RoutineType*>(
 		    ca->a ? ca->a->ty : nullptr);
 		auto target_routine =
