@@ -85,40 +85,6 @@ const bool k_tmethod_initialized = []() {
 	        "data", k_tmethod_data_field, &k_pointer});
 	return true;
 }();
-#if 0
-// Note: I don't think it's useful to have actual user-visible interfaces implemented on the metaclass.
-//InterfaceType k_m_iobject("pas::m_iobject", new Frame(nullptr), std::vector<InterfaceType*>());
-
-// Populate m_iobject's frame with the metaclass methods Pascal code can
-// dispatch through a TClass value (e.g. `someTClassValue.ClassName`). Each
-// maps to a C++ virtual method on pas::m_iobject (rtl.h); each class's
-// compiler-generated m_meta (emit.cc) provides the override. Without these
-// in the frame, lookups through a TClass value find nothing -- the
-// metaclass methods exist only at the C++ level.
-//
-// The IIFE assigned to k_m_iobject_methods_initialized runs at static-init
-// time. Per C++20 [basic.start.dynamic], ordered dynamic init of non-local
-// variables within a single TU proceeds in textual order -- so k_m_iobject
-// (declared above) is already constructed when the IIFE runs, and
-// &k_m_iobject is safe to read and pass as owner_class.
-const bool k_m_iobject_methods_initialized = []() {
-	auto add = [](const char* pas_name, const char* cxx_name,
-	              std::vector<Parameter> formals, Type* ret_ty) {
-		auto sig = new RoutineType(SourceLocation::builtin(), std::move(formals), ret_ty, ROUTINE);
-		auto m = new Method(cxx_name, pas_name, sig, /*has_overload_directive=*/false,
-		                    &k_m_iobject, Method::VirtualKind::None);
-		m->ty = sig;
-		m->has_body = true;
-		k_m_iobject.children->register_callable(pas_name, m);
-	};
-	add("classname", "p_classname", {}, &k_shortstring);
-	add("inheritsfrom", "p_inheritsfrom",
-	    {Parameter{"klass", "p_klass", &k_m_iobject, ParamMode::Value, nullptr}},
-	    &k_boolean);
-	add("classparent", "p_classparent", {}, &k_m_iobject);
-	return true;
-}();
-#endif
 
 Type* const k_all_intrinsics[] = {
     &k_byte,
