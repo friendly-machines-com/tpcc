@@ -24,6 +24,11 @@ type
     Middle: Integer;
     Last: Word;
   end;
+  TShortStringRecord = record
+    Name: string[2];
+    Enabled: Boolean;
+    Define: string[5];
+  end;
 
 const
   IntegerSize: SizeInt = SizeOf(Integer);
@@ -33,6 +38,8 @@ var
   Padded: TPadded;
   Variant: TVariant;
   PackedValue: TPacked;
+  ShortName: string[2];
+  ShortStringRecord: TShortStringRecord;
   N: SizeInt;
 
 begin
@@ -44,6 +51,10 @@ begin
   N := SizeOf(TVariant);
   N := SizeOf(PackedValue);
   N := SizeOf(TPacked);
+  N := SizeOf(ShortName);
+  N := SizeOf(string[2]);
+  N := SizeOf(ShortStringRecord);
+  N := SizeOf(TShortStringRecord);
   Variant.Small := 1;
   Variant.Number := 2;
   Variant.Large := 3

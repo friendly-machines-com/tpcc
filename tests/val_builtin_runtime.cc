@@ -6,7 +6,8 @@
 
 template<typename T>
 static bool parse(const char* text, std::size_t length, T expected) {
-	pas::t_shortstring source = pas::tpcc_shortstring_from_c(text, length);
+	pas::t_shortstring<255> source =
+	    pas::tpcc_shortstring_from_c(text, length);
 	T value{};
 	pas::t_integer code = -1;
 	pas::p_val(source, value, code);
@@ -37,7 +38,8 @@ int main() {
 	if (!parse("-2.5e2", 6, static_cast<pas::t_extended>(-250.0L)))
 		return EXIT_FAILURE;
 
-	pas::t_shortstring source = pas::tpcc_shortstring_from_c("128", 3);
+	pas::t_shortstring<255> source =
+	    pas::tpcc_shortstring_from_c("128", 3);
 	pas::t_shortint small = 42;
 	pas::t_integer code = -1;
 	pas::p_val(source, small, code);

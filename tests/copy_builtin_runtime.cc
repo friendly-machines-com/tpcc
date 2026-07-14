@@ -2,7 +2,9 @@
 #include "copy_builtin.cc"
 #undef main
 
-static bool equals(const pas::t_shortstring& value, const char* bytes, std::size_t length) {
+static bool equals(
+    const pas::t_shortstring<255>& value,
+    const char* bytes, std::size_t length) {
 	return value.length == length &&
 	       std::memcmp(value.data, bytes, length) == 0 &&
 	       value.data[length] == 0;

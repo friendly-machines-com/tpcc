@@ -10,7 +10,7 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/sizeof_layout.cc" tests/sizeof_layout.pp
 
-if [ "$(rg -F -c 'static_cast<pas::t_sizeint>(sizeof(' "$tmp/sizeof_layout.cc")" -ne 8 ]; then
+if [ "$(rg -F -c 'static_cast<pas::t_sizeint>(sizeof(' "$tmp/sizeof_layout.cc")" -ne 12 ]; then
 	echo "SizeOf expressions did not remain C++ sizeof expressions" >&2
 	exit 1
 fi
@@ -34,7 +34,14 @@ for expected in \
 	'sizeof(t_tvariant) == 16' \
 	'alignof(t_tvariant) == 8' \
 	'static_assert(sizeof(t_tpacked) == t_tpacked::m_storage_size' \
-	'static_assert(alignof(t_tpacked) == 1'
+	'static_assert(alignof(t_tpacked) == 1' \
+	'offsetof(t_tshortstringrecord, p_name) == 0' \
+	'sizeof(decltype(t_tshortstringrecord::p_name)) == 3' \
+	'offsetof(t_tshortstringrecord, p_enabled) == 3' \
+	'offsetof(t_tshortstringrecord, p_define) == 4' \
+	'sizeof(decltype(t_tshortstringrecord::p_define)) == 6' \
+	'sizeof(t_tshortstringrecord) == 10' \
+	'alignof(t_tshortstringrecord) == 1'
 do
 	if ! rg -Fq "$expected" "$tmp/sizeof_layout.cc"; then
 		echo "missing layout assertion: $expected" >&2

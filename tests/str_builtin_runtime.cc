@@ -4,14 +4,16 @@
 #include <cstring>
 #include <limits>
 
-static bool equals(const pas::t_shortstring& value, const char* expected) {
+static bool equals(
+    const pas::t_shortstring<255>& value,
+    const char* expected) {
 	const std::size_t length = std::strlen(expected);
 	return static_cast<std::size_t>(value.length) == length &&
 	    std::memcmp(value.data, expected, length) == 0;
 }
 
 int main() {
-	pas::t_shortstring text{};
+	pas::t_shortstring<255> text{};
 
 	pas::p_str(static_cast<pas::t_extended>(1.5L), text);
 	if (!equals(text, " 1.50000000000000000000E+0000"))

@@ -4,9 +4,9 @@
 #include <stdexcept>
 
 int main() {
-	pas::t_shortstring abc =
+	pas::t_shortstring<255> abc =
 	    pas::tpcc_shortstring_from_c("abc", 3);
-	pas::t_shortstring abd =
+	pas::t_shortstring<255> abd =
 	    pas::tpcc_shortstring_from_c("abd", 3);
 
 	const auto abc_storage =

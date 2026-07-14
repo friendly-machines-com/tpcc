@@ -37,6 +37,12 @@ FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, Ord
 	this->item_type = item_type;
 }
 
+ShortStringType::ShortStringType(
+    SourceLocation source_location, uint8_t capacity)
+    : Type(std::move(source_location)), capacity(capacity) {
+	assert(capacity != 0);
+}
+
 FixedSetType::FixedSetType(SourceLocation source_location, Type* item_type)
     : Type(std::move(source_location)) {
 	this->item_type = item_type;
@@ -240,6 +246,9 @@ std::optional<TypeLayout> type_layout_impl(
 	}
 	if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty))
 		return intrinsic->layout;
+	if (auto shortstring = dynamic_cast<ShortStringType*>(ty))
+		return TypeLayout{
+		    static_cast<uint64_t>(shortstring->capacity) + 1, 1};
 	if (ty == boolean_type())
 		return TypeLayout{1, 1};
 	if (dynamic_cast<EnumType*>(ty))
@@ -449,10 +458,11 @@ Type* common_arith_type(Type* a, Type* b) {
 		return integer_type();
 	if (a == b)
 		return a;
-	if (a == shortstring_type() && b == char_type()) {
-		return shortstring_type();
-	} else if (a == char_type() && b == shortstring_type()) {
-		return shortstring_type();
+	if (dynamic_cast<ShortStringType*>(a) && b == char_type()) {
+		return a;
+	} else if (a == char_type() &&
+		   dynamic_cast<ShortStringType*>(b)) {
+		return b;
 	}
 	if (a == &untyped_integer_type())
 		return b;
@@ -484,6 +494,13 @@ int conversion_cost(Type* from, Type* to) {
 		    ? 0
 		    : -1;
 	}
+	// Every ShortString capacity belongs to the same Pascal string family.
+	// Conversion is length-aware and truncates to the destination capacity.
+	// Treat capacities as equal for overload ranking, matching FPC's rule that
+	// `string` and `string[N]` do not distinguish overloads.
+	if (dynamic_cast<ShortStringType*>(from) &&
+	    dynamic_cast<ShortStringType*>(to))
+		return 0;
 	if (from == &untyped_integer_type()) {
 		int real_to = real_widening_rank(to);
 		if (real_to >= 0)
@@ -595,6 +612,21 @@ static std::string diagnostic_string_literal(const std::string& text) {
 	r.push_back('\'');
 	return r;
 }
+
+const char* ShortStringType::diagnostic_kind() const {
+	return "shortstring";
+}
+
+void ShortStringType::collect_diagnostic_edges(ErrorLetContext*) const {
+}
+
+void ShortStringType::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "capacity: " << static_cast<unsigned>(capacity);
+}
+
 // Aggregate frames are indexed for member names by add_frame_edge(), but
 // indexing frames is deliberately name-evidence-only. Aggregate type bodies
 // print member type refs, so the owning aggregate Type explicitly contributes

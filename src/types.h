@@ -91,6 +91,19 @@ struct OrdinalRange {
 	uint64_t length = 0;
 };
 
+/** Pascal ShortString is one family of inline, length-prefixed byte strings.
+ *  `ShortString`, `string` under {$H-}, and `string[255]` all have capacity
+ *  255; `string[N]` is the same semantic type constructor with capacity N.
+ *  Capacity is payload bytes, so the physical size is capacity + one length
+ *  byte. */
+struct ShortStringType: public Type {
+	uint8_t capacity;
+	ShortStringType(SourceLocation source_location, uint8_t capacity);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 struct FixedArrayType: public Type {
 	Type* bounds;
 	Type* item_type;

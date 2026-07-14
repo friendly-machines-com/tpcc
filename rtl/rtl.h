@@ -13,8 +13,6 @@
 // from Pascal source.
 #pragma once
 
-// FIXME: Probably shouldn't NUL terminate shortstrings.
-
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -247,10 +245,52 @@ inline t_boolean tpcc_bool_to_boolean(bool value) {
 	return value ? p_true : p_false;
 }
 
+template<std::size_t Capacity>
 struct t_shortstring {
-	t_char length;
-	t_char data[255];
+	static_assert(
+	    Capacity >= 1 && Capacity <= 255,
+	    "Pascal ShortString capacity must be in 1..255");
+	static constexpr std::size_t capacity = Capacity;
+
+	t_char length{};
+	t_char data[Capacity]{};
+
+	constexpr t_shortstring() = default;
+
+	template<std::size_t SourceCapacity>
+	constexpr t_shortstring(
+	    const t_shortstring<SourceCapacity>& source) {
+		*this = source;
+	}
+
+	template<std::size_t SourceCapacity>
+	constexpr t_shortstring& operator=(
+	    const t_shortstring<SourceCapacity>& source) {
+		const std::size_t copied = std::min({
+		    static_cast<std::size_t>(source.length.value),
+		    SourceCapacity,
+		    Capacity,
+		});
+		length = t_char{static_cast<uint8_t>(copied)};
+		for (std::size_t i = 0; i < copied; ++i)
+			data[i] = source.data[i];
+		return *this;
+	}
 };
+
+template<typename T>
+struct tpcc_is_shortstring : std::false_type {};
+
+template<std::size_t Capacity>
+struct tpcc_is_shortstring<t_shortstring<Capacity>>
+    : std::true_type {};
+
+template<typename T>
+inline constexpr bool tpcc_is_shortstring_v =
+    tpcc_is_shortstring<std::remove_cv_t<T>>::value;
+
+static_assert(sizeof(t_shortstring<255>) == 256);
+static_assert(alignof(t_shortstring<255>) == 1);
 
 // A Pascal Text variable currently stores the stream used by Write/WriteLn.
 // The pointer is non-owning and null means that the Text variable is unopened.
@@ -510,31 +550,35 @@ inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
 	};
 }
 
-template<typename I>
-inline t_char& p_index(t_shortstring& value, I index) {
+template<std::size_t Capacity, typename I>
+inline t_char& p_index(t_shortstring<Capacity>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 || actual > 255)
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(Capacity))
 		throw std::out_of_range("Pascal ShortString index out of range");
 	if (actual == 0)
 		return value.length;
 	return value.data[static_cast<std::size_t>(actual - 1)];
 }
 
-template<typename I>
-inline const t_char& p_index(const t_shortstring& value, I index) {
+template<std::size_t Capacity, typename I>
+inline const t_char& p_index(
+    const t_shortstring<Capacity>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 || actual > 255)
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(Capacity))
 		throw std::out_of_range("Pascal ShortString index out of range");
 	if (actual == 0)
 		return value.length;
 	return value.data[static_cast<std::size_t>(actual - 1)];
 }
 
-template<typename I>
+template<std::size_t Capacity, typename I>
 inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
-    t_shortstring& value, I index) {
+    t_shortstring<Capacity>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 || actual > 255)
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(Capacity))
 		throw std::out_of_range("Pascal ShortString storage index out of range");
 	if (actual == 0)
 		return tpcc_typed_storage_ref<t_char>{
@@ -549,17 +593,18 @@ inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
 	return tpcc_typed_storage_ref<t_char>{
 	    {
 	        bytes + offset * sizeof(t_char),
-	        (sizeof(value.data) - 1) - offset,
+	        Capacity - offset,
 	    },
 	    std::addressof(value.data[offset]),
 	};
 }
 
-template<typename I>
+template<std::size_t Capacity, typename I>
 inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
-    const t_shortstring& value, I index) {
+    const t_shortstring<Capacity>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
-	if (actual < 0 || actual > 255)
+	if (actual < 0 ||
+	    actual > static_cast<std::ptrdiff_t>(Capacity))
 		throw std::out_of_range("Pascal ShortString storage index out of range");
 	if (actual == 0)
 		return tpcc_typed_const_storage_ref<t_char>{
@@ -576,7 +621,7 @@ inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
 	return tpcc_typed_const_storage_ref<t_char>{
 	    {
 	        bytes + offset * sizeof(t_char),
-	        (sizeof(value.data) - 1) - offset,
+	        Capacity - offset,
 	    },
 	    std::addressof(value.data[offset]),
 	};
@@ -625,9 +670,10 @@ struct t_dynamicarray {
 };
 
 // Placeholder carrier for Pascal AnsiString. It is deliberately a distinct C++
-// type from t_shortstring so Pascal overloads on string vs AnsiString do not
-// collapse, even though this runtime does not implement real managed strings yet.
-struct t_ansistring : t_shortstring {};
+// type from every t_shortstring<N> so Pascal overloads on ShortString versus
+// AnsiString do not collapse, even though this runtime does not implement real
+// managed strings yet.
+struct t_ansistring : t_shortstring<255> {};
 
 template<typename T>
 struct tpcc_write_arg {
@@ -667,8 +713,8 @@ template<typename T>
 inline std::string tpcc_render_write_value(
     const T& value, bool has_precision, t_sizeint precision) {
 	std::ostringstream out;
-	if constexpr (std::is_same_v<T, t_shortstring> ||
-	              std::is_same_v<T, t_ansistring>) {
+	if constexpr (tpcc_is_shortstring_v<T> ||
+		              std::is_same_v<T, t_ansistring>) {
 		const std::size_t length = value.length.value;
 		std::string result;
 		result.reserve(length);
@@ -777,37 +823,38 @@ template<typename I>
 inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
     t_ansistring& value, I index) {
 	p_uniquestring(value);
-	return tpcc_make_storage_ref(static_cast<t_shortstring&>(value), index);
+	return tpcc_make_storage_ref(
+	    static_cast<t_shortstring<255>&>(value), index);
 }
 
 template<typename I>
 inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
     const t_ansistring& value, I index) {
 	return tpcc_make_const_storage_ref(
-	    static_cast<const t_shortstring&>(value), index);
+	    static_cast<const t_shortstring<255>&>(value), index);
 }
 
 template<typename I>
 inline t_char& tpcc_index_write(t_ansistring& value, I index) {
 	p_uniquestring(value);
-	return p_index(static_cast<t_shortstring&>(value), index);
+	return p_index(static_cast<t_shortstring<255>&>(value), index);
 }
 
-inline t_shortstring tpcc_shortstring_from_c(const char* s, std::size_t length) {
-	t_shortstring result{};
-	const std::size_t stored_length = std::min(length, sizeof(result.data) - 1);
+template<std::size_t Capacity = 255>
+inline t_shortstring<Capacity> tpcc_shortstring_from_c(
+    const char* s, std::size_t length) {
+	t_shortstring<Capacity> result{};
+	const std::size_t stored_length = std::min(length, Capacity);
 	result.length = t_char{static_cast<uint8_t>(stored_length)};
 	if (stored_length != 0)
 		memcpy(result.data, s, stored_length);
-	result.data[stored_length] = t_char{0};
 	return result;
 }
 
-inline t_shortstring p_char_to_shortstring(t_char value) {
-	t_shortstring result{};
+inline t_shortstring<255> p_char_to_shortstring(t_char value) {
+	t_shortstring<255> result{};
 	result.length = 1;
 	result.data[0] = value;
-	result.data[1] = 0;
 	return result;
 }
 
@@ -854,7 +901,10 @@ inline t_sizeint p_comparechar(tpcc_const_storage_ref first,
 	return p_comparebyte(first, second, count);
 }
 
-inline t_longint p_pos(const t_shortstring& needle, const t_shortstring& haystack) {
+template<std::size_t NeedleCapacity, std::size_t HaystackCapacity>
+inline t_longint p_pos(
+    const t_shortstring<NeedleCapacity>& needle,
+    const t_shortstring<HaystackCapacity>& haystack) {
 	if (needle.length == 0)
 		return 1;
 	if (needle.length > haystack.length)
@@ -867,7 +917,9 @@ inline t_longint p_pos(const t_shortstring& needle, const t_shortstring& haystac
 	return 0;
 }
 
-inline t_longint p_pos(t_char needle, const t_shortstring& haystack) {
+template<std::size_t Capacity>
+inline t_longint p_pos(
+    t_char needle, const t_shortstring<Capacity>& haystack) {
 	for (std::size_t offset = 0; offset < haystack.length; ++offset) {
 		if (haystack.data[offset] == needle)
 			return static_cast<t_longint>(offset + 1);
@@ -875,11 +927,13 @@ inline t_longint p_pos(t_char needle, const t_shortstring& haystack) {
 	return 0;
 }
 
-// Pascal Copy uses one-based indices. Preserve the RTL's ShortString
-// invariant on every return path: at most 254 payload bytes followed by the
-// reserved zero terminator.
-inline t_shortstring p_copy(const t_shortstring& value, t_longint index, t_longint count) {
-	t_shortstring result{};
+// Pascal Copy uses one-based indices and returns the ordinary 255-byte
+// ShortString type declared by System.
+template<std::size_t Capacity>
+inline t_shortstring<255> p_copy(
+    const t_shortstring<Capacity>& value,
+    t_longint index, t_longint count) {
+	t_shortstring<255> result{};
 	if (count <= 0)
 		return result;
 	if (index < 1)
@@ -892,31 +946,33 @@ inline t_shortstring p_copy(const t_shortstring& value, t_longint index, t_longi
 	const std::size_t copied = std::min({
 	    requested,
 	    source_length - start,
-	    sizeof(result.data) - 1,
+	    decltype(result)::capacity,
 	});
 	result.length = t_char{static_cast<uint8_t>(copied)};
 	if (copied != 0)
 		std::memcpy(result.data, value.data + start, copied);
-	result.data[copied] = t_char{0};
 	return result;
 }
 
 inline t_ansistring p_copy(const t_ansistring& value, t_longint index, t_longint count) {
 	t_ansistring result{};
-	static_cast<t_shortstring&>(result) =
-	    p_copy(static_cast<const t_shortstring&>(value), index, count);
+	static_cast<t_shortstring<255>&>(result) =
+	    p_copy(static_cast<const t_shortstring<255>&>(value), index, count);
 	return result;
 }
 
-inline t_shortstring p_copy(t_char value, t_longint index, t_longint count) {
-	t_shortstring source{};
+inline t_shortstring<255> p_copy(
+    t_char value, t_longint index, t_longint count) {
+	t_shortstring<255> source{};
 	source.length = t_char{1};
 	source.data[0] = value;
-	source.data[1] = t_char{0};
 	return p_copy(source, index, count);
 }
 
-inline void p_delete(t_shortstring& value, t_longint index, t_longint count) {
+template<std::size_t Capacity>
+inline void p_delete(
+    t_shortstring<Capacity>& value,
+    t_longint index, t_longint count) {
 	if (index < 1 || count <= 0)
 		return;
 	const std::size_t start = static_cast<std::size_t>(index - 1);
@@ -928,14 +984,17 @@ inline void p_delete(t_shortstring& value, t_longint index, t_longint count) {
 	const std::size_t tail = length - start - removed;
 	std::memmove(value.data + start, value.data + start + removed, tail);
 	value.length = static_cast<uint8_t>(length - removed);
-	value.data[value.length] = 0;
 }
 
 inline void p_delete(t_ansistring& value, t_longint index, t_longint count) {
-	p_delete(static_cast<t_shortstring&>(value), index, count);
+	p_delete(static_cast<t_shortstring<255>&>(value), index, count);
 }
 
-inline void p_insert(const t_shortstring& source, t_shortstring& value, t_longint index) {
+template<std::size_t SourceCapacity, std::size_t DestinationCapacity>
+inline void p_insert(
+    const t_shortstring<SourceCapacity>& source,
+    t_shortstring<DestinationCapacity>& value,
+    t_longint index) {
 	if (source.length == 0)
 		return;
 
@@ -947,23 +1006,21 @@ inline void p_insert(const t_shortstring& source, t_shortstring& value, t_longin
 	if (start > value.length)
 		start = value.length;
 
-	// Handle potential aliasing (e.g., Pascal's `Insert(S, S, 2)`).
-	// Shortstrings are <= 256 bytes, so a stack copy is cheap and prevents memory corruption.
-	t_shortstring temp_source;
-	const t_shortstring* p_src = &source;
-	if (&source == &value) {
-		temp_source = source;
-		p_src = &temp_source;
-	}
+	// Copy the source payload before moving the destination tail. Besides the
+	// ordinary Insert(S, S, ...) case, different-capacity references can alias
+	// through Pascal pointer casts.
+	t_shortstring<SourceCapacity> temp_source = source;
+	const auto* p_src = &temp_source;
 
 	// Truncation logic: Calculate how much of the source we can actually fit
-	std::size_t max_insert = 254 - start;
+	std::size_t max_insert = DestinationCapacity - start;
 	std::size_t copy_count = std::min(static_cast<std::size_t>(p_src->length), max_insert);
 
 	if (copy_count == 0)
 		return;
 
-	std::size_t max_tail = 254 - (start + copy_count);
+	std::size_t max_tail =
+	    DestinationCapacity - (start + copy_count);
 	std::size_t tail = value.length - start;
 	std::size_t tail_copy = std::min(tail, max_tail);
 
@@ -975,38 +1032,46 @@ inline void p_insert(const t_shortstring& source, t_shortstring& value, t_longin
 	// Copy the new characters from the source string into the gap
 	std::memcpy(value.data + start, p_src->data, copy_count);
 
-	// Update length and null-terminate
+	// Update the Pascal length byte. ShortString has no terminator byte.
 	value.length = static_cast<uint8_t>(start + copy_count + tail_copy);
-	value.data[value.length] = 0;
 }
 
-inline void p_insert(t_char source, t_shortstring& destination, t_longint index) {
-	t_shortstring one_character{};
+template<std::size_t Capacity>
+inline void p_insert(
+    t_char source, t_shortstring<Capacity>& destination,
+    t_longint index) {
+	t_shortstring<1> one_character{};
 	one_character.length = 1;
 	one_character.data[0] = source;
-	one_character.data[1] = 0;
 	p_insert(one_character, destination, index);
 }
 
 inline void p_insert(const t_ansistring& source, t_ansistring& destination, t_longint index) {
-	p_insert(static_cast<const t_shortstring&>(source), static_cast<t_shortstring&>(destination), index);
+	p_insert(
+	    static_cast<const t_shortstring<255>&>(source),
+	    static_cast<t_shortstring<255>&>(destination), index);
 }
 
-inline t_shortstring p_add(const t_shortstring& a, const t_shortstring& b) {
-	t_shortstring result {};
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_shortstring<255> p_add(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
+	t_shortstring<255> result{};
 	const std::size_t result_length = std::min<std::size_t>(
 	    static_cast<std::size_t>(a.length) + static_cast<std::size_t>(b.length),
-	    sizeof(result.data) - 1);
+	    decltype(result)::capacity);
 	const std::size_t a_length = std::min<std::size_t>(a.length, result_length);
 	const std::size_t b_length = result_length - a_length;
 	result.length = static_cast<uint8_t>(result_length);
 	memcpy(result.data, a.data, a_length);
 	memcpy(&result.data[a_length], b.data, b_length);
-	result.data[result.length] = 0;
 	return result;
 }
 
-inline int tpcc_stringcmp(const t_shortstring& a, const t_shortstring& b) {
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline int tpcc_stringcmp(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
 	int r = memcmp(a.data, b.data, std::min(a.length, b.length));
 	if (r == 0) {
 		return (int) a.length - (int) b.length;
@@ -1014,30 +1079,46 @@ inline int tpcc_stringcmp(const t_shortstring& a, const t_shortstring& b) {
 	return r;
 }
 
-inline t_boolean p_lessthan(const t_shortstring& a, const t_shortstring& b) {
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_boolean p_lessthan(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) < 0);
 }
 
-inline t_boolean p_lessthanorequal(const t_shortstring& a, const t_shortstring& b) {
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_boolean p_lessthanorequal(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) <= 0);
 }
 
-inline t_boolean p_equal(const t_shortstring& a, const t_shortstring& b) {
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_boolean p_equal(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) == 0);
 }
 
-inline t_boolean p_greaterthan(const t_shortstring& a, const t_shortstring& b) {
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_boolean p_greaterthan(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) > 0);
 }
 
-inline t_boolean p_greaterthanorequal(const t_shortstring& a, const t_shortstring& b) {
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_boolean p_greaterthanorequal(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) >= 0);
 }
 
 inline t_char p_assign(t_char value) { return value; }
-inline t_ansistring p_assign(t_shortstring value) {
+template<std::size_t Capacity>
+inline t_ansistring p_assign(t_shortstring<Capacity> value) {
 	t_ansistring result{};
-	static_cast<t_shortstring&>(result) = value;
+	static_cast<t_shortstring<255>&>(result) = value;
 	return result;
 }
 inline t_boolean p_lessthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value < b.value); }
@@ -1064,7 +1145,10 @@ template<typename T> inline T p_high() {
 	else
 		return std::numeric_limits<T>::max();
 }
-inline t_sizeint p_length(const t_shortstring& s) { return s.length; }
+template<std::size_t Capacity>
+inline t_sizeint p_length(const t_shortstring<Capacity>& s) {
+	return s.length;
+}
 inline t_sizeint p_length(const t_ansistring& s) { return s.length; }
 inline void p_setlength(t_ansistring& s, t_integer value) {
 	const std::size_t old_length = s.length;
@@ -1279,9 +1363,9 @@ inline void p_dec(tpcc_typed_storage_ref<T> x, t_integer n = 1) {
 	p_dec(*x.value, n);
 }
 
-template<typename T>
+template<typename T, std::size_t Capacity>
 requires std::is_integral_v<T>
-inline void p_str(T x, t_shortstring& s) {
+inline void p_str(T x, t_shortstring<Capacity>& s) {
 	char buf[128];
 	int n;
 	if constexpr (std::is_signed_v<T>)
@@ -1290,14 +1374,14 @@ inline void p_str(T x, t_shortstring& s) {
 		n = std::snprintf(buf, sizeof(buf), "%llu", (unsigned long long)x);
 	if (n < 0)
 		n = 0;
-	if (n > 254)
-		n = 254;
+	if (static_cast<std::size_t>(n) > Capacity)
+		n = static_cast<int>(Capacity);
 	s.length = static_cast<uint8_t>(n);
 	memcpy(s.data, buf, s.length);
-	s.data[s.length] = 0;
 }
 
-inline void p_str(t_extended x, t_shortstring& s) {
+template<std::size_t Capacity>
+inline void p_str(t_extended x, t_shortstring<Capacity>& s) {
 	// Str(Extended, ...) uses all 21 significant decimal digits of an 80-bit
 	// Extended and always emits four exponent digits.
 	if (!__builtin_isfinite(x)) {
@@ -1309,7 +1393,8 @@ inline void p_str(t_extended x, t_shortstring& s) {
 		if (!nan)
 			*output++ = __builtin_signbit(x) ? '-' : '+';
 		memcpy(output, nan ? "Nan" : "Inf", 3);
-		s = tpcc_shortstring_from_c(formatted, sizeof(formatted));
+		s = tpcc_shortstring_from_c<Capacity>(
+		    formatted, sizeof(formatted));
 		return;
 	}
 
@@ -1337,7 +1422,7 @@ inline void p_str(t_extended x, t_shortstring& s) {
 	memcpy(output, exponent + 2, static_cast<std::size_t>(exponent_digits));
 	output += exponent_digits;
 
-	s = tpcc_shortstring_from_c(
+	s = tpcc_shortstring_from_c<Capacity>(
 	    formatted, static_cast<std::size_t>(output - formatted));
 }
 
@@ -1347,8 +1432,9 @@ struct tpcc_val_prefix {
 	bool negative;
 };
 
+template<std::size_t Capacity>
 inline tpcc_val_prefix tpcc_val_parse_prefix(
-    const t_shortstring& source, t_integer& code) {
+    const t_shortstring<Capacity>& source, t_integer& code) {
 	const std::size_t length = source.length;
 	std::size_t position = 0;
 	while (position < length &&
@@ -1404,9 +1490,11 @@ inline unsigned tpcc_val_digit(uint8_t character) {
 	return 16;
 }
 
-template<typename T>
+template<typename T, std::size_t Capacity>
 requires std::is_integral_v<T> && (!std::is_same_v<T, bool>)
-inline void p_val(const t_shortstring& source, T& destination, t_integer& code) {
+inline void p_val(
+    const t_shortstring<Capacity>& source,
+    T& destination, t_integer& code) {
 	destination = 0;
 	tpcc_val_prefix prefix = tpcc_val_parse_prefix(source, code);
 	const std::size_t length = source.length;
@@ -1466,9 +1554,11 @@ inline void p_val(const t_shortstring& source, T& destination, t_integer& code) 
 	code = 0;
 }
 
-template<typename T>
+template<typename T, std::size_t Capacity>
 requires std::is_floating_point_v<T>
-inline void p_val(const t_shortstring& source, T& destination, t_integer& code) {
+inline void p_val(
+    const t_shortstring<Capacity>& source,
+    T& destination, t_integer& code) {
 	destination = 0;
 	const std::size_t length = source.length;
 	std::size_t position = 0;
@@ -1505,38 +1595,35 @@ inline void p_val(const t_shortstring& source, T& destination, t_integer& code) 
 	code = 0;
 }
 
-template<typename T, typename Code>
+template<typename T, typename Code, std::size_t Capacity>
 requires ((std::is_integral_v<T> && (!std::is_same_v<T, bool>)) ||
-          std::is_floating_point_v<T>) &&
-         std::is_integral_v<Code> && (!std::is_same_v<Code, bool>)
-inline void p_val(const t_shortstring& source, T& destination,
-    tpcc_typed_storage_ref<Code> code) {
+	          std::is_floating_point_v<T>) &&
+	         std::is_integral_v<Code> && (!std::is_same_v<Code, bool>)
+inline void p_val(const t_shortstring<Capacity>& source, T& destination,
+	    tpcc_typed_storage_ref<Code> code) {
 	t_integer parsed_code = 0;
 	p_val(source, destination, parsed_code);
 	*code.value = static_cast<Code>(parsed_code);
 }
 
-template<typename T>
+template<typename T, std::size_t Capacity>
 requires (std::is_integral_v<T> && (!std::is_same_v<T, bool>)) ||
-         std::is_floating_point_v<T>
-inline void p_val(const t_shortstring& source, T& destination) {
+	         std::is_floating_point_v<T>
+inline void p_val(
+    const t_shortstring<Capacity>& source, T& destination) {
 	t_integer code = 0;
 	p_val(source, destination, code);
 }
 
 template<typename T>
 requires std::is_signed_v<T> && std::is_integral_v<T>
-inline t_shortstring tpcc_octstr_signed(T value, t_byte count) {
-	if (count >= sizeof(t_shortstring::data))
-		throw std::length_error(
-		    "OctStr count exceeds tpcc ShortString payload capacity");
-
+inline t_shortstring<255> tpcc_octstr_signed(T value, t_byte count) {
 	using unsigned_type = std::make_unsigned_t<T>;
 	constexpr unsigned width = std::numeric_limits<unsigned_type>::digits;
 	unsigned_type bits = std::bit_cast<unsigned_type>(value);
 	const bool negative = value < 0;
 
-	t_shortstring result{};
+	t_shortstring<255> result{};
 	result.length = t_char{count};
 	for (std::size_t i = count; i != 0; --i) {
 		result.data[i - 1] =
@@ -1546,19 +1633,21 @@ inline t_shortstring tpcc_octstr_signed(T value, t_byte count) {
 			bits |= static_cast<unsigned_type>(
 			    ~unsigned_type{0} << (width - 3));
 	}
-	result.data[count] = t_char{0};
 	return result;
 }
 
-inline t_shortstring p_octstr(t_longint value, t_byte count) {
+inline t_shortstring<255> p_octstr(
+    t_longint value, t_byte count) {
 	return tpcc_octstr_signed(value, count);
 }
 
-inline t_shortstring p_octstr(t_int64 value, t_byte count) {
+inline t_shortstring<255> p_octstr(
+    t_int64 value, t_byte count) {
 	return tpcc_octstr_signed(value, count);
 }
 
-inline t_shortstring p_octstr(t_qword value, t_byte count) {
+inline t_shortstring<255> p_octstr(
+    t_qword value, t_byte count) {
 	// FPC's QWord overload delegates through Int64, preserving the QWord bit
 	// pattern and therefore sign-extending values whose top bit is set.
 	return tpcc_octstr_signed(std::bit_cast<t_int64>(value), count);
@@ -1605,7 +1694,7 @@ struct t_tobject: public m_iobject {
 			static m_meta meta{};
 			return &meta;
 		}
-		virtual t_shortstring p_classname() {
+			virtual t_shortstring<255> p_classname() {
 			return tpcc_shortstring_from_c("tobject", strlen("tobject"));
 		}
 		virtual bool p_inheritsfrom(struct m_iobject* s) {
@@ -1622,7 +1711,7 @@ struct t_tobject: public m_iobject {
 	m_iobject* p_classtype() {
 		return m_meta::p_classtype();
 	}
-	/*not virtual*/ inline static t_shortstring p_classname() {
+		/*not virtual*/ inline static t_shortstring<255> p_classname() {
 		return p_classtype()->p_classname();
 	}
 	/*not virtual*/ inline static bool p_inheritsfrom(struct m_meta* s) {
@@ -1635,7 +1724,7 @@ struct t_tobject: public m_iobject {
 #else
 /*interface*/ struct m_iobject {
 	virtual m_iobject* p_classtype() = 0;
-	virtual t_shortstring p_classname() = 0;
+	virtual t_shortstring<255> p_classname() = 0;
 	virtual bool p_inheritsfrom(m_iobject* s) = 0;
 	virtual m_iobject* p_classparent() = 0;
 };

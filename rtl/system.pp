@@ -25,7 +25,7 @@ type
   PtrUInt = external nil name 'pas::t_ptruint';
   SizeInt = external nil name 'pas::t_sizeint';
   SizeUInt = external nil name 'pas::t_sizeuint';
-  shortstring = external nil name 'pas::t_shortstring';
+  shortstring = external nil name 'pas::t_shortstring<255>';
   Text = external nil name 'pas::t_text';
   PShortString = ^shortstring;
   PChar = ^Char;

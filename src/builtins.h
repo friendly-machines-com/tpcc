@@ -121,7 +121,7 @@ Type* int64_type();
 Type* pointer_type();
 Type* boolean_type();
 Type* char_type();
-Type* shortstring_type();
+ShortStringType* shortstring_type(uint8_t capacity = 255);
 Type* ansistring_type();
 Type* text_type();
 Type* single_type();

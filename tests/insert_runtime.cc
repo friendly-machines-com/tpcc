@@ -2,8 +2,9 @@
 
 #include <cstddef>
 
-static pas::t_shortstring repeated(char value, std::size_t length) {
-	pas::t_shortstring result{};
+static pas::t_shortstring<255> repeated(
+    char value, std::size_t length) {
+	pas::t_shortstring<255> result{};
 	result.length = static_cast<uint8_t>(length);
 	for (std::size_t i = 0; i < length; ++i)
 		result.data[i] = value;

@@ -4,7 +4,9 @@
 #include <cstring>
 #include <stdexcept>
 
-static bool equals(const pas::t_shortstring& value, const char* expected) {
+static bool equals(
+    const pas::t_shortstring<255>& value,
+    const char* expected) {
 	const std::size_t length = std::strlen(expected);
 	return static_cast<std::size_t>(value.length) == length &&
 	    std::memcmp(value.data, expected, length) == 0;

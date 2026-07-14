@@ -54,7 +54,7 @@ IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}, {}, TypeL
 IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {}, {}, TypeLayout{16, 16});
 EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
 IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1});
-IntrinsicType k_shortstring(SourceLocation::builtin(), "pas::t_shortstring", {}, {}, TypeLayout{256, 1});
+ShortStringType k_shortstring(SourceLocation::builtin(), 255);
 IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {}, {}, TypeLayout{256, 1});
 IntrinsicType k_text(SourceLocation::builtin(), "pas::t_text", {}, {}, TypeLayout{8, 8});
 IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {}, {}, TypeLayout{8, 8});
@@ -141,7 +141,15 @@ Type* int64_type() { return &k_int64; }
 Type* pointer_type() { return &k_pointer; }
 Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
-Type* shortstring_type() { return &k_shortstring; }
+ShortStringType* shortstring_type(uint8_t capacity) {
+	if (capacity == 255)
+		return &k_shortstring;
+	static std::array<ShortStringType*, 256> types{};
+	ShortStringType*& result = types[capacity];
+	if (!result)
+		result = new ShortStringType(SourceLocation::builtin(), capacity);
+	return result;
+}
 Type* ansistring_type() { return &k_ansistring; }
 Type* text_type() { return &k_text; }
 Type* single_type() { return &k_single; }
@@ -488,6 +496,11 @@ Type* lookup_builtin_type(std::string cxx_name) {
 		if (auto q = dynamic_cast<IntrinsicType*>(t)) {
 			if (q->cxx_name == cxx_name) {
 				return t;
+				}
+		} else if (auto q = dynamic_cast<ShortStringType*>(t)) {
+			if (q->capacity == 255 &&
+			    cxx_name == "pas::t_shortstring<255>") {
+				return q;
 			}
 		} else if (auto q = dynamic_cast<InterfaceType*>(t)) {
 			if (q->cxx_name == cxx_name) {

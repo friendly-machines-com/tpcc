@@ -2457,7 +2457,8 @@ Property* Parser::default_property_for_type(Type* ty) {
 		    accessor, accessor, true);
 		return array->default_property;
 	}
-	if (ty == shortstring_type() || ty == ansistring_type()) {
+		if (dynamic_cast<ShortStringType*>(ty) ||
+		    ty == ansistring_type()) {
 		Node* read_accessor = create_builtin_value("pas::p_index");
 		Node* write_accessor = ty == ansistring_type()
 		    ? create_builtin_value("pas::tpcc_index_write")
@@ -3340,13 +3341,27 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return raise_type_parse_error("bitpacked record is not implemented");
 	} else if (maybe_parse_circumflex()) {
 		return new PointerType(current_location(), parse_type_expression(true));
-	} else if (peek_keyword("string")) {
-		parse_keyword("string");
-		if (!maybe_parse_opening_bracket())
-			return shortstring_type();
-		parse_expression();
-		parse_closing_bracket();
-		return raise_type_parse_error("sized-string type (string[N]) not implemented yet");
+		} else if (peek_keyword("string")) {
+			parse_keyword("string");
+			if (!maybe_parse_opening_bracket())
+				return shortstring_type();
+			Node* capacity_expression = parse_expression();
+			parse_closing_bracket();
+			ConstEvalContext ctx;
+			ConstEvalResult folded =
+			    capacity_expression->const_eval(ctx);
+			if (folded.kind == ConstEvalResult::Kind::NotConstant)
+				return raise_type_parse_error(
+				    "shortstring capacity must be a constant integer");
+			if (folded.kind == ConstEvalResult::Kind::Error)
+				return raise_type_parse_error(folded.message);
+			auto capacity = dynamic_cast<Integer*>(folded.node);
+			if (!capacity || capacity->negative ||
+			    capacity->value == 0 || capacity->value > 255)
+				return raise_type_parse_error(
+				    "shortstring capacity must be in 1..255");
+			return shortstring_type(
+			    static_cast<uint8_t>(capacity->value));
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
@@ -3715,8 +3730,9 @@ struct TypeBlockResolver {
 	}
 
 	bool normalize_type_contents(Type* ty) {
-		if (dynamic_cast<IntrinsicType*>(ty) ||
-		    dynamic_cast<UnitType*>(ty) ||
+			if (dynamic_cast<IntrinsicType*>(ty) ||
+			    dynamic_cast<ShortStringType*>(ty) ||
+			    dynamic_cast<UnitType*>(ty) ||
 		    dynamic_cast<UntypedIntegerType*>(ty) ||
 		    dynamic_cast<EnumType*>(ty))
 			return true;
@@ -4782,9 +4798,10 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 			costs[self_slots + i] = 1000;
 			continue;
 		}
-		if (auto literal = dynamic_cast<String*>(args[i])) {
-			if (literal->value.size() == 1 &&
-			    rty->formals[i].ty == shortstring_type()) {
+			if (auto literal = dynamic_cast<String*>(args[i])) {
+				if (literal->value.size() == 1 &&
+				    dynamic_cast<ShortStringType*>(
+				        rty->formals[i].ty)) {
 				// One-byte quoted literals begin as Char, but Pascal also
 				// permits them in a string context. Keep this worse than an
 				// exact Char overload; cast() pins the selected string type.
@@ -4869,8 +4886,8 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 			literal->ty = target_ty;
 			return literal;
 		}
-		if (target_ty == shortstring_type()) {
-			literal->ty = target_ty;
+			if (dynamic_cast<ShortStringType*>(target_ty)) {
+				literal->ty = target_ty;
 			return literal;
 		}
 	}

@@ -924,7 +924,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(active, "\t\treturn &meta;\n");
 			fprintf(active, "\t}\n");
 			if (!body->lookup_value_local("classname")) {
-				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring p_classname() {\n");
+				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring<255> p_classname() {\n");
 				fprintf(active,
 					"\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\", strlen(\"%s\"));\n",
 					class_name.c_str(), class_name.c_str()); // FIXME: escape
@@ -960,7 +960,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		fprintf(active, ";\n");
 		// Generate wrapper proxies in the regular class.  Those all have to be generated each time since they are static.
 		if (!body->lookup_value_local("classname")) {
-			fprintf(active, "\tpublic: inline static ::pas::t_shortstring p_classname() {\n");
+			fprintf(active, "\tpublic: inline static ::pas::t_shortstring<255> p_classname() {\n");
 			fprintf(active, "\t\treturn m_meta::m_meta_instance()->p_classname();\n");
 			fprintf(active, "\t}\n");
 		}
@@ -1453,7 +1453,7 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		return;
 	}
-	if (auto s = dynamic_cast<String*>(expr)) {
+		if (auto s = dynamic_cast<String*>(expr)) {
 		if (s->ty == char_type()) {
 			if (s->value.size() != 1)
 				unhandled_node("Char literal does not contain exactly one byte", s);
@@ -1461,7 +1461,14 @@ void Emitter::emit_expression(Node* expr) {
 				static_cast<unsigned>(static_cast<unsigned char>(s->value[0])));
 			return;
 		}
-		fprintf(active, "pas::tpcc_shortstring_from_c(");
+			auto shortstring =
+			    dynamic_cast<ShortStringType*>(s->ty);
+			if (!shortstring)
+				unhandled_node(
+				    "non-Char string literal has non-ShortString type",
+				    s);
+			fprintf(active, "pas::tpcc_shortstring_from_c<%u>(",
+			    static_cast<unsigned>(shortstring->capacity));
 		fputc('"', active);
 		for (unsigned char ch : s->value)
 			fprintf(active, "\\%03o", static_cast<unsigned>(ch));
@@ -1881,6 +1888,11 @@ void Emitter::emit_type_ref(Type* ty) {
 	}
 	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
 		fprintf(active, "%.*s", (int)it->cxx_name.size(), it->cxx_name.data());
+		return;
+	}
+	if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
+		fprintf(active, "pas::t_shortstring<%u>",
+		    static_cast<unsigned>(shortstring->capacity));
 		return;
 	}
 	if (dynamic_cast<UnitType*>(ty)) {
