@@ -672,8 +672,8 @@ struct t_dynamicarray {
 
 // Placeholder carrier for Pascal AnsiString. It remains inline until managed
 // strings are implemented, but it is deliberately independent of
-// t_shortstring<N>: data[0..253] are payload and data[length] is always the
-// PChar-compatible zero terminator.
+// t_shortstring<N>: data[0..capacity-1] are payload and data[length] is always
+// the PChar-compatible zero terminator.
 struct t_ansistring {
 	static constexpr std::size_t capacity =
 	    std::numeric_limits<uint8_t>::max() - 1;
