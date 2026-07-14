@@ -9,7 +9,7 @@ mkdir -p "$tmp"
 cd "$root"
 
 ./mp -Furtl -o"$tmp/pos_builtin.cc" tests/pos_builtin.pp
-if ! rg -F -q 'tpcc_shortstring_from_c("\141\000\142", 3)' "$tmp/pos_builtin.cc"; then
+if ! rg -F -q 'tpcc_shortstring_from_c<255>("\141\000\142", 3)' "$tmp/pos_builtin.cc"; then
 	echo "embedded-NUL Pascal literal lost its explicit byte length" >&2
 	exit 1
 fi

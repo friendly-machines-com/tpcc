@@ -2,9 +2,19 @@
 #include "copy_builtin.cc"
 #undef main
 
+template<std::size_t Capacity>
 static bool equals(
-    const pas::t_shortstring<255>& value,
-    const char* bytes, std::size_t length) {
+    const pas::t_shortstring<Capacity>& value,
+    const char* bytes,
+    std::size_t length) {
+	return value.length == length &&
+	       std::memcmp(value.data, bytes, length) == 0;
+}
+
+static bool equals(
+    const pas::t_ansistring& value,
+    const char* bytes,
+    std::size_t length) {
 	return value.length == length &&
 	       std::memcmp(value.data, bytes, length) == 0 &&
 	       value.data[length] == 0;

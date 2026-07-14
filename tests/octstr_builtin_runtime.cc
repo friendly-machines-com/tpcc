@@ -2,7 +2,6 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <stdexcept>
 
 static bool equals(
     const pas::t_shortstring<255>& value,
@@ -30,11 +29,13 @@ int main() {
 	if (!equals(pas::p_octstr(static_cast<pas::t_qword>(0), 0), ""))
 		return EXIT_FAILURE;
 
-	try {
-		(void)pas::p_octstr(static_cast<pas::t_longint>(0), 255);
+	auto maximum =
+	    pas::p_octstr(static_cast<pas::t_longint>(0), 255);
+	if (maximum.length != 255)
 		return EXIT_FAILURE;
-	} catch (const std::length_error&) {
-	}
+	for (std::size_t i = 0; i < 255; ++i)
+		if (maximum.data[i] != '0')
+			return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
 }

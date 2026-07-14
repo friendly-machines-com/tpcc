@@ -38,7 +38,7 @@ int main() {
 	bool rejected = false;
 	try {
 		pas::p_comparechar(
-		    pas::tpcc_make_const_storage_ref(abc, 254),
+		    pas::tpcc_make_const_storage_ref(abc, 255),
 		    abd_storage,
 		    2);
 	} catch (const std::out_of_range&) {
