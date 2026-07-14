@@ -4,6 +4,15 @@ const
   FoldedCast: Single = Single(1.25);
   FoldedCoerce: Single = 2.5 as Single;
 
+type
+  TBase = class
+    destructor Destroy; virtual;
+  end;
+
+type
+  TChild = class(TBase)
+  end;
+
 var
   S: Single;
   D: Double;
@@ -15,13 +24,22 @@ var
   Quotient: Single;
   Parsed: Single;
   ParseCode: LongInt;
+  IntegerValue: Integer;
   RankSingle: LongInt;
   RankDouble: LongInt;
   RankExtended: LongInt;
   RankInteger: LongInt;
+  RankTypedInteger: LongInt;
   RankLiteral: LongInt;
   SingleLess: Boolean;
   SingleSize: SizeInt;
+  Base: TBase;
+  Child: TChild;
+  IsChild: Boolean;
+
+destructor TBase.Destroy;
+begin
+end;
 
 function Rank(Value: Single): LongInt; overload;
 begin
@@ -63,7 +81,12 @@ begin
   RankDouble := Rank(D);
   RankExtended := Rank(E);
   RankInteger := Rank(1);
+  IntegerValue := 1;
+  RankTypedInteger := Rank(IntegerValue);
   RankLiteral := Rank(1.0);
 
-  Val('2.25', Parsed, ParseCode)
+  Val('2.25', Parsed, ParseCode);
+
+  Child := Base as TChild;
+  IsChild := Base is TChild
 end.

@@ -4,6 +4,7 @@
 
 int main() {
 	static_assert(sizeof(pas::t_single) == 4);
+	p_base = new t_tchild;
 	if (tpcc_pascal_main() != 0)
 		return 1;
 	if (p_foldedcast != 1.25f ||
@@ -27,10 +28,17 @@ int main() {
 	    p_rankdouble != 2 ||
 	    p_rankextended != 3 ||
 	    p_rankinteger != 1 ||
+	    p_ranktypedinteger != 1 ||
 	    p_rankliteral != 3)
 		return 7;
 	if (p_parsecode != 0 ||
 	    p_parsed != 2.25f)
 		return 8;
+	if (p_child != p_base ||
+	    p_ischild != pas::p_true)
+		return 9;
+	delete p_base;
+	p_base = nullptr;
+	p_child = nullptr;
 	return 0;
 }
