@@ -74,6 +74,7 @@ public:
 	void emit_unit_implementation_prologue(std::string this_unit_h_file, std::vector<std::string> impl_used_unit_h_files);
 	void emit_unit_lifecycle_open(std::string cxx_name);
 	void emit_unit_lifecycle_close();
+	void emit_class_constructor_call(Method* method);
 	// Emit a C++ struct/class definition for a named record/class/object
 	// type. Fields and method prototypes go inside; method bodies are still
 	// emitted separately (outside the class) by emit_procedure_open.

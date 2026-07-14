@@ -8,6 +8,7 @@ class Type;
 class Frame;
 class RoutineType;
 class Callable;
+struct ClassType;
 class ErrorLetContext;
 struct BuiltinDesc;
 struct ConstEvalContext;
@@ -82,6 +83,21 @@ public:
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+/** A class name used as a value, as opposed to the same identifier in a type
+ * position. `target` is the exact Pascal class, `ty` is `class of target`,
+ * and emission obtains its one stable metaclass object through
+ * `target::p_classtype()`. */
+class ClassRefValue: public Node {
+public:
+	ClassType* target;
+	explicit ClassRefValue(ClassType* target);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
 };
 
 /** One Pascal Write/WriteLn invocation. These routines have compiler grammar,
@@ -232,8 +248,20 @@ public:
 };
 
 struct StorageSlot: public Node {
+	enum class Kind {
+		Ordinary,
+		AggregateMember,
+		ClassVariable,
+	};
 	std::string cxx_name;
-	StorageSlot(std::string cxx_name, Type* ty);
+	Kind kind;
+	// Non-null for aggregate members and class variables. In particular a
+	// class variable is owned by its declaring outer class even when source
+	// lookup reaches it through a descendant class or a metaclass receiver.
+	Type* owner_type;
+	StorageSlot(std::string cxx_name, Type* ty,
+	            Kind kind = Kind::Ordinary,
+	            Type* owner_type = nullptr);
 	const char* diagnostic_kind() const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

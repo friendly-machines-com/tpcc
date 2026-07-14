@@ -32,6 +32,11 @@ BinaryOperation::BinaryOperation(Node* a, Node* b) {
 
 ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
     : receiver(receiver), callee(callee), args(std::move(args)) {}
+ClassRefValue::ClassRefValue(ClassType* target)
+    : target(target) {
+	this->ty = new ClassRefType(
+	    target ? target->source_location : SourceLocation{}, target);
+}
 WriteCall::WriteCall(
     bool newline, Node* file, std::vector<Item> items)
     : newline(newline), file(file), items(std::move(items)) {}
@@ -83,7 +88,9 @@ SizeOf::SizeOf(Type* operand_type)
 // (`new`, `class`, `false`, ...). If empty (anonymous entity -- nameless
 // parameter in a prototype, compiler temporary, routine-type declaration
 // `procedure of object`, etc.), cxx_name stays empty and emission skips it.
-StorageSlot::StorageSlot(std::string cxx_name, Type* ty) {
+StorageSlot::StorageSlot(std::string cxx_name, Type* ty,
+                         Kind kind, Type* owner_type)
+    : kind(kind), owner_type(owner_type) {
 	this->cxx_name = cxx_name;
 	this->ty = ty;
 }
@@ -260,6 +267,22 @@ void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 	}
 	ctx->indent(out, indent + 1);
 	out << "returns: " << ctx->known_type_ref(ty);
+}
+
+const char* ClassRefValue::diagnostic_kind() const {
+	return "class_reference_value";
+}
+void ClassRefValue::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(target);
+}
+void ClassRefValue::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned) const {
+	out << "class reference "
+	    << ctx->known_type_ref(target)
+	    << " : " << ctx->known_type_ref(ty);
 }
 
 const char* WriteCall::diagnostic_kind() const {

@@ -1638,6 +1638,14 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			return new Cast(value, target_ty);
 		}
 	}
+	if (auto class_type =
+	        dynamic_cast<ClassType*>(maybe_resolve_type(id))) {
+		// Pascal keeps type and value lookup distinct. In value context the
+		// class name denotes the exact class-reference value; it is not the
+		// ClassType object reused as a fake expression. The parenthesized
+		// type-cast case above must win for `TFoo(value)`.
+		return new ClassRefValue(class_type);
+	}
 	raise_parse_error("unresolved value identifier: " + id);
 	return nullptr;
 }
@@ -1651,6 +1659,10 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 // Statement and expression context both flow through here.
 Node* Parser::parse_inherited() {
 	consume(); // `inherited`
+	if (current_routine &&
+	    current_routine->ty->kind == CLASS_CONSTRUCTOR)
+		raise_parse_error(
+		    "inherited is not supported in a class constructor");
 
 	std::string name;
 	auto opt = maybe_parse_identifier();
@@ -2676,9 +2688,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			parse_const_block();
 			is_class = false;
 		} else if (peek_keyword("var")) {
-			if (is_class) {
-				raise_parse_error("class var unsupported");
-			}
+			bool class_variables = is_class;
+			if (class_variables &&
+			    !dynamic_cast<ClassType*>(owner_class))
+				raise_parse_error(
+				    "class variables require a class container");
 			parse_keyword("var");
 			// This is an aggregate field section, not a declaration-scope var
 			// block.  Keep every field in Pascal declaration order so RecordType
@@ -2696,7 +2710,16 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 					raise_parse_error("managed fields inside packed records are not implemented");
 				}
 				for (const auto& member_name : member_names) {
-					auto slot = new StorageSlot(cxx_value_name(member_name), ty);
+					// A class variable has one storage location owned by its
+					// declaring class. It must not become a data member of
+					// every metaclass instance: that would give Base.X and
+					// Child.X different storage, unlike Pascal.
+					auto kind = class_variables
+					    ? StorageSlot::Kind::ClassVariable
+					    : StorageSlot::Kind::AggregateMember;
+					auto slot = new StorageSlot(
+					    cxx_value_name(member_name), ty, kind,
+					    owner_class);
 					body->register_variable(member_name, slot, ty);
 					if (auto packed = dynamic_cast<PackedRecordType*>(owner_class))
 						packed->fields.push_back({member_name, slot, ty});
@@ -2721,7 +2744,22 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
 			if (dynamic_cast<PackedRecordType*>(owner_class))
 				raise_parse_error("methods inside packed records are not implemented");
-			parse_method_prototype(body, owner_class, peek_keyword("function"), peek_keyword("destructor"), peek_keyword("constructor"), is_class);
+			if (is_class && peek_keyword("destructor"))
+				raise_parse_error(
+				    "class destructor lifecycle hooks are not implemented");
+			if (is_class && peek_keyword("constructor")) {
+				auto class_type =
+				    dynamic_cast<ClassType*>(owner_class);
+				if (!class_type)
+					raise_parse_error(
+					    "class constructor requires a class");
+				parse_class_constructor_prototype(class_type);
+			} else {
+				parse_method_prototype(body, owner_class,
+				    peek_keyword("function"),
+				    peek_keyword("destructor"),
+				    peek_keyword("constructor"), is_class);
+			}
 			is_class = false;
 			continue; // parse_method_prototype consumes its terminating ';'
 		} else if (peek_keyword("property")) {
@@ -2758,7 +2796,10 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				raise_parse_error("managed fields inside packed records are not implemented");
 			}
 			for (auto member_name : member_names) {
-				auto slot = new StorageSlot(cxx_value_name(member_name), ty);
+				auto slot = new StorageSlot(
+				    cxx_value_name(member_name), ty,
+				    StorageSlot::Kind::AggregateMember,
+				    owner_class);
 				body->register_variable(member_name, slot, ty);
 				if (auto packed = dynamic_cast<PackedRecordType*>(owner_class))
 					packed->fields.push_back({member_name, slot, ty});
@@ -2819,7 +2860,9 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 				auto fname = parse_identifier();
 				parse_colon();
 				auto fty = parse_type_expression(false);
-				auto slot = new StorageSlot(cxx_value_name(fname), fty);
+				auto slot = new StorageSlot(
+				    cxx_value_name(fname), fty,
+				    StorageSlot::Kind::AggregateMember, rt);
 				// Variant slots live in the SAME Frame as fixed fields
 				// (Pascal requires globally-distinct field names within a
 				// record, so duplicate-name detection via register_variable
@@ -3832,6 +3875,15 @@ struct TypeBlockResolver {
 				if (!normalize_node(arg))
 					return false;
 		}
+		if (auto n = dynamic_cast<ClassRefValue*>(node)) {
+			Type* target = n->target;
+			if (!normalize_type(target))
+				return false;
+			n->target = dynamic_cast<ClassType*>(target);
+			if (!n->target)
+				return fail(
+				    "class-reference value target resolved to non-class type");
+		}
 		if (auto n = dynamic_cast<WriteCall*>(node)) {
 			if (!normalize_node(n->file))
 				return false;
@@ -3999,7 +4051,8 @@ struct TypeBlockResolver {
 			for (auto*& iface : c->implemented_interfaces)
 				if (!normalize_type_as(iface, "implemented interface"))
 					return false;
-			return normalize_frame(c->children);
+			return normalize_node(c->class_constructor) &&
+			       normalize_frame(c->children);
 		}
 		if (auto i = dynamic_cast<InterfaceType*>(ty)) {
 			for (auto*& iface : i->super_interfaces)
@@ -4490,6 +4543,12 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		} else {
 			raise_type_kind_mismatch("expected class as owner", "class", owner);
 		}
+	} else if (kind == CLASS_CONSTRUCTOR) {
+		// A lifecycle class constructor does not construct an object and has
+		// no result. Its internal receiver is a metaclass only so the body can
+		// reuse class-method lowering; it never enters ordinary constructor
+		// allocation or owner-class result typing.
+		ret_ty = &unit_type();
 	} else if (is_function) {
 		parse_colon();
 		ret_ty = parse_type_expression(false);
@@ -4543,6 +4602,39 @@ Type* Parser::parse_operator_type() {
 	parse_keyword("operator");
 	// For now this is very similar to function.  Note: even parse_routine_signature uses parse_identifier() instead of parse_operator(), sigh.
 	return parse_routine_signature(false, true, true, ROUTINE);
+}
+
+void Parser::parse_class_constructor_prototype(
+    ClassType* owner_class) {
+	parse_keyword("constructor");
+	std::string pas_name = parse_identifier();
+	RoutineType* sig = parse_routine_signature(
+	    true, false, false, CLASS_CONSTRUCTOR, owner_class);
+	if (!sig->formals.empty())
+		raise_parse_error(
+		    "class constructor cannot have parameters");
+	parse_semicolon();
+
+	// These directives all describe user-callable or dispatchable overloads.
+	// A class constructor is instead one compiler-scheduled hook per class.
+	if (peek_keyword("overload") || peek_keyword("virtual") ||
+	    peek_keyword("dynamic") || peek_keyword("override") ||
+	    peek_keyword("abstract"))
+		raise_parse_error(
+		    "class constructor cannot have routine directives");
+	if (owner_class->class_constructor)
+		raise_parse_error(
+		    "only one class constructor may be declared in a class");
+
+	auto method = new Method(
+	    "m_init", pas_name, sig, false, owner_class,
+	    Method::VirtualKind::None);
+	method->ty = sig;
+	owner_class->class_constructor = method;
+	if (!current_unit)
+		raise_parse_error(
+		    "class constructor declared outside a unit or program");
+	current_unit->class_constructors.push_back(method);
 }
 
 // Class Member Prototype Registration (Value Level)
@@ -4705,7 +4797,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	Callable* saved_routine = current_routine;
 	bool nested_lambda = saved_routine && dynamic_cast<Procedure*>(target);
 	current_routine = target;
-	StorageSlot* self_slot = nullptr;
+	StorageSlot* receiver_slot = nullptr;
 	if (auto m = dynamic_cast<Method*>(target)) {
 		// Pascal class-method Self is the class reference, not an instance.
 		// Keep that as the same Type used for `class of Foo`; emit_type_ref
@@ -4715,16 +4807,23 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		// InterfaceType are already reference-shaped; ObjectType is value-shaped
 		// and needs a pointer wrapper for member-access emission.
 		Type* self_ty = nullptr;
-		if (target->ty->kind == CLASS_METHOD) {
+		if (target->ty->kind == CLASS_METHOD ||
+		    target->ty->kind == CLASS_CONSTRUCTOR) {
 			self_ty = new ClassRefType(current_location(), m->owner_class);
 		} else if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
 			self_ty = m->owner_class;
 		} else {
 			self_ty = new PointerType(current_location(), m->owner_class);
 		}
-		self_slot = new StorageSlot("this", self_ty);
-		body_frame->register_variable("self", self_slot, self_ty);
-		push_with_scope(owner_frame, self_slot);
+		receiver_slot = new StorageSlot("this", self_ty);
+		// The generated m_meta::m_init body needs a C++ receiver so class
+		// members can be lowered through the exact class reference. Pascal
+		// nevertheless specifies no Self for a class constructor, so do not
+		// put a `self` identifier in its body frame.
+		if (target->ty->kind != CLASS_CONSTRUCTOR)
+			body_frame->register_variable(
+			    "self", receiver_slot, self_ty);
+		push_with_scope(owner_frame, receiver_slot);
 	}
 	push_scope(body_frame);
 	if (target->ty->return_type != &unit_type()) { // function
@@ -4748,7 +4847,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	for (size_t i = 0; i < pushed; i++)
 		pop_scope();
 	pop_scope(); // pop body_frame
-	if (self_slot)
+	if (receiver_slot)
 		pop_scope(); // pop the with_scope
 	current_routine = saved_routine;
 }
@@ -4813,6 +4912,33 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		Frame* owner_frame = get_type_body_frame(owner_ty);
 		if (!owner_frame)
 			raise_parse_error("'" + first_name + "' is not a class/record/object");
+		if (is_class && is_destructor)
+			raise_parse_error(
+			    "class destructor lifecycle hooks are not implemented");
+		if (is_class && is_constructor) {
+			auto class_type = dynamic_cast<ClassType*>(owner_ty);
+			if (!class_type)
+				raise_parse_error(
+				    "class constructor implementation requires a class");
+			Method* method = class_type->class_constructor;
+			if (!method || method->pas_name != method_name)
+				raise_parse_error(
+				    "no class constructor '" + method_name +
+				    "' on '" + first_name + "'");
+			RoutineType* sig = parse_routine_signature(
+			    true, false, false, CLASS_CONSTRUCTOR,
+			    owner_ty);
+			if (!sig->formals.empty())
+				raise_parse_error(
+				    "class constructor cannot have parameters");
+			parse_semicolon();
+			if (method->has_body)
+				raise_parse_error(
+				    "duplicate implementation of class constructor '" +
+				    method_name + "'");
+			parse_routine_body(method, owner_frame);
+			return;
+		}
 		// if (is_destructor) {
 		//	if (auto class_type = dynamic_cast<ClassType*>(owner_ty)) {
 		//		method_name = "~" + class_type->cxx_name;
@@ -5478,6 +5604,7 @@ void Parser::parse_unit_body() {
 	// impl can transparently see interface decls via the parent chain.
 	Frame* impl = new Frame(iface);
 	Unit* unit = unit_registry->register_new(name, iface, impl);
+	current_unit = unit;
 	unit->phase = UnitPhase::InterfaceInProgress;
 
 	parse_keyword("interface");
@@ -5529,6 +5656,12 @@ void Parser::parse_unit_body() {
 	if (emitter)
 		emitter->emit_unit_lifecycle_open(
 		    unit->initialization_cxx_name);
+	if (!unit->class_constructors.empty()) {
+		unit->has_initialization = true;
+		for (Method* method : unit->class_constructors)
+			if (emitter)
+				emitter->emit_class_constructor_call(method);
+	}
 	if (maybe_parse_keyword("begin")) {
 		unit->has_initialization = true;
 		parse_unit_statement_sequence(false);
@@ -5584,6 +5717,7 @@ void Parser::parse_program_or_unit() {
 			emitter->open_for_program(options ? options->program_output_path : "");
 		Frame* impl = new Frame(nullptr);
 		Unit* unit = unit_registry->register_new(name, nullptr, impl);
+		current_unit = unit;
 		unit->phase = UnitPhase::InterfaceInProgress;
 		push_scope(impl);
 		// Program-body `uses`: same shape as a unit's implementation-side
@@ -5624,6 +5758,11 @@ void Parser::parse_program_or_unit() {
 				    used->finalization_cxx_name);
 			}
 			emitter->emit_main_prologue(lifecycle_hooks);
+			// Program-local class hooks have the same position as unit class
+			// hooks: dependency units are ready, while user program statements
+			// have not begun.
+			for (Method* method : unit->class_constructors)
+				emitter->emit_class_constructor_call(method);
 		}
 		parse_block_body();
 		parse_keyword("end");

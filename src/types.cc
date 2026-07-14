@@ -1,5 +1,6 @@
 #include "types.h"
 #include "builtins.h"
+#include "cst.h"
 #include "evaluator.h"
 #include <algorithm>
 #include <cassert>
@@ -925,6 +926,7 @@ void ClassType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(super);
 	for (auto* i : implemented_interfaces)
 		ctx->add_type_edge(i);
+	ctx->add_value_edge(class_constructor);
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
 }
@@ -940,6 +942,11 @@ void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringst
 		for (auto* i : implemented_interfaces)
 			out << " " << ctx->known_type_ref(i);
 		out << "\n";
+	}
+	if (class_constructor) {
+		ctx->indent(out, indent + 1);
+		out << "class constructor: "
+		    << ctx->known_value_ref(class_constructor) << "\n";
 	}
 	ctx->print_frame_members(out, children, indent + 1);
 	ctx->indent(out, indent);
@@ -1045,6 +1052,8 @@ void RoutineType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostring
 	out << "kind: ";
 	if (kind == CONSTRUCTOR)
 		out << "constructor";
+	else if (kind == CLASS_CONSTRUCTOR)
+		out << "class_constructor";
 	else if (kind == DESTRUCTOR)
 		out << "destructor";
 	else if (kind == METHOD)

@@ -10,6 +10,7 @@ class Frame;
 class Node;
 class StorageSlot;
 class Property;
+class Method;
 class ErrorLetContext;
 
 struct TypeLayout {
@@ -286,6 +287,10 @@ struct ClassType: public Type {
 	std::string cxx_name;
 	std::vector<InterfaceType*> implemented_interfaces; // FIXME: not transitive ?
 	ClassType* super;
+	// A Pascal `class constructor Name` is a lifecycle hook, not a value
+	// member named Name. Keeping it out of `children` makes it impossible for
+	// ordinary member lookup, calls, or routine references to expose it.
+	Method* class_constructor = nullptr;
 	ClassType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -386,6 +391,7 @@ struct Parameter {
 
 enum RoutineKind {
 	CONSTRUCTOR,
+	CLASS_CONSTRUCTOR,
 	DESTRUCTOR,
 	METHOD,
 	ROUTINE,

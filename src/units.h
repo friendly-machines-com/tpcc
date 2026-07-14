@@ -4,6 +4,7 @@
 #include <vector>
 
 class Frame;
+class Method;
 
 /** Where along the parse timeline a Unit currently is. Values are ordered so
  *  transitions only go forward. A `uses` at interface time that resolves to a
@@ -33,6 +34,11 @@ public:
 	std::string finalization_cxx_name;
 	bool has_initialization = false;
 	bool has_finalization = false;
+	// Source order is also parent-before-child for classes declared in one
+	// unit: Pascal requires a superclass to be complete before it is used as
+	// a parent. Dependency units are initialized before this unit, so their
+	// parent hooks have already run.
+	std::vector<Method*> class_constructors;
 	Unit(std::string name, Frame* interface_frame, Frame* implementation_frame);
 };
 

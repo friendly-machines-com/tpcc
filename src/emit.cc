@@ -10,6 +10,8 @@
 #include <set>
 #include <typeinfo>
 
+static std::string owner_cxx_name(Type* owner);
+
 // NODE may be null; SITE names the caller for the error message.
 [[noreturn]] static void unhandled_node(const char* site, const Node* node) {
 	if (node) {
@@ -153,6 +155,21 @@ void Emitter::emit_unit_lifecycle_close() {
 	if (!active)
 		return;
 	fprintf(active, "}\n");
+}
+
+void Emitter::emit_class_constructor_call(Method* method) {
+	if (!active)
+		return;
+	if (!method || method->ty->kind != CLASS_CONSTRUCTOR ||
+	    !method->owner_class)
+		unhandled_node(
+		    "invalid class constructor lifecycle entry", method);
+	// The hook is deliberately invoked on the exact class's metaclass.
+	// It is nonvirtual and is scheduled only for the class that declared it,
+	// so C++ metaclass inheritance cannot accidentally run a parent hook for
+	// a descendant that has no hook of its own.
+	fprintf(active, "\t%s::p_classtype()->m_init();\n",
+	    owner_cxx_name(method->owner_class).c_str());
 }
 
 void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
@@ -807,7 +824,8 @@ void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 	if (auto m = dynamic_cast<Method*>(c)) {
 		if (m->owner_class) {
 			qualifier = owner_cxx_name(m->owner_class) + "::";
-			if (c->ty->kind == CLASS_METHOD)
+			if (c->ty->kind == CLASS_METHOD ||
+			    c->ty->kind == CLASS_CONSTRUCTOR)
 				qualifier += "m_meta::";
 		}
 	}
@@ -921,14 +939,19 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				unhandled_type("parent class name unknown", c);
 			}
 			std::string classref_api_cxx = classref_api_cxx_for(c);
-			fprintf(active,
-			    "\tpublic: inline static m_meta* p_classtype() {\n");
-			// This will basically NEVER be possible in Pascal.
-			// Note: Alternative would be to emit "inline static struct m_meta { ... } meta;".
-			fprintf(active, "\t\tstatic %s meta{};\n",
-			    cxx_name.c_str());
-			fprintf(active, "\t\treturn &meta;\n");
-			fprintf(active, "\t}\n");
+			if (!c->super) {
+				// Pascal class methods have a metaclass Self. ClassType is
+				// the root operation that exposes that same receiver to
+				// Pascal, so its implementation belongs here and returns
+				// `this`. Derived metaclasses inherit the virtual operation;
+				// making it a C++ static function would lose the dynamic
+				// class-reference receiver.
+				fprintf(active,
+				    "\tpublic: virtual inline %s p_classtype() {\n",
+				    classref_api_cxx.c_str());
+				fprintf(active, "\t\treturn this;\n");
+				fprintf(active, "\t}\n");
+			}
 			if (!body->lookup_value_local("classname")) {
 				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring<255> p_classname() {\n");
 				fprintf(active,
@@ -941,7 +964,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				if (parent_class_cxx_name.empty()) {
 					fprintf(active, "\t\treturn ::pas::tpcc_bool_to_boolean(s == this);\n");
 				} else {
-					fprintf(active, "\t\treturn ::pas::tpcc_bool_to_boolean(s == this || %s::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn ::pas::tpcc_bool_to_boolean(s == this || %s::m_meta::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
 				fprintf(active, "\t}\n");
 			}
@@ -954,36 +977,29 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				}
 				fprintf(active, "\t}\n");
 			}
-			// TODO: maybe even add constructor wrappers here in the metaclass; they would do the (new X()).Create() and synth the result
+			if (c->class_constructor) {
+				fprintf(active, "\t");
+				emit_callable_signature(
+				    c->class_constructor,
+				    Position::Declaration, "");
+				fprintf(active, ";\n");
+			}
 			// fallthrough
 		} else {
 			unhandled_type("emit_aggregate_decl", ty);
 		}
 	} else if (is_class && !in_meta) {
-		auto c = static_cast<ClassType*>(ty);
-		std::string classref_api_cxx = classref_api_cxx_for(c);
 		emit_aggregate_decl("m_meta", ty, true);
 		fprintf(active, ";\n");
+		// This is the one stable class-reference accessor. It owns the exact
+		// metaclass object for T. Class methods are intentionally not mirrored
+		// as outer C++ static proxies: such proxies have no metaclass `this`
+		// and therefore cannot preserve derived class-method dispatch.
 		fprintf(active,
 		    "\tpublic: inline static m_meta* p_classtype() {\n");
-		fprintf(active, "\t\treturn m_meta::p_classtype();\n");
+		fprintf(active, "\t\tstatic m_meta meta{};\n");
+		fprintf(active, "\t\treturn &meta;\n");
 		fprintf(active, "\t}\n");
-		// Generate wrapper proxies in the regular class.  Those all have to be generated each time since they are static.
-		if (!body->lookup_value_local("classname")) {
-			fprintf(active, "\tpublic: inline static ::pas::t_shortstring<255> p_classname() {\n");
-			fprintf(active, "\t\treturn p_classtype()->p_classname();\n");
-			fprintf(active, "\t}\n");
-		}
-		if (!body->lookup_value_local("inheritsfrom")) {
-			fprintf(active, "\tpublic: inline static ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
-			fprintf(active, "\t\treturn p_classtype()->p_inheritsfrom(s);\n");
-			fprintf(active, "\t}\n");
-		}
-		if (!body->lookup_value_local("classparent")) {
-			fprintf(active, "\tpublic: inline static %s p_classparent() {\n", classref_api_cxx.c_str());
-			fprintf(active, "\t\treturn p_classtype()->p_classparent();\n");
-			fprintf(active, "\t}\n");
-		}
 		// fallthrough
 	}
 	// Variant-record emission strategy:
@@ -1025,54 +1041,74 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				continue;
 			if (rec)
 				continue;
+			if (is_class && in_meta)
+				continue;
 			fprintf(active, "\t");
+			if (slot->kind ==
+			    StorageSlot::Kind::ClassVariable) {
+				// `inline` is solely the C++20 ODR mechanism that
+				// permits header definition. `static` supplies the
+				// Pascal semantics: one storage location owned by the
+				// declaring class and inherited by name. A field in
+				// m_meta would instead create one copy in every exact
+				// class's metaclass object.
+				fprintf(active, "inline static ");
+			}
 			emit_type_ref(slot->ty);
-			fprintf(active, " %s;\n", slot->cxx_name.c_str());
-		} else if (auto call = dynamic_cast<Callable*>(v)) {
-			// An external method's C++ declaration and implementation are
-			// supplied outside the emitted Pascal aggregate.
-			if (call->is_external)
-				continue;
-			if (in_meta && call->ty->kind != CLASS_METHOD)
-				continue;
-			fprintf(active, "\t");
-			if (auto m = dynamic_cast<Method*>(call)) {
-				if (is_interface) {
-					fprintf(active, "virtual ");
-				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {
-					// autogenerate proxies in regular class
-					fprintf(active, "inline static ");
-				} else if (m->virtual_kind == Method::VirtualKind::Virtual || m->virtual_kind == Method::VirtualKind::Abstract || m->virtual_kind == Method::VirtualKind::Dynamic /*FIXME*/) {
-					fprintf(active, "virtual ");
-				}
-			}
-			emit_callable_signature(call, Position::Declaration, "");
-			if (auto m = dynamic_cast<Method*>(call)) {
-				if (is_interface) {
-					fprintf(active, " = 0");
-				} else if (call->ty->kind == CLASS_METHOD && !in_meta) {
-					// Autogenerate proxies in regular class.  That's so the user can do: instance.foo() where foo is a class method.
-					// C++ DOES allow calling instance.foo() this way even if instance's class doesnt have the static method but one of its superclasses does.
-					fprintf(active, " {\n");
-					fprintf(active, "\t%s p_classtype()->%s(",
-						call->ty->return_type == &unit_type() ? "" : "return",
-						call->cxx_name.c_str()); // TODO: escape
-					for (size_t i = 0; i < call->ty->formals.size(); i++) {
-						auto& f = call->ty->formals[i];
-						if (i > 0) {
-							fprintf(active, ", ");
-						}
-						fprintf(active, " %s", f.cxx_name.c_str()); // TODO: escape
-					}
-					fprintf(active, "\t);\n");
-					fprintf(active, "}\n");
-				} else if (m->virtual_kind == Method::VirtualKind::Override) {
-					fprintf(active, " override");
-				} else if (m->virtual_kind == Method::VirtualKind::Abstract) {
-					fprintf(active, " = 0");
-				}
-			}
+			fprintf(active, " %s", slot->cxx_name.c_str());
+			if (slot->kind ==
+			    StorageSlot::Kind::ClassVariable)
+				fprintf(active, "{}");
 			fprintf(active, ";\n");
+		} else {
+			std::vector<Callable*> callables;
+			if (auto call = dynamic_cast<Callable*>(v))
+				callables.push_back(call);
+			else if (auto overloads =
+			             dynamic_cast<OverloadSet*>(v))
+				callables = overloads->members;
+			for (Callable* call : callables) {
+				// One Pascal class frame feeds two C++ carriers. Flatten
+				// overload sets here, then route each declaration by its
+				// already-known RoutineKind. The outer class never receives
+				// a static class-method proxy: a static proxy has no
+				// metaclass Self and cannot preserve derived dispatch.
+				if (call->is_external)
+					continue;
+				if (is_class) {
+					bool belongs_in_meta =
+					    call->ty->kind == CLASS_METHOD;
+					if (belongs_in_meta != in_meta)
+						continue;
+				} else if (in_meta) {
+					continue;
+				}
+
+				fprintf(active, "\t");
+				auto method =
+				    dynamic_cast<Method*>(call);
+				if (method &&
+				    (is_interface ||
+				     method->virtual_kind ==
+				         Method::VirtualKind::Virtual ||
+				     method->virtual_kind ==
+				         Method::VirtualKind::Abstract ||
+				     method->virtual_kind ==
+				         Method::VirtualKind::Dynamic))
+					fprintf(active, "virtual ");
+				emit_callable_signature(
+				    call, Position::Declaration, "");
+				if (method) {
+					if (is_interface ||
+					    method->virtual_kind ==
+					        Method::VirtualKind::Abstract)
+						fprintf(active, " = 0");
+					else if (method->virtual_kind ==
+					         Method::VirtualKind::Override)
+						fprintf(active, " override");
+				}
+				fprintf(active, ";\n");
+			}
 		}
 	}
 	// Variant part: selector (if present) emits as a regular field; arms
@@ -1429,6 +1465,17 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 void Emitter::emit_expression(Node* expr) {
 	if (!active)
 		return;
+	if (auto class_reference =
+	        dynamic_cast<ClassRefValue*>(expr)) {
+		if (!class_reference->target ||
+		    class_reference->target->cxx_name.empty())
+			unhandled_node(
+			    "class-reference value has unnamed target",
+			    class_reference);
+		fprintf(active, "%s::p_classtype()",
+		    class_reference->target->cxx_name.c_str());
+		return;
+	}
 	if (auto nil = dynamic_cast<NilLiteral*>(expr)) {
 		auto routine =
 		    dynamic_cast<RoutineType*>(nil->ty);
@@ -1651,6 +1698,18 @@ void Emitter::emit_expression(Node* expr) {
 		unhandled_node("unsupported property read accessor", accessor);
 	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
+		if (auto slot = dynamic_cast<StorageSlot*>(m->b);
+		    slot &&
+		    slot->kind == StorageSlot::Kind::ClassVariable) {
+			// Class-variable lookup may arrive through a descendant class or
+			// through the current metaclass receiver, but the storage is
+			// statically owned by the declaring Pascal class. Emitting the
+			// receiver would turn it into a per-metaclass field access.
+			fprintf(active, "%s::%s",
+			    owner_cxx_name(slot->owner_type).c_str(),
+			    slot->cxx_name.c_str());
+			return;
+		}
 		if (auto packed = dynamic_cast<PackedRecordType*>(m->a->ty)) {
 			(void)packed;
 			auto field = dynamic_cast<StorageSlot*>(m->b);

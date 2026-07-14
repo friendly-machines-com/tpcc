@@ -123,6 +123,9 @@ private:
 	// Number of enclosing statement loops. break/continue are invalid at zero.
 	unsigned loop_depth = 0;
 	UnitRegistry* unit_registry;
+	// The unit/program whose declarations this Parser instance is consuming.
+	// Sub-parsers have their own Parser and therefore their own current_unit.
+	Unit* current_unit = nullptr;
 	// May be null. When non-null, emission hooks in the parser call into it
 	// as declarations and statements are parsed. Null is used only by
 	// sub-parsers loading a `uses`d unit until unit-level emission (.h/.cc
@@ -371,6 +374,7 @@ protected:
 	void maybe_parse_proc_attributes();
 	RoutineType* parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);
+	void parse_class_constructor_prototype(ClassType* owner_class);
 	Procedure* match_or_create_procedure(
 	    const std::string& pas_name, RoutineType* sig,
 	    bool had_paren, bool has_overload,
