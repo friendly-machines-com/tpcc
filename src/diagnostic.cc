@@ -225,7 +225,7 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 		return;
 	indexed_frames.insert(key);
 
-	for (const auto& item : frame->types_local()) {
+	for (const auto& item : frame->declared_types()) {
 		const std::string& name = item.first;
 		const Type* ty = item.second;
 		if (!ty)
@@ -237,7 +237,7 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 		}
 	}
 
-	for (const auto& item : frame->values_local()) {
+	for (const auto& item : frame->declared_values()) {
 		const std::string& name = item.first;
 		const FrameValueEntry& entry = item.second;
 		if (entry.ty) {
@@ -368,7 +368,7 @@ no_proc_call_name:
 
 	if (!n.member_names.empty())
 		return NameBase{name_component("member_" + n.member_names.front(), n.kind.c_str()), ""};
-	// Overload-set members are often not directly present as Frame::values_local()
+	// Overload-set members are often not directly present as Frame::declared_values()
 	// entries: the frame stores the OverloadSet under the source name, while its
 	// Callable members only carry Callable::pas_name. Use that before falling
 	// back to the bland dynamic kind ("procedure", "method", ...), otherwise
@@ -536,7 +536,7 @@ static void print_source_location(std::ostringstream& out, const SourceLocation&
 void ErrorLetContext::print_frame_members(std::ostringstream& out, const Frame* frame, unsigned indent_level) const {
 	if (!frame)
 		return;
-	for (const auto& item : frame->values_local()) {
+	for (const auto& item : frame->declared_values()) {
 		const std::string& name = item.first;
 		const FrameValueEntry& entry = item.second;
 		indent(out, indent_level);

@@ -1267,6 +1267,17 @@ static bool callable_group_opens_parent(Node* binding) {
 	return false;
 }
 
+/** Inspect declarations owned by exactly FRAME. This is storage access for
+ *  the explicit environment/parent walkers below, not a name-lookup policy. */
+static Node* find_declared_value(
+    const Frame* frame, const std::string& name) {
+	const auto& values = frame->declared_values();
+	auto found = values.find(name);
+	return found == values.end()
+	           ? nullptr
+	           : found->second.value;
+}
+
 /** Resolve one member name through a structural parent chain. A member
  *  overload directive opens the same member family into the parent class or
  *  object; it never opens lookup into a lexical or unit-global routine family.
@@ -1276,7 +1287,8 @@ static Node* lookup_member_binding(const Frame* frame,
 	std::vector<Callable*> callables;
 	for (const Frame* current = frame; current;
 	     current = current->parent) {
-		Node* binding = current->lookup_value_local(name);
+		Node* binding =
+		    find_declared_value(current, name);
 		if (!binding)
 			continue;
 		auto callable = dynamic_cast<Callable*>(binding);
@@ -1311,7 +1323,7 @@ Node* ScopeEntry::lookup_value(
     const std::string& name) const {
 	if (is_receiver_environment())
 		return lookup_member_binding(frame, name);
-	return frame->lookup_value_local(name);
+	return find_declared_value(frame, name);
 }
 
 static Node* bind_lookup_result(Node* qualifier, Node* binding) {
@@ -1423,7 +1435,7 @@ Node* Parser::active_function_result_lvalue(Callable* c) const {
 	}
 	if (!active)
 		return nullptr;
-	return c->body_frame->lookup_value_local("result");
+	return c->body_frame->lookup_value("result");
 }
 
 /** value that can be assigned to */
@@ -1528,7 +1540,8 @@ static Node* lookup_method_in_ancestors(std::string name, Type* starting_at) {
 		Frame* body = body_frame_of(t);
 		if (!body)
 			continue;
-		if (Node* hit = body->lookup_value_local(name))
+		if (Node* hit =
+		        find_declared_value(body, name))
 			return hit;
 	}
 	return nullptr;
@@ -4222,7 +4235,7 @@ struct TypeBlockResolver {
 			return true;
 
 		std::vector<std::pair<std::string, Type*>> local_types;
-		for (const auto& item : frame->types_local())
+		for (const auto& item : frame->declared_types())
 			local_types.push_back(item);
 		for (auto& item : local_types) {
 			Type* ty = item.second;
@@ -4232,7 +4245,7 @@ struct TypeBlockResolver {
 		}
 
 		std::vector<std::pair<std::string, FrameValueEntry>> local_values;
-		for (const auto& item : frame->values_local())
+		for (const auto& item : frame->declared_values())
 			local_values.push_back(item);
 		for (auto& item : local_values) {
 			Node* value = item.second.value;
@@ -5094,7 +5107,9 @@ Procedure* Parser::match_or_create_procedure(
 		// of its interface declaration. Use local lookup here to avoid seeing the
 		// same parent frame more than once through structural parents.
 		for (auto it = scopes.rbegin(); it != scopes.rend() && !target; ++it)
-			consider_existing(it->frame->lookup_value_local(pas_name));
+			consider_existing(
+			    find_declared_value(
+			        it->frame, pas_name));
 	}
 	if (!target && short_form_implementation && existing)
 		raise_parse_error("no unimplemented prototype");

@@ -755,7 +755,7 @@ void ShortStringType::print_diagnostic_definition(
 static void add_frame_value_type_edges(ErrorLetContext* ctx, const Frame* frame) {
 	if (!frame)
 		return;
-	for (const auto& item : frame->values_local()) {
+	for (const auto& item : frame->declared_values()) {
 		ctx->add_type_edge(item.second.ty);
 	}
 }

@@ -123,7 +123,7 @@ private:
 	void discover_value(const Node* node, unsigned depth);
 
 	// index_frame is intentionally not graph discovery. It records local names
-	// from Frame::types_local()/values_local() under the supplied edge role.
+	// from Frame::declared_types()/declared_values() under the supplied edge role.
 	void index_frame(const Frame* frame, DiagnosticFrameUse use);
 	void prepare();
 	void assign_names();
