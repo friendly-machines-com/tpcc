@@ -298,6 +298,10 @@ struct ClassType: public Type {
 	// The later full declaration fills this object and clears the flag.
 	bool is_forward_declaration = false;
 	std::string forward_name;
+	// Source-level `class abstract` marker. Native FPC uses this only for a
+	// controllable warning on direct exact-class construction; it does not
+	// alter the VMT, methods, C++ carrier, or descendant class flags.
+	bool is_abstract = false;
 	// A Pascal `class constructor Name` is a lifecycle hook, not a value
 	// member named Name. Keeping it out of `children` makes it impossible for
 	// ordinary member lookup, calls, or routine references to expose it.

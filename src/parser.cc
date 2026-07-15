@@ -3365,6 +3365,12 @@ Type* Parser::parse_class_type(
 		ct->is_forward_declaration = true;
 		return ct;
 	}
+	// Native FPC's class-level abstract option is metadata, independent of
+	// abstract methods. It is parsed before the ancestor list, is not
+	// inherited, and has no C++ emission effect. The later construction
+	// warning can consult the stored flag without changing class lowering.
+	const bool is_abstract = maybe_parse_keyword(
+	    "abstract");
 	ClassType* super_ty = nullptr;
 	std::vector<InterfaceType*> implemented_interfaces;
 	const bool has_ancestor_list = maybe_parse_opening_paren();
@@ -3416,6 +3422,7 @@ Type* Parser::parse_class_type(
 	    std::move(implemented_interfaces);
 	ct->super = super_ty;
 	ct->is_forward_declaration = false;
+	ct->is_abstract = is_abstract;
 	if (has_ancestor_list && input_token == ";") {
 		// `TChild = class(TParent);` is FPC's completed empty-descendant
 		// shorthand. Give it the same inherited member Frame as an explicit

@@ -1066,6 +1066,10 @@ void ClassType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 }
 void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
+	if (is_abstract) {
+		ctx->indent(out, indent + 1);
+		out << "abstract: yes\n";
+	}
 	if (super) {
 		ctx->indent(out, indent + 1);
 		out << "super: " << ctx->known_type_ref(super) << "\n";
