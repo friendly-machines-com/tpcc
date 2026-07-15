@@ -13,7 +13,7 @@ type
     property Message: String read FMessage write FMessage;
   end;
 
-function Supports(a: TObject; b: TClass): Boolean; external nil name '::u_system::p_supports';
+function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_supports';
 
 implementation
 

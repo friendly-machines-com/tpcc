@@ -73,6 +73,11 @@ type
   end;
 {$endif}
 
+{$ifdef TEST_EXTERNAL_NIL_REJECTED}
+procedure OldExternalSpelling;
+  external nil name 'p_old_external_spelling';
+{$endif}
+
 procedure TBase.SetValue(NewValue: LongInt);
 begin
   Value := NewValue

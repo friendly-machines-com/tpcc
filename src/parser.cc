@@ -3813,7 +3813,6 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return parse_operator_type();
 	} else if (peek_directive("external")) { // usually primitive; otherwise we would miss a lot of info
 		parse_directive("external");
-		parse_keyword("nil"); // FIXME: allow string literals, eval.
 		parse_directive("name");
 		std::string cxx_name = parse_string_literal();
 
@@ -4646,7 +4645,6 @@ void Parser::parse_var_block() {
 			if (names.size() != 1)
 				raise_parse_error(
 				    "an external variable declaration must have exactly one name");
-			parse_keyword("nil");
 			parse_directive("name");
 			external_cxx_name = parse_string_literal();
 		}
@@ -5142,7 +5140,6 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	std::string cxx_name = cxx_value_name(pas_name);
 	bool external = false;
 	if (maybe_parse_keyword("external")) {
-		parse_keyword("nil");
 		parse_directive("name");
 		cxx_name = parse_string_literal();
 		parse_semicolon();
@@ -5481,7 +5478,6 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 				body_follows = false;
 				parse_semicolon();
 			} else if (maybe_parse_directive("external")) {
-				parse_keyword("nil");
 				parse_directive("name");
 				external_cxx_name = parse_string_literal();
 				body_follows = false;
