@@ -143,6 +143,12 @@ void Emitter::set_section(Section s) {
 }
 
 void Emitter::close() {
+	while (!captures.empty()) {
+		if (captures.back().stream)
+			fclose(captures.back().stream);
+		active = captures.back().previous;
+		captures.pop_back();
+	}
 	if (out_h) {
 		fclose(out_h);
 		out_h = nullptr;
@@ -398,6 +404,95 @@ void Emitter::emit_goto(std::string cxx_label_name) {
 	if (!active)
 		return;
 	fprintf(active, "\tgoto %s;\n", cxx_label_name.c_str());
+}
+
+void Emitter::begin_statement_capture() {
+	FILE* stream = active ? tmpfile() : nullptr;
+	if (active && !stream) {
+		fprintf(stderr,
+		    "internal compiler error: could not create statement capture\n");
+		fflush(stderr);
+		exit(1);
+	}
+	captures.push_back(Capture{active, stream});
+	active = stream;
+}
+
+std::string Emitter::end_statement_capture() {
+	assert(!captures.empty());
+	FILE* stream = captures.back().stream;
+	FILE* previous = captures.back().previous;
+	captures.pop_back();
+	active = previous;
+	if (!stream)
+		return {};
+
+	if (fflush(stream) != 0 || fseek(stream, 0, SEEK_END) != 0) {
+		fclose(stream);
+		fprintf(stderr,
+		    "internal compiler error: could not finish statement capture\n");
+		fflush(stderr);
+		exit(1);
+	}
+	long size = ftell(stream);
+	if (size < 0 || fseek(stream, 0, SEEK_SET) != 0) {
+		fclose(stream);
+		fprintf(stderr,
+		    "internal compiler error: could not read statement capture\n");
+		fflush(stderr);
+		exit(1);
+	}
+	std::string result(static_cast<size_t>(size), '\0');
+	if (!result.empty() &&
+	    fread(result.data(), 1, result.size(), stream) != result.size()) {
+		fclose(stream);
+		fprintf(stderr,
+		    "internal compiler error: short read from statement capture\n");
+		fflush(stderr);
+		exit(1);
+	}
+	fclose(stream);
+	return result;
+}
+
+void Emitter::emit_try_except_prologue(
+    const std::string& try_body) {
+	if (!active)
+		return;
+	fprintf(active, "\ttry {\n");
+	fwrite(try_body.data(), 1, try_body.size(), active);
+	fprintf(active, "\t} catch (...) {\n");
+}
+
+void Emitter::emit_try_except_epilogue() {
+	if (!active)
+		return;
+	fprintf(active, "\t}\n");
+}
+
+void Emitter::emit_try_finally(
+    const std::string& try_body,
+    const std::string& finally_body) {
+	if (!active)
+		return;
+	fprintf(active, "\t{\n");
+	fprintf(active, "\t\tauto tpcc_finally = [&]() {\n");
+	fwrite(finally_body.data(), 1, finally_body.size(), active);
+	fprintf(active, "\t\t};\n");
+	fprintf(active,
+	    "\t\tauto tpcc_finally_guard = "
+	    "::u_system::tpcc_make_scope_exit([&]() { "
+	    "tpcc_finally(); });\n");
+	fprintf(active, "\t\ttry {\n");
+	fwrite(try_body.data(), 1, try_body.size(), active);
+	fprintf(active, "\t\t} catch (...) {\n");
+	fprintf(active, "\t\t\ttpcc_finally_guard.release();\n");
+	fprintf(active, "\t\t\ttpcc_finally();\n");
+	fprintf(active, "\t\t\tthrow;\n");
+	fprintf(active, "\t\t}\n");
+	fprintf(active, "\t\ttpcc_finally_guard.release();\n");
+	fprintf(active, "\t\ttpcc_finally();\n");
+	fprintf(active, "\t}\n");
 }
 
 void Emitter::emit_statement(Node* stmt) {

@@ -59,7 +59,9 @@ static std::unordered_set<std::string> keywords = {
     "dynamic", // FIXME
     "else",
     "end",
+    "except",
     "file",
+    "finally",
     "forward", // FIXME directive ?
     "for",
     "function",
@@ -94,6 +96,7 @@ static std::unordered_set<std::string> keywords = {
     "string",
     "then",
     "to",
+    "try",
     "type",
     "unit",
     "until",
@@ -845,7 +848,8 @@ static Frame* get_type_body_frame(Type* ty) {
 }
 
 void Parser::maybe_parse_statement() {
-	if (peek_keyword("end") || peek_keyword("until")) {
+	if (peek_keyword("end") || peek_keyword("until") ||
+	    peek_keyword("except") || peek_keyword("finally")) {
 		return;
 	}
 	if (peek_keyword("break") || peek_keyword("continue")) {
@@ -853,13 +857,23 @@ void Parser::maybe_parse_statement() {
 		consume();
 		if (loop_depth == 0)
 			raise_parse_error(is_break ? "break outside loop" : "continue outside loop");
+		if (!finally_loop_depths.empty() &&
+		    loop_depth <= finally_loop_depths.back())
+			raise_parse_error(
+			    is_break
+			        ? "break cannot leave a finally block"
+			        : "continue cannot leave a finally block");
 		if (emitter)
 			emitter->emit_loop_control(is_break);
 	} else if (peek_keyword("return")) { // FIXME Exit
+		if (!finally_loop_depths.empty())
+			raise_parse_error("return cannot leave a finally block");
 		consume();
 		parse_expression();
 	} else if (peek_directive("exit")) {
 		parse_directive("exit");
+		if (!finally_loop_depths.empty())
+			raise_parse_error("exit cannot leave a finally block");
 		if (!current_routine)
 			raise_parse_error("exit outside routine");
 		Type* ret_ty = current_routine->ty->return_type;
@@ -884,6 +898,43 @@ void Parser::maybe_parse_statement() {
 		std::string label = parse_identifier();
 		if (emitter)
 			emitter->emit_goto(cxx_label_name(label));
+	} else if (peek_keyword("try")) {
+		parse_keyword("try");
+		if (emitter)
+			emitter->begin_statement_capture();
+		parse_block_body();
+		std::string try_body;
+		if (emitter)
+			try_body = emitter->end_statement_capture();
+
+		if (maybe_parse_keyword("except")) {
+			if (peek_directive("on"))
+				raise_parse_error(
+				    "typed exception handlers are not implemented yet");
+			if (emitter)
+				emitter->emit_try_except_prologue(try_body);
+			parse_block_body();
+			parse_keyword("end");
+			if (emitter)
+				emitter->emit_try_except_epilogue();
+		} else if (maybe_parse_keyword("finally")) {
+			if (emitter)
+				emitter->begin_statement_capture();
+			finally_loop_depths.push_back(loop_depth);
+			parse_block_body();
+			finally_loop_depths.pop_back();
+			std::string finally_body;
+			if (emitter)
+				finally_body =
+				    emitter->end_statement_capture();
+			parse_keyword("end");
+			if (emitter)
+				emitter->emit_try_finally(
+				    try_body, finally_body);
+		} else {
+			raise_parse_error(
+			    "expected except or finally after try block");
+		}
 	} else if (peek_keyword("if")) {
 		parse_keyword("if");
 		auto condition = parse_expression();

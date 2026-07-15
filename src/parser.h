@@ -115,6 +115,10 @@ private:
 	Callable* current_routine = nullptr;
 	// Number of enclosing statement loops. break/continue are invalid at zero.
 	unsigned loop_depth = 0;
+	// Loop depth on entry to each currently parsed finally body. FPC permits
+	// break/continue for a loop wholly inside finally, but forbids control
+	// flow from leaving finally. Exit always leaves it.
+	std::vector<unsigned> finally_loop_depths;
 	UnitRegistry* unit_registry;
 	// The unit/program whose declarations this Parser instance is consuming.
 	// Sub-parsers have their own Parser and therefore their own current_unit.

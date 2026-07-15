@@ -55,6 +55,11 @@ private:
 	FILE* out_h;       // null for programs
 	FILE* out_cc;
 	FILE* active;      // points at out_h or out_cc; null until a section is set
+	struct Capture {
+		FILE* previous;
+		FILE* stream;
+	};
+	std::vector<Capture> captures;
 
 public:
 	Emitter();
@@ -108,6 +113,17 @@ public:
 	void emit_statement(Node* stmt);
 	void emit_label(std::string cxx_label_name);
 	void emit_goto(std::string cxx_label_name);
+	// A try/finally must place the finally callable before the protected C++
+	// statements even though Pascal spells the protected statements first.
+	// These operations temporarily collect ordinary statement emission so
+	// emit_try_finally can put both source blocks in the required order.
+	void begin_statement_capture();
+	std::string end_statement_capture();
+	void emit_try_except_prologue(const std::string& try_body);
+	void emit_try_except_epilogue();
+	void emit_try_finally(
+	    const std::string& try_body,
+	    const std::string& finally_body);
 	void emit_with_prologue(std::string alias_cxx_name, Node* target);
 	void emit_with_epilogue();
 	// Control-flow framing. Each is parse-time emission: parser parses the

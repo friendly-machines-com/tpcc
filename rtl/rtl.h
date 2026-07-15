@@ -43,6 +43,34 @@
 
 namespace u_system {
 
+// try/finally needs cleanup on C++ return, break, continue, and outward goto.
+// Its generated catch path releases this guard before running finally, so the
+// destructor never runs a throwing finally body during exception unwinding.
+template<typename Action>
+class tpcc_scope_exit {
+	Action action;
+	bool armed = true;
+
+public:
+	explicit tpcc_scope_exit(Action action)
+	    : action(std::move(action)) {}
+	tpcc_scope_exit(const tpcc_scope_exit&) = delete;
+	tpcc_scope_exit& operator=(const tpcc_scope_exit&) = delete;
+	~tpcc_scope_exit() noexcept(noexcept(action())) {
+		if (armed)
+			action();
+	}
+	void release() noexcept {
+		armed = false;
+	}
+};
+
+template<typename Action>
+auto tpcc_make_scope_exit(Action&& action) {
+	return tpcc_scope_exit<std::decay_t<Action>>(
+	    std::forward<Action>(action));
+}
+
 using t_byte     = uint8_t;
 using t_shortint = int8_t;
 using t_word     = uint16_t;
