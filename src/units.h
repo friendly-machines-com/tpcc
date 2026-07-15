@@ -22,18 +22,21 @@ enum class UnitPhase {
 	Done,
 };
 
-/** A Unit is a named container of declarations. Programs and units share this
- *  representation:
- *   - unit:    interface_frame = exported decls, implementation_frame = private
- *              decls + routine bodies (parent = interface_frame).
- *   - program: interface_frame = null (nothing to export), implementation_frame
- *              = everything (main block + local decls). */
+/** A Unit is a named container of declarations. A Pascal unit has one member
+ *  frame: the implementation continues mutating the frame populated by the
+ *  interface, just as reopening the generated C++ namespace continues adding
+ *  members to the same namespace. General Pascal member visibility is not
+ *  represented yet; `interface` versus `implementation` currently controls
+ *  emission into the header versus the .cc, not a second symbol identity.
+ *
+ *  Programs use the same storage shape, but `is_program` prevents their local
+ *  declarations from being treated as names owned by a Pascal unit namespace. */
 class Unit {
 public:
 	std::string name;
 	std::string cxx_namespace;
-	Frame* interface_frame;      // null for programs
-	Frame* implementation_frame; // always present
+	Frame* frame;
+	bool is_program;
 	UnitPhase phase;
 	std::string initialization_cxx_name;
 	std::string finalization_cxx_name;
@@ -44,7 +47,7 @@ public:
 	// a parent. Dependency units are initialized before this unit, so their
 	// parent hooks have already run.
 	std::vector<Method*> class_constructors;
-	Unit(std::string name, Frame* interface_frame, Frame* implementation_frame);
+	Unit(std::string name, Frame* frame, bool is_program);
 };
 
 /** Global-per-compilation map of unit name -> Unit*. Loading via `uses` goes
@@ -55,7 +58,7 @@ private:
 	std::vector<Unit*> completed;
 public:
 	/** Insert a new Unit for NAME. Aborts if NAME is already present. */
-	Unit* register_new(std::string name, Frame* interface_frame, Frame* implementation_frame);
+	Unit* register_new(std::string name, Frame* frame, bool is_program = false);
 	/** Returns the Unit for NAME, or nullptr if not registered. */
 	Unit* lookup(std::string name) const;
 	/** Record a fully parsed unit. Recursive parsing makes this the unit

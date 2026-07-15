@@ -224,10 +224,9 @@ Frame* Parser::current_declaration_frame() const {
 }
 
 Unit* Parser::declaration_unit(Frame* frame) const {
-	if (!current_unit || !current_unit->interface_frame)
+	if (!current_unit || current_unit->is_program)
 		return nullptr; // program or no active source unit
-	if (frame == current_unit->interface_frame ||
-	    frame == current_unit->implementation_frame)
+	if (frame == current_unit->frame)
 		return current_unit;
 	return nullptr;
 }
@@ -2973,14 +2972,14 @@ ClassType* Parser::lookup_implicit_tobject_superclass() {
 		return nullptr;
 	}
 
-	Frame* system_interface = system_unit->interface_frame;
-	if (!system_interface) {
+	Frame* system_frame = system_unit->frame;
+	if (!system_frame) {
 		raise_type_parse_error(
-		    "implicit class inheritance requires an interface frame on the System unit");
+		    "implicit class inheritance requires a member frame on the System unit");
 		return nullptr;
 	}
 
-	Type* tobject_type = system_interface->lookup_type("tobject");
+	Type* tobject_type = system_frame->lookup_type("tobject");
 	if (!tobject_type) {
 		raise_type_parse_error(
 		    "implicit class inheritance requires System.TObject");
@@ -4315,7 +4314,7 @@ void Parser::maybe_parse_type_block(bool delphi_auto_end) {
 void Parser::parse_var_block() {
 	parse_keyword("var");
 	// Register each var directly into the enclosing declaration scope
-	// (unit interface_frame, program impl_frame, or procedure body_frame).
+	// (unit/program frame or procedure body_frame).
 	// We deliberately do NOT create a sub-frame: the var decls must persist
 	// past this block parse so callers in other compilation units can resolve
 	// them after `uses`.
@@ -5702,11 +5701,8 @@ void Parser::parse_unit_body() {
 	// -> "unit" branch) hits this path with an unopened emitter.
 	if (emitter && !emitter->is_open())
 		emitter->open_for_unit(name, options ? options->output_dir : "");
-	Frame* iface = new Frame(nullptr);
-	// Implementation frame's structural parent is the interface frame, so
-	// impl can transparently see interface decls via the parent chain.
-	Frame* impl = new Frame(iface);
-	Unit* unit = unit_registry->register_new(name, iface, impl);
+	Frame* unit_frame = new Frame(nullptr);
+	Unit* unit = unit_registry->register_new(name, unit_frame);
 	current_unit = unit;
 	unit->phase = UnitPhase::InterfaceInProgress;
 
@@ -5725,9 +5721,9 @@ void Parser::parse_unit_body() {
 		parse_semicolon();
 	}
 	for (Unit* used : iface_units)
-		push_scope(used->interface_frame);
-	push_scope(iface);
-	push_declaration_frame(iface);
+		push_scope(used->frame);
+	push_scope(unit_frame);
+	push_declaration_frame(unit_frame);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Header);
 		std::vector<std::string> h_files;
@@ -5749,15 +5745,14 @@ void Parser::parse_unit_body() {
 		parse_semicolon();
 	}
 	// Rebuild only the lookup path for the implementation's precedence:
-	// private declarations, this unit's interface, implementation uses,
-	// interface uses. Declaration ownership is changed independently below.
+	// this unit, implementation uses, interface uses. Interface and
+	// implementation declarations deliberately keep the same Frame identity.
 	pop_declaration_frame();
-	pop_scope(); // iface
+	pop_scope(); // unit
 	for (Unit* used : impl_units)
-		push_scope(used->interface_frame);
-	push_scope(iface);
-	push_scope(impl);
-	push_declaration_frame(impl);
+		push_scope(used->frame);
+	push_scope(unit_frame);
+	push_declaration_frame(unit_frame);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Implementation);
 		std::vector<std::string> h_files;
@@ -5811,8 +5806,7 @@ void Parser::parse_unit_body() {
 		emitter->emit_unit_implementation_epilogue();
 
 	pop_declaration_frame();
-	pop_scope(); // impl
-	pop_scope(); // iface
+	pop_scope(); // unit
 	for (size_t i = 0; i < impl_units.size(); i++)
 		pop_scope();
 	for (size_t i = 0; i < iface_units.size(); i++)
@@ -5831,8 +5825,10 @@ void Parser::parse_program_or_unit() {
 		// parse units and arrive with an already-open unit emitter.
 		if (emitter && !emitter->is_open())
 			emitter->open_for_program(options ? options->program_output_path : "");
-		Frame* impl = new Frame(nullptr);
-		Unit* unit = unit_registry->register_new(name, nullptr, impl);
+		Frame* program_frame = new Frame(nullptr);
+		Unit* unit =
+		    unit_registry->register_new(
+		        name, program_frame, true);
 		current_unit = unit;
 		unit->phase = UnitPhase::InterfaceInProgress;
 		// Load dependencies, then install the lookup path in increasing
@@ -5847,9 +5843,9 @@ void Parser::parse_program_or_unit() {
 			parse_semicolon();
 		}
 		for (Unit* used : prog_units)
-			push_scope(used->interface_frame);
-		push_scope(impl);
-		push_declaration_frame(impl);
+			push_scope(used->frame);
+		push_scope(program_frame);
+		push_declaration_frame(program_frame);
 		if (emitter) {
 			std::vector<std::string> h_files;
 			for (Unit* u : prog_units)
