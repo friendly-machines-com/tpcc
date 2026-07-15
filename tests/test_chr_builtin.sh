@@ -17,7 +17,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	tests/chr_builtin_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/chr_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/chr_builtin"
 

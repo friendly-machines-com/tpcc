@@ -17,7 +17,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/loop_control.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/loop_control"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/loop_control"
 

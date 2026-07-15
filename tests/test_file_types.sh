@@ -45,7 +45,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/file_types.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/file_types"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/file_types"
 

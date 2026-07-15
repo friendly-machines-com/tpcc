@@ -921,9 +921,7 @@ void Emitter::emit_procedure_close(Callable* target, bool nested_lambda) {
 	if (!active)
 		return;
 	auto ty = target->ty;
-	if (ty->kind == CONSTRUCTOR) {
-		fprintf(active, "\treturn this;\n");
-	} else if (ty->return_type != &unit_type()) {
+	if (ty->return_type != &unit_type()) {
 		fprintf(active, "\treturn p_result;\n");
 	}
 	fprintf(active, nested_lambda ? "\t};\n" : "}\n");
@@ -1076,6 +1074,16 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				}
 				fprintf(active, "\t}\n");
 			}
+			// Allocation is virtual on the metaclass so an inherited
+			// NewInstance implementation still creates the exact class
+			// represented by its receiver. The out-of-class definition is
+			// emitted only after the outer object type is complete.
+			std::string object_cxx_name =
+			    type_cxx_name(c, c->cxx_name);
+			fprintf(active, c->super
+			    ? "\tpublic: %s* m_allocate() override;\n"
+			    : "\tpublic: virtual %s* m_allocate();\n",
+			    object_cxx_name.c_str());
 			if (c->class_constructor) {
 				fprintf(active, "\t");
 				emit_callable_signature(
@@ -1088,6 +1096,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			unhandled_type("emit_aggregate_decl", ty);
 		}
 	} else if (is_class && !in_meta) {
+		auto c = static_cast<ClassType*>(ty);
 		emit_aggregate_decl("m_meta", ty, true);
 		fprintf(active, ";\n");
 		// This is the one stable class-reference accessor. It owns the exact
@@ -1098,6 +1107,17 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		    "\tpublic: inline static m_meta* p_classtype() {\n");
 		fprintf(active, "\t\tstatic m_meta meta{};\n");
 		fprintf(active, "\t\treturn &meta;\n");
+		fprintf(active, "\t}\n");
+		// A class name already has an exact class-reference value through the
+		// static accessor above. An object expression needs the inverse
+		// operation: recover the metaclass of its dynamic object. C++ virtual
+		// dispatch supplies that information without storing another pointer
+		// in every object. The return override is covariant because generated
+		// metaclasses inherit in the same order as their object classes.
+		fprintf(active, c->super
+		    ? "\tpublic: inline m_meta* m_classref() override {\n"
+		    : "\tpublic: virtual inline m_meta* m_classref() {\n");
+		fprintf(active, "\t\treturn p_classtype();\n");
 		fprintf(active, "\t}\n");
 		// fallthrough
 	}
@@ -1340,6 +1360,15 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(active, "\n");
 		emit_aggregate_decl(cxx_name, ty);
 		fprintf(active, ";\n");
+		if (dynamic_cast<ClassType*>(ty)) {
+			fprintf(active,
+			    "inline %s* %s::m_meta::m_allocate() {\n",
+			    cxx_name.c_str(), cxx_name.c_str());
+			fprintf(active,
+			    "\treturn ::u_system::m_allocate_object<%s>();\n",
+			    cxx_name.c_str());
+			fprintf(active, "}\n");
+		}
 		if (auto record = dynamic_cast<RecordType*>(ty)) {
 			auto layout = record_layout(record);
 			if (!layout)
@@ -1567,6 +1596,48 @@ void Emitter::emit_const_storage_ref(Node* expr) {
 	fprintf(active, "::u_system::tpcc_make_const_storage_ref(");
 	emit_expression(expr);
 	fprintf(active, ")");
+}
+
+void Emitter::emit_call_arguments(
+    RoutineType* call_ty,
+    const std::vector<Node*>& args) {
+	for (size_t i = 0; i < args.size(); i++) {
+		if (i > 0)
+			fprintf(active, ", ");
+		Node* arg = args[i];
+		if (call_ty && i < call_ty->formals.size() &&
+		    call_ty->formals[i].mode == ParamMode::Value &&
+		    dynamic_cast<Integer*>(arg)) {
+			Type* formal_ty =
+			    call_ty->formals[i].ty;
+			// Pascal has already selected the declaration. Pin a raw
+			// integer literal to its value-parameter carrier so C++
+			// cannot independently select another overload.
+			fprintf(active, "static_cast<");
+			emit_type_ref(formal_ty);
+			fprintf(active, ">(");
+			emit_expression(arg);
+			fprintf(active, ")");
+		} else if (
+		    call_ty && i < call_ty->formals.size() &&
+		    call_ty->formals[i].mode == ParamMode::Const &&
+		    call_ty->formals[i].ty == unknown_type()) {
+			emit_const_storage_ref(arg);
+		} else if (
+		    call_ty && i < call_ty->formals.size() &&
+		    (call_ty->formals[i].mode == ParamMode::Var ||
+		     call_ty->formals[i].mode == ParamMode::Out) &&
+		    call_ty->formals[i].ty == unknown_type()) {
+			emit_storage_ref(arg);
+		} else if (
+		    call_ty && i < call_ty->formals.size() &&
+		    (call_ty->formals[i].mode == ParamMode::Var ||
+		     call_ty->formals[i].mode == ParamMode::Out)) {
+			emit_writable_expression(arg);
+		} else {
+			emit_expression(arg);
+		}
+	}
 }
 
 static const char* cxx_unary_operator(UnaryOperation* op) {
@@ -1914,23 +1985,65 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, ")");
 		return;
 	}
+	if (auto construct =
+	        dynamic_cast<Construct*>(expr)) {
+		auto result_type =
+		    dynamic_cast<ClassType*>(construct->ty);
+		Method* initializer = construct->initializer;
+		if (!result_type || !initializer ||
+		    !initializer->owner_class)
+			unhandled_node(
+			    "invalid construction expression",
+			    construct);
+		std::string result_cxx_name =
+		    type_cxx_name(
+		        result_type,
+		        result_type->cxx_name);
+		std::string owner =
+		    owner_cxx_reference_name(
+		        initializer->owner_class);
+		fprintf(active,
+		    "::u_system::m_construct<%s, static_cast<",
+		    result_cxx_name.c_str());
+		emit_type_ref(
+		    initializer->ty->return_type);
+		fprintf(active, " (%s::*)", owner.c_str());
+		emit_formal_parameters(
+		    initializer->ty, false);
+		fprintf(active, ">(&%s::%s)>(",
+		    owner.c_str(),
+		    callable_cxx_name(initializer).c_str());
+		emit_expression(
+		    construct->class_reference);
+		if (!construct->args.empty())
+			fprintf(active, ", ");
+		emit_call_arguments(
+		    initializer->ty,
+		    construct->args);
+		fprintf(active, ")");
+		return;
+	}
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
 		if (pc->receiver) {
 			auto receiver = pc->receiver;
 			bool done = false;
-			if (auto ty = dynamic_cast<RoutineType*>(pc->callee->ty)) {
-				if (ty->kind == CONSTRUCTOR) {
-					if (auto receiver_ty = dynamic_cast<ClassType*>(receiver->ty)) {
-						fprintf(active, "(new %s",
-						    type_cxx_name(
-						        receiver_ty,
-						        receiver_ty->cxx_name)
-						        .c_str()); // FIXME: escape
-						fprintf(active, ")->");
-						done = true;
+			if (auto method =
+			        dynamic_cast<Method*>(pc->callee)) {
+				if (method->ty->kind == CLASS_METHOD) {
+					emit_expression(receiver);
+					if (dynamic_cast<ClassRefType*>(
+					        receiver->ty)) {
+						fprintf(active, "->");
+					} else if (dynamic_cast<ClassType*>(
+					               receiver->ty)) {
+						fprintf(active,
+						    "->m_classref()->");
 					} else {
-						unhandled_type("constructor receiver", receiver->ty);
+						unhandled_type(
+						    "class-method receiver",
+						    receiver->ty);
 					}
+					done = true;
 				}
 			}
 
@@ -1958,52 +2071,15 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(pc->callee);
 			fprintf(active, "(");
 		}
-		for (size_t i = 0; i < pc->args.size(); i++) {
-			if (i > 0)
-				fprintf(active, ", ");
-			Node* arg = pc->args[i];
-			// Callable has its semantic RoutineType in Callable::ty (the
-			// historical class currently shadows Node::ty), so recover it
-			// through the concrete callee rather than reading Node::ty.
-			RoutineType* call_ty = nullptr;
-			if (auto callable = dynamic_cast<Callable*>(pc->callee)) {
-				call_ty = callable->ty;
-			} else {
-				call_ty = dynamic_cast<RoutineType*>(pc->callee->ty);
-			}
-			if (call_ty && i < call_ty->formals.size() &&
-			    call_ty->formals[i].mode == ParamMode::Value &&
-			    dynamic_cast<Integer*>(arg)) {
-				Type* formal_ty = call_ty->formals[i].ty;
-				// The Pascal overload has already been selected. Spell its
-				// value-parameter type at the C++ call boundary so a raw
-				// literal such as `3ull` cannot make C++ independently choose
-				// among every p_equal/p_divide overload. Non-literal implicit
-				// conversions are already explicit Cast nodes; variables
-				// already have their declared C++ type. Do not value-cast
-				// var/out/const arguments: those must remain references.
-				fprintf(active, "static_cast<");
-				emit_type_ref(formal_ty);
-				fprintf(active, ">(");
-				emit_expression(arg);
-				fprintf(active, ")");
-			} else if (call_ty && i < call_ty->formals.size() &&
-				   call_ty->formals[i].mode == ParamMode::Const &&
-				   call_ty->formals[i].ty == unknown_type()) {
-				emit_const_storage_ref(arg);
-			} else if (call_ty && i < call_ty->formals.size() &&
-				   (call_ty->formals[i].mode == ParamMode::Var ||
-				    call_ty->formals[i].mode == ParamMode::Out) &&
-				   call_ty->formals[i].ty == unknown_type()) {
-				emit_storage_ref(arg);
-			} else if (call_ty && i < call_ty->formals.size() &&
-				   (call_ty->formals[i].mode == ParamMode::Var ||
-				    call_ty->formals[i].mode == ParamMode::Out)) {
-				emit_writable_expression(arg);
-			} else {
-				emit_expression(arg);
-			}
-		}
+		RoutineType* call_ty = nullptr;
+		if (auto callable =
+		        dynamic_cast<Callable*>(pc->callee))
+			call_ty = callable->ty;
+		else
+			call_ty =
+			    dynamic_cast<RoutineType*>(
+			        pc->callee->ty);
+		emit_call_arguments(call_ty, pc->args);
 		fprintf(active, ")");
 		return;
 	}

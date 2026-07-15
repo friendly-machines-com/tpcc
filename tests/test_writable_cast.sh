@@ -26,7 +26,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	tests/writable_cast_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/writable_cast"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/writable_cast"
 

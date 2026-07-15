@@ -18,7 +18,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/length_native_types.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/length_native_types"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/length_native_types"
 

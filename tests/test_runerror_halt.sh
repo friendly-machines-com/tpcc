@@ -18,7 +18,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	tests/errorcode_builtin_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/errorcode_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/errorcode_builtin"
 
@@ -32,7 +32,7 @@ do
 		-Wextra \
 		-Irtl \
 		"$tmp/${builtin}_builtin.cc" \
-		rtl/system.cc \
+		"$tmp/system.cc" \
 		-o "$tmp/${builtin}_builtin"
 done
 

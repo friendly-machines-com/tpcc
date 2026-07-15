@@ -22,7 +22,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	tests/copy_builtin_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/copy_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/copy_builtin"
 

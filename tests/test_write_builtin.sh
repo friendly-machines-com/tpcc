@@ -30,7 +30,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	tests/write_builtin_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/write_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/write_builtin"
 

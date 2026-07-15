@@ -11,7 +11,7 @@ cd "$root"
 ./mp -Furtl -o"$tmp/type_block_publication.cc" \
 	tests/type_block_publication.pp
 
-if ! rg -Fq 'struct t_tbase : public t_tobject' \
+if ! rg -Fq 'struct t_tbase : public ::u_system::t_tobject' \
 	"$tmp/type_block_publication.cc"
 then
 	echo "bare class did not implicitly inherit System.TObject" >&2

@@ -36,15 +36,19 @@ type
   TClass = class of TObject;
   TObject = class
   public
+    constructor Create;
     destructor Destroy; virtual;
+    procedure Free;
     
-    // Class methods live on the generated m_meta class.  The regular class
-    // emits static proxies so TObject.ClassName and obj.ClassName both dispatch
-    // through the metaclass instance.
+    // Class methods live on the generated m_meta class. A class name supplies
+    // its exact metaclass; an object supplies its dynamic metaclass through
+    // the compiler-generated virtual object-to-class-reference conversion.
     class function ClassType: TClass; virtual; external nil name 'p_classtype';
     class function ClassName: shortstring; virtual;
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;
+    class function NewInstance: TObject; virtual;
+    procedure AfterConstruction; virtual;
   end;
 
 var
@@ -258,7 +262,30 @@ procedure UniqueString(var value: AnsiString); external nil name '::u_system::p_
 
 implementation
 
+function tpcc_new_instance(meta: TClass): TObject;
+  external nil name '::u_system::m_new_instance';
+procedure tpcc_free_object(instance: TObject);
+  external nil name '::u_system::m_free_object';
+
+constructor TObject.Create;
+begin
+end;
+
 destructor TObject.Destroy;
+begin
+end;
+
+procedure TObject.Free;
+begin
+  tpcc_free_object(Self)
+end;
+
+class function TObject.NewInstance: TObject;
+begin
+  Result := tpcc_new_instance(Self)
+end;
+
+procedure TObject.AfterConstruction;
 begin
 end;
 

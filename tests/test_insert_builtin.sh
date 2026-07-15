@@ -17,7 +17,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/insert_builtin.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/insert_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/insert_builtin"
 

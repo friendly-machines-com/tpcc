@@ -8,6 +8,7 @@ class Type;
 class Frame;
 class RoutineType;
 class Callable;
+class Method;
 class Unit;
 struct ClassType;
 class ErrorLetContext;
@@ -101,6 +102,25 @@ public:
 	explicit ClassRefValue(ClassType* target);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** Allocation plus one ordinary Pascal constructor initializer invocation.
+ *  The class-reference receiver determines the allocated/result class;
+ *  `initializer` remains a Unit-returning object method and may have been
+ *  declared by an ancestor. */
+class Construct: public Node {
+public:
+	Node* class_reference;
+	Method* initializer;
+	std::vector<Node*> args;
+	Construct(Node* class_reference, Method* initializer,
+	          std::vector<Node*> args, ClassType* result_type);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(
 	    ErrorLetContext* ctx, std::ostringstream& out,
 	    unsigned indent) const override;

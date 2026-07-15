@@ -175,6 +175,8 @@ public:
 	// declaration). m_proc and m_method both take this as their template
 	// argument.
 	void emit_function_type(RoutineType* ty);
+	void emit_call_arguments(
+	    RoutineType* ty, const std::vector<Node*>& args);
 	// Emit a full enum declaration body: `enum [NAME] { a, b, c }` -- no
 	// leading newline, no trailing semicolon. Caller frames those. Used by
 	// emit_type_definition (named, at type-block scope) and emit_type_ref's

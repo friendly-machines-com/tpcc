@@ -17,7 +17,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/delete_builtin.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/delete_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/delete_builtin"
 

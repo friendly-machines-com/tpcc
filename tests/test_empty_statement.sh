@@ -18,7 +18,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/empty_statement.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/empty_statement"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/empty_statement"
 

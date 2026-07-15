@@ -27,7 +27,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/comparechar_builtin.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/comparechar_builtin_pascal"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/comparechar_builtin_pascal"
 

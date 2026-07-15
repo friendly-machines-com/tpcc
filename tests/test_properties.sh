@@ -36,7 +36,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	tests/properties_runtime.cc \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/properties"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/properties"
 

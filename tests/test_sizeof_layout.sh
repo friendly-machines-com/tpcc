@@ -62,7 +62,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/sizeof_layout.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/sizeof_layout"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/sizeof_layout"
 

@@ -38,6 +38,13 @@ ClassRefValue::ClassRefValue(ClassType* target)
 	this->ty = new ClassRefType(
 	    target ? target->source_location : SourceLocation{}, target);
 }
+Construct::Construct(
+    Node* class_reference, Method* initializer,
+    std::vector<Node*> args, ClassType* result_type)
+    : class_reference(class_reference), initializer(initializer),
+      args(std::move(args)) {
+	this->ty = result_type;
+}
 UnitRef::UnitRef(Unit* unit) : unit(unit) {}
 WriteCall::WriteCall(
     bool newline, Node* file, std::vector<Item> items)
@@ -274,6 +281,9 @@ void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 const char* ClassRefValue::diagnostic_kind() const {
 	return "class_reference_value";
 }
+const char* Construct::diagnostic_kind() const {
+	return "construction";
+}
 const char* UnitRef::diagnostic_kind() const {
 	return "unit_reference";
 }
@@ -286,12 +296,39 @@ void ClassRefValue::collect_diagnostic_edges(
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(target);
 }
+void Construct::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(class_reference);
+	ctx->add_value_edge(initializer);
+	for (Node* arg : args)
+		ctx->add_value_edge(arg);
+}
 void ClassRefValue::print_diagnostic_definition(
     ErrorLetContext* ctx, std::ostringstream& out,
     unsigned) const {
 	out << "class reference "
 	    << ctx->known_type_ref(target)
 	    << " : " << ctx->known_type_ref(ty);
+}
+void Construct::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "construct "
+	    << ctx->known_type_ref(ty);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "class reference: "
+	    << ctx->known_value_ref(class_reference);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "initializer: "
+	    << ctx->known_value_ref(initializer);
+	for (Node* arg : args) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "arg: " << ctx->known_value_ref(arg);
+	}
 }
 
 const char* WriteCall::diagnostic_kind() const {

@@ -17,7 +17,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/math_intrinsics.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/math_intrinsics"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/math_intrinsics"
 

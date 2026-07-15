@@ -17,7 +17,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/case_statement.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/case_statement"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/case_statement"
 

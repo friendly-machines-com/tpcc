@@ -21,7 +21,7 @@ diff -u tests/23_packed_record.cc "$tmp/23_packed_record.cc"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/23_packed_record.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/23_packed_record"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/23_packed_record"
 
@@ -35,7 +35,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/23_packed_record"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/packed_overlay.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/packed_overlay"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_overlay"
 

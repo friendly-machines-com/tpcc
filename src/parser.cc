@@ -1196,8 +1196,69 @@ Node* Parser::parse_numeral() {
 	}
 }
 
+static bool callable_group_opens_parent(Node* binding) {
+	if (auto callable = dynamic_cast<Callable*>(binding))
+		return callable->has_overload_directive;
+	if (auto overloads = dynamic_cast<OverloadSet*>(binding)) {
+		for (Callable* callable : overloads->members)
+			if (callable->has_overload_directive)
+				return true;
+	}
+	return false;
+}
+
+/** Resolve one member name through a structural parent chain. A member
+ *  overload directive opens the same member family into the parent class or
+ *  object; it never opens lookup into a lexical or unit-global routine family.
+ *  The first closed parent group is included and then ends the family. */
+static Node* lookup_member_binding(const Frame* frame,
+    const std::string& name) {
+	std::vector<Callable*> callables;
+	for (const Frame* current = frame; current;
+	     current = current->parent) {
+		Node* binding = current->lookup_value_local(name);
+		if (!binding)
+			continue;
+		auto callable = dynamic_cast<Callable*>(binding);
+		auto overloads = dynamic_cast<OverloadSet*>(binding);
+		if (!callable && !overloads) {
+			if (callables.empty())
+				return binding;
+			break;
+		}
+		if (callable)
+			callables.push_back(callable);
+		else
+			callables.insert(
+			    callables.end(), overloads->members.begin(),
+			    overloads->members.end());
+		if (!callable_group_opens_parent(binding))
+			break;
+	}
+	if (callables.empty())
+		return nullptr;
+	if (callables.size() == 1)
+		return callables.front();
+	return new OverloadSet(std::move(callables));
+}
+
+static Node* bind_lookup_result(Node* qualifier, Node* binding) {
+	if (!qualifier || dynamic_cast<UnitRef*>(qualifier))
+		return binding;
+	if (auto property = dynamic_cast<Property*>(binding))
+		return new PropertyAccess(qualifier, property, {});
+	auto access = new MemberAccess(qualifier, binding);
+	access->ty = binding->ty;
+	return access;
+}
+
 /** Walk the scope stack top-down looking up a value-position name (variable,
- *  constant, procedure, function, builtin). Return null if not found. */
+ *  constant, procedure, function, builtin). Return null if not found.
+ *
+ *  A receiver-qualified hit selects the member lookup domain. Its callable
+ *  family is gathered only through structural parents and is returned with
+ *  that receiver bound. It must not be merged with same-named routines in
+ *  lexical or unit scopes. */
 Node* Parser::maybe_resolve_value(std::string name) {
 	std::vector<Callable*> collected;
 	// Walk top-down. First hit shadows unless it's overload-marked; then
@@ -1218,18 +1279,20 @@ Node* Parser::maybe_resolve_value(std::string name) {
 		Node* hit = it->frame->lookup_value_local(name);
 		if (!hit)
 			continue;
+		if (it->qualifier &&
+		    !dynamic_cast<UnitRef*>(it->qualifier)) {
+			if (!collected.empty())
+				break;
+			return bind_lookup_result(
+			    it->qualifier,
+			    lookup_member_binding(it->frame, name));
+		}
 		auto as_call = dynamic_cast<Callable*>(hit);
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
 		if (collected.empty() && !as_call && !as_set) {
 			// First (and terminating) hit is a non-callable value.
-			if (it->qualifier) {
-				if (auto property = dynamic_cast<Property*>(hit))
-					return new PropertyAccess(it->qualifier, property, {});
-				auto m = new MemberAccess(it->qualifier, hit);
-				m->ty = hit->ty;
-				return m;
-			}
-			return hit;
+			return bind_lookup_result(
+			    it->qualifier, hit);
 		}
 		if (as_call) {
 			if (!as_call->has_overload_directive) {
@@ -1949,9 +2012,7 @@ Node* Parser::maybe_auto_call(Node* n) {
 	// A candidate that requires args will fail there with a clear error.
 	std::vector<Node*> args;
 	auto fc = finalize_call(n, args, /*name for error*/ "", current_location());
-	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = call_result_type(fc.callee);
-	return call;
+	return make_call(fc, std::move(args));
 }
 
 static Frame* body_frame_of(Type* ty) {
@@ -1988,7 +2049,8 @@ Node* Parser::parse_member_selection(Node* base) {
 	if (!members)
 		raise_parse_error(
 		    "member access on non-composite type");
-	Node* member = members->lookup_value(member_name);
+	Node* member = lookup_member_binding(
+	    members, member_name);
 	if (!member)
 		raise_parse_error(
 		    "no member '" + member_name + "'");
@@ -2016,9 +2078,7 @@ Node* Parser::parse_designator_tail(Node* result) {
 			}
 			parse_closing_paren();
 			auto fc = finalize_call(result, args, /*name_for_error*/ "", call_location);
-			auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-			call->ty = call_result_type(fc.callee);
-			result = call;
+			result = make_call(fc, std::move(args));
 			continue;
 		} else if (maybe_parse_opening_bracket()) {
 			// Parse the complete bracket argument list before resolving it.
@@ -2236,9 +2296,7 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 		args.push_back(cast(b, common_ty));
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = call_result_type(fc.callee);
-	return call;
+	return make_call(fc, std::move(args));
 }
 
 Node* Parser::mk_assign(Node* a, Node* b) {
@@ -2280,8 +2338,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 		args.push_back(cast(b, common_ty));
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = call_result_type(fc.callee);
+	Node* call = make_call(fc, std::move(args));
 	/*	if (call->ty->return_type != boolean_type()) {
 			raise_type_mismatch("custom comparison operator '" + id + "' has wrong return type", boolean_type(), call->ty);
 		} FIXME */
@@ -2305,9 +2362,7 @@ Node* Parser::mk_membership(Node* item, Node* set) {
 	};
 	Node* fn = resolve_value("in");
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = call_result_type(fc.callee);
-	return call;
+	return make_call(fc, std::move(args));
 }
 
 Node* Parser::mk_unary_same(std::string id, Node* x) {
@@ -2323,8 +2378,7 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 	std::vector<Node*> args;
 	args.push_back(x);
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-	call->ty = call_result_type(fc.callee);
+	Node* call = make_call(fc, std::move(args));
 	/*	if (call->ty->return_type != x->ty) {
 			raise_type_mismatch("custom unary operator '" + id + "' has wrong return type", x->ty, call->ty);
 		} FIXME */
@@ -3935,8 +3989,20 @@ struct TypeBlockResolver {
 		if (auto inc = dynamic_cast<IncompleteType*>(ty)) {
 			if (!inc->resolved)
 				return fail("forward-referenced type not defined in this type block: " + inc->name);
-			if (!resolving_incomplete.insert(inc).second)
+			if (!resolving_incomplete.insert(inc).second) {
+				// A class is already a reference-shaped Pascal type, so
+				// returning or accepting the class currently being defined
+				// does not recursively embed its C++ object. Keep rejecting
+				// the corresponding by-value record cycle.
+				if (dynamic_cast<ClassType*>(
+				        inc->resolved) ||
+				    dynamic_cast<InterfaceType*>(
+				        inc->resolved)) {
+					ty = inc->resolved;
+					return true;
+				}
 				return fail("cyclic forward type reference involving: " + inc->name);
+			}
 			Type* resolved = inc->resolved;
 			if (!normalize_type(resolved))
 				return false;
@@ -4011,6 +4077,14 @@ struct TypeBlockResolver {
 				if (!normalize_node(item.lower) ||
 				    !normalize_node(item.upper))
 					return false;
+		if (auto n = dynamic_cast<Construct*>(node)) {
+			if (!normalize_node(n->class_reference) ||
+			    !normalize_node(n->initializer))
+				return false;
+			for (Node* arg : n->args)
+				if (!normalize_node(arg))
+					return false;
+		}
 		if (auto n = dynamic_cast<UnaryOperation*>(node)) {
 			if (!normalize_node(n->a))
 				return false;
@@ -4700,10 +4774,7 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 	}
 	Type* ret_ty = &unit_type();
 	if (kind == CONSTRUCTOR) {
-		if (auto ty = dynamic_cast<ClassType*>(owner)) {
-			// That's so we can emit "(new X())->Create()".
-			ret_ty = ty;
-		} else {
+		if (!dynamic_cast<ClassType*>(owner)) {
 			raise_type_kind_mismatch("expected class as owner", "class", owner);
 		}
 	} else if (kind == CLASS_CONSTRUCTOR) {
@@ -5218,10 +5289,11 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 	}
 }
 
-// Per-argument conversion costs for a candidate. Returns empty vector when
-// the candidate isn't viable. Costs sized to formals.size() (+1 for Self
-// when candidate is a Method with receiver); entries past args.size() are 0
-// (default-supplied positions).
+// Per-visible-argument conversion costs for a candidate. Returns an empty
+// vector when the candidate is not viable. Pascal binds a method receiver
+// separately and performs single dispatch after selecting a declaration from
+// its member family, so Self is deliberately not an overload-ranking
+// position. Entries past args.size() are zero for default-supplied formals.
 static bool is_ordinal_intrinsic_argument(Type* ty) {
 	while (auto subrange = dynamic_cast<SubrangeType*>(ty))
 		ty = subrange->base_type;
@@ -5231,7 +5303,8 @@ static bool is_ordinal_intrinsic_argument(Type* ty) {
 	return intrinsic_ordinal_bounds(ty, &bounds);
 }
 
-static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::vector<Node*>& args) {
+static std::vector<int> per_arg_costs(
+    Callable* c, const std::vector<Node*>& args) {
 	auto rty = static_cast<RoutineType*>(c->ty);
 	const BuiltinDesc* builtin = lookup_builtin_desc(c->cxx_name);
 
@@ -5241,16 +5314,7 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 		if (!rty->formals[i].default_value)
 			return {};
 	}
-	// Self position (if any) is prepended to the cost vector.
-	auto m = dynamic_cast<Method*>(c);
-	size_t self_slots = (m && receiver) ? 1 : 0;
-	std::vector<int> costs(self_slots + rty->formals.size(), 0);
-	if (self_slots) {
-		int sc = conversion_cost(receiver ? receiver->ty : nullptr, m->owner_class);
-		if (sc < 0)
-			return {};
-		costs[0] = sc;
-	}
+	std::vector<int> costs(rty->formals.size(), 0);
 	for (size_t i = 0; i < args.size(); i++) {
 		Type* from = args[i] ? args[i]->ty : nullptr;
 		if (builtin &&
@@ -5258,7 +5322,7 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 		    i == 0 &&
 		    (dynamic_cast<RoutineType*>(from) ||
 		     (from && from->is_reference_type()))) {
-			costs[self_slots + i] = 0;
+			costs[i] = 0;
 			continue;
 		}
 		if (rty->formals[i].ty == unknown_type()) {
@@ -5270,7 +5334,7 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 			}
 			// This is a constrained generic match. It is viable for every
 			// accepted type but should lose to a concrete exact overload.
-			costs[self_slots + i] = 1000;
+			costs[i] = 1000;
 			continue;
 		}
 			if (auto literal = dynamic_cast<String*>(args[i])) {
@@ -5280,14 +5344,14 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 				// One-byte quoted literals begin as Char, but Pascal also
 				// permits them in a string context. Keep this worse than an
 				// exact Char overload; cast() pins the selected string type.
-				costs[self_slots + i] = 1;
+				costs[i] = 1;
 				continue;
 			}
 		}
 		auto mode = rty->formals[i].mode;
 		if (mode == ParamMode::Var || mode == ParamMode::Out) {
 			if (from == rty->formals[i].ty) {
-				costs[self_slots + i] = 0;
+				costs[i] = 0;
 				continue;
 			}
 			if (rty->formals[i].ty == pointer_type() &&
@@ -5295,12 +5359,12 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 				// FPC's GetMem(out Pointer, ...) accepts storage of any
 				// typed pointer. Preserve that storage type for C++ template
 				// deduction instead of casting the out argument to void*&.
-				costs[self_slots + i] = 1;
+				costs[i] = 1;
 				continue;
 			}
 			if (auto subrange = dynamic_cast<SubrangeType*>(from)) {
 				if (subrange->base_type == rty->formals[i].ty) {
-					costs[self_slots + i] = 1;
+					costs[i] = 1;
 					continue;
 				}
 			}
@@ -5309,7 +5373,7 @@ static std::vector<int> per_arg_costs(Callable* c, Node* receiver, const std::ve
 		int cc = conversion_cost(from, rty->formals[i].ty);
 		if (cc < 0)
 			return {};
-		costs[self_slots + i] = cc;
+		costs[i] = cc;
 	}
 	return costs;
 }
@@ -5385,9 +5449,7 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		std::vector<Node*> args;
 		args.push_back(a);
 		auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), target_ty);
-		auto call = new ProcCall(fc.receiver, fc.callee, std::move(args));
-		call->ty = call_result_type(fc.callee);
-		return call;
+		return make_call(fc, std::move(args));
 
 		// return new Cast(a, target_ty); // FIXME.
 	}
@@ -5539,7 +5601,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			if (name_for_error.empty() && !c->pas_name.empty()) {
 				name_for_error = c->pas_name;
 			}
-			auto costs = per_arg_costs(c, receiver, args);
+			auto costs = per_arg_costs(c, args);
 			if (!costs.empty() &&
 			    (!expected_return_type ||
 			     static_cast<RoutineType*>(c->ty)->return_type == expected_return_type))
@@ -5580,6 +5642,66 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			emit_parse_error_at(
 			    error_location,
 			    "routine value has the wrong result type");
+	}
+	if (auto method = dynamic_cast<Method*>(chosen)) {
+		if (!receiver)
+			emit_parse_error_at(
+			    error_location,
+			    "method '" + name_for_error +
+			        "' has no bound receiver");
+		auto receiver_class_ref =
+		    dynamic_cast<ClassRefType*>(receiver->ty);
+		switch (method->ty->kind) {
+		case CLASS_METHOD: {
+			auto owner =
+			    dynamic_cast<ClassType*>(
+			        method->owner_class);
+			ClassType* actual = receiver_class_ref
+			    ? dynamic_cast<ClassType*>(
+			          receiver_class_ref->target)
+			    : dynamic_cast<ClassType*>(
+			          receiver->ty);
+			bool compatible = false;
+			for (ClassType* current = actual; current;
+			     current = current->super)
+				if (current == owner) {
+					compatible = true;
+					break;
+				}
+			if (!owner || !compatible)
+				emit_parse_error_at(
+				    error_location,
+				    "class method '" +
+				        name_for_error +
+				        "' has an incompatible receiver");
+			break;
+		}
+		case CONSTRUCTOR:
+			// A class reference forms a construction expression; an
+			// existing object invokes the same declaration as an
+			// initializer method. The two applications are separated
+			// after overload selection.
+			break;
+		case METHOD:
+		case DESTRUCTOR:
+			if (receiver_class_ref)
+				emit_parse_error_at(
+				    error_location,
+				    "instance method '" +
+				        name_for_error +
+				        "' cannot be called through a class reference");
+			break;
+		case CLASS_CONSTRUCTOR:
+			emit_parse_error_at(
+			    error_location,
+			    "class constructor is not user-callable");
+			break;
+		case ROUTINE:
+			emit_parse_error_at(
+			    error_location,
+			    "method declaration has routine receiver kind");
+			break;
+		}
 	}
 	// Materialize missing args from defaults.
 	auto rty = chosen
@@ -5700,6 +5822,38 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	}
 	return FinalizedCall{
 	    receiver, chosen ? static_cast<Node*>(chosen) : target};
+}
+
+Node* Parser::make_call(
+    FinalizedCall finalized, std::vector<Node*> args) {
+	if (auto initializer =
+	        dynamic_cast<Method*>(finalized.callee);
+	    initializer &&
+	    initializer->ty->kind == CONSTRUCTOR &&
+	    finalized.receiver) {
+		if (auto class_reference =
+		        dynamic_cast<ClassRefType*>(
+		            finalized.receiver->ty)) {
+			Type* target = class_reference->target;
+			while (auto incomplete =
+			           dynamic_cast<IncompleteType*>(
+			               target))
+				target = incomplete->resolved;
+			auto result_type =
+			    dynamic_cast<ClassType*>(target);
+			if (!result_type)
+				raise_parse_error(
+				    "constructor class reference does not target a class");
+			return new Construct(
+			    finalized.receiver, initializer,
+			    std::move(args), result_type);
+		}
+	}
+	auto call = new ProcCall(
+	    finalized.receiver, finalized.callee,
+	    std::move(args));
+	call->ty = call_result_type(finalized.callee);
+	return call;
 }
 
 Unit* Parser::load_or_get_unit(std::string name) {

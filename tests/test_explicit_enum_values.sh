@@ -37,7 +37,7 @@ done
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/explicit_enum_values.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/explicit_enum_values"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/explicit_enum_values"
 

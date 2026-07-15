@@ -21,7 +21,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/pos_builtin.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/pos_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/pos_builtin"
 

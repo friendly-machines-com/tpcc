@@ -39,7 +39,7 @@ done
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/shortstring_type.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/shortstring_type_pascal"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_pascal"
 

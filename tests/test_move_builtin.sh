@@ -23,7 +23,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/move_builtin.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/move_builtin_pascal"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/move_builtin_pascal"
 

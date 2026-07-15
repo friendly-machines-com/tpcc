@@ -17,7 +17,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/generic_intrinsics.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/generic_intrinsics"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/generic_intrinsics"
 

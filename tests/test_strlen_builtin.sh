@@ -18,7 +18,7 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/strlen_builtin.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/strlen_builtin_pascal"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/strlen_builtin_pascal"
 

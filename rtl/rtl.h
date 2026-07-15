@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <cstdio>
 #include <iomanip>
@@ -1890,6 +1891,57 @@ inline void p_freemem(t_pointer value, t_ptruint size) {
 inline t_ptruint p_freemem(t_pointer value) {
 	std::free(value);
 	return 0;
+}
+
+// A generated metaclass cannot define `new T` until its enclosing object T is
+// complete, so its out-of-class m_allocate definition calls this template.
+// Abstract generated C++ classes must still have a valid metaclass vtable;
+// they produce no instance and are rejected by construction before use.
+template<typename T>
+inline T* m_allocate_object() {
+	if constexpr (std::is_abstract_v<T>)
+		return nullptr;
+	else
+		return new T{};
+}
+
+// Default TObject.NewInstance preserves the dynamic metaclass receiver. Every
+// generated metaclass overrides m_allocate covariantly, so an inherited
+// NewInstance body allocates the exact represented object class.
+template<typename Meta>
+inline auto m_new_instance(Meta* meta)
+    -> decltype(meta->m_allocate()) {
+	return meta->m_allocate();
+}
+
+template<typename Object>
+inline void m_free_object(Object* object) {
+	delete object;
+}
+
+// Construct is the one allocation boundary. Initializer remains an ordinary
+// Unit-returning object method, so inherited and virtual constructor bodies
+// use the already allocated most-derived C++ object. The pointer-to-member
+// template argument is the declaration selected by Pascal overload
+// resolution; C++ is not asked to select the overload again.
+template<typename Result, auto Initializer,
+         typename Meta, typename... Args>
+inline Result* m_construct(
+    Meta* meta, Args&&... args) {
+	auto* object =
+	    static_cast<Result*>(
+	        meta->p_newinstance());
+	if (!object)
+		throw std::bad_alloc();
+	try {
+		(object->*Initializer)(
+		    std::forward<Args>(args)...);
+		object->p_afterconstruction();
+		return object;
+	} catch (...) {
+		delete object;
+		throw;
+	}
 }
 
 #if 0

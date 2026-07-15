@@ -332,6 +332,11 @@ protected:
 	                           std::string name_for_error,
 	                           SourceLocation error_location,
 	                           Type* expected_return_type = nullptr);
+	/** Form the semantic application after overload selection. Constructor
+	 *  selection through a class reference becomes Construct; every other
+	 *  selected callable remains ProcCall. */
+	Node* make_call(
+	    FinalizedCall finalized, std::vector<Node*> args);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();

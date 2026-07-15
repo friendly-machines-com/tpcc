@@ -34,7 +34,7 @@ done
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/typed_const_aggregates.cc" \
-	rtl/system.cc \
+	"$tmp/system.cc" \
 	-o "$tmp/typed_const_aggregates"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/typed_const_aggregates"
 
