@@ -5,7 +5,8 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tmp=${TMPDIR:-/tmp}/tpcc-unit-uses-scope-test.$$
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/positive" "$tmp/no-interface-reexport" \
-	"$tmp/no-implementation-reexport" "$tmp/cycles"
+	"$tmp/no-implementation-reexport" "$tmp/cycles" \
+	"$tmp/explicit" "$tmp/shadow-type" "$tmp/shadow-value"
 
 cd "$root"
 
@@ -24,6 +25,24 @@ cd "$root"
 	-o "$tmp/positive/scope_main"
 
 ASAN_OPTIONS=detect_leaks=1 "$tmp/positive/scope_main"
+
+for case in explicit shadow-type shadow-value
+do
+	source=$(printf '%s' "$case" | tr '-' '_')
+	./mp -Furtl -Futests/unit_uses_scope \
+		-o"$tmp/$case/main.cc" \
+		"tests/unit_uses_scope/scope_$source.pp"
+	"${CXX:-g++}" \
+		-std=c++20 \
+		-Wall \
+		-Wextra \
+		-fsanitize=address,undefined \
+		-I"$tmp/$case" \
+		-Irtl \
+		"$tmp/$case"/*.cc \
+		-o "$tmp/$case/main"
+	ASAN_OPTIONS=detect_leaks=1 "$tmp/$case/main"
+done
 
 if ./mp -Furtl -Futests/unit_uses_scope \
 	-o"$tmp/no-interface-reexport/main.cc" \

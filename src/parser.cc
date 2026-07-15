@@ -1204,6 +1204,14 @@ Node* Parser::maybe_resolve_value(std::string name) {
 	// keep walking to aggregate additional overload-marked hits from lower
 	// scopes (cross-unit overloading).
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+		if (auto unit =
+		        dynamic_cast<UnitRef*>(it->qualifier);
+		    unit && unit->unit &&
+		    unit->unit->name == name) {
+			if (collected.empty())
+				return unit;
+			break;
+		}
 		// The parser scope stack is already the chain being searched here. Use the
 		// local Frame lookup so a parent Frame reached through lookup_value() is not
 		// seen again when the loop later visits that parent scope entry.
@@ -1244,6 +1252,21 @@ Node* Parser::maybe_resolve_value(std::string name) {
 	if (collected.size() == 1)
 		return collected[0];
 	return new OverloadSet(std::move(collected));
+}
+
+UnitRef* Parser::resolve_unit_type_qualifier(
+    std::string name) {
+	if (maybe_resolve_type(name))
+		raise_parse_error(
+		    "type identifier '" + name +
+		    "' is not a unit qualifier");
+	Node* binding = maybe_resolve_value(name);
+	if (auto unit = dynamic_cast<UnitRef*>(binding))
+		return unit;
+	raise_parse_error(
+	    "identifier '" + name +
+	    "' is not a unit qualifier");
+	return nullptr;
 }
 
 /** Walk the scope stack top-down looking up a value-position name. Raise if not found. */
@@ -1499,6 +1522,21 @@ Node* Parser::parse_value() {
 }
 
 Node* Parser::parse_value_from_identifier(std::string id) {
+	if (maybe_parse_period()) {
+		Node* base = maybe_resolve_value(id);
+		if (!base) {
+			if (auto class_type =
+			        dynamic_cast<ClassType*>(
+			            maybe_resolve_type(id)))
+				base =
+				    new ClassRefValue(class_type);
+		}
+		if (!base)
+			raise_parse_error(
+			    "unresolved member qualifier: " +
+			    id);
+		return parse_member_selection(base);
+	}
 	if (Node* value = maybe_resolve_value(id)) {
 		// Within a function body, a bare occurrence of that function's name
 		// denotes its hidden result variable.  Parentheses still mean a call,
@@ -1932,32 +1970,39 @@ static Frame* body_frame_of(Type* ty) {
 	return nullptr;
 }
 
+static Frame* body_frame_of(Node* value) {
+	if (auto unit = dynamic_cast<UnitRef*>(value))
+		return unit->unit ? unit->unit->frame : nullptr;
+	return body_frame_of(value ? value->ty : nullptr);
+}
+
 Node* Parser::parse_designator() {
 	return parse_designator_tail(parse_value());
+}
+
+Node* Parser::parse_member_selection(Node* base) {
+	// A callable base is invoked before selecting a member from its result.
+	base = maybe_auto_call(base);
+	std::string member_name = parse_identifier();
+	Frame* members = body_frame_of(base);
+	if (!members)
+		raise_parse_error(
+		    "member access on non-composite type");
+	Node* member = members->lookup_value(member_name);
+	if (!member)
+		raise_parse_error(
+		    "no member '" + member_name + "'");
+	if (auto property = dynamic_cast<Property*>(member))
+		return new PropertyAccess(base, property, {});
+	auto result = new MemberAccess(base, member);
+	result->ty = member->ty;
+	return result;
 }
 
 Node* Parser::parse_designator_tail(Node* result) {
 	while (true) {
 		if (maybe_parse_period()) {
-			// Binary infix: RHS is a single identifier token. Before applying,
-			// if LHS is a bare callable it must be auto-called (else the `.`
-			// would try to look up a member of a callable, which is nonsense).
-			result = maybe_auto_call(result);
-			std::string member_name = parse_identifier();
-			Type* ct = result->ty;
-			Frame* members = body_frame_of(ct);
-			if (!members)
-				raise_parse_error("member access on non-composite type");
-			Node* member = members->lookup_value(member_name);
-			if (!member)
-				raise_parse_error("no member '" + member_name + "'");
-			if (auto property = dynamic_cast<Property*>(member)) {
-				result = new PropertyAccess(result, property, {});
-			} else {
-				auto ma = new MemberAccess(result, member);
-				ma->ty = member->ty;
-				result = ma;
-			}
+			result = parse_member_selection(result);
 		} else if (input_token == "(") {
 			SourceLocation call_location = current_location();
 			parse_opening_paren();
@@ -2124,6 +2169,8 @@ bool Parser::is_referenceable(Node* n) {
 	if (auto member = dynamic_cast<MemberAccess*>(n)) {
 		if (!dynamic_cast<StorageSlot*>(member->b))
 			return false;
+		if (dynamic_cast<UnitRef*>(member->a))
+			return true;
 		if (member->a->ty && member->a->ty->is_reference_type())
 			return true;
 		return is_referenceable(member->a);
@@ -3636,6 +3683,21 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 			std::string id = parse_identifier();
 			if (maybe_parse_period_period())
 				return reuse_subrange_type(parse_value_from_identifier(id), parse_subrange_bound_expression());
+			if (maybe_parse_period()) {
+				UnitRef* unit =
+				    resolve_unit_type_qualifier(id);
+				std::string member =
+				    parse_identifier();
+				Type* result =
+				    unit->unit->frame->lookup_type(
+				        member);
+				if (!result)
+					raise_type_parse_error(
+					    "unit '" + id +
+					    "' has no type '" +
+					    member + "'");
+				return result;
+			}
 			if (token_continues_subrange_bound_after_primary(input_token)) {
 				Node* lower_bound = parse_subrange_bound_expression_after_identifier(id);
 				parse_period_period();
@@ -4155,8 +4217,7 @@ struct TypeBlockResolver {
 			return normalize_frame(o->children);
 		}
 		if (auto m = dynamic_cast<ModuleType*>(ty))
-			return normalize_frame(m->interface_children) &&
-			       normalize_frame(m->implementation_children);
+			return normalize_frame(m->children);
 		return true;
 	}
 };
@@ -5451,7 +5512,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	Node* receiver = nullptr;
 	if (auto ma = dynamic_cast<MemberAccess*>(target)) {
 		if (dynamic_cast<Callable*>(ma->b) || dynamic_cast<OverloadSet*>(ma->b)) {
-			receiver = ma->a;
+			if (!dynamic_cast<UnitRef*>(ma->a))
+				receiver = ma->a;
 			target = ma->b;
 		}
 	}
@@ -5709,8 +5771,9 @@ void Parser::parse_unit_body() {
 	parse_keyword("interface");
 	// Install the interface lookup path in increasing precedence. Declaration
 	// ownership is independent and is set explicitly after this path exists.
-	// Since a user of X opens only X's interface Frame, X's own uses do not
-	// become re-exports.
+	// Used-unit frames remain separate lookup entries: their declarations are
+	// never inserted into this unit frame and therefore cannot be re-exported
+	// through it.
 	std::vector<Unit*> iface_units;
 	if (Unit* sys = implicit_uses(name))
 		iface_units.push_back(sys);
@@ -5721,7 +5784,7 @@ void Parser::parse_unit_body() {
 		parse_semicolon();
 	}
 	for (Unit* used : iface_units)
-		push_scope(used->frame);
+		push_scope(used->frame, used->reference);
 	push_scope(unit_frame);
 	push_declaration_frame(unit_frame);
 	if (emitter) {
@@ -5750,7 +5813,7 @@ void Parser::parse_unit_body() {
 	pop_declaration_frame();
 	pop_scope(); // unit
 	for (Unit* used : impl_units)
-		push_scope(used->frame);
+		push_scope(used->frame, used->reference);
 	push_scope(unit_frame);
 	push_declaration_frame(unit_frame);
 	if (emitter) {
@@ -5843,7 +5906,7 @@ void Parser::parse_program_or_unit() {
 			parse_semicolon();
 		}
 		for (Unit* used : prog_units)
-			push_scope(used->frame);
+			push_scope(used->frame, used->reference);
 		push_scope(program_frame);
 		push_declaration_frame(program_frame);
 		if (emitter) {

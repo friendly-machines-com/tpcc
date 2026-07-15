@@ -1,5 +1,6 @@
 #include "cst.h"
 #include "builtins.h"
+#include "units.h"
 #include <iomanip>
 #include <limits>
 #include <sstream>
@@ -37,6 +38,7 @@ ClassRefValue::ClassRefValue(ClassType* target)
 	this->ty = new ClassRefType(
 	    target ? target->source_location : SourceLocation{}, target);
 }
+UnitRef::UnitRef(Unit* unit) : unit(unit) {}
 WriteCall::WriteCall(
     bool newline, Node* file, std::vector<Item> items)
     : newline(newline), file(file), items(std::move(items)) {}
@@ -271,6 +273,13 @@ void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 
 const char* ClassRefValue::diagnostic_kind() const {
 	return "class_reference_value";
+}
+const char* UnitRef::diagnostic_kind() const {
+	return "unit_reference";
+}
+void UnitRef::print_diagnostic_definition(
+    ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << " " << (unit ? unit->name : "<null>");
 }
 void ClassRefValue::collect_diagnostic_edges(
     ErrorLetContext* ctx) const {

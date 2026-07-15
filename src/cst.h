@@ -106,6 +106,20 @@ public:
 	    unsigned indent) const override;
 };
 
+/** The canonical designator for a Pascal unit environment. It is neither a
+ * runtime value nor a type. MemberAccess uses it as the base for the same
+ * `base.member` representation used by records, objects, and class
+ * references; emission lowers this base to the unit's static C++ namespace. */
+class UnitRef: public Node {
+public:
+	Unit* unit;
+	explicit UnitRef(Unit* unit);
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
 /** One Pascal Write/WriteLn invocation. These routines have compiler grammar,
  * not an ordinary RoutineType signature: the optional first Text argument and
  * every value's `:width[:precision]` qualifiers must remain grouped. */

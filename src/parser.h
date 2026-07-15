@@ -26,6 +26,7 @@ class Property;
 class PropertyAccess;
 class Builtin;
 class RoutineRef;
+class UnitRef;
 
 /** Shared compiler-wide options set from the command line and consulted by
  *  the tokenizer's directive handling and by unit/include file lookup. One
@@ -196,6 +197,7 @@ protected:
 	Node* parse_typed_const_initializer(Type* ty);
 	Node* resolve_lvalue(std::string name);
 	Node* maybe_resolve_value(std::string name);
+	UnitRef* resolve_unit_type_qualifier(std::string name);
 	Node* resolve_value(std::string name);
 	Type* maybe_resolve_type(std::string name);
 	Type* resolve_type(std::string name, bool allow_forward);
@@ -225,6 +227,7 @@ protected:
 	 *  via maybe_auto_call. */
 	Node* parse_designator();
 	Node* parse_designator_tail(Node* result);
+	Node* parse_member_selection(Node* base);
 	/** If NODE is a bare callable (Callable, OverloadSet, or MemberAccess
 	 *  whose member is either) AND at least one candidate can be invoked
 	 *  parameterlessly (no formals or all formals defaulted), wrap it in a
@@ -301,7 +304,7 @@ protected:
 	 *  and returns the Units in source order. This does not mutate `scopes`:
 	 *  uses makes another unit available for lookup, but does not make that
 	 *  unit the owner of declarations which follow the uses clause. The caller
-	 *  installs the returned interface frames below its own declaration frame. */
+	 *  opens each returned unit frame below its own declaration frame. */
 	std::vector<Unit*> parse_uses_clause(bool in_interface, std::string current_name);
 	/** Implicitly load the `system` unit. USER_NAME is the unit/program being
 	 *  parsed; if it case-insensitively equals "system" we're parsing system

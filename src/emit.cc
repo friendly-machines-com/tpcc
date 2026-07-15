@@ -1819,6 +1819,14 @@ void Emitter::emit_expression(Node* expr) {
 		unhandled_node("unsupported property read accessor", accessor);
 	}
 	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
+		if (dynamic_cast<UnitRef*>(m->a)) {
+			// A unit is a static declaration environment, not an object
+			// receiver. The selected declaration already carries its owning
+			// unit, so the ordinary owned-name emitter produces
+			// `::u_unit::member`.
+			emit_expression(m->b);
+			return;
+		}
 		if (auto slot = dynamic_cast<StorageSlot*>(m->b);
 		    slot &&
 		    slot->kind == StorageSlot::Kind::ClassVariable) {

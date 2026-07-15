@@ -1,4 +1,5 @@
 #include "units.h"
+#include "cst.h"
 #include "frame.h"
 #include <cstdio>
 #include <cstdlib>
@@ -12,6 +13,7 @@ Unit::Unit(std::string name, Frame* frame, bool is_program)
       cxx_namespace(cxx_unit_name(name)),
       frame(frame),
       is_program(is_program),
+      reference(new UnitRef(this)),
       phase(UnitPhase::Unparsed),
       initialization_cxx_name("tpcc_initialize_" + name),
       finalization_cxx_name("tpcc_finalize_" + name) {}

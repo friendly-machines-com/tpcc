@@ -5,6 +5,7 @@
 
 class Frame;
 class Method;
+class UnitRef;
 
 /** C++ namespace token used to lower a Pascal unit. Pascal identifiers have
  * already been normalized to lowercase by the tokenizer. */
@@ -37,6 +38,7 @@ public:
 	std::string cxx_namespace;
 	Frame* frame;
 	bool is_program;
+	UnitRef* reference;
 	UnitPhase phase;
 	std::string initialization_cxx_name;
 	std::string finalization_cxx_name;

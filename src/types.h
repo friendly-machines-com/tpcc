@@ -342,9 +342,8 @@ struct PointerType: public Type {
 /** The type of a Pascal `unit X;` module. Renamed from UnitType to avoid
  *  colliding with the type-theoretic UnitType (one-inhabitant type) below. */
 struct ModuleType: public Type {
-	Frame* interface_children;
-	Frame* implementation_children;
-	ModuleType(SourceLocation source_location, Frame* interface_children, Frame* implementation_children);
+	Frame* children;
+	ModuleType(SourceLocation source_location, Frame* children);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

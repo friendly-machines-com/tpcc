@@ -115,10 +115,10 @@ ObjectType::ObjectType(SourceLocation source_location, Frame* children, ObjectTy
 	this->super = super;
 }
 
-ModuleType::ModuleType(SourceLocation source_location, Frame* interface_children, Frame* implementation_children)
+ModuleType::ModuleType(
+    SourceLocation source_location, Frame* children)
     : Type(std::move(source_location)) {
-	this->interface_children = interface_children;
-	this->implementation_children = implementation_children;
+	this->children = children;
 }
 
 UnitType::UnitType(SourceLocation source_location) : Type(std::move(source_location)) {}
@@ -1000,8 +1000,8 @@ void PointerType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream
 
 const char* ModuleType::diagnostic_kind() const { return "module"; }
 void ModuleType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
-	ctx->add_frame_edge(interface_children, DiagnosticFrameUse::ModuleMembers);
-	ctx->add_frame_edge(implementation_children, DiagnosticFrameUse::ModuleMembers);
+	ctx->add_frame_edge(
+	    children, DiagnosticFrameUse::ModuleMembers);
 }
 void ModuleType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
