@@ -1809,9 +1809,10 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 Node* Parser::parse_inherited() {
 	consume(); // `inherited`
 	if (current_routine &&
-	    current_routine->ty->kind == CLASS_CONSTRUCTOR)
+	    (current_routine->ty->kind == CLASS_CONSTRUCTOR ||
+	     current_routine->ty->kind == CLASS_DESTRUCTOR))
 		raise_parse_error(
-		    "inherited is not supported in a class constructor");
+		    "inherited is not supported in a class lifecycle hook");
 
 	std::string name;
 	auto opt = maybe_parse_identifier();
@@ -2925,16 +2926,19 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
 			if (dynamic_cast<PackedRecordType*>(owner_class))
 				raise_parse_error("methods inside packed records are not implemented");
-			if (is_class && peek_keyword("destructor"))
-				raise_parse_error(
-				    "class destructor lifecycle hooks are not implemented");
-			if (is_class && peek_keyword("constructor")) {
+			if (is_class &&
+			    (peek_keyword("constructor") ||
+			     peek_keyword("destructor"))) {
 				auto class_type =
 				    dynamic_cast<ClassType*>(owner_class);
 				if (!class_type)
 					raise_parse_error(
-					    "class constructor requires a class");
-				parse_class_constructor_prototype(class_type);
+					    "class lifecycle hook requires a class");
+				parse_class_lifecycle_prototype(
+				    class_type,
+				    peek_keyword("constructor")
+				        ? CLASS_CONSTRUCTOR
+				        : CLASS_DESTRUCTOR);
 			} else {
 				parse_method_prototype(body, owner_class,
 				    peek_keyword("function"),
@@ -4346,6 +4350,7 @@ struct TypeBlockResolver {
 				if (!normalize_type_as(iface, "implemented interface"))
 					return false;
 			return normalize_node(c->class_constructor) &&
+			       normalize_node(c->class_destructor) &&
 			       normalize_frame(c->children);
 		}
 		if (auto i = dynamic_cast<InterfaceType*>(ty)) {
@@ -4859,11 +4864,12 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		if (!dynamic_cast<ClassType*>(owner)) {
 			raise_type_kind_mismatch("expected class as owner", "class", owner);
 		}
-	} else if (kind == CLASS_CONSTRUCTOR) {
-		// A lifecycle class constructor does not construct an object and has
-		// no result. Its internal receiver is a metaclass only so the body can
-		// reuse class-method lowering; it never enters ordinary constructor
-		// allocation or owner-class result typing.
+	} else if (kind == CLASS_CONSTRUCTOR ||
+	           kind == CLASS_DESTRUCTOR) {
+		// Lifecycle hooks neither construct nor destroy an object instance and
+		// have no result. Their internal receiver is a metaclass only so their
+		// bodies can reuse class-method lowering; they never enter ordinary
+		// constructor allocation or object-destructor lowering.
 		ret_ty = &unit_type();
 	} else if (is_function) {
 		parse_colon();
@@ -4920,37 +4926,58 @@ Type* Parser::parse_operator_type() {
 	return parse_routine_signature(false, true, true, ROUTINE);
 }
 
-void Parser::parse_class_constructor_prototype(
-    ClassType* owner_class) {
-	parse_keyword("constructor");
+void Parser::parse_class_lifecycle_prototype(
+    ClassType* owner_class, RoutineKind kind) {
+	if (kind != CLASS_CONSTRUCTOR &&
+	    kind != CLASS_DESTRUCTOR)
+		raise_parse_error(
+		    "internal error: invalid class lifecycle kind");
+	const bool constructing =
+	    kind == CLASS_CONSTRUCTOR;
+	const char* lifecycle_name =
+	    constructing ? "class constructor" : "class destructor";
+	parse_keyword(
+	    constructing ? "constructor" : "destructor");
 	std::string pas_name = parse_identifier();
 	RoutineType* sig = parse_routine_signature(
-	    true, false, false, CLASS_CONSTRUCTOR, owner_class);
+	    true, false, false, kind, owner_class);
 	if (!sig->formals.empty())
 		raise_parse_error(
-		    "class constructor cannot have parameters");
+		    std::string(lifecycle_name) +
+		    " cannot have parameters");
 	parse_semicolon();
 
-	// These directives all describe user-callable or dispatchable overloads.
-	// A class constructor is instead one compiler-scheduled hook per class.
+	// These directives all describe user-callable or dispatchable overloads;
+	// lifecycle hooks are instead compiler-scheduled, nonvirtual operations.
 	if (peek_keyword("overload") || peek_keyword("virtual") ||
 	    peek_keyword("dynamic") || peek_keyword("override") ||
 	    peek_keyword("abstract"))
 		raise_parse_error(
-		    "class constructor cannot have routine directives");
-	if (owner_class->class_constructor)
+		    std::string(lifecycle_name) +
+		    " cannot have routine directives");
+	Method*& slot = constructing
+	    ? owner_class->class_constructor
+	    : owner_class->class_destructor;
+	if (slot)
 		raise_parse_error(
-		    "only one class constructor may be declared in a class");
+		    std::string("only one ") +
+		    lifecycle_name +
+		    " may be declared in a class");
 
 	auto method = new Method(
-	    "m_init", pas_name, sig, false, owner_class,
+	    constructing ? "m_init" : "m_fini",
+	    pas_name, sig, false, owner_class,
 	    Method::VirtualKind::None);
 	method->ty = sig;
-	owner_class->class_constructor = method;
+	slot = method;
 	if (!current_unit)
 		raise_parse_error(
-		    "class constructor declared outside a unit or program");
-	current_unit->class_constructors.push_back(method);
+		    std::string(lifecycle_name) +
+		    " declared outside a unit or program");
+	auto& scheduled = constructing
+	    ? current_unit->class_constructors
+	    : current_unit->class_destructors;
+	scheduled.push_back(method);
 }
 
 // Class Member Prototype Registration (Value Level)
@@ -5126,7 +5153,8 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		// and needs a pointer wrapper for member-access emission.
 		Type* self_ty = nullptr;
 		if (target->ty->kind == CLASS_METHOD ||
-		    target->ty->kind == CLASS_CONSTRUCTOR) {
+		    target->ty->kind == CLASS_CONSTRUCTOR ||
+		    target->ty->kind == CLASS_DESTRUCTOR) {
 			self_ty = new ClassRefType(current_location(), m->owner_class);
 		} else if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
 			self_ty = m->owner_class;
@@ -5134,11 +5162,12 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 			self_ty = new PointerType(current_location(), m->owner_class);
 		}
 		receiver_slot = new StorageSlot("this", self_ty);
-		// The generated m_meta::m_init body needs a C++ receiver so class
-		// members can be lowered through the exact class reference. Pascal
-		// nevertheless specifies no Self for a class constructor, so do not
-		// put a `self` identifier in its body frame.
-		if (target->ty->kind != CLASS_CONSTRUCTOR)
+		// The generated m_meta lifecycle body needs a C++ receiver so class
+		// members can be lowered through the exact class reference. FPC treats
+		// both lifecycle hooks as static class methods, so neither has a
+		// Pascal-visible Self identifier.
+		if (target->ty->kind != CLASS_CONSTRUCTOR &&
+		    target->ty->kind != CLASS_DESTRUCTOR)
 			body_frame->register_variable(
 			    "self", receiver_slot, self_ty);
 		push_scope(owner_frame, receiver_slot);
@@ -5230,29 +5259,42 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		Frame* owner_frame = get_type_body_frame(owner_ty);
 		if (!owner_frame)
 			raise_parse_error("'" + first_name + "' is not a class/record/object");
-		if (is_class && is_destructor)
-			raise_parse_error(
-			    "class destructor lifecycle hooks are not implemented");
-		if (is_class && is_constructor) {
+		if (is_class &&
+		    (is_constructor || is_destructor)) {
 			auto class_type = dynamic_cast<ClassType*>(owner_ty);
 			if (!class_type)
 				raise_parse_error(
-				    "class constructor implementation requires a class");
-			Method* method = class_type->class_constructor;
+				    "class lifecycle implementation requires a class");
+			const bool constructing = is_constructor;
+			const char* lifecycle_name =
+			    constructing
+			        ? "class constructor"
+			        : "class destructor";
+			RoutineKind kind = constructing
+			    ? CLASS_CONSTRUCTOR
+			    : CLASS_DESTRUCTOR;
+			Method* method = constructing
+			    ? class_type->class_constructor
+			    : class_type->class_destructor;
 			if (!method || method->pas_name != method_name)
 				raise_parse_error(
-				    "no class constructor '" + method_name +
+				    "no " +
+				    std::string(lifecycle_name) +
+				    " '" + method_name +
 				    "' on '" + first_name + "'");
 			RoutineType* sig = parse_routine_signature(
-			    true, false, false, CLASS_CONSTRUCTOR,
+			    true, false, false, kind,
 			    owner_ty);
 			if (!sig->formals.empty())
 				raise_parse_error(
-				    "class constructor cannot have parameters");
+				    std::string(lifecycle_name) +
+				    " cannot have parameters");
 			parse_semicolon();
 			if (method->has_body)
 				raise_parse_error(
-				    "duplicate implementation of class constructor '" +
+				    "duplicate implementation of " +
+				    std::string(lifecycle_name) +
+				    " '" +
 				    method_name + "'");
 			parse_routine_body(method, owner_frame);
 			return;
@@ -5779,9 +5821,10 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				        "' cannot be called through a class reference");
 			break;
 		case CLASS_CONSTRUCTOR:
+		case CLASS_DESTRUCTOR:
 			emit_parse_error_at(
 			    error_location,
-			    "class constructor is not user-callable");
+			    "class lifecycle hook is not user-callable");
 			break;
 		case ROUTINE:
 			emit_parse_error_at(
@@ -6078,7 +6121,7 @@ void Parser::parse_unit_body() {
 		unit->has_initialization = true;
 		for (Method* method : unit->class_constructors)
 			if (emitter)
-				emitter->emit_class_constructor_call(method);
+				emitter->emit_class_lifecycle_call(method);
 	}
 	if (maybe_parse_keyword("begin")) {
 		unit->has_initialization = true;
@@ -6099,6 +6142,15 @@ void Parser::parse_unit_body() {
 	    maybe_parse_keyword("finalization")) {
 		unit->has_finalization = true;
 		parse_unit_statement_sequence(false);
+	}
+	if (!unit->class_destructors.empty()) {
+		unit->has_finalization = true;
+		// FPC appends lifecycle destructors after the user's finalization
+		// statements. It uses the same declaration-order structure walk as
+		// constructors, so parents precede descendants here as well.
+		for (Method* method : unit->class_destructors)
+			if (emitter)
+				emitter->emit_class_lifecycle_call(method);
 	}
 	if (emitter)
 		emitter->emit_unit_lifecycle_close();
@@ -6175,17 +6227,26 @@ void Parser::parse_program_or_unit() {
 				        used->initialization_cxx_name,
 				        used->finalization_cxx_name});
 			}
-			emitter->emit_main_prologue(lifecycle_hooks);
+			emitter->emit_main_prologue(
+			    lifecycle_hooks,
+			    unit->class_destructors);
 			// Program-local class hooks have the same position as unit class
 			// hooks: dependency units are ready, while user program statements
 			// have not begun.
 			for (Method* method : unit->class_constructors)
-				emitter->emit_class_constructor_call(method);
+				emitter->emit_class_lifecycle_call(method);
+			// Arm program finalization only after every program class
+			// constructor completed. This mirrors the per-unit rule that a
+			// partially initialized lifecycle is not finalized.
+			if (!unit->class_destructors.empty())
+				emitter
+				    ->emit_program_finalizer_registration();
 		}
 		parse_block_body();
 		parse_keyword("end");
 		if (emitter)
-			emitter->emit_main_epilogue();
+			emitter->emit_main_epilogue(
+			    !unit->class_destructors.empty());
 		pop_declaration_frame();
 		pop_scope(); // program
 		for (size_t i = 0; i < prog_units.size(); i++)

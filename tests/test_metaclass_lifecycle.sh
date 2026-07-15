@@ -19,10 +19,24 @@ then
 	exit 1
 fi
 
+if test "$(rg -F -c 'void m_fini();' \
+	"$tmp/metaclass_lifecycle.cc")" -ne 2
+then
+	echo "class destructors were not emitted exactly once per declaring metaclass" >&2
+	exit 1
+fi
+
 if test "$(rg -F -c 'void p_initialize();' \
 	"$tmp/metaclass_lifecycle.cc")" -ne 1
 then
 	echo "class constructor did not remain separate from its same-named ordinary method" >&2
+	exit 1
+fi
+
+if test "$(rg -F -c 'void p_finalize();' \
+	"$tmp/metaclass_lifecycle.cc")" -ne 1
+then
+	echo "class destructor did not remain separate from its same-named ordinary method" >&2
 	exit 1
 fi
 
@@ -41,10 +55,12 @@ fi
 actual=$("$tmp/metaclass_lifecycle")
 expected='base
 child
-11'
+11
+base final
+child final'
 if test "$actual" != "$expected"
 then
-	echo "unexpected class-constructor order or class-variable value" >&2
+	echo "unexpected class lifecycle order or class-variable value" >&2
 	printf 'expected:\n%s\nactual:\n%s\n' "$expected" "$actual" >&2
 	exit 1
 fi

@@ -930,6 +930,7 @@ void ClassType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	for (auto* i : implemented_interfaces)
 		ctx->add_type_edge(i);
 	ctx->add_value_edge(class_constructor);
+	ctx->add_value_edge(class_destructor);
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
 }
@@ -950,6 +951,11 @@ void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringst
 		ctx->indent(out, indent + 1);
 		out << "class constructor: "
 		    << ctx->known_value_ref(class_constructor) << "\n";
+	}
+	if (class_destructor) {
+		ctx->indent(out, indent + 1);
+		out << "class destructor: "
+		    << ctx->known_value_ref(class_destructor) << "\n";
 	}
 	ctx->print_frame_members(out, children, indent + 1);
 	ctx->indent(out, indent);
@@ -1063,6 +1069,8 @@ void RoutineType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostring
 		out << "constructor";
 	else if (kind == CLASS_CONSTRUCTOR)
 		out << "class_constructor";
+	else if (kind == CLASS_DESTRUCTOR)
+		out << "class_destructor";
 	else if (kind == DESTRUCTOR)
 		out << "destructor";
 	else if (kind == METHOD)

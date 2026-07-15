@@ -226,21 +226,24 @@ void Emitter::emit_unit_lifecycle_close() {
 	fprintf(active, "}\n");
 }
 
-void Emitter::emit_class_constructor_call(Method* method) {
+void Emitter::emit_class_lifecycle_call(Method* method) {
 	if (!active)
 		return;
-	if (!method || method->ty->kind != CLASS_CONSTRUCTOR ||
+	if (!method ||
+	    (method->ty->kind != CLASS_CONSTRUCTOR &&
+	     method->ty->kind != CLASS_DESTRUCTOR) ||
 	    !method->owner_class)
 		unhandled_node(
-		    "invalid class constructor lifecycle entry", method);
+		    "invalid class lifecycle entry", method);
 	// The hook is deliberately invoked on the exact class's metaclass.
 	// It is nonvirtual and is scheduled only for the class that declared it,
 	// so C++ metaclass inheritance cannot accidentally run a parent hook for
 	// a descendant that has no hook of its own.
-	fprintf(active, "\t%s::p_classtype()->m_init();\n",
+	fprintf(active, "\t%s::p_classtype()->%s();\n",
 	    owner_cxx_reference_name(
 	        method->owner_class)
-	        .c_str());
+	        .c_str(),
+	    method->cxx_name.c_str());
 }
 
 void Emitter::emit_var_decl(
@@ -274,7 +277,9 @@ void Emitter::emit_const_decl(std::string cxx_name, Type* ty, Node* initializer)
 
 void Emitter::emit_main_prologue(
     const std::vector<UnitLifecycleNames>&
-        unit_lifecycle_hooks) {
+        unit_lifecycle_hooks,
+    const std::vector<Method*>&
+        program_class_destructors) {
 	if (!active)
 		return;
 	fprintf(active, "\n");
@@ -318,6 +323,29 @@ void Emitter::emit_main_prologue(
 	fprintf(active, "\t\t\tfinalize();\n");
 	fprintf(active, "\t}\n");
 	fprintf(active, "}\n");
+	if (!program_class_destructors.empty()) {
+		// Program lifecycle finalization must also run for Halt and normal
+		// return, so it is an atexit callback rather than code pasted after
+		// the program body. It is armed only after every program class
+		// constructor succeeds. Since that registration happens after the
+		// unit callback registration, C++'s reverse atexit order finalizes
+		// the program before its units.
+		fprintf(active,
+		    "bool tpcc_program_finalization_armed = false;\n");
+		fprintf(active,
+		    "bool tpcc_program_finalization_started = false;\n\n");
+		fprintf(active,
+		    "void tpcc_finalize_program() noexcept {\n");
+		fprintf(active,
+		    "\tif (!tpcc_program_finalization_armed || "
+		    "tpcc_program_finalization_started)\n");
+		fprintf(active, "\t\treturn;\n");
+		fprintf(active,
+		    "\ttpcc_program_finalization_started = true;\n");
+		for (Method* method : program_class_destructors)
+			emit_class_lifecycle_call(method);
+		fprintf(active, "}\n");
+	}
 	fprintf(active, "}\n\n");
 	fprintf(active, "int main() {\n");
 	fprintf(active,
@@ -331,11 +359,26 @@ void Emitter::emit_main_prologue(
 	fprintf(active, "\t\t}\n");
 }
 
-void Emitter::emit_main_epilogue() {
+void Emitter::emit_program_finalizer_registration() {
+	if (!active)
+		return;
+	fprintf(active,
+	    "\t\ttpcc_program_finalization_armed = true;\n");
+	fprintf(active,
+	    "\t\tif (std::atexit(tpcc_finalize_program) != 0) {\n");
+	fprintf(active, "\t\t\ttpcc_finalize_program();\n");
+	fprintf(active, "\t\t\tstd::terminate();\n");
+	fprintf(active, "\t\t}\n");
+}
+
+void Emitter::emit_main_epilogue(
+    bool has_program_class_destructors) {
 	if (!active)
 		return;
 	fprintf(active, "\t\treturn 0;\n");
 	fprintf(active, "\t} catch (...) {\n");
+	if (has_program_class_destructors)
+		fprintf(active, "\t\ttpcc_finalize_program();\n");
 	fprintf(active, "\t\ttpcc_finalize_initialized_units();\n");
 	fprintf(active, "\t\tthrow;\n");
 	fprintf(active, "\t}\n");
@@ -1011,7 +1054,8 @@ void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 		if (m->owner_class) {
 			qualifier = owner_cxx_name(m->owner_class) + "::";
 			if (c->ty->kind == CLASS_METHOD ||
-			    c->ty->kind == CLASS_CONSTRUCTOR)
+			    c->ty->kind == CLASS_CONSTRUCTOR ||
+			    c->ty->kind == CLASS_DESTRUCTOR)
 				qualifier += "m_meta::";
 		}
 	}
@@ -1195,6 +1239,13 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				fprintf(active, "\t");
 				emit_callable_signature(
 				    c->class_constructor,
+				    Position::Declaration, "");
+				fprintf(active, ";\n");
+			}
+			if (c->class_destructor) {
+				fprintf(active, "\t");
+				emit_callable_signature(
+				    c->class_destructor,
 				    Position::Declaration, "");
 				fprintf(active, ";\n");
 			}

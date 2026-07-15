@@ -49,6 +49,10 @@ public:
 	// a parent. Dependency units are initialized before this unit, so their
 	// parent hooks have already run.
 	std::vector<Method*> class_constructors;
+	// FPC schedules class destructors with the same source-order structure
+	// walk as constructors (including parent before descendant), but places
+	// those calls after the unit's explicit finalization statements.
+	std::vector<Method*> class_destructors;
 	Unit(std::string name, Frame* frame, bool is_program);
 };
 

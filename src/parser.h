@@ -395,7 +395,8 @@ protected:
 	void maybe_parse_proc_attributes();
 	RoutineType* parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);
-	void parse_class_constructor_prototype(ClassType* owner_class);
+	void parse_class_lifecycle_prototype(
+	    ClassType* owner_class, RoutineKind kind);
 	Procedure* match_or_create_procedure(
 	    const std::string& pas_name, RoutineType* sig,
 	    bool had_paren, bool has_overload,

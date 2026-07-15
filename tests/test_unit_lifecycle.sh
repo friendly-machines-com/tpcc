@@ -25,7 +25,7 @@ cd "$root"
 
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/normal/lifecycle" >"$tmp/normal/output"
-if [ "$(cat "$tmp/normal/output")" != "ABECDMdceba" ]; then
+if [ "$(cat "$tmp/normal/output")" != "ABECDMdcrseba" ]; then
 	echo "wrong initialization/finalization order:" >&2
 	cat "$tmp/normal/output" >&2
 	exit 1

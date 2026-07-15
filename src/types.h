@@ -295,6 +295,10 @@ struct ClassType: public Type {
 	// member named Name. Keeping it out of `children` makes it impossible for
 	// ordinary member lookup, calls, or routine references to expose it.
 	Method* class_constructor = nullptr;
+	// Class destructors are the finalization half of the same lifecycle
+	// mechanism. They likewise have no Pascal value identity: the source name
+	// exists only to match the declaration with its implementation.
+	Method* class_destructor = nullptr;
 	ClassType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -401,6 +405,7 @@ struct Parameter {
 enum RoutineKind {
 	CONSTRUCTOR,
 	CLASS_CONSTRUCTOR,
+	CLASS_DESTRUCTOR,
 	DESTRUCTOR,
 	METHOD,
 	ROUTINE,

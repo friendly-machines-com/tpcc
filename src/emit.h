@@ -92,7 +92,7 @@ public:
 	void emit_unit_implementation_epilogue();
 	void emit_unit_lifecycle_open(std::string cxx_name);
 	void emit_unit_lifecycle_close();
-	void emit_class_constructor_call(Method* method);
+	void emit_class_lifecycle_call(Method* method);
 	// Emit a C++ struct/class definition for a named record/class/object
 	// type. Fields and method prototypes go inside; method bodies are still
 	// emitted separately (outside the class) by emit_procedure_open.
@@ -108,8 +108,12 @@ public:
 	void emit_const_decl(std::string cxx_name, Type* ty, Node* initializer);
 	void emit_main_prologue(
 	    const std::vector<UnitLifecycleNames>&
-	        unit_lifecycle_hooks);
-	void emit_main_epilogue();
+	        unit_lifecycle_hooks,
+	    const std::vector<Method*>&
+	        program_class_destructors);
+	void emit_program_finalizer_registration();
+	void emit_main_epilogue(
+	    bool has_program_class_destructors);
 	void emit_statement(Node* stmt);
 	void emit_label(std::string cxx_label_name);
 	void emit_goto(std::string cxx_label_name);
