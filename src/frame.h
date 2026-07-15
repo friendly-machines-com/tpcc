@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <map>
+#include <ranges>
 #include "types.h"
 
 class Node;
@@ -61,8 +62,23 @@ public:
      *  duplicate identifier. Returns true on success, false on a duplicate /
      *  overload-mismatch error (caller reports the diagnostic with location). */
     bool register_callable(std::string name, Callable* c);
-    const std::map<std::string, Type*>& types_local() const { return type_items; }
-    const std::map<std::string, FrameValueEntry>& values_local() const { return value_items; }
+    /** Declaration ownership query, not name lookup. This intentionally
+     *  returns only a boolean: callers that need a value must use
+     *  lookup_value(), which applies the structural parent chain. */
+    bool declares_value(const std::string& name) const {
+	    return value_items.find(name) != value_items.end();
+    }
+    /** Read-only declaration enumeration for emission, normalization, and
+     *  diagnostics. A subrange has iteration but no associative find(), so it
+     *  cannot be substituted for semantic name lookup. */
+    auto type_declarations() const {
+	    return std::ranges::subrange(
+	        type_items.cbegin(), type_items.cend());
+    }
+    auto value_declarations() const {
+	    return std::ranges::subrange(
+	        value_items.cbegin(), value_items.cend());
+    }
 };
 
 /** Whether BINDING's Pascal overload directive opens the family into the

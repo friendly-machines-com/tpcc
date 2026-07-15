@@ -1156,16 +1156,14 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				fprintf(active, "\t\treturn this;\n");
 				fprintf(active, "\t}\n");
 			}
-			if (body->values_local().find("classname") ==
-			    body->values_local().end()) {
+			if (!body->declares_value("classname")) {
 				fprintf(active, "\tpublic: virtual inline ::u_system::t_shortstring<255> p_classname() {\n");
 				fprintf(active,
 					"\t\treturn ::u_system::tpcc_shortstring_from_c(\"%s\", strlen(\"%s\"));\n",
 					class_name.c_str(), class_name.c_str()); // FIXME: escape
 				fprintf(active, "\t}\n");
 			}
-			if (body->values_local().find("inheritsfrom") ==
-			    body->values_local().end()) {
+			if (!body->declares_value("inheritsfrom")) {
 				fprintf(active, "\tpublic: virtual inline ::u_system::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
 				if (parent_class_cxx_name.empty()) {
 					fprintf(active, "\t\treturn ::u_system::tpcc_bool_to_boolean(s == this);\n");
@@ -1174,8 +1172,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				}
 				fprintf(active, "\t}\n");
 			}
-			if (body->values_local().find("classparent") ==
-			    body->values_local().end()) {
+			if (!body->declares_value("classparent")) {
 				fprintf(active, "\tpublic: virtual inline %s p_classparent() {\n", classref_api_cxx.c_str());
 				if (parent_class_cxx_name.empty()) {
 					fprintf(active, "\t\treturn nullptr;\n");
@@ -1259,7 +1256,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(active, " %s;\n", field.slot->cxx_name.c_str());
 		}
 	}
-	for (auto& kv : body->values_local()) {
+	for (auto& kv : body->value_declarations()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
 			if (is_interface) {

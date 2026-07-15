@@ -4181,7 +4181,8 @@ struct TypeBlockResolver {
 			return true;
 
 		std::vector<std::pair<std::string, Type*>> local_types;
-		for (const auto& item : frame->types_local())
+		for (const auto& item :
+		     frame->type_declarations())
 			local_types.push_back(item);
 		for (auto& item : local_types) {
 			Type* ty = item.second;
@@ -4191,7 +4192,8 @@ struct TypeBlockResolver {
 		}
 
 		std::vector<std::pair<std::string, FrameValueEntry>> local_values;
-		for (const auto& item : frame->values_local())
+		for (const auto& item :
+		     frame->value_declarations())
 			local_values.push_back(item);
 		for (auto& item : local_values) {
 			Node* value = item.second.value;
@@ -5222,20 +5224,14 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		//		method_name = "~" + class_type->cxx_name;
 		//	}
 		// }
-		// An out-of-line `T.Method` body implements a declaration owned by
-		// exactly T. Normal Frame lookup includes inherited members, but an
-		// ancestor declaration belongs to the ancestor and cannot acquire a
-		// second body under T.
-		const auto& owner_declarations =
-		    owner_frame->values_local();
-		auto owner_method =
-		    owner_declarations.find(method_name);
 		Node* hit =
-		    owner_method == owner_declarations.end()
-		        ? nullptr
-		        : owner_method->second.value;
+		    owner_frame->lookup_value(method_name);
 		auto m = dynamic_cast<Method*>(hit);
-		if (!m)
+		// An out-of-line `T.Method` body implements a declaration owned by
+		// exactly T. Normal Frame lookup may find an inherited method, but
+		// owner identity rejects it without bypassing structural lookup or
+		// exposing the frame's declaration table by name.
+		if (!m || m->owner_class != owner_ty)
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR
 																      : METHOD,
