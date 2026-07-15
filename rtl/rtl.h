@@ -1865,6 +1865,13 @@ inline t_boolean p_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.val
 inline t_boolean p_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value > b.value); }
 inline t_boolean p_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
 
+// Pascal Pointer equality compares pointer values; it does not inspect the
+// pointed-to storage. Typed pointers reach this overload through Pascal's
+// existing typed-pointer/untyped-Pointer compatibility conversion.
+inline t_boolean p_equal(t_pointer a, t_pointer b) {
+	return tpcc_bool_to_boolean(a == b);
+}
+
 template<typename T> inline t_longword p_ord(T x) { return static_cast<t_longword>(x); }
 
 template<typename T>

@@ -122,6 +122,11 @@ operator =(a, b: Char): Boolean; external nil name '::u_system::p_equal';
 operator >(a, b: Char): Boolean; external nil name '::u_system::p_greaterthan';
 operator >=(a, b: Char): Boolean; external nil name '::u_system::p_greaterthanorequal';
 
+// Typed and untyped pointers share Pascal's ordinary pointer equality. The
+// compiler supplies the other operand's pointer type to `nil`, then the
+// existing Pointer compatibility conversion selects this single overload.
+operator =(a, b: Pointer): Boolean; external nil name '::u_system::p_equal';
+
 operator <(a, b: Cardinal): Boolean; external nil name '::u_system::p_lessthan';
 operator <=(a, b: Cardinal): Boolean; external nil name '::u_system::p_lessthanorequal';
 operator =(a, b: Cardinal): Boolean; external nil name '::u_system::p_equal';

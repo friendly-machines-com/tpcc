@@ -2330,6 +2330,22 @@ Node* Parser::mk_assign(Node* a, Node* b) {
 }
 
 Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
+	// `nil` has no type of its own. For an ordinary pointer comparison, the
+	// other operand supplies its exact pointer type before normal operator
+	// resolution runs. Do not widen this to every reference type: classes and
+	// class references have their own comparison rules and are not Pascal
+	// Pointer values.
+	auto a_pointer = a ? dynamic_cast<PointerType*>(a->ty) : nullptr;
+	auto b_pointer = b ? dynamic_cast<PointerType*>(b->ty) : nullptr;
+	if (!a_pointer && dynamic_cast<NilLiteral*>(a) && b_pointer) {
+		a = cast(a, b_pointer);
+		a_pointer = b_pointer;
+	}
+	if (!b_pointer && dynamic_cast<NilLiteral*>(b) && a_pointer) {
+		b = cast(b, a_pointer);
+		b_pointer = a_pointer;
+	}
+
 	RoutineType* a_routine =
 	    a ? dynamic_cast<RoutineType*>(a->ty) : nullptr;
 	RoutineType* b_routine =
