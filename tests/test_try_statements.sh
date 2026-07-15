@@ -17,12 +17,12 @@ cd "$root"
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/try_statements.cc" \
+	"$tmp/sysutils.cc" \
 	"$tmp/system.cc" \
 	-o "$tmp/try_statements"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/try_statements"
 
 for source in \
-	tests/try_typed_handler.pp \
 	tests/finally_exit.pp \
 	tests/finally_break.pp
 do

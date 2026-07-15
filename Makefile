@@ -156,6 +156,9 @@ test-old-file-api: mp
 test-try-statements: mp
 	sh tests/test_try_statements.sh
 
+test-exception-handlers: mp
+	sh tests/test_exception_handlers.sh
+
 test-integer-not: mp
 	sh tests/test_integer_not.sh
 
@@ -177,6 +180,12 @@ test-final-methods: mp
 test-abstract-methods: mp
 	sh tests/test_abstract_methods.sh
 
-test: test-packed-record test-ifopt test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle test-metaclass-construction test-untyped-pointer-dereference test-ansistring-pointer-cast test-old-file-api test-try-statements test-integer-not test-pointer-equality test-sysutils-exception test-old-object-lifecycle test-incomplete-type-resolution test-final-methods test-abstract-methods
+test-abstract-classes: mp
+	sh tests/test_abstract_classes.sh
 
-.PHONY: all clean distclean test test-packed-record test-ifopt test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle test-metaclass-construction test-untyped-pointer-dereference test-ansistring-pointer-cast test-old-file-api test-try-statements test-integer-not test-pointer-equality test-sysutils-exception test-old-object-lifecycle test-incomplete-type-resolution test-final-methods test-abstract-methods
+test-class-static-methods: mp
+	sh tests/test_class_static_methods.sh
+
+test: test-packed-record test-ifopt test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle test-metaclass-construction test-untyped-pointer-dereference test-ansistring-pointer-cast test-old-file-api test-try-statements test-exception-handlers test-integer-not test-pointer-equality test-sysutils-exception test-old-object-lifecycle test-incomplete-type-resolution test-final-methods test-abstract-methods test-abstract-classes test-class-static-methods
+
+.PHONY: all clean distclean test test-packed-record test-ifopt test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle test-metaclass-construction test-untyped-pointer-dereference test-ansistring-pointer-cast test-old-file-api test-try-statements test-exception-handlers test-integer-not test-pointer-equality test-sysutils-exception test-old-object-lifecycle test-incomplete-type-resolution test-final-methods test-abstract-methods test-abstract-classes test-class-static-methods

@@ -18,7 +18,7 @@ then
 	exit 1
 fi
 if ! rg -Fq \
-	'::u_system::p_runerror(static_cast<::u_system::t_word>(211));' \
+	'::u_system::m_runtime_error(211);' \
 	"$tmp/abstract_methods.cc"
 then
 	echo "class abstract method did not receive the runtime-error stub" >&2

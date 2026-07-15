@@ -173,12 +173,6 @@ void Emitter::set_section(Section s) {
 }
 
 void Emitter::close() {
-	while (!captures.empty()) {
-		if (captures.back().stream)
-			fclose(captures.back().stream);
-		active = captures.back().previous;
-		captures.pop_back();
-	}
 	if (out_h) {
 		fclose(out_h);
 		out_h = nullptr;
@@ -420,6 +414,24 @@ void Emitter::emit_main_epilogue(
 	if (!active)
 		return;
 	fprintf(active, "\t\treturn 0;\n");
+	fprintf(active,
+	    "\t} catch (::u_system::tpcc_pascal_exception<"
+	    "::u_system::t_tobject>& tpcc_exception) {\n"
+	    "\t\t::u_system::tpcc_pascal_exception_scope<"
+	    "::u_system::t_tobject> tpcc_exception_scope("
+	    "tpcc_exception);\n"
+	    "\t\tauto tpcc_exceptproc = "
+	    "::u_system::p_exceptproc;\n");
+	if (has_program_class_destructors)
+		fprintf(active, "\t\ttpcc_finalize_program();\n");
+	fprintf(active, "\t\ttpcc_finalize_initialized_units();\n");
+	fprintf(active,
+	    "\t\tif (tpcc_exceptproc)\n"
+	    "\t\t\ttpcc_exceptproc("
+	    "tpcc_exception.object(), "
+	    "tpcc_exception.address(), "
+	    "tpcc_exception.frame());\n"
+	    "\t\treturn 217;\n");
 	fprintf(active, "\t} catch (...) {\n");
 	if (has_program_class_destructors)
 		fprintf(active, "\t\ttpcc_finalize_program();\n");
@@ -530,98 +542,156 @@ void Emitter::emit_goto(std::string cxx_label_name) {
 	fprintf(active, "\tgoto %s;\n", cxx_label_name.c_str());
 }
 
-void Emitter::begin_statement_capture() {
-	FILE* stream = active ? tmpfile() : nullptr;
-	if (active && !stream) {
-		fprintf(stderr,
-		    "internal compiler error: could not create statement capture\n");
-		fflush(stderr);
-		exit(1);
-	}
-	captures.push_back(Capture{active, stream});
-	active = stream;
-}
-
-std::string Emitter::end_statement_capture() {
-	assert(!captures.empty());
-	FILE* stream = captures.back().stream;
-	FILE* previous = captures.back().previous;
-	captures.pop_back();
-	active = previous;
-	if (!stream)
-		return {};
-
-	if (fflush(stream) != 0 || fseek(stream, 0, SEEK_END) != 0) {
-		fclose(stream);
-		fprintf(stderr,
-		    "internal compiler error: could not finish statement capture\n");
-		fflush(stderr);
-		exit(1);
-	}
-	long size = ftell(stream);
-	if (size < 0 || fseek(stream, 0, SEEK_SET) != 0) {
-		fclose(stream);
-		fprintf(stderr,
-		    "internal compiler error: could not read statement capture\n");
-		fflush(stderr);
-		exit(1);
-	}
-	std::string result(static_cast<size_t>(size), '\0');
-	if (!result.empty() &&
-	    fread(result.data(), 1, result.size(), stream) != result.size()) {
-		fclose(stream);
-		fprintf(stderr,
-		    "internal compiler error: short read from statement capture\n");
-		fflush(stderr);
-		exit(1);
-	}
-	fclose(stream);
-	return result;
-}
-
-void Emitter::emit_try_except_prologue(
-    const std::string& try_body) {
+void Emitter::emit_try_prologue() {
 	if (!active)
 		return;
-	fprintf(active, "\ttry {\n");
-	fwrite(try_body.data(), 1, try_body.size(), active);
-	// Fail is constructor control flow, not a Pascal exception. It must pass
-	// through `except` handlers until an initializer boundary consumes it.
 	fprintf(active,
-	    "\t} catch (const ::u_system::tpcc_constructor_fail&) {\n"
-	    "\t\tthrow;\n"
-	    "\t} catch (...) {\n");
+	    "\ttry {\n"
+	    "\t\t[[maybe_unused]] std::exception_ptr "
+	    "tpcc_pending_exception;\n"
+	    "\t\ttry {\n");
 }
 
-void Emitter::emit_try_except_epilogue() {
+void Emitter::emit_try_except_prologue() {
 	if (!active)
 		return;
-	fprintf(active, "\t}\n");
-}
-
-void Emitter::emit_try_finally(
-    const std::string& try_body,
-    const std::string& finally_body) {
-	if (!active)
-		return;
-	fprintf(active, "\t{\n");
-	fprintf(active, "\t\tauto tpcc_finally = [&]() {\n");
-	fwrite(finally_body.data(), 1, finally_body.size(), active);
-	fprintf(active, "\t\t};\n");
+	// Pascal except catches only the Pascal carrier. Constructor Fail,
+	// native implementation failures, and compiler-private control transfer
+	// therefore pass through without name-specific rethrow branches.
 	fprintf(active,
-	    "\t\tauto tpcc_finally_guard = "
-	    "::u_system::tpcc_make_scope_exit([&]() { "
-	    "tpcc_finally(); });\n");
-	fprintf(active, "\t\ttry {\n");
-	fwrite(try_body.data(), 1, try_body.size(), active);
-	fprintf(active, "\t\t} catch (...) {\n");
-	fprintf(active, "\t\t\ttpcc_finally_guard.release();\n");
-	fprintf(active, "\t\t\ttpcc_finally();\n");
-	fprintf(active, "\t\t\tthrow;\n");
+	    "\t\t} catch "
+	    "(::u_system::tpcc_pascal_exception<"
+	    "::u_system::t_tobject>& tpcc_exception) {\n"
+	    "\t\t\t::u_system::tpcc_pascal_exception_scope<"
+	    "::u_system::t_tobject> tpcc_exception_scope("
+	    "tpcc_exception);\n");
+}
+
+void Emitter::emit_exception_handler_prologue(
+    Type* exception_type, std::string variable_cxx_name,
+    bool first) {
+	if (!active)
+		return;
+	auto exception_class =
+	    dynamic_cast<ClassType*>(exception_type);
+	if (!exception_class)
+		unhandled_type(
+		    "exception handler type is not a class",
+		    exception_type);
+	fprintf(active, "\t\t\t%sif (",
+	    first ? "" : "else ");
+	if (variable_cxx_name.empty()) {
+		fprintf(active,
+		    "tpcc_exception.get_if<%s>() != nullptr",
+		    owner_cxx_reference_name(
+		        exception_class).c_str());
+	} else {
+		fprintf(active,
+		    "auto* %s = tpcc_exception.get_if<%s>()",
+		    variable_cxx_name.c_str(),
+		    owner_cxx_reference_name(
+		        exception_class).c_str());
+	}
+	fprintf(active, ") {\n");
+}
+
+void Emitter::emit_exception_handler_epilogue() {
+	if (active)
+		fprintf(active, "\t\t\t}\n");
+}
+
+void Emitter::emit_exception_default_prologue() {
+	if (active)
+		fprintf(active, "\t\t\telse {\n");
+}
+
+void Emitter::emit_exception_default_epilogue() {
+	if (active)
+		fprintf(active, "\t\t\t}\n");
+}
+
+void Emitter::emit_try_except_epilogue(
+    bool typed_handlers, bool has_default) {
+	if (!active)
+		return;
+	if (typed_handlers && !has_default)
+		fprintf(active,
+		    "\t\t\telse {\n"
+		    "\t\t\t\tthrow;\n"
+		    "\t\t\t}\n");
 	fprintf(active, "\t\t}\n");
-	fprintf(active, "\t\ttpcc_finally_guard.release();\n");
-	fprintf(active, "\t\ttpcc_finally();\n");
-	fprintf(active, "\t}\n");
+}
+
+void Emitter::emit_try_finally_prologue() {
+	if (!active)
+		return;
+	// Save an arbitrary pending unwind opaquely. The finally statements
+	// stream once after the catch on both normal and exceptional completion.
+	// No Pascal handler examines or converts this exception_ptr.
+	fprintf(active,
+	    "\t\t} catch (...) {\n"
+	    "\t\t\ttpcc_pending_exception = "
+	    "std::current_exception();\n"
+	    "\t\t}\n");
+}
+
+void Emitter::emit_try_finally_epilogue() {
+	if (!active)
+		return;
+	fprintf(active,
+	    "\t\tif (tpcc_pending_exception)\n"
+	    "\t\t\tstd::rethrow_exception("
+	    "tpcc_pending_exception);\n");
+}
+
+void Emitter::emit_try_control_epilogue(
+    unsigned try_depth, RoutineType* routine,
+    bool inside_loop) {
+	if (!active)
+		return;
+	fprintf(active, "\t}");
+	if (routine) {
+		fprintf(active,
+		    " catch (::u_system::tpcc_return_transfer<");
+		emit_type_ref(routine->return_type);
+		fprintf(active,
+		    ">& tpcc_return) {\n"
+		    "\t\tif (tpcc_return.next_try_depth != %u)\n"
+		    "\t\t\tthrow;\n"
+		    "\t\t--tpcc_return.next_try_depth;\n"
+		    "\t\tif (tpcc_return.next_try_depth != 0)\n"
+		    "\t\t\tthrow;\n",
+		    try_depth);
+		if (routine->return_type == &unit_type())
+			fprintf(active, "\t\treturn;\n");
+		else
+			fprintf(active,
+			    "\t\treturn std::move("
+			    "tpcc_return.value);\n");
+		fprintf(active, "\t}");
+	}
+	if (inside_loop) {
+		fprintf(active,
+		    " catch (::u_system::tpcc_loop_transfer& "
+		    "tpcc_loop) {\n"
+		    "\t\tif (tpcc_loop.next_try_depth != %u)\n"
+		    "\t\t\tthrow;\n"
+		    "\t\t--tpcc_loop.next_try_depth;\n"
+		    "\t\tif (tpcc_loop.next_try_depth != "
+		    "tpcc_loop.target_try_depth)\n"
+		    "\t\t\tthrow;\n"
+		    "\t\tif (tpcc_loop.is_break)\n"
+		    "\t\t\tbreak;\n"
+		    "\t\tcontinue;\n"
+		    "\t}",
+		    try_depth);
+	}
+	if (!routine && !inside_loop)
+		fprintf(active,
+		    " catch (...) {\n"
+		    "\t\tthrow;\n"
+		    "\t}");
+	fprintf(active, "\n");
 }
 
 void Emitter::emit_statement(Node* stmt) {
@@ -630,6 +700,26 @@ void Emitter::emit_statement(Node* stmt) {
 	if (dynamic_cast<ConstructorFail*>(stmt)) {
 		fprintf(active,
 		    "\tthrow ::u_system::tpcc_constructor_fail{};\n");
+		return;
+	}
+	if (auto raise = dynamic_cast<Raise*>(stmt)) {
+		if (!raise->object) {
+			fprintf(active, "\tthrow;\n");
+			return;
+		}
+		fprintf(active,
+		    "\t::u_system::m_raise_pascal(");
+		emit_expression(raise->object);
+		if (raise->address) {
+			fprintf(active, ", ");
+			emit_expression(raise->address);
+			fprintf(active, ", ");
+			if (raise->frame)
+				emit_expression(raise->frame);
+			else
+				fprintf(active, "nullptr");
+		}
+		fprintf(active, ");\n");
 		return;
 	}
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
@@ -874,12 +964,25 @@ void Emitter::emit_statement(Node* stmt) {
 		return;
 	}
 	if (auto r = dynamic_cast<Return*>(stmt)) {
-		fprintf(active, "\treturn");
-		if (r->a) {
-			fprintf(active, " ");
-			emit_expression(r->a);
+		if (r->try_depth != 0) {
+			fprintf(active,
+			    "\tthrow ::u_system::tpcc_return_transfer<");
+			emit_type_ref(
+			    r->a ? r->a->ty : &unit_type());
+			fprintf(active, ">{%u", r->try_depth);
+			if (r->a) {
+				fprintf(active, ", ");
+				emit_expression(r->a);
+			}
+			fprintf(active, "};\n");
+		} else {
+			fprintf(active, "\treturn");
+			if (r->a) {
+				fprintf(active, " ");
+				emit_expression(r->a);
+			}
+			fprintf(active, ";\n");
 		}
-		fprintf(active, ";\n");
 		return;
 	}
 	if (auto ic = dynamic_cast<InheritedCall*>(stmt)) {
@@ -1055,10 +1158,20 @@ void Emitter::emit_for_epilogue() {
 	fprintf(active, "\t}\n");
 }
 
-void Emitter::emit_loop_control(bool is_break) {
+void Emitter::emit_loop_control(
+    bool is_break, unsigned try_depth,
+    unsigned target_try_depth) {
 	if (!active)
 		return;
-	fprintf(active, is_break ? "\tbreak;\n" : "\tcontinue;\n");
+	if (try_depth == target_try_depth) {
+		fprintf(active,
+		    is_break ? "\tbreak;\n" : "\tcontinue;\n");
+		return;
+	}
+	fprintf(active,
+	    "\tthrow ::u_system::tpcc_loop_transfer{%u, %u, %s};\n",
+	    try_depth, target_try_depth,
+	    is_break ? "true" : "false");
 }
 
 void Emitter::emit_formal_parameter(
@@ -1509,13 +1622,12 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 						// Native FPC permits constructing a class which still
 						// has abstract methods. Its VMT entry calls
 						// AbstractError only if dispatch reaches that slot.
-						// RunError(211) is TPCC's existing non-catchable
-						// runtime-error path and adds no dependency beyond the
-						// already-required rtl.h.
+						// The System runtime-error hook lets SysUtils turn 211
+						// into EAbstractError without making generated class
+						// declarations depend on SysUtils.
 						fprintf(active,
 						    " {\n"
-						    "\t\t::u_system::p_runerror("
-						    "static_cast<::u_system::t_word>(211));\n"
+						    "\t\t::u_system::m_runtime_error(211);\n"
 						    "\t}\n");
 						continue;
 					}

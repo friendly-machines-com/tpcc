@@ -1,9 +1,19 @@
 #include "rtl.h"
 
 #include <cstdlib>
-#include <stdexcept>
+struct runtime_error_code {
+	::u_system::t_longint value;
+};
+
+static void raise_runtime_error(
+    ::u_system::t_longint value,
+    ::u_system::t_pointer,
+    ::u_system::t_pointer) {
+	throw runtime_error_code{value};
+}
 
 int main() {
+	::u_system::p_errorproc = &raise_runtime_error;
 	::u_system::t_shortstring<255> abc =
 	    ::u_system::tpcc_shortstring_from_c("abc", 3);
 	::u_system::t_shortstring<255> abd =
@@ -41,8 +51,8 @@ int main() {
 		    ::u_system::tpcc_make_const_storage_ref(abc, 255),
 		    abd_storage,
 		    2);
-	} catch (const std::out_of_range&) {
-		rejected = true;
+	} catch (const runtime_error_code& error) {
+		rejected = error.value == 201;
 	}
 	if (!rejected)
 		return EXIT_FAILURE;

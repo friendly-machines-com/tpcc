@@ -343,8 +343,31 @@ public:
 class Return: public UnaryOperation {
 public:
 	// `a == nullptr` means a void/procedure return.
-	Return(Node* a);
+	// `try_depth` is nonzero only when this return must cross that many
+	// currently protected Pascal try bodies. The emitter then uses private
+	// C++ control transfer until the outermost crossed try performs the real
+	// return.
+	unsigned try_depth;
+	Return(Node* a, unsigned try_depth = 0);
 	const char* diagnostic_kind() const override;
+};
+
+/** Pascal `raise`. `object == nullptr` is bare re-raise; otherwise the
+ * object is already converted to System.TObject. Explicit `at` operands are
+ * nullable independently and are evaluated once by the emitted helper call. */
+class Raise: public Node {
+public:
+	Node* object;
+	Node* address;
+	Node* frame;
+	Raise(Node* object, Node* address = nullptr,
+	      Node* frame = nullptr);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
 };
 
 /** Compiler-inserted implicit type conversion. Distinct from Coerce (which

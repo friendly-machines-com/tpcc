@@ -135,6 +135,35 @@ private:
 	Callable* current_routine = nullptr;
 	// Number of enclosing statement loops. break/continue are invalid at zero.
 	unsigned loop_depth = 0;
+	// Protected Pascal try bodies currently being streamed. A nonlocal
+	// Exit/break/continue records this depth in a private C++ transfer so each
+	// crossed try can perform its except/finally semantics before the actual
+	// control transfer occurs.
+	unsigned protected_try_depth = 0;
+	// protected_try_depth at entry to each enclosing loop. A break/continue
+	// is native C++ control flow when both depths agree; otherwise it must
+	// unwind the intervening protected try bodies first.
+	std::vector<unsigned> loop_try_depths;
+	// FPC permits bare `raise;` only in the statement sequence belonging
+	// directly to an except clause. Entering a nested try clears this even
+	// when that try occurs lexically inside an outer handler.
+	bool bare_raise_allowed = false;
+	// FPC assigns distinct identities to a try's protected body and to its
+	// except/finally region. A goto may remain within one identity but may not
+	// enter or leave it. Keep only label metadata required to validate forward
+	// gotos; ordinary statement emission remains single pass.
+	struct LabelExceptionState {
+		std::optional<unsigned> definition_block;
+		std::vector<std::pair<unsigned, SourceLocation>>
+		    goto_blocks;
+	};
+	struct StatementControlContext {
+		unsigned next_exception_block = 0;
+		unsigned current_exception_block = 0;
+		std::map<std::string, LabelExceptionState> labels;
+	};
+	std::vector<StatementControlContext>
+	    statement_control_contexts;
 	// Loop depth on entry to each currently parsed finally body. FPC permits
 	// break/continue for a loop wholly inside finally, but forbids control
 	// flow from leaving finally. Exit always leaves it.
@@ -395,6 +424,15 @@ protected:
 	void parse_period();
 	bool maybe_parse_period_period();
 	void parse_period_period();
+	void push_statement_control_context();
+	void pop_statement_control_context();
+	unsigned current_exception_block() const;
+	unsigned enter_exception_block();
+	void restore_exception_block(unsigned block);
+	void record_label_definition(
+	    const std::string& name, SourceLocation location);
+	void record_goto(
+	    const std::string& name, SourceLocation location);
 	/** Add/remove a lookup environment, optionally selected through an
 	 *  expression. These never change declaration ownership. */
 	void push_scope(const Frame* scope, Node* qualifier = nullptr);

@@ -1,5 +1,8 @@
 program TryStatements;
 
+uses
+  SysUtils;
+
 var
   State: LongInt;
   I: LongInt;
@@ -20,6 +23,21 @@ begin
     Exit
   finally
     Value := 2
+  end;
+  Value := 99
+end;
+
+procedure LeaveNested(var Value: LongInt);
+begin
+  try
+    try
+      Value := 10;
+      Exit
+    finally
+      Value := Value + 1
+    end
+  finally
+    Value := Value + 2
   end;
   Value := 99
 end;
@@ -68,6 +86,38 @@ begin
 
   LeaveEarly(State);
   if State <> 2 then
+    Fail;
+
+  LeaveNested(State);
+  if State <> 13 then
+    Fail;
+
+  State := 0;
+  while true do
+    begin
+      try
+        break
+      except
+        State := 99
+      end
+    end;
+  if State <> 0 then
+    Fail;
+
+  State := 0;
+  while true do
+    begin
+      try
+        try
+          break
+        finally
+          State := State + 1
+        end
+      finally
+        State := State + 2
+      end
+    end;
+  if State <> 3 then
     Fail;
 
   State := 0;

@@ -35,6 +35,7 @@ type
   // carrier is a pointer to the empty target-specific base implemented by
   // X's metaclass, so X may still be incomplete at the declaration site.
   TClass = class of TObject;
+  TErrorProc = procedure(ErrorCode: LongInt; Address, Frame: Pointer);
   TObject = class
   public
     constructor Create;
@@ -51,6 +52,8 @@ type
     class function NewInstance: TObject; virtual;
     procedure AfterConstruction; virtual;
   end;
+  TExceptProc = procedure(ExceptObject: TObject;
+    Address, Frame: Pointer);
 
 const
   MaxLongint = $7fffffff;
@@ -60,6 +63,14 @@ const
 var
   // RunError stores its error number in this RTL variable before terminating.
   ErrorCode: Word external name '::u_system::p_errorcode';
+  // System reports language runtime failures without depending on SysUtils.
+  // SysUtils installs its ordinary Pascal routine here to translate those
+  // numeric errors into Pascal exception objects; without it RunError retains
+  // System's terminating behavior.
+  ErrorProc: TErrorProc external name '::u_system::p_errorproc';
+  // The generated program entry calls this after finalizing initialized
+  // Pascal units when a Pascal exception reaches the outer boundary.
+  ExceptProc: TExceptProc;
   // Reset(File) consults the low two access-mode bits. Higher sharing-mode
   // bits are retained for source compatibility and ignored by this runtime.
   FileMode: Byte external name '::u_system::p_filemode';

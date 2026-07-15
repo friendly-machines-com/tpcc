@@ -57,11 +57,6 @@ private:
 	FILE* out_h;       // null for programs
 	FILE* out_cc;
 	FILE* active;      // points at out_h or out_cc; null until a section is set
-	struct Capture {
-		FILE* previous;
-		FILE* stream;
-	};
-	std::vector<Capture> captures;
 
 public:
 	Emitter();
@@ -123,17 +118,25 @@ public:
 	void emit_statement(Node* stmt);
 	void emit_label(std::string cxx_label_name);
 	void emit_goto(std::string cxx_label_name);
-	// A try/finally must place the finally callable before the protected C++
-	// statements even though Pascal spells the protected statements first.
-	// These operations temporarily collect ordinary statement emission so
-	// emit_try_finally can put both source blocks in the required order.
-	void begin_statement_capture();
-	std::string end_statement_capture();
-	void emit_try_except_prologue(const std::string& try_body);
-	void emit_try_except_epilogue();
-	void emit_try_finally(
-	    const std::string& try_body,
-	    const std::string& finally_body);
+	// The common prefix streams a protected Pascal try body immediately.
+	// The suffix then selects except or finally, while the outer private
+	// catches propagate or realize Exit/break/continue after every crossed
+	// Pascal try has performed its work.
+	void emit_try_prologue();
+	void emit_try_except_prologue();
+	void emit_exception_handler_prologue(
+	    Type* exception_type, std::string variable_cxx_name,
+	    bool first);
+	void emit_exception_handler_epilogue();
+	void emit_exception_default_prologue();
+	void emit_exception_default_epilogue();
+	void emit_try_except_epilogue(
+	    bool typed_handlers, bool has_default);
+	void emit_try_finally_prologue();
+	void emit_try_finally_epilogue();
+	void emit_try_control_epilogue(
+	    unsigned try_depth, RoutineType* routine,
+	    bool inside_loop);
 	void emit_with_prologue(std::string alias_cxx_name, Node* target);
 	void emit_with_epilogue();
 	// Control-flow framing. Each is parse-time emission: parser parses the
@@ -157,7 +160,9 @@ public:
 	void emit_repeat_epilogue(Node* condition);
 	void emit_for_prologue(Node* control, Node* initial, Node* final, bool descending);
 	void emit_for_epilogue();
-	void emit_loop_control(bool is_break);
+	void emit_loop_control(
+	    bool is_break, unsigned try_depth = 0,
+	    unsigned target_try_depth = 0);
 
 	// Procedure/function definition emission. emit_procedure_open writes the
 	// C++ signature plus opening brace; body statements emit between; then

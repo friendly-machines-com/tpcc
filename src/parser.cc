@@ -90,6 +90,7 @@ static std::unordered_set<std::string> keywords = {
     "packed",
     "procedure",
     "program",
+    "raise",
     "record",
     "repeat",
     "set",
@@ -894,7 +895,42 @@ void Parser::maybe_parse_statement() {
 	    peek_keyword("except") || peek_keyword("finally")) {
 		return;
 	}
-	if (peek_directive("fail") &&
+	if (peek_keyword("raise")) {
+		parse_keyword("raise");
+		Node* object = nullptr;
+		Node* address = nullptr;
+		Node* frame = nullptr;
+		const bool bare =
+		    input_token == ";" ||
+		    peek_keyword("end") ||
+		    peek_keyword("else") ||
+		    peek_keyword("until") ||
+		    peek_keyword("except") ||
+		    peek_keyword("finally");
+		if (bare) {
+			if (!bare_raise_allowed)
+				raise_parse_error(
+				    "re-raise is only valid directly inside an except handler");
+		} else {
+			ClassType* tobject =
+			    lookup_implicit_tobject_superclass();
+			object = cast(
+			    parse_expression(), tobject);
+			if (maybe_parse_directive("at")) {
+				address = cast(
+				    parse_expression(),
+				    pointer_type());
+				if (maybe_parse_comma())
+					frame = cast(
+					    parse_expression(),
+					    pointer_type());
+			}
+		}
+		if (emitter)
+			emitter->emit_statement(
+			    new Raise(
+			        object, address, frame));
+	} else if (peek_directive("fail") &&
 	    current_routine &&
 	    current_routine->ty->kind == CONSTRUCTOR) {
 		parse_directive("fail");
@@ -913,7 +949,9 @@ void Parser::maybe_parse_statement() {
 			        ? "break cannot leave a finally block"
 			        : "continue cannot leave a finally block");
 		if (emitter)
-			emitter->emit_loop_control(is_break);
+			emitter->emit_loop_control(
+			    is_break, protected_try_depth,
+			    loop_try_depths.back());
 	} else if (peek_keyword("return")) { // FIXME Exit
 		if (!finally_loop_depths.empty())
 			raise_parse_error("return cannot leave a finally block");
@@ -941,49 +979,185 @@ void Parser::maybe_parse_statement() {
 			value = resolve_value("result");
 		}
 		if (emitter)
-			emitter->emit_statement(new Return(value));
+			emitter->emit_statement(
+			    new Return(
+			        value, protected_try_depth));
 	} else if (peek_keyword("goto")) {
+		SourceLocation goto_location =
+		    current_location();
 		parse_keyword("goto");
 		std::string label = parse_identifier();
+		record_goto(label, goto_location);
 		if (emitter)
 			emitter->emit_goto(cxx_label_name(label));
 	} else if (peek_keyword("try")) {
+		const unsigned enclosing_exception_block =
+		    current_exception_block();
 		parse_keyword("try");
+		const unsigned this_try_depth =
+		    protected_try_depth + 1;
+		const bool try_is_inside_loop =
+		    loop_depth != 0;
+		const bool saved_bare_raise =
+		    bare_raise_allowed;
 		if (emitter)
-			emitter->begin_statement_capture();
+			emitter->emit_try_prologue();
+		enter_exception_block();
+		++protected_try_depth;
+		bare_raise_allowed = false;
 		parse_block_body();
-		std::string try_body;
-		if (emitter)
-			try_body = emitter->end_statement_capture();
+		--protected_try_depth;
 
 		if (maybe_parse_keyword("except")) {
-			if (peek_directive("on"))
-				raise_parse_error(
-				    "typed exception handlers are not implemented yet");
+			enter_exception_block();
 			if (emitter)
-				emitter->emit_try_except_prologue(try_body);
-			parse_block_body();
+				emitter->emit_try_except_prologue();
+			bool typed_handlers = false;
+			bool has_default = false;
+			if (peek_directive("on")) {
+				typed_handlers = true;
+				bool first_handler = true;
+				while (peek_directive("on")) {
+					parse_directive("on");
+					std::string first =
+					    parse_identifier();
+					std::optional<std::string>
+					    variable_name;
+					Type* exception_type = nullptr;
+					if (maybe_parse_colon()) {
+						variable_name = first;
+						exception_type =
+						    parse_type_expression(
+						        false);
+					} else if (
+					    maybe_parse_period()) {
+						UnitRef* unit =
+						    resolve_unit_type_qualifier(
+						        first);
+						std::string member =
+						    parse_identifier();
+						exception_type =
+						    unit->unit->frame
+						        ->lookup_type(
+						            member);
+						if (!exception_type)
+							raise_parse_error(
+							    "unit '" +
+							    first +
+							    "' has no type '" +
+							    member + "'");
+					} else {
+						exception_type =
+						    resolve_type(
+						        first, false);
+					}
+					if (!dynamic_cast<ClassType*>(
+					        exception_type))
+						raise_type_kind_mismatch(
+						    "exception handler type must be a class",
+						    "class",
+						    exception_type);
+					parse_keyword("do");
+
+					auto handler_frame =
+					    new Frame(nullptr);
+					StorageSlot* variable =
+					    nullptr;
+					if (variable_name) {
+						variable =
+						    new StorageSlot(
+						        cxx_value_name(
+						            *variable_name),
+						        exception_type);
+						handler_frame
+						    ->register_variable(
+						        *variable_name,
+						        variable,
+						        exception_type);
+					}
+					if (emitter)
+						emitter
+						    ->emit_exception_handler_prologue(
+						        exception_type,
+						        variable
+						            ? variable
+						                  ->cxx_name
+						            : "",
+						        first_handler);
+					push_scope(handler_frame);
+					bare_raise_allowed = true;
+					const bool empty_handler =
+					    input_token == ";" ||
+					    peek_directive("on") ||
+					    peek_keyword("else") ||
+					    peek_keyword("end");
+					if (!empty_handler)
+						parse_statement();
+					bare_raise_allowed = false;
+					pop_scope();
+					if (emitter)
+						emitter
+						    ->emit_exception_handler_epilogue();
+					first_handler = false;
+
+					const bool separated =
+					    maybe_parse_semicolon();
+					while (maybe_parse_semicolon()) {
+					}
+					if (peek_directive("on") &&
+					    !separated)
+						raise_parse_error(
+						    "missing semicolon between exception handlers");
+				}
+				if (maybe_parse_keyword("else")) {
+					has_default = true;
+					if (emitter)
+						emitter
+						    ->emit_exception_default_prologue();
+					bare_raise_allowed = true;
+					parse_block_body();
+					bare_raise_allowed = false;
+					if (emitter)
+						emitter
+						    ->emit_exception_default_epilogue();
+				}
+			} else {
+				has_default = true;
+				bare_raise_allowed = true;
+				parse_block_body();
+				bare_raise_allowed = false;
+			}
+			bare_raise_allowed = saved_bare_raise;
 			parse_keyword("end");
 			if (emitter)
-				emitter->emit_try_except_epilogue();
+				emitter->emit_try_except_epilogue(
+				    typed_handlers, has_default);
 		} else if (maybe_parse_keyword("finally")) {
+			enter_exception_block();
 			if (emitter)
-				emitter->begin_statement_capture();
+				emitter->emit_try_finally_prologue();
+			bare_raise_allowed = false;
 			finally_loop_depths.push_back(loop_depth);
 			parse_block_body();
 			finally_loop_depths.pop_back();
-			std::string finally_body;
-			if (emitter)
-				finally_body =
-				    emitter->end_statement_capture();
+			bare_raise_allowed =
+			    saved_bare_raise;
 			parse_keyword("end");
 			if (emitter)
-				emitter->emit_try_finally(
-				    try_body, finally_body);
+				emitter->emit_try_finally_epilogue();
 		} else {
 			raise_parse_error(
 			    "expected except or finally after try block");
 		}
+		restore_exception_block(
+		    enclosing_exception_block);
+		if (emitter)
+			emitter->emit_try_control_epilogue(
+			    this_try_depth,
+			    current_routine
+			        ? current_routine->ty
+			        : nullptr,
+			    try_is_inside_loop);
 	} else if (peek_keyword("if")) {
 		parse_keyword("if");
 		auto condition = parse_expression();
@@ -1090,7 +1264,10 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_while_prologue(condition);
 		++loop_depth;
+		loop_try_depths.push_back(
+		    protected_try_depth);
 		parse_statement();
+		loop_try_depths.pop_back();
 		--loop_depth;
 		if (emitter)
 			emitter->emit_while_epilogue();
@@ -1122,7 +1299,10 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_for_prologue(control, initial, final, descending);
 		++loop_depth;
+		loop_try_depths.push_back(
+		    protected_try_depth);
 		parse_statement();
+		loop_try_depths.pop_back();
 		--loop_depth;
 		if (emitter)
 			emitter->emit_for_epilogue();
@@ -1131,7 +1311,10 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_repeat_prologue();
 		++loop_depth;
+		loop_try_depths.push_back(
+		    protected_try_depth);
 		parse_block_body();
+		loop_try_depths.pop_back();
 		--loop_depth;
 		parse_keyword("until");
 		auto condition = parse_expression();
@@ -1173,8 +1356,12 @@ void Parser::maybe_parse_statement() {
 		// writes the hidden result slot, while expression use stays a call.
 		Node* lhs = nullptr;
 		if (!input_token.empty() && keywords.find(input_token) == keywords.end()) {
+			SourceLocation designator_location =
+			    current_location();
 			std::string first = parse_identifier();
 			if (maybe_parse_colon()) {
+				record_label_definition(
+				    first, designator_location);
 				if (emitter)
 					emitter->emit_label(cxx_label_name(first));
 				parse_statement();
@@ -4226,6 +4413,78 @@ void Parser::parse_unit_statement_sequence(bool stop_at_finalization) {
 	}
 }
 
+void Parser::push_statement_control_context() {
+	statement_control_contexts.emplace_back();
+}
+
+void Parser::pop_statement_control_context() {
+	if (statement_control_contexts.empty())
+		raise_parse_error(
+		    "internal parser error: statement control context underflow");
+	statement_control_contexts.pop_back();
+}
+
+unsigned Parser::current_exception_block() const {
+	return statement_control_contexts.empty()
+	    ? 0
+	    : statement_control_contexts.back()
+	          .current_exception_block;
+}
+
+unsigned Parser::enter_exception_block() {
+	if (statement_control_contexts.empty())
+		push_statement_control_context();
+	auto& context =
+	    statement_control_contexts.back();
+	context.current_exception_block =
+	    ++context.next_exception_block;
+	return context.current_exception_block;
+}
+
+void Parser::restore_exception_block(
+    unsigned block) {
+	if (statement_control_contexts.empty())
+		return;
+	statement_control_contexts.back()
+	    .current_exception_block = block;
+}
+
+void Parser::record_label_definition(
+    const std::string& name, SourceLocation location) {
+	if (statement_control_contexts.empty())
+		push_statement_control_context();
+	auto& state =
+	    statement_control_contexts.back().labels[name];
+	if (state.definition_block)
+		emit_parse_error_at(
+		    location,
+		    "duplicate statement label '" + name + "'");
+	state.definition_block =
+	    current_exception_block();
+	for (const auto& use : state.goto_blocks)
+		if (use.first != *state.definition_block)
+			emit_parse_error_at(
+			    use.second,
+			    "goto may not enter or leave a Pascal exception block");
+}
+
+void Parser::record_goto(
+    const std::string& name, SourceLocation location) {
+	if (statement_control_contexts.empty())
+		push_statement_control_context();
+	auto& state =
+	    statement_control_contexts.back().labels[name];
+	const unsigned block =
+	    current_exception_block();
+	if (state.definition_block &&
+	    *state.definition_block != block)
+		emit_parse_error_at(
+		    location,
+		    "goto may not enter or leave a Pascal exception block");
+	state.goto_blocks.push_back(
+	    {block, std::move(location)});
+}
+
 void Parser::parse_label_block() {
 	parse_keyword("label");
 	do {
@@ -6081,6 +6340,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	Callable* saved_routine = current_routine;
 	bool nested_lambda = saved_routine && dynamic_cast<Procedure*>(target);
 	current_routine = target;
+	push_statement_control_context();
 	StorageSlot* receiver_slot = nullptr;
 	bool pushed_owner_scope = false;
 	if (auto m = dynamic_cast<Method*>(target)) {
@@ -6159,6 +6419,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	pop_scope(); // pop body_frame
 	if (pushed_owner_scope)
 		pop_scope(); // pop the with_scope
+	pop_statement_control_context();
 	current_routine = saved_routine;
 }
 
@@ -7255,6 +7516,7 @@ void Parser::parse_program_or_unit() {
 			push_scope(used->frame, used->reference);
 		push_scope(program_frame);
 		push_declaration_frame(program_frame);
+		push_statement_control_context();
 		if (emitter) {
 			std::vector<std::string> h_files;
 			for (Unit* u : prog_units)
@@ -7300,6 +7562,7 @@ void Parser::parse_program_or_unit() {
 		if (emitter)
 			emitter->emit_main_epilogue(
 			    !unit->class_destructors.empty());
+		pop_statement_control_context();
 		pop_declaration_frame();
 		pop_scope(); // program
 		for (size_t i = 0; i < prog_units.size(); i++)

@@ -1,0 +1,169 @@
+#include "rtl.h"
+#include <array>
+#include <cstdlib>
+#include <exception>
+#include <functional>
+#include "system.h"
+
+
+struct t_tpackedpair {
+	using m_field_0_type = ::u_system::t_byte;
+	enum : std::size_t { m_field_0_offset = 0 };
+	using m_field_1_type = ::u_system::t_integer;
+	enum : std::size_t { m_field_1_offset = 1 };
+	enum : std::size_t { m_storage_size = 5 };
+
+private:
+	std::array<std::byte, m_storage_size> m_storage{};
+
+public:
+	std::byte* m_data() noexcept { return m_storage.data(); }
+	const std::byte* m_data() const noexcept { return m_storage.data(); }
+	m_field_0_type m_get_p_tag() const noexcept {
+		static_assert(std::is_trivially_copyable_v<m_field_0_type>, "packed field must be trivially copyable");
+		static_assert(m_field_0_offset + sizeof(m_field_0_type) <= m_storage_size, "packed field exceeds carrier storage");
+		m_field_0_type value{};
+		std::memcpy(&value, m_storage.data() + m_field_0_offset, sizeof value);
+		return value;
+	}
+	void m_set_p_tag(const m_field_0_type& value) noexcept {
+		static_assert(std::is_trivially_copyable_v<m_field_0_type>, "packed field must be trivially copyable");
+		static_assert(m_field_0_offset + sizeof(m_field_0_type) <= m_storage_size, "packed field exceeds carrier storage");
+		std::memcpy(m_storage.data() + m_field_0_offset, &value, sizeof value);
+	}
+	m_field_1_type m_get_p_value() const noexcept {
+		static_assert(std::is_trivially_copyable_v<m_field_1_type>, "packed field must be trivially copyable");
+		static_assert(m_field_1_offset + sizeof(m_field_1_type) <= m_storage_size, "packed field exceeds carrier storage");
+		m_field_1_type value{};
+		std::memcpy(&value, m_storage.data() + m_field_1_offset, sizeof value);
+		return value;
+	}
+	void m_set_p_value(const m_field_1_type& value) noexcept {
+		static_assert(std::is_trivially_copyable_v<m_field_1_type>, "packed field must be trivially copyable");
+		static_assert(m_field_1_offset + sizeof(m_field_1_type) <= m_storage_size, "packed field exceeds carrier storage");
+		std::memcpy(m_storage.data() + m_field_1_offset, &value, sizeof value);
+	}
+};
+static_assert(sizeof(t_tpackedpair) == t_tpackedpair::m_storage_size, "packed-record carrier size mismatch");
+static_assert(alignof(t_tpackedpair) == 1, "packed-record carrier alignment mismatch");
+static_assert(std::is_standard_layout_v<t_tpackedpair>, "packed-record carrier must have standard layout");
+static_assert(std::is_trivially_copyable_v<t_tpackedpair>, "packed-record carrier must be trivially copyable");
+
+struct t_tordinaryouter {
+	t_tpackedpair p_pair;
+};
+static_assert(std::is_standard_layout_v<t_tordinaryouter>, "ordinary record must have standard layout");
+static_assert(offsetof(t_tordinaryouter, p_pair) == 0, "ordinary-record field offset mismatch");
+static_assert(sizeof(decltype(t_tordinaryouter::p_pair)) == 5, "ordinary-record field size mismatch");
+static_assert(sizeof(t_tordinaryouter) == 5, "ordinary-record total size mismatch");
+static_assert(alignof(t_tordinaryouter) == 1, "ordinary-record alignment mismatch");
+
+void p_takevalue(t_tpackedpair p_r) {
+}
+
+void p_change(t_tpackedpair& p_r) {
+	p_r.m_set_p_value(20ull);
+}
+
+void p_produce(t_tpackedpair& p_r) {
+	p_r.m_set_p_tag(3ull);
+	p_r.m_set_p_value(30ull);
+}
+
+::u_system::t_integer p_readvalue(const t_tpackedpair& p_r) {
+	::u_system::t_integer p_result;
+	p_result = p_r.m_get_p_value();
+	return p_result;
+}
+
+t_tpackedpair p_makepair() {
+	t_tpackedpair p_result;
+	p_result.m_set_p_tag(4ull);
+	p_result.m_set_p_value(40ull);
+	return p_result;
+}
+[[maybe_unused]] t_tpackedpair p_a;
+[[maybe_unused]] t_tpackedpair p_b;
+[[maybe_unused]] t_tordinaryouter p_outer;
+[[maybe_unused]] ::u_system::t_integer p_n;
+
+
+namespace {
+struct tpcc_unit_entry {
+	void (*initialize)();
+	void (*finalize)();
+};
+
+constexpr std::array<tpcc_unit_entry, 0> tpcc_units{{
+}};
+std::size_t tpcc_initialized_unit_count = 0;
+bool tpcc_finalization_started = false;
+
+void tpcc_finalize_initialized_units() noexcept {
+	if (tpcc_finalization_started)
+		return;
+	tpcc_finalization_started = true;
+	while (tpcc_initialized_unit_count != 0) {
+		--tpcc_initialized_unit_count;
+		auto finalize = tpcc_units[tpcc_initialized_unit_count].finalize;
+		if (finalize)
+			finalize();
+	}
+}
+}
+
+int main() {
+	if (std::atexit(tpcc_finalize_initialized_units) != 0)
+		std::terminate();
+	try {
+		for (const auto& unit : tpcc_units) {
+			if (unit.initialize)
+				unit.initialize();
+			++tpcc_initialized_unit_count;
+		}
+	p_a.m_set_p_tag(1ull);
+	p_a.m_set_p_value(10ull);
+	p_b = p_a;
+	p_takevalue(p_b);
+	p_change(p_b);
+	p_produce(p_a);
+	p_n = p_readvalue(p_a);
+	p_b = p_makepair();
+	p_outer.p_pair.m_set_p_value(50ull);
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_char>(p_a.m_get_p_tag()), static_cast<::u_system::t_char>(3ull)))) {
+	p_n = 0ull;
+	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	}
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_a.m_get_p_value()), static_cast<::u_system::t_int64>(30ull)))) {
+	p_n = 0ull;
+	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	}
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_n), static_cast<::u_system::t_int64>(30ull)))) {
+	p_n = 0ull;
+	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	}
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_char>(p_b.m_get_p_tag()), static_cast<::u_system::t_char>(4ull)))) {
+	p_n = 0ull;
+	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	}
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_b.m_get_p_value()), static_cast<::u_system::t_int64>(40ull)))) {
+	p_n = 0ull;
+	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	}
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_outer.p_pair.m_get_p_value()), static_cast<::u_system::t_int64>(50ull)))) {
+	p_n = 0ull;
+	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	}
+		return 0;
+	} catch (::u_system::tpcc_pascal_exception<::u_system::t_tobject>& tpcc_exception) {
+		::u_system::tpcc_pascal_exception_scope<::u_system::t_tobject> tpcc_exception_scope(tpcc_exception);
+		auto tpcc_exceptproc = ::u_system::p_exceptproc;
+		tpcc_finalize_initialized_units();
+		if (tpcc_exceptproc)
+			tpcc_exceptproc(tpcc_exception.object(), tpcc_exception.address(), tpcc_exception.frame());
+		return 217;
+	} catch (...) {
+		tpcc_finalize_initialized_units();
+		throw;
+	}
+}

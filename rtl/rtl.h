@@ -24,6 +24,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <new>
@@ -43,37 +44,144 @@
 
 namespace u_system {
 
-// `Fail` is constructor control flow, not a Pascal exception. Generated
-// Pascal except handlers immediately rethrow this marker; allocation or
-// direct-initializer boundaries are the only consumers.
+// `Fail` is constructor control flow, not a Pascal exception. Pascal except
+// handlers catch only tpcc_pascal_exception, so this marker passes through
+// them to an allocation or direct-initializer boundary.
 struct tpcc_constructor_fail final {};
 
-// try/finally needs cleanup on C++ return, break, continue, and outward goto.
-// Its generated catch path releases this guard before running finally, so the
-// destructor never runs a throwing finally body during exception unwinding.
-template<typename Action>
-class tpcc_scope_exit {
-	Action action;
-	bool armed = true;
+// Exit/break/continue which cross a protected Pascal try cannot use native
+// C++ control transfer: the try suffix is not known until its body has already
+// streamed. These private carriers unwind through each crossed try; that try's
+// outer catch decrements next_try_depth and either propagates or performs the
+// real C++ transfer. They are not Pascal exceptions and are therefore never
+// visible to `except`.
+template<typename T>
+struct tpcc_return_transfer {
+	unsigned next_try_depth;
+	T value;
+};
+
+template<>
+struct tpcc_return_transfer<void> {
+	unsigned next_try_depth;
+};
+
+struct tpcc_loop_transfer {
+	unsigned next_try_depth;
+	unsigned target_try_depth;
+	bool is_break;
+};
+
+// One carrier type represents every object raised by Pascal. Root is the
+// generated System.TObject carrier; keeping it a template lets rtl.h define
+// the mechanism before that generated class is complete. The exception owns
+// the Pascal object until a handler completes or rethrows it.
+template<typename Root>
+class tpcc_pascal_exception {
+	std::unique_ptr<Root> raised_object;
+	void* raised_address;
+	void* raised_frame;
 
 public:
-	explicit tpcc_scope_exit(Action action)
-	    : action(std::move(action)) {}
-	tpcc_scope_exit(const tpcc_scope_exit&) = delete;
-	tpcc_scope_exit& operator=(const tpcc_scope_exit&) = delete;
-	~tpcc_scope_exit() noexcept(noexcept(action())) {
-		if (armed)
-			action();
+	tpcc_pascal_exception(
+	    std::unique_ptr<Root> object,
+	    void* address, void* frame)
+	    : raised_object(std::move(object)),
+	      raised_address(address),
+	      raised_frame(frame) {}
+	tpcc_pascal_exception(
+	    tpcc_pascal_exception&&) noexcept = default;
+	tpcc_pascal_exception& operator=(
+	    tpcc_pascal_exception&&) noexcept = default;
+	tpcc_pascal_exception(
+	    const tpcc_pascal_exception&) = delete;
+	tpcc_pascal_exception& operator=(
+	    const tpcc_pascal_exception&) = delete;
+
+	Root* object() const noexcept {
+		return raised_object.get();
 	}
-	void release() noexcept {
-		armed = false;
+	void* address() const noexcept {
+		return raised_address;
+	}
+	void* frame() const noexcept {
+		return raised_frame;
+	}
+	template<typename T>
+	T* get_if() const noexcept {
+		return dynamic_cast<T*>(raised_object.get());
+	}
+
+	std::unique_ptr<Root> release_if(
+	    Root* object) noexcept {
+		if (raised_object.get() != object)
+			return {};
+		return std::move(raised_object);
 	}
 };
 
-template<typename Action>
-auto tpcc_make_scope_exit(Action&& action) {
-	return tpcc_scope_exit<std::decay_t<Action>>(
-	    std::forward<Action>(action));
+// While a Pascal handler executes, its caught carrier is the owner of the
+// handler variable's object. `raise E` is an explicit new raise, but E may
+// still designate that same object (directly or through another variable).
+// Transfer its existing ownership into the new carrier instead of giving the
+// same raw pointer two owners. The linked stack also handles an outer handler
+// object raised from inside a nested handler.
+template<typename Root>
+class tpcc_pascal_exception_scope {
+	tpcc_pascal_exception<Root>& exception;
+	tpcc_pascal_exception_scope* previous;
+	inline static thread_local
+	    tpcc_pascal_exception_scope* active = nullptr;
+
+public:
+	explicit tpcc_pascal_exception_scope(
+	    tpcc_pascal_exception<Root>& exception) noexcept
+	    : exception(exception), previous(active) {
+		active = this;
+	}
+	~tpcc_pascal_exception_scope() {
+		active = previous;
+	}
+	tpcc_pascal_exception_scope(
+	    const tpcc_pascal_exception_scope&) = delete;
+	tpcc_pascal_exception_scope& operator=(
+	    const tpcc_pascal_exception_scope&) = delete;
+
+	static std::unique_ptr<Root> take_if_active(
+	    Root* object) noexcept {
+		for (auto* scope = active; scope;
+		     scope = scope->previous) {
+			auto owned =
+			    scope->exception.release_if(object);
+			if (owned)
+				return owned;
+		}
+		return {};
+	}
+};
+
+template<typename Root>
+[[noreturn]] inline void m_raise_pascal(
+    Root* object, void* address, void* frame) {
+	auto ownership =
+	    tpcc_pascal_exception_scope<Root>::
+	        take_if_active(object);
+	if (!ownership)
+		ownership.reset(object);
+	throw tpcc_pascal_exception<Root>{
+	    std::move(ownership), address, frame};
+}
+
+// Keep target-specific call-site recovery in one helper. noinline makes the
+// return address the generated Pascal raise site on the supported GCC/Clang
+// SysV target instead of an inlined point inside its containing expression.
+template<typename Root>
+[[noreturn, gnu::noinline]] inline void m_raise_pascal(
+    Root* object) {
+	void* frame = __builtin_frame_address(0);
+	void* address = __builtin_extract_return_addr(
+	    __builtin_return_address(0));
+	m_raise_pascal(object, address, frame);
 }
 
 using t_byte     = uint8_t;
@@ -261,6 +369,9 @@ inline void m_store_tmethod_data(
 }
 
 inline t_word p_errorcode = 0;
+using m_error_proc =
+    void (*)(t_longint, t_pointer, t_pointer);
+inline m_error_proc p_errorproc = nullptr;
 static_assert(sizeof(t_ptrint) == 8);
 static_assert(sizeof(t_ptruint) == 8);
 static_assert(sizeof(t_sizeint) == 8);
@@ -301,6 +412,25 @@ static_assert(sizeof(t_double) == 8);
 
 [[noreturn]] inline void p_runerror() {
 	p_runerror(0);
+}
+
+[[noreturn]] inline void m_runtime_error(
+    t_longint code, t_pointer address,
+    t_pointer frame) {
+	if (p_errorproc)
+		p_errorproc(code, address, frame);
+	// ErrorProc has a procedure type in Pascal rather than a noreturn type.
+	// If a user-installed callback returns, retain System's ordinary runtime
+	// error behavior instead of continuing after a failed RTL operation.
+	p_runerror(static_cast<t_word>(code));
+}
+
+[[noreturn, gnu::noinline]] inline void
+m_runtime_error(t_longint code) {
+	t_pointer frame = __builtin_frame_address(0);
+	t_pointer address = __builtin_extract_return_addr(
+	    __builtin_return_address(0));
+	m_runtime_error(code, address, frame);
 }
 
 // FPC's Char is an unsigned 8-bit ordinal, but it is nominally distinct from
@@ -504,10 +634,9 @@ inline tpcc_storage_ref tpcc_make_storage_ref(tpcc_storage_ref value) {
 // tpcc_make_storage_ref(pointer_variable), which refers to the bytes occupied
 // by the pointer variable itself.
 inline tpcc_storage_ref tpcc_dereference_storage(
-    t_pointer value) {
+	t_pointer value) {
 	if (!value)
-		throw std::out_of_range(
-		    "Pascal untyped pointer dereference through nil");
+		m_runtime_error(216);
 	return tpcc_storage_ref{
 	    reinterpret_cast<std::byte*>(value),
 	    std::numeric_limits<std::size_t>::max(),
@@ -637,7 +766,7 @@ inline T& p_index(t_fixedarray<T, length, low>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
 	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
-		throw std::out_of_range("Pascal fixed-array index out of range");
+		m_runtime_error(201);
 	return value.items[static_cast<std::size_t>(actual - first)];
 }
 
@@ -646,7 +775,7 @@ inline const T& p_index(const t_fixedarray<T, length, low>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
 	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
-		throw std::out_of_range("Pascal fixed-array index out of range");
+		m_runtime_error(201);
 	return value.items[static_cast<std::size_t>(actual - first)];
 }
 
@@ -656,7 +785,7 @@ inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
 	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
-		throw std::out_of_range("Pascal fixed-array storage index out of range");
+		m_runtime_error(201);
 	const std::size_t offset = static_cast<std::size_t>(actual - first);
 	auto* bytes = reinterpret_cast<std::byte*>(std::addressof(value.items));
 	return tpcc_typed_storage_ref<T>{
@@ -674,7 +803,7 @@ inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	const std::ptrdiff_t first = static_cast<std::ptrdiff_t>(low);
 	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
-		throw std::out_of_range("Pascal fixed-array storage index out of range");
+		m_runtime_error(201);
 	const std::size_t offset = static_cast<std::size_t>(actual - first);
 	const auto* bytes =
 	    reinterpret_cast<const std::byte*>(std::addressof(value.items));
@@ -692,7 +821,7 @@ inline t_char& p_index(t_shortstring<Capacity>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	if (actual < 0 ||
 	    actual > static_cast<std::ptrdiff_t>(Capacity))
-		throw std::out_of_range("Pascal ShortString index out of range");
+		m_runtime_error(201);
 	if (actual == 0)
 		return value.length;
 	return value.data[static_cast<std::size_t>(actual - 1)];
@@ -704,7 +833,7 @@ inline const t_char& p_index(
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	if (actual < 0 ||
 	    actual > static_cast<std::ptrdiff_t>(Capacity))
-		throw std::out_of_range("Pascal ShortString index out of range");
+		m_runtime_error(201);
 	if (actual == 0)
 		return value.length;
 	return value.data[static_cast<std::size_t>(actual - 1)];
@@ -716,7 +845,7 @@ inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	if (actual < 0 ||
 	    actual > static_cast<std::ptrdiff_t>(Capacity))
-		throw std::out_of_range("Pascal ShortString storage index out of range");
+		m_runtime_error(201);
 	if (actual == 0)
 		return tpcc_typed_storage_ref<t_char>{
 		    {
@@ -742,7 +871,7 @@ inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
 	if (actual < 0 ||
 	    actual > static_cast<std::ptrdiff_t>(Capacity))
-		throw std::out_of_range("Pascal ShortString storage index out of range");
+		m_runtime_error(201);
 	if (actual == 0)
 		return tpcc_typed_const_storage_ref<t_char>{
 		    {
@@ -767,14 +896,14 @@ inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
 template<typename T, typename I>
 inline T& p_index(T* value, I index) {
 	if (!value)
-		throw std::out_of_range("Pascal pointer index through nil");
+		m_runtime_error(216);
 	return value[static_cast<std::ptrdiff_t>(index)];
 }
 
 template<typename T, typename I>
 inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(T* value, I index) {
 	if (!value)
-		throw std::out_of_range("Pascal pointer storage index through nil");
+		m_runtime_error(216);
 	T* selected = value + static_cast<std::ptrdiff_t>(index);
 	return tpcc_typed_storage_ref<T>{
 	    {
@@ -789,7 +918,7 @@ template<typename T, typename I>
 inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
     const T* value, I index) {
 	if (!value)
-		throw std::out_of_range("Pascal pointer storage index through nil");
+		m_runtime_error(216);
 	const T* selected = value + static_cast<std::ptrdiff_t>(index);
 	return tpcc_typed_const_storage_ref<T>{
 	    {
@@ -842,8 +971,7 @@ struct t_ansistring {
 		    static_cast<std::ptrdiff_t>(index);
 		if (actual < 0 ||
 		    actual > static_cast<std::ptrdiff_t>(capacity))
-			throw std::out_of_range(
-			    "Pascal AnsiString index out of range");
+			m_runtime_error(201);
 		return actual == 0
 		    ? length
 		    : data[static_cast<std::size_t>(actual - 1)];
@@ -855,8 +983,7 @@ struct t_ansistring {
 		    static_cast<std::ptrdiff_t>(index);
 		if (actual < 0 ||
 		    actual > static_cast<std::ptrdiff_t>(capacity))
-			throw std::out_of_range(
-			    "Pascal AnsiString index out of range");
+			m_runtime_error(201);
 		return actual == 0
 		    ? length
 		    : data[static_cast<std::size_t>(actual - 1)];
@@ -868,8 +995,7 @@ struct t_ansistring {
 		    static_cast<std::ptrdiff_t>(index);
 		if (actual < 0 ||
 		    actual > static_cast<std::ptrdiff_t>(capacity))
-			throw std::out_of_range(
-			    "Pascal AnsiString storage index out of range");
+			m_runtime_error(201);
 		return actual == 0
 		    ? sizeof(length)
 		    : capacity -
@@ -1504,8 +1630,7 @@ inline void tpcc_write_many(
 
 inline std::ostream& tpcc_text_stream(t_text& file) {
 	if (!file.stream)
-		throw std::logic_error(
-		    "Write/WriteLn on an unopened Pascal Text file");
+		m_runtime_error(103);
 	return *file.stream;
 }
 
@@ -1619,7 +1744,7 @@ inline void p_fillchar(tpcc_storage_ref destination, t_sizeint count, t_byte val
 		return;
 	const std::size_t byte_count = static_cast<std::size_t>(count);
 	if (byte_count > destination.size)
-		throw std::out_of_range("FillChar exceeds destination storage");
+		m_runtime_error(201);
 	std::memset(destination.data, value, byte_count);
 }
 
@@ -1629,9 +1754,9 @@ inline void p_move(tpcc_const_storage_ref source,
 		return;
 	const std::size_t byte_count = static_cast<std::size_t>(count);
 	if (byte_count > source.size)
-		throw std::out_of_range("Move exceeds source storage");
+		m_runtime_error(201);
 	if (byte_count > destination.size)
-		throw std::out_of_range("Move exceeds destination storage");
+		m_runtime_error(201);
 	std::memmove(destination.data, source.data, byte_count);
 }
 
@@ -1641,9 +1766,9 @@ inline t_sizeint p_comparebyte(tpcc_const_storage_ref first,
 		return 0;
 	const std::size_t byte_count = static_cast<std::size_t>(count);
 	if (byte_count > first.size)
-		throw std::out_of_range("CompareByte exceeds first buffer");
+		m_runtime_error(201);
 	if (byte_count > second.size)
-		throw std::out_of_range("CompareByte exceeds second buffer");
+		m_runtime_error(201);
 	const int comparison = std::memcmp(first.data, second.data, byte_count);
 	return comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
 }
@@ -1971,9 +2096,10 @@ TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended)
 // outside the destination range (and for NaN/infinity). Check before casting
 // so Pascal Trunc/Round never rely on C++ undefined behavior.
 inline t_int64 tpcc_checked_real_to_int64(t_extended value, const char* operation) {
+	(void)operation;
 	constexpr t_extended limit = 0x1p63L;
 	if (!__builtin_isfinite(value) || value < -limit || value >= limit)
-		throw std::range_error(operation);
+		m_runtime_error(201);
 	return static_cast<t_int64>(value);
 }
 
@@ -2422,10 +2548,16 @@ template<typename T>
 requires std::is_object_v<T> || std::is_void_v<T>
 inline void p_getmem(T*& destination, t_ptruint size) {
 	destination = static_cast<T*>(std::malloc(static_cast<std::size_t>(size)));
+	if (!destination && size != 0)
+		m_runtime_error(203);
 }
 
 inline t_pointer p_getmem(t_ptruint size) {
-	return std::malloc(static_cast<std::size_t>(size));
+	t_pointer result =
+	    std::malloc(static_cast<std::size_t>(size));
+	if (!result && size != 0)
+		m_runtime_error(203);
+	return result;
 }
 
 inline void p_freemem(t_pointer value, t_ptruint size) {
@@ -2446,8 +2578,13 @@ template<typename T>
 inline T* m_allocate_object() {
 	if constexpr (std::is_abstract_v<T>)
 		return nullptr;
-	else
-		return new T{};
+	else {
+		try {
+			return new T{};
+		} catch (const std::bad_alloc&) {
+			m_runtime_error(203);
+		}
+	}
 }
 
 // Default TObject.NewInstance preserves the dynamic metaclass receiver. Every
@@ -2473,7 +2610,11 @@ inline void m_free_object(Object* object) {
 // vptr before any Pascal initializer method runs.
 template<typename T>
 inline T* m_new_value() {
-	return new T;
+	try {
+		return new T;
+	} catch (const std::bad_alloc&) {
+		m_runtime_error(203);
+	}
 }
 
 // An ordinary constructor call on existing storage has no result in Pascal.
@@ -2497,7 +2638,12 @@ inline void m_invoke_initializer(
 template<typename T, auto Initializer,
          typename... Args>
 inline T* m_new_object(Args&&... args) {
-	std::unique_ptr<T> object(new T);
+	std::unique_ptr<T> object;
+	try {
+		object.reset(new T);
+	} catch (const std::bad_alloc&) {
+		m_runtime_error(203);
+	}
 	try {
 		(object.get()->*Initializer)(
 		    std::forward<Args>(args)...);
@@ -2537,7 +2683,7 @@ inline Result* m_construct(
 	    static_cast<Result*>(
 	        meta->p_newinstance());
 	if (!object)
-		throw std::bad_alloc();
+		m_runtime_error(203);
 	try {
 		(object->*Initializer)(
 		    std::forward<Args>(args)...);

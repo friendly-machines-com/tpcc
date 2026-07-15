@@ -11,7 +11,7 @@ cd "$root"
 ./mp -Furtl -o"$tmp/abstract_classes.cc" \
 	tests/abstract_classes.pp
 
-if rg -Fq '= 0;' "$tmp/abstract_classes.cc" ||
+if rg -q '\) = 0;' "$tmp/abstract_classes.cc" ||
    rg -Fq 'p_runerror(' "$tmp/abstract_classes.cc"
 then
 	echo "class abstract incorrectly changed C++ class or method emission" >&2

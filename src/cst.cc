@@ -101,7 +101,10 @@ CoerceCheck::CoerceCheck(Node* value, Type* target_type)
     : UnaryOperation(value), target_type(target_type) {}
 
 Dereference::Dereference(Node* a) : UnaryOperation(a) {}
-Return::Return(Node* a) : UnaryOperation(a) {}
+Return::Return(Node* a, unsigned try_depth)
+    : UnaryOperation(a), try_depth(try_depth) {}
+Raise::Raise(Node* object, Node* address, Node* frame)
+    : object(object), address(address), frame(frame) {}
 AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
 RoutineRef::RoutineRef(Node* receiver, Node* candidates)
     : receiver(receiver), candidates(candidates) {}
@@ -497,6 +500,25 @@ ConstEvalResult MemberAccess::const_eval(
 }
 const char* Index::diagnostic_kind() const { return "index"; }
 const char* Return::diagnostic_kind() const { return "return"; }
+const char* Raise::diagnostic_kind() const { return "raise"; }
+void Raise::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(object);
+	ctx->add_value_edge(address);
+	ctx->add_value_edge(frame);
+}
+void Raise::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned) const {
+	out << "raise";
+	if (object)
+		out << " " << ctx->known_value_ref(object);
+	if (address)
+		out << " at " << ctx->known_value_ref(address);
+	if (frame)
+		out << ", " << ctx->known_value_ref(frame);
+}
 
 const char* Cast::diagnostic_kind() const { return "cast"; }
 ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
