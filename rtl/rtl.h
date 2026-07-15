@@ -17,11 +17,13 @@
 #include <array>
 #include <bit>
 #include <charconv>
+#include <cerrno>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <new>
@@ -285,6 +287,18 @@ struct t_shortstring {
 
 	t_char length;
 	t_char data[Capacity];
+
+	std::string m_string() const {
+		std::string result;
+		const std::size_t count =
+		    std::min<std::size_t>(
+		        length.value, Capacity);
+		result.reserve(count);
+		for (std::size_t i = 0; i < count; ++i)
+			result.push_back(
+			    static_cast<char>(data[i].value));
+		return result;
+	}
 };
 
 template<typename T>
@@ -766,6 +780,18 @@ struct t_ansistring {
 		return const_cast<t_char*>(data);
 	}
 
+	std::string m_string() const {
+		std::string result;
+		const std::size_t count =
+		    std::min<std::size_t>(
+		        length.value, capacity);
+		result.reserve(count);
+		for (std::size_t i = 0; i < count; ++i)
+			result.push_back(
+			    static_cast<char>(data[i].value));
+		return result;
+	}
+
 	template<typename I>
 	t_char& index(I index) {
 		const std::ptrdiff_t actual =
@@ -919,6 +945,417 @@ static_assert(std::is_aggregate_v<t_ansistring>);
 static_assert(
     std::is_trivially_default_constructible_v<t_ansistring>);
 static_assert(std::is_trivially_copyable_v<t_ansistring>);
+
+struct binary_file_state {
+	std::string name;
+	std::FILE* handle = nullptr;
+	t_longint record_size = 128;
+	bool readable = false;
+	bool writable = false;
+};
+
+// FPC's file variables are opaque handles and Close preserves the assigned
+// filename so Reset/Rewrite can reopen without another Assign. Keep the
+// pointed-to state in process-owned storage: t_file remains its pointer-sized,
+// trivially-copyable Pascal carrier, while every state is reclaimed during
+// normal C++ process teardown.
+inline std::vector<std::unique_ptr<binary_file_state>>&
+m_binary_file_states() {
+	static std::vector<
+	    std::unique_ptr<binary_file_state>> states;
+	return states;
+}
+
+inline t_word m_inoutres = 0;
+inline t_byte p_filemode = 2;
+
+inline void m_set_io_error(t_word error) {
+	if (m_inoutres == 0)
+		m_inoutres = error;
+}
+
+inline t_word m_file_error_from_errno(
+    int error, t_word fallback) {
+	switch (error) {
+	case ENOENT:
+		return 2;
+	case EACCES:
+	case EPERM:
+		return 5;
+	case EMFILE:
+	case ENFILE:
+		return 4;
+	case EBADF:
+		return 6;
+	default:
+		return fallback;
+	}
+}
+
+inline t_word p_ioresult() {
+	const t_word result = m_inoutres;
+	m_inoutres = 0;
+	return result;
+}
+
+inline void m_close_binary_handle(
+    binary_file_state& state) {
+	if (!state.handle)
+		return;
+	if (std::fclose(state.handle) != 0)
+		m_set_io_error(
+		    m_file_error_from_errno(errno, 101));
+	state.handle = nullptr;
+	state.readable = false;
+	state.writable = false;
+}
+
+template<typename PascalString>
+inline void p_assign(
+    t_file& file, const PascalString& name) {
+	if (m_inoutres != 0)
+		return;
+	if (file.state && file.state->handle)
+		m_close_binary_handle(*file.state);
+	auto state =
+	    std::make_unique<binary_file_state>();
+	state->name = name.m_string();
+	file.state = state.get();
+	m_binary_file_states().push_back(
+	    std::move(state));
+}
+
+inline bool m_prepare_binary_open(
+    t_file& file, t_longint record_size) {
+	if (m_inoutres != 0)
+		return false;
+	if (!file.state) {
+		m_set_io_error(102);
+		return false;
+	}
+	if (record_size <= 0) {
+		m_set_io_error(12);
+		return false;
+	}
+	if (file.state->handle)
+		m_close_binary_handle(*file.state);
+	if (m_inoutres != 0)
+		return false;
+	file.state->record_size = record_size;
+	return true;
+}
+
+inline void p_rewrite(
+    t_file& file, t_longint record_size) {
+	if (!m_prepare_binary_open(
+	        file, record_size))
+		return;
+	errno = 0;
+	file.state->handle =
+	    std::fopen(file.state->name.c_str(), "w+b");
+	if (!file.state->handle) {
+		m_set_io_error(
+		    m_file_error_from_errno(errno, 101));
+		return;
+	}
+	// FPC opens an untyped Rewrite file for writing. The C handle is
+	// read/write so a later Reset can reuse ordinary host file semantics;
+	// Pascal access checks still use these explicit mode flags.
+	file.state->readable = false;
+	file.state->writable = true;
+}
+
+inline void p_reset(
+    t_file& file, t_longint record_size) {
+	if (!m_prepare_binary_open(
+	        file, record_size))
+		return;
+	const t_byte access =
+	    static_cast<t_byte>(p_filemode & 3);
+	const char* mode = nullptr;
+	switch (access) {
+	case 0:
+		mode = "rb";
+		break;
+	case 1:
+	case 2:
+		mode = "r+b";
+		break;
+	default:
+		m_set_io_error(12);
+		return;
+	}
+	errno = 0;
+	file.state->handle =
+	    std::fopen(file.state->name.c_str(), mode);
+	if (!file.state->handle) {
+		m_set_io_error(
+		    m_file_error_from_errno(errno, 100));
+		return;
+	}
+	file.state->readable = access != 1;
+	file.state->writable = access != 0;
+}
+
+inline bool m_require_open_binary_file(
+    t_file& file) {
+	if (m_inoutres != 0)
+		return false;
+	if (!file.state) {
+		m_set_io_error(102);
+		return false;
+	}
+	if (!file.state->handle) {
+		m_set_io_error(103);
+		return false;
+	}
+	return true;
+}
+
+inline void p_close(t_file& file) {
+	if (!m_require_open_binary_file(file))
+		return;
+	m_close_binary_handle(*file.state);
+}
+
+inline void p_seek(
+    t_file& file, t_int64 record_position) {
+	if (!m_require_open_binary_file(file))
+		return;
+	if (record_position < 0 ||
+	    record_position >
+	        std::numeric_limits<long>::max() /
+	            file.state->record_size) {
+		m_set_io_error(156);
+		return;
+	}
+	const long byte_position =
+	    static_cast<long>(
+	        record_position *
+	        file.state->record_size);
+	if (std::fseek(
+	        file.state->handle,
+	        byte_position, SEEK_SET) != 0)
+		m_set_io_error(156);
+}
+
+inline t_int64 p_filepos(t_file& file) {
+	if (!m_require_open_binary_file(file))
+		return -1;
+	const long position =
+	    std::ftell(file.state->handle);
+	if (position < 0) {
+		m_set_io_error(156);
+		return -1;
+	}
+	return static_cast<t_int64>(
+	    position / file.state->record_size);
+}
+
+inline t_int64 p_filesize(t_file& file) {
+	if (!m_require_open_binary_file(file))
+		return -1;
+	const long original =
+	    std::ftell(file.state->handle);
+	if (original < 0 ||
+	    std::fseek(
+	        file.state->handle, 0, SEEK_END) != 0) {
+		m_set_io_error(156);
+		return -1;
+	}
+	const long end =
+	    std::ftell(file.state->handle);
+	if (std::fseek(
+	        file.state->handle,
+	        original, SEEK_SET) != 0) {
+		m_set_io_error(156);
+		return -1;
+	}
+	if (end < 0) {
+		m_set_io_error(156);
+		return -1;
+	}
+	return static_cast<t_int64>(
+	    end / file.state->record_size);
+}
+
+inline t_boolean p_eof(t_file& file) {
+	if (!m_require_open_binary_file(file))
+		return p_true;
+	if (!file.state->readable) {
+		m_set_io_error(104);
+		return p_true;
+	}
+	const long original =
+	    std::ftell(file.state->handle);
+	if (original < 0 ||
+	    std::fseek(
+	        file.state->handle, 0, SEEK_END) != 0) {
+		m_set_io_error(156);
+		return p_true;
+	}
+	const long end =
+	    std::ftell(file.state->handle);
+	if (std::fseek(
+	        file.state->handle,
+	        original, SEEK_SET) != 0 ||
+	    end < 0) {
+		m_set_io_error(156);
+		return p_true;
+	}
+	return tpcc_bool_to_boolean(
+	    original >= end);
+}
+
+inline void p_truncate(t_file& file) {
+	if (!m_require_open_binary_file(file))
+		return;
+	if (!file.state->writable) {
+		m_set_io_error(105);
+		return;
+	}
+	const long position =
+	    std::ftell(file.state->handle);
+	if (position < 0 ||
+	    std::fflush(file.state->handle) != 0) {
+		m_set_io_error(101);
+		return;
+	}
+	std::error_code error;
+	std::filesystem::resize_file(
+	    file.state->name,
+	    static_cast<std::uintmax_t>(position),
+	    error);
+	if (error) {
+		m_set_io_error(101);
+		return;
+	}
+	std::clearerr(file.state->handle);
+	if (std::fseek(
+	        file.state->handle,
+	        position, SEEK_SET) != 0)
+		m_set_io_error(156);
+}
+
+template<typename Count>
+inline bool m_binary_transfer_count(
+    Count count, t_longint record_size,
+    std::size_t* records,
+    std::size_t* bytes) {
+	if constexpr (std::is_signed_v<Count>)
+		if (count < 0) {
+			m_set_io_error(106);
+			return false;
+		}
+	const auto unsigned_count =
+	    static_cast<std::make_unsigned_t<Count>>(count);
+	if (unsigned_count >
+	    std::numeric_limits<std::size_t>::max()) {
+		m_set_io_error(106);
+		return false;
+	}
+	*records =
+	    static_cast<std::size_t>(unsigned_count);
+	if (*records >
+	    std::numeric_limits<std::size_t>::max() /
+	        static_cast<std::size_t>(record_size)) {
+		m_set_io_error(106);
+		return false;
+	}
+	*bytes =
+	    *records *
+	    static_cast<std::size_t>(record_size);
+	return true;
+}
+
+template<typename Count, typename Result>
+inline void p_blockread(
+    t_file& file, tpcc_storage_ref buffer,
+    Count count, Result& result) {
+	result = 0;
+	if (!m_require_open_binary_file(file))
+		return;
+	if (!file.state->readable) {
+		m_set_io_error(104);
+		return;
+	}
+	std::size_t records;
+	std::size_t bytes;
+	if (!m_binary_transfer_count(
+	        count, file.state->record_size,
+	        &records, &bytes))
+		return;
+	if (bytes > buffer.size) {
+		m_set_io_error(100);
+		return;
+	}
+	const std::size_t transferred =
+	    std::fread(
+	        buffer.data,
+	        static_cast<std::size_t>(
+	            file.state->record_size),
+	        records, file.state->handle);
+	result = static_cast<Result>(transferred);
+	if (std::ferror(file.state->handle))
+		m_set_io_error(100);
+}
+
+template<typename Count>
+inline void p_blockread(
+    t_file& file, tpcc_storage_ref buffer,
+    Count count) {
+	Count transferred = 0;
+	p_blockread(
+	    file, buffer, count, transferred);
+	if (m_inoutres == 0 &&
+	    transferred != count)
+		m_set_io_error(100);
+}
+
+template<typename Count, typename Result>
+inline void p_blockwrite(
+    t_file& file, tpcc_const_storage_ref buffer,
+    Count count, Result& result) {
+	result = 0;
+	if (!m_require_open_binary_file(file))
+		return;
+	if (!file.state->writable) {
+		m_set_io_error(105);
+		return;
+	}
+	std::size_t records;
+	std::size_t bytes;
+	if (!m_binary_transfer_count(
+	        count, file.state->record_size,
+	        &records, &bytes))
+		return;
+	if (bytes > buffer.size) {
+		m_set_io_error(101);
+		return;
+	}
+	const std::size_t transferred =
+	    std::fwrite(
+	        buffer.data,
+	        static_cast<std::size_t>(
+	            file.state->record_size),
+	        records, file.state->handle);
+	result = static_cast<Result>(transferred);
+	if (transferred != records ||
+	    std::ferror(file.state->handle))
+		m_set_io_error(101);
+}
+
+template<typename Count>
+inline void p_blockwrite(
+    t_file& file, tpcc_const_storage_ref buffer,
+    Count count) {
+	Count transferred = 0;
+	p_blockwrite(
+	    file, buffer, count, transferred);
+	if (m_inoutres == 0 &&
+	    transferred != count)
+		m_set_io_error(101);
+}
 
 template<typename T>
 struct tpcc_write_arg {

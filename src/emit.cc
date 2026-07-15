@@ -1612,6 +1612,16 @@ void Emitter::emit_storage_ref(Node* expr) {
 	        dynamic_cast<Dereference*>(expr);
 	    dereference &&
 	    dereference->ty == unknown_type()) {
+		if (auto address =
+		        dynamic_cast<AddrOf*>(
+		            dereference->a)) {
+			// Pascal `(@place)^` is the original place. This matters for
+			// omitted-type formals: their C++ carrier is already a storage
+			// view, so taking the address of that carrier would point at
+			// compiler bookkeeping rather than the caller's bytes.
+			emit_storage_ref(address->a);
+			return;
+		}
 		fprintf(active,
 		    "::u_system::tpcc_dereference_storage(");
 		emit_expression(dereference->a);
@@ -1640,6 +1650,12 @@ void Emitter::emit_const_storage_ref(Node* expr) {
 	        dynamic_cast<Dereference*>(expr);
 	    dereference &&
 	    dereference->ty == unknown_type()) {
+		if (auto address =
+		        dynamic_cast<AddrOf*>(
+		            dereference->a)) {
+			emit_const_storage_ref(address->a);
+			return;
+		}
 		fprintf(active,
 		    "::u_system::tpcc_make_const_storage_ref("
 		    "::u_system::tpcc_dereference_storage(");

@@ -54,6 +54,9 @@ type
 var
   // RunError stores its error number in this RTL variable before terminating.
   ErrorCode: Word external nil name '::u_system::p_errorcode';
+  // Reset(File) consults the low two access-mode bits. Higher sharing-mode
+  // bits are retained for source compatibility and ignored by this runtime.
+  FileMode: Byte external nil name '::u_system::p_filemode';
   
 operator+(a: Cardinal): Cardinal; external nil name '::u_system::p_positive';
 operator+(a: Integer): Integer; external nil name '::u_system::p_positive';
@@ -230,6 +233,28 @@ procedure getmem(out destination: Pointer; size: PtrUInt); overload; external ni
 function getmem(size: PtrUInt): Pointer; overload; external nil name '::u_system::p_getmem';
 procedure freemem(value: Pointer; size: PtrUInt); overload; external nil name '::u_system::p_freemem';
 function freemem(value: Pointer): PtrUInt; overload; external nil name '::u_system::p_freemem';
+procedure assign(out f: File; const name: ShortString); external nil name '::u_system::p_assign';
+procedure rewrite(var f: File; recordsize: LongInt = 128); external nil name '::u_system::p_rewrite';
+procedure reset(var f: File; recordsize: LongInt = 128); external nil name '::u_system::p_reset';
+procedure close(var f: File); external nil name '::u_system::p_close';
+procedure seek(var f: File; position: Int64); external nil name '::u_system::p_seek';
+function filepos(var f: File): Int64; external nil name '::u_system::p_filepos';
+function filesize(var f: File): Int64; external nil name '::u_system::p_filesize';
+function eof(var f: File): Boolean; external nil name '::u_system::p_eof';
+procedure truncate(var f: File); external nil name '::u_system::p_truncate';
+function ioresult: Word; external nil name '::u_system::p_ioresult';
+procedure blockread(var f: File; var buffer; count: Int64; var result: Int64); external nil name '::u_system::p_blockread';
+procedure blockread(var f: File; var buffer; count: LongInt; var result: LongInt); external nil name '::u_system::p_blockread';
+procedure blockread(var f: File; var buffer; count: Cardinal; var result: Cardinal); external nil name '::u_system::p_blockread';
+procedure blockread(var f: File; var buffer; count: Word; var result: Word); external nil name '::u_system::p_blockread';
+procedure blockread(var f: File; var buffer; count: Word; var result: Integer); external nil name '::u_system::p_blockread';
+procedure blockread(var f: File; var buffer; count: Int64); external nil name '::u_system::p_blockread';
+procedure blockwrite(var f: File; const buffer; count: Int64; var result: Int64); external nil name '::u_system::p_blockwrite';
+procedure blockwrite(var f: File; const buffer; count: LongInt; var result: LongInt); external nil name '::u_system::p_blockwrite';
+procedure blockwrite(var f: File; const buffer; count: Cardinal; var result: Cardinal); external nil name '::u_system::p_blockwrite';
+procedure blockwrite(var f: File; const buffer; count: Word; var result: Word); external nil name '::u_system::p_blockwrite';
+procedure blockwrite(var f: File; const buffer; count: Word; var result: Integer); external nil name '::u_system::p_blockwrite';
+procedure blockwrite(var f: File; const buffer; count: LongInt); external nil name '::u_system::p_blockwrite';
 function assigned(const x: Pointer): Boolean; external nil name '::u_system::p_assigned';
 function trunc(const x: Extended): Int64; external nil name '::u_system::p_trunc';
 function round(const x: Extended): Int64; external nil name '::u_system::p_round';

@@ -540,6 +540,15 @@ void Parser::handle_directive(const std::string& body) {
 			options->defines.erase(rest);
 		return;
 	}
+	if (name == "i" &&
+	    (rest == "+" || rest == "-")) {
+		// This is the {$I+}/{$I-} I/O-checking switch, not the short
+		// spelling of {$INCLUDE file}. File operations currently preserve
+		// their status in IOResult in either mode; recognizing the switch
+		// here prevents the tokenizer from treating "+" or "-" as an
+		// include filename.
+		return;
+	}
 	if (name == "i" || name == "include") {
 		if (rest.size() >= 2 && rest.front() == '%' && rest.back() == '%') {
 			std::string literal = expand_include_macro(rest);
