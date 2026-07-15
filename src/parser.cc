@@ -5780,6 +5780,14 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			vk = Method::VirtualKind::Override;
 			parse_semicolon();
 		} else if (maybe_parse_keyword("abstract")) {
+			// A class/object abstract method occupies an existing virtual
+			// dispatch slot; `abstract` does not itself create that slot.
+			// Interface methods are the separate implicitly-pure case.
+			if (vk == Method::VirtualKind::None &&
+			    !dynamic_cast<InterfaceType*>(
+			        owner_class))
+				raise_parse_error(
+				    "only virtual methods can be abstract");
 			vk = Method::VirtualKind::Abstract;
 			parse_semicolon();
 		} else if (maybe_parse_keyword("dynamic")) {
@@ -5800,10 +5808,15 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	// method, whereas C++ final would prohibit the implementation. This
 	// lowering therefore supports final only on explicit class/object virtual
 	// slots.
-	if (is_final &&
-	    vk == Method::VirtualKind::None)
-		raise_parse_error(
-		    "only virtual methods can be final");
+	if (is_final) {
+		if (dynamic_cast<InterfaceType*>(
+		        owner_class))
+			raise_parse_error(
+			    "final interface methods are not supported");
+		if (vk == Method::VirtualKind::None)
+			raise_parse_error(
+			    "only virtual methods can be final");
+	}
 	if (auto object =
 	        dynamic_cast<ObjectType*>(owner_class)) {
 		if (is_constructor &&
@@ -5826,6 +5839,11 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	auto m = new Method(cxx_name, pas_name, sig, has_overload, owner_class, vk);
 	m->is_final = is_final;
 	m->ty = sig; // The node's type IS the prototype.
+	// Install an AbstractError VMT stub.
+	// The emitter supplies that body, so a source implementation would be
+	// a second implementation of the same method.
+	if (vk == Method::VirtualKind::Abstract)
+		m->has_body = true;
 	if (external) {
 		m->has_body = true;
 		m->is_external = true;

@@ -1493,17 +1493,30 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				if (method) {
 					// C++ final is the exact enforcement mechanism for a
 					// Pascal virtual slot which may no longer be overridden.
-					// It is independent of override and must precede the
-					// pure-specifier on abstract/interface declarations.
+					// It is independent of override and precedes either the
+					// generated abstract body or an ordinary semicolon.
 					if (method->virtual_kind ==
 					    Method::VirtualKind::Override)
 						fprintf(active, " override");
 					if (method->is_final)
 						fprintf(active, " final");
-					if (is_interface ||
-					    method->virtual_kind ==
-					        Method::VirtualKind::Abstract)
+					if (is_interface)
 						fprintf(active, " = 0");
+					else if (method->virtual_kind ==
+					         Method::VirtualKind::Abstract) {
+						// Native FPC permits constructing a class which still
+						// has abstract methods. Its VMT entry calls
+						// AbstractError only if dispatch reaches that slot.
+						// RunError(211) is TPCC's existing non-catchable
+						// runtime-error path and adds no dependency beyond the
+						// already-required rtl.h.
+						fprintf(active,
+						    " {\n"
+						    "\t\t::u_system::p_runerror("
+						    "static_cast<::u_system::t_word>(211));\n"
+						    "\t}\n");
+						continue;
+					}
 				}
 				fprintf(active, ";\n");
 			}
