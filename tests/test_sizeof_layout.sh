@@ -10,12 +10,12 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/sizeof_layout.cc" tests/sizeof_layout.pp
 
-if [ "$(rg -F -c 'static_cast<pas::t_sizeint>(sizeof(' "$tmp/sizeof_layout.cc")" -ne 11 ]; then
+if [ "$(rg -F -c 'static_cast<::u_system::t_sizeint>(sizeof(' "$tmp/sizeof_layout.cc")" -ne 11 ]; then
 	echo "SizeOf expressions did not remain C++ sizeof expressions" >&2
 	exit 1
 fi
 
-if ! rg -Fq 'pas::t_fixedarray<pas::t_byte, 4,' "$tmp/sizeof_layout.cc"; then
+if ! rg -Fq '::u_system::t_fixedarray<::u_system::t_byte, 4,' "$tmp/sizeof_layout.cc"; then
 	echo "SizeOf constant evaluation did not construct the array bound" >&2
 	exit 1
 fi

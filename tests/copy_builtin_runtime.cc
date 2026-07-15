@@ -4,7 +4,7 @@
 
 template<std::size_t Capacity>
 static bool equals(
-    const pas::t_shortstring<Capacity>& value,
+    const ::u_system::t_shortstring<Capacity>& value,
     const char* bytes,
     std::size_t length) {
 	return value.length == length &&
@@ -12,7 +12,7 @@ static bool equals(
 }
 
 static bool equals(
-    const pas::t_ansistring& value,
+    const ::u_system::t_ansistring& value,
     const char* bytes,
     std::size_t length) {
 	return value.length == length &&
@@ -36,20 +36,20 @@ int main() {
 		return 6;
 	if (!equals(p_trimmed, "abc", 3))
 		return 7;
-	auto assigned = pas::p_assign(
-	    pas::tpcc_shortstring_from_c("abc", strlen("abc")));
+	auto assigned = ::u_system::p_assign(
+	    ::u_system::tpcc_shortstring_from_c("abc", strlen("abc")));
 	if (!equals(assigned, "abc", 3))
 		return 8;
-	pas::p_setlength(assigned, 5);
+	::u_system::p_setlength(assigned, 5);
 	if (assigned.length != 5 ||
 	    assigned.data[3] != 0 ||
 	    assigned.data[4] != 0 ||
 	    assigned.data[5] != 0)
 		return 9;
-	pas::p_setlength(assigned, -1);
+	::u_system::p_setlength(assigned, -1);
 	if (assigned.length != 0 || assigned.data[0] != 0)
 		return 10;
-	pas::p_setlength(assigned, 1000);
+	::u_system::p_setlength(assigned, 1000);
 	if (assigned.length != 254 || assigned.data[254] != 0)
 		return 11;
 	return 0;

@@ -39,38 +39,38 @@ constexpr OrdinalBounds signed_bounds(unsigned bits) {
 	};
 }
 
-IntrinsicType k_byte(SourceLocation::builtin(), "pas::t_byte", 0, unsigned_bounds(8), TypeLayout{1, 1});
-IntrinsicType k_shortint(SourceLocation::builtin(), "pas::t_shortint", 1, signed_bounds(8), TypeLayout{1, 1});
-IntrinsicType k_word(SourceLocation::builtin(), "pas::t_word", 2, unsigned_bounds(16), TypeLayout{2, 2});
-IntrinsicType k_smallint(SourceLocation::builtin(), "pas::t_smallint", 3, signed_bounds(16), TypeLayout{2, 2});
-IntrinsicType k_longword(SourceLocation::builtin(), "pas::t_longword", 4, unsigned_bounds(32), TypeLayout{4, 4});
-IntrinsicType k_integer(SourceLocation::builtin(), "pas::t_integer", 5, signed_bounds(32), TypeLayout{4, 4});
-IntrinsicType k_longint(SourceLocation::builtin(), "pas::t_longint", 6, signed_bounds(32), TypeLayout{4, 4});
-IntrinsicType k_qword(SourceLocation::builtin(), "pas::t_qword", 7, unsigned_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_int64(SourceLocation::builtin(), "pas::t_int64", 8, signed_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_set(SourceLocation::builtin(), "pas::t_set", {});
-IntrinsicType k_single(SourceLocation::builtin(), "pas::t_single", {}, {}, TypeLayout{4, 4});
-IntrinsicType k_double(SourceLocation::builtin(), "pas::t_double", {}, {}, TypeLayout{8, 8});
-IntrinsicType k_extended(SourceLocation::builtin(), "pas::t_extended", {}, {}, TypeLayout{16, 16});
-EnumType k_boolean(SourceLocation::builtin(), "pas::t_boolean", "false", "true");
-IntrinsicType k_char(SourceLocation::builtin(), "pas::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1});
+IntrinsicType k_byte(SourceLocation::builtin(), "::u_system::t_byte", 0, unsigned_bounds(8), TypeLayout{1, 1});
+IntrinsicType k_shortint(SourceLocation::builtin(), "::u_system::t_shortint", 1, signed_bounds(8), TypeLayout{1, 1});
+IntrinsicType k_word(SourceLocation::builtin(), "::u_system::t_word", 2, unsigned_bounds(16), TypeLayout{2, 2});
+IntrinsicType k_smallint(SourceLocation::builtin(), "::u_system::t_smallint", 3, signed_bounds(16), TypeLayout{2, 2});
+IntrinsicType k_longword(SourceLocation::builtin(), "::u_system::t_longword", 4, unsigned_bounds(32), TypeLayout{4, 4});
+IntrinsicType k_integer(SourceLocation::builtin(), "::u_system::t_integer", 5, signed_bounds(32), TypeLayout{4, 4});
+IntrinsicType k_longint(SourceLocation::builtin(), "::u_system::t_longint", 6, signed_bounds(32), TypeLayout{4, 4});
+IntrinsicType k_qword(SourceLocation::builtin(), "::u_system::t_qword", 7, unsigned_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_int64(SourceLocation::builtin(), "::u_system::t_int64", 8, signed_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_set(SourceLocation::builtin(), "::u_system::t_set", {});
+IntrinsicType k_single(SourceLocation::builtin(), "::u_system::t_single", {}, {}, TypeLayout{4, 4});
+IntrinsicType k_double(SourceLocation::builtin(), "::u_system::t_double", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_extended(SourceLocation::builtin(), "::u_system::t_extended", {}, {}, TypeLayout{16, 16});
+EnumType k_boolean(SourceLocation::builtin(), "::u_system::t_boolean", "false", "true");
+IntrinsicType k_char(SourceLocation::builtin(), "::u_system::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1});
 ShortStringType k_shortstring(SourceLocation::builtin(), 255);
-IntrinsicType k_ansistring(SourceLocation::builtin(), "pas::t_ansistring", {}, {}, TypeLayout{256, 1});
-IntrinsicType k_text(SourceLocation::builtin(), "pas::t_text", {}, {}, TypeLayout{8, 8});
-IntrinsicType k_file(SourceLocation::builtin(), "pas::t_file", {}, {}, TypeLayout{8, 8});
-IntrinsicType k_pointer(SourceLocation::builtin(), "pas::t_pointer", {}, {}, TypeLayout{8, 8});
-IntrinsicType k_ptrint(SourceLocation::builtin(), "pas::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_ptruint(SourceLocation::builtin(), "pas::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_sizeint(SourceLocation::builtin(), "pas::t_sizeint", 8, signed_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_sizeuint(SourceLocation::builtin(), "pas::t_sizeuint", 7, unsigned_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_fixedarray(SourceLocation::builtin(), "pas::t_fixedarray", {});
-IntrinsicType k_unknown(SourceLocation::builtin(), "pas::tpcc_unknown_type", {});
+IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{256, 1});
+IntrinsicType k_text(SourceLocation::builtin(), "::u_system::t_text", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_file(SourceLocation::builtin(), "::u_system::t_file", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_pointer(SourceLocation::builtin(), "::u_system::t_pointer", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_ptrint(SourceLocation::builtin(), "::u_system::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_ptruint(SourceLocation::builtin(), "::u_system::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_sizeint(SourceLocation::builtin(), "::u_system::t_sizeint", 8, signed_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_sizeuint(SourceLocation::builtin(), "::u_system::t_sizeuint", 7, unsigned_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_fixedarray(SourceLocation::builtin(), "::u_system::t_fixedarray", {});
+IntrinsicType k_unknown(SourceLocation::builtin(), "::u_system::tpcc_unknown_type", {});
 Frame* k_tmethod_children = new Frame(nullptr);
 RecordType k_tmethod(SourceLocation::builtin(), k_tmethod_children);
 StorageSlot* k_tmethod_code_field = nullptr;
 StorageSlot* k_tmethod_data_field = nullptr;
 const bool k_tmethod_initialized = []() {
-	k_tmethod.cxx_name = "pas::t_tmethod";
+	k_tmethod.cxx_name = "::u_system::t_tmethod";
 	k_tmethod_code_field =
 	    new StorageSlot("p_code", &k_pointer);
 	k_tmethod_data_field =
@@ -400,98 +400,98 @@ static ConstEvalResult fold_chr(ConstEvalContext&, Type* result_ty, const std::v
 }
 
 // Pascal-visible builtin procedures/functions. To add one: append a row
-// AND implement `pas::p_<name>` in rtl.h. Linker enforces the rtl.h side.
+// AND implement `::u_system::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const BuiltinDesc k_builtins[] = {
-    {"pas::p_ord", nullptr, {}, BuiltinGenericKind::OrdinalValue},
-    {"pas::p_inc", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
-    {"pas::p_dec", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
+    {"::u_system::p_ord", nullptr, {}, BuiltinGenericKind::OrdinalValue},
+    {"::u_system::p_inc", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
+    {"::u_system::p_dec", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
     // Both operations have the same generic Pascal signature and type
     // relationship; only their ordinary RTL function bodies differ.
-    {"pas::p_include", nullptr, {}, BuiltinGenericKind::SetMutation},
-    {"pas::p_exclude", nullptr, {}, BuiltinGenericKind::SetMutation},
-    {"pas::p_str", nullptr},
-    {"pas::p_val", nullptr},
-    {"pas::p_octstr", nullptr},
-    {"pas::p_strlen", nullptr},
-    {"pas::p_getmem", nullptr},
-    {"pas::p_freemem", nullptr},
-    {"pas::p_halt", nullptr},
-    {"pas::p_runerror", nullptr},
-    {"pas::p_low", nullptr, TypeBoundKind::Low},
-    {"pas::p_high", nullptr, TypeBoundKind::High},
+    {"::u_system::p_include", nullptr, {}, BuiltinGenericKind::SetMutation},
+    {"::u_system::p_exclude", nullptr, {}, BuiltinGenericKind::SetMutation},
+    {"::u_system::p_str", nullptr},
+    {"::u_system::p_val", nullptr},
+    {"::u_system::p_octstr", nullptr},
+    {"::u_system::p_strlen", nullptr},
+    {"::u_system::p_getmem", nullptr},
+    {"::u_system::p_freemem", nullptr},
+    {"::u_system::p_halt", nullptr},
+    {"::u_system::p_runerror", nullptr},
+    {"::u_system::p_low", nullptr, TypeBoundKind::Low},
+    {"::u_system::p_high", nullptr, TypeBoundKind::High},
     {
-        .cxx_name = "pas::p_sizeof",
+        .cxx_name = "::u_system::p_sizeof",
         .const_fold = nullptr,
         .syntax_kind = BuiltinSyntaxKind::SizeOf,
     },
     {
-        .cxx_name = "pas::p_write",
+        .cxx_name = "::u_system::p_write",
         .const_fold = nullptr,
         .syntax_kind = BuiltinSyntaxKind::Write,
     },
     {
-        .cxx_name = "pas::p_writeln",
+        .cxx_name = "::u_system::p_writeln",
         .const_fold = nullptr,
         .syntax_kind = BuiltinSyntaxKind::WriteLn,
     },
-    {"pas::p_setlength", nullptr},
-    {"pas::p_uniquestring", nullptr},
+    {"::u_system::p_setlength", nullptr},
+    {"::u_system::p_uniquestring", nullptr},
     {
-        .cxx_name = "pas::p_length",
+        .cxx_name = "::u_system::p_length",
         .const_fold = fold_length,
     },
-    {"pas::p_index", nullptr},
-    {"pas::tpcc_index_write", nullptr},
-    {"pas::p_char_to_shortstring", nullptr},
-    {"pas::p_chr", fold_chr},
-    {"pas::p_fillchar", nullptr},
-    {"pas::p_move", nullptr},
-    {"pas::p_comparebyte", nullptr},
-    {"pas::p_comparechar", nullptr},
-    {"pas::p_assigned", nullptr, {}, BuiltinGenericKind::Assigned},
-    {"pas::p_trunc", fold_trunc},
-    {"pas::p_round", fold_round},
-    {"pas::p_frac", fold_frac},
-    {"pas::p_sqrt", fold_sqrt},
-    {"pas::p_exp", fold_exp},
-    {"pas::p_ln", fold_ln},
-    {"pas::p_pos", fold_pos},
-    {"pas::p_copy", nullptr},
-    {"pas::p_delete", nullptr},
-    {"pas::p_insert", nullptr},
+    {"::u_system::p_index", nullptr},
+    {"::u_system::tpcc_index_write", nullptr},
+    {"::u_system::p_char_to_shortstring", nullptr},
+    {"::u_system::p_chr", fold_chr},
+    {"::u_system::p_fillchar", nullptr},
+    {"::u_system::p_move", nullptr},
+    {"::u_system::p_comparebyte", nullptr},
+    {"::u_system::p_comparechar", nullptr},
+    {"::u_system::p_assigned", nullptr, {}, BuiltinGenericKind::Assigned},
+    {"::u_system::p_trunc", fold_trunc},
+    {"::u_system::p_round", fold_round},
+    {"::u_system::p_frac", fold_frac},
+    {"::u_system::p_sqrt", fold_sqrt},
+    {"::u_system::p_exp", fold_exp},
+    {"::u_system::p_ln", fold_ln},
+    {"::u_system::p_pos", fold_pos},
+    {"::u_system::p_copy", nullptr},
+    {"::u_system::p_delete", nullptr},
+    {"::u_system::p_insert", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
-    {"pas::p_bitwiseand", nullptr},
-    {"pas::p_bitwiseor", nullptr},
-    {"pas::p_bitwisexor", nullptr},
+    {"::u_system::p_bitwiseand", nullptr},
+    {"::u_system::p_bitwiseor", nullptr},
+    {"::u_system::p_bitwisexor", nullptr},
 
-    // Delphi {"pas::p_logicalor", nullptr},
-    // Delphi {"pas::p_logicaland", nullptr},
-    {"pas::p_logicalnot", nullptr},
-    {"pas::p_logicalxor", nullptr},
+    // Delphi {"::u_system::p_logicalor", nullptr},
+    // Delphi {"::u_system::p_logicaland", nullptr},
+    {"::u_system::p_logicalnot", nullptr},
+    {"::u_system::p_logicalxor", nullptr},
 
-    {"pas::p_add", fold_add},
-    {"pas::p_subtract", fold_subtract},
-    {"pas::p_positive", fold_unary_plus},
-    {"pas::p_negative", fold_unary_minus},
-    {"pas::p_multiply", fold_multiply},
-    {"pas::p_divide", fold_divide},
-    {"pas::p_intdivide", fold_intdivide},
-    {"pas::p_assign", nullptr}, // delphi doesnt have it; well it has some kind of "implicit" operator that does the same.
-    {"pas::p_modulus", fold_modulus},
-    {"pas::p_leftshift", nullptr},
-    {"pas::p_rightshift", nullptr},
+    {"::u_system::p_add", fold_add},
+    {"::u_system::p_subtract", fold_subtract},
+    {"::u_system::p_positive", fold_unary_plus},
+    {"::u_system::p_negative", fold_unary_minus},
+    {"::u_system::p_multiply", fold_multiply},
+    {"::u_system::p_divide", fold_divide},
+    {"::u_system::p_intdivide", fold_intdivide},
+    {"::u_system::p_assign", nullptr}, // delphi doesnt have it; well it has some kind of "implicit" operator that does the same.
+    {"::u_system::p_modulus", fold_modulus},
+    {"::u_system::p_leftshift", nullptr},
+    {"::u_system::p_rightshift", nullptr},
 
-    {"pas::p_lessthan", nullptr},
-    {"pas::p_lessthanorequal", nullptr},
-    {"pas::p_equal", nullptr},
-    {"pas::p_greaterthan", nullptr},
-    {"pas::p_greaterthanorequal", nullptr},
-    {"pas::p_in", nullptr},
-    {"pas::p_supports", nullptr},
+    {"::u_system::p_lessthan", nullptr},
+    {"::u_system::p_lessthanorequal", nullptr},
+    {"::u_system::p_equal", nullptr},
+    {"::u_system::p_greaterthan", nullptr},
+    {"::u_system::p_greaterthanorequal", nullptr},
+    {"::u_system::p_in", nullptr},
+    {"::u_system::p_supports", nullptr},
 
-    {"pas::t_boolean::p_true", nullptr},
-    {"pas::t_boolean::p_false", nullptr},
+    {"::u_system::t_boolean::p_true", nullptr},
+    {"::u_system::t_boolean::p_false", nullptr},
 };
 
 Type* lookup_builtin_type(std::string cxx_name) {
@@ -502,7 +502,7 @@ Type* lookup_builtin_type(std::string cxx_name) {
 				}
 		} else if (auto q = dynamic_cast<ShortStringType*>(t)) {
 			if (q->capacity == 255 &&
-			    cxx_name == "pas::t_shortstring<255>") {
+			    cxx_name == "::u_system::t_shortstring<255>") {
 				return q;
 			}
 		} else if (auto q = dynamic_cast<InterfaceType*>(t)) {
@@ -547,9 +547,9 @@ Builtin* create_builtin_value(std::string cxx_name) {
 const Frame& root_frame() {
 	static const Frame f = []() {
 		Frame ff(nullptr);
-		auto p_false = new EnumMemberRef("pas::t_boolean::p_false", 0, &k_boolean);
+		auto p_false = new EnumMemberRef("::u_system::t_boolean::p_false", 0, &k_boolean);
 		ff.register_variable("false", p_false, &k_boolean);
-		auto p_true = new EnumMemberRef("pas::t_boolean::p_true", 1, &k_boolean);
+		auto p_true = new EnumMemberRef("::u_system::t_boolean::p_true", 1, &k_boolean);
 		ff.register_variable("true", p_true, &k_boolean);
 		// File is a reserved type-forming keyword, not a declaration in
 		// System. Registering its singleton here also lets type-or-expression
@@ -577,7 +577,7 @@ void IntrinsicType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 
 const char* Builtin::diagnostic_kind() const { return "builtin"; }
 void Builtin::collect_diagnostic_edges(ErrorLetContext*) const {
-	// A Builtin denotes an opaque C++ overload set such as pas::p_dec, not one
+	// A Builtin denotes an opaque C++ overload set such as ::u_system::p_dec, not one
 	// Pascal RoutineType. Do not add Node::ty here; it is intentionally null.
 }
 void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {

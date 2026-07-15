@@ -2108,7 +2108,7 @@ bool Parser::property_read_is_place(PropertyAccess* access) {
 		    ? true
 		    : is_referenceable(access->receiver);
 	if (auto builtin = dynamic_cast<Builtin*>(accessor))
-		return builtin->desc && builtin->desc->cxx_name == "pas::p_index" &&
+		return builtin->desc && builtin->desc->cxx_name == "::u_system::p_index" &&
 		       is_referenceable(access->receiver);
 	return false; // ordinary Pascal getter calls return values
 }
@@ -2503,7 +2503,7 @@ Property* Parser::default_property_for_type(Type* ty) {
 	// Built-in containers participate through the same Property node used by
 	// source declarations. Their accessor is the RTL reference operation.
 	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
-		auto accessor = create_builtin_value("pas::p_index");
+		auto accessor = create_builtin_value("::u_system::p_index");
 		array->default_property = new Property(
 		    "items", array->item_type, {array->range.base_type},
 		    accessor, accessor, true);
@@ -2511,9 +2511,9 @@ Property* Parser::default_property_for_type(Type* ty) {
 	}
 		if (dynamic_cast<ShortStringType*>(ty) ||
 		    ty == ansistring_type()) {
-		Node* read_accessor = create_builtin_value("pas::p_index");
+		Node* read_accessor = create_builtin_value("::u_system::p_index");
 		Node* write_accessor = ty == ansistring_type()
-		    ? create_builtin_value("pas::tpcc_index_write")
+		    ? create_builtin_value("::u_system::tpcc_index_write")
 		    : read_accessor;
 		ty->default_property = new Property(
 		    "items", char_type(), {integer_type()},
@@ -2521,7 +2521,7 @@ Property* Parser::default_property_for_type(Type* ty) {
 		return ty->default_property;
 	}
 	if (auto pointer = dynamic_cast<PointerType*>(ty)) {
-		auto accessor = create_builtin_value("pas::p_index");
+		auto accessor = create_builtin_value("::u_system::p_index");
 		pointer->default_property = new Property(
 		    "items", pointer->item_type, {integer_type()},
 		    accessor, accessor, true);
@@ -2731,7 +2731,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				auto ty = parse_type_expression(false);
 				if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
 				    dynamic_cast<PackedRecordType*>(owner_class) &&
-				    intrinsic && intrinsic->cxx_name == "pas::t_ansistring") {
+				    intrinsic && intrinsic->cxx_name == "::u_system::t_ansistring") {
 					raise_parse_error("managed fields inside packed records are not implemented");
 				}
 				for (const auto& member_name : member_names) {
@@ -2817,7 +2817,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			auto ty = parse_type_expression(false);
 			if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
 			    dynamic_cast<PackedRecordType*>(owner_class) &&
-			    intrinsic && intrinsic->cxx_name == "pas::t_ansistring") {
+			    intrinsic && intrinsic->cxx_name == "::u_system::t_ansistring") {
 				raise_parse_error("managed fields inside packed records are not implemented");
 			}
 			for (auto member_name : member_names) {
@@ -2921,7 +2921,7 @@ Type* Parser::parse_class_type() {
 		} else {
 			return raise_type_kind_mismatch("parse_class_type: type after 'class of' is not a class", "class", target_ty);
 		}
-		// FIXME: return lookup_builtin_type("pas::m_iobject");
+		// FIXME: return lookup_builtin_type("::u_system::m_iobject");
 		// return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
 	}
 	ClassType* super_ty = nullptr;
@@ -5862,20 +5862,18 @@ void Parser::parse_program_or_unit() {
 		parse_decl_blocks(false);
 		parse_keyword("begin");
 		if (emitter) {
-			std::vector<std::pair<std::string, std::string>>
+			std::vector<UnitLifecycleNames>
 			    lifecycle_hooks;
 			for (Unit* used :
 			     unit_registry->completed_units()) {
 				if (!used->has_initialization &&
 				    !used->has_finalization)
 					continue;
-				lifecycle_hooks.emplace_back(
-				    "::" + used->cxx_namespace +
-				        "::" +
+				lifecycle_hooks.push_back(
+				    UnitLifecycleNames{
+				        used->cxx_namespace,
 				        used->initialization_cxx_name,
-				    "::" + used->cxx_namespace +
-				        "::" +
-				        used->finalization_cxx_name);
+				        used->finalization_cxx_name});
 			}
 			emitter->emit_main_prologue(lifecycle_hooks);
 			// Program-local class hooks have the same position as unit class

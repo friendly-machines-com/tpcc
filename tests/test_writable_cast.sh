@@ -9,7 +9,7 @@ mkdir -p "$tmp"
 cd "$root"
 
 ./mp -Furtl -o"$tmp/writable_cast.cc" tests/writable_cast.pp
-if ! rg -Fq 'pas::tpcc_store_writable_cast<' "$tmp/writable_cast.cc"; then
+if ! rg -Fq '::u_system::tpcc_store_writable_cast<' "$tmp/writable_cast.cc"; then
 	echo "writable cast did not lower through typed RTL storage" >&2
 	exit 1
 fi

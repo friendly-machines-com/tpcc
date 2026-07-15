@@ -48,7 +48,7 @@ enum class BuiltinSyntaxKind {
 };
 
 struct BuiltinDesc {
-	std::string_view cxx_name;    // e.g. "pas::p_ord"
+	std::string_view cxx_name;    // e.g. "::u_system::p_ord"
 	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
 	std::optional<TypeBoundKind> type_bound_kind = {};
 	BuiltinGenericKind generic_kind = BuiltinGenericKind::None;
@@ -57,7 +57,7 @@ struct BuiltinDesc {
 
 struct IntrinsicTypeDesc {
 	std::string_view pas_name;    // lowercase
-	std::string_view cxx_name;    // e.g. "pas::t_integer"
+	std::string_view cxx_name;    // e.g. "::u_system::t_integer"
 };
 
 struct OrdinalBounds {

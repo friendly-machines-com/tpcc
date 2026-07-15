@@ -255,15 +255,19 @@ void Emitter::emit_const_decl(std::string cxx_name, Type* ty, Node* initializer)
 }
 
 void Emitter::emit_main_prologue(
-    const std::vector<std::pair<std::string, std::string>>&
+    const std::vector<UnitLifecycleNames>&
         unit_lifecycle_hooks) {
 	if (!active)
 		return;
 	fprintf(active, "\n");
-	for (const auto& [initialize, finalize] :
-	     unit_lifecycle_hooks) {
-		fprintf(active, "void %s();\n", initialize.c_str());
-		fprintf(active, "void %s();\n", finalize.c_str());
+	for (const auto& unit : unit_lifecycle_hooks) {
+		fprintf(active, "namespace %s {\n",
+		    unit.cxx_namespace.c_str());
+		fprintf(active, "void %s();\n",
+		    unit.initialize.c_str());
+		fprintf(active, "void %s();\n",
+		    unit.finalize.c_str());
+		fprintf(active, "}\n");
 	}
 	fprintf(active, "\nnamespace {\n");
 	fprintf(active, "struct tpcc_unit_entry {\n");
@@ -273,9 +277,12 @@ void Emitter::emit_main_prologue(
 	fprintf(active,
 	        "constexpr std::array<tpcc_unit_entry, %zu> tpcc_units{{\n",
 	        unit_lifecycle_hooks.size());
-	for (const auto& [initialize, finalize] : unit_lifecycle_hooks)
-		fprintf(active, "\t{%s, %s},\n",
-		        initialize.c_str(), finalize.c_str());
+	for (const auto& unit : unit_lifecycle_hooks)
+		fprintf(active, "\t{::%s::%s, ::%s::%s},\n",
+		    unit.cxx_namespace.c_str(),
+		    unit.initialize.c_str(),
+		    unit.cxx_namespace.c_str(),
+		    unit.finalize.c_str());
 	fprintf(active, "}};\n");
 	fprintf(active, "std::size_t tpcc_initialized_unit_count = 0;\n");
 	fprintf(active, "bool tpcc_finalization_started = false;\n\n");
@@ -404,8 +411,8 @@ void Emitter::emit_statement(Node* stmt) {
 				    (is_code || is_data)) {
 					fprintf(active,
 					    is_code
-					        ? "\tpas::m_store_tmethod_code("
-					        : "\tpas::m_store_tmethod_data(");
+					        ? "\t::u_system::m_store_tmethod_code("
+					        : "\t::u_system::m_store_tmethod_data(");
 					emit_writable_expression(view->a);
 					fprintf(active, ", ");
 					emit_expression(a->b);
@@ -421,7 +428,7 @@ void Emitter::emit_statement(Node* stmt) {
 			// would create aliasing/lifetime hazards. The RTL helper bit-copies
 			// the target value into a real source-carrier value, then assigns
 			// that value through the typed storage view.
-			fprintf(active, "\tpas::tpcc_store_writable_cast<");
+			fprintf(active, "\t::u_system::tpcc_store_writable_cast<");
 			emit_type_ref(cast->ty);
 			fprintf(active, ">(");
 			emit_storage_ref(cast->a);
@@ -471,7 +478,7 @@ void Emitter::emit_statement(Node* stmt) {
 						fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
 						fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source));\n");
 						fprintf(active, "\t\tauto tpcc_overlay_field = tpcc_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
-						fprintf(active, "\t\tpas::p_index(tpcc_overlay_field, ");
+						fprintf(active, "\t\t::u_system::p_index(tpcc_overlay_field, ");
 						emit_expression(indexed_argument);
 						fprintf(active, ") = ");
 						emit_expression(a->b);
@@ -587,7 +594,7 @@ void Emitter::emit_statement(Node* stmt) {
 		return;
 	}
 	if (auto write = dynamic_cast<WriteCall*>(stmt)) {
-		fprintf(active, "\tpas::%s(",
+		fprintf(active, "\t::u_system::%s(",
 		    write->newline ? "p_writeln" : "p_write");
 		bool need_comma = false;
 		if (write->file) {
@@ -597,19 +604,19 @@ void Emitter::emit_statement(Node* stmt) {
 		for (const WriteCall::Item& item : write->items) {
 			if (need_comma)
 				fprintf(active, ", ");
-			fprintf(active, "pas::tpcc_make_write_arg(");
+			fprintf(active, "::u_system::tpcc_make_write_arg(");
 			fprintf(active, "static_cast<");
 			emit_type_ref(item.value->ty);
 			fprintf(active, ">(");
 			emit_expression(item.value);
 			fprintf(active, ")");
 			if (item.width) {
-				fprintf(active, ", static_cast<pas::t_sizeint>(");
+				fprintf(active, ", static_cast<::u_system::t_sizeint>(");
 				emit_expression(item.width);
 				fprintf(active, ")");
 			}
 			if (item.precision) {
-				fprintf(active, ", static_cast<pas::t_sizeint>(");
+				fprintf(active, ", static_cast<::u_system::t_sizeint>(");
 				emit_expression(item.precision);
 				fprintf(active, ")");
 			}
@@ -786,16 +793,16 @@ void Emitter::emit_for_prologue(Node* control, Node* initial, Node* final, bool 
 	fprintf(active, "\tbool tpcc_for_done = false;\n");
 	fprintf(active, "\tfor (");
 	emit_expression(control);
-	fprintf(active, " = tpcc_for_initial; !tpcc_for_done && pas::tpcc_for_%s_equal(",
+	fprintf(active, " = tpcc_for_initial; !tpcc_for_done && ::u_system::tpcc_for_%s_equal(",
 		descending ? "greater" : "less");
 	emit_expression(control);
-	fprintf(active, ", tpcc_for_final); tpcc_for_done = pas::tpcc_for_equal(");
+	fprintf(active, ", tpcc_for_final); tpcc_for_done = ::u_system::tpcc_for_equal(");
 	emit_expression(control);
 	fprintf(active, ", tpcc_for_final), ");
 	emit_expression(control);
 	fprintf(active, " = tpcc_for_done ? ");
 	emit_expression(control);
-	fprintf(active, " : pas::tpcc_for_%s(", descending ? "pred" : "succ");
+	fprintf(active, " : ::u_system::tpcc_for_%s(", descending ? "pred" : "succ");
 	emit_expression(control);
 	fprintf(active, ")) {\n");
 }
@@ -820,8 +827,8 @@ void Emitter::emit_formal_parameter(
 	     formal.mode == ParamMode::Out ||
 	     formal.mode == ParamMode::Const)) {
 		fprintf(active, formal.mode == ParamMode::Const
-		    ? "pas::tpcc_const_storage_ref"
-		    : "pas::tpcc_storage_ref");
+		    ? "::u_system::tpcc_const_storage_ref"
+		    : "::u_system::tpcc_storage_ref");
 	} else {
 		if (formal.mode == ParamMode::Const)
 			fprintf(active, "const ");
@@ -1045,18 +1052,18 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				fprintf(active, "\t}\n");
 			}
 			if (!body->lookup_value_local("classname")) {
-				fprintf(active, "\tpublic: virtual inline ::pas::t_shortstring<255> p_classname() {\n");
+				fprintf(active, "\tpublic: virtual inline ::u_system::t_shortstring<255> p_classname() {\n");
 				fprintf(active,
-					"\t\treturn ::pas::tpcc_shortstring_from_c(\"%s\", strlen(\"%s\"));\n",
+					"\t\treturn ::u_system::tpcc_shortstring_from_c(\"%s\", strlen(\"%s\"));\n",
 					class_name.c_str(), class_name.c_str()); // FIXME: escape
 				fprintf(active, "\t}\n");
 			}
 			if (!body->lookup_value_local("inheritsfrom")) {
-				fprintf(active, "\tpublic: virtual inline ::pas::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
+				fprintf(active, "\tpublic: virtual inline ::u_system::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
 				if (parent_class_cxx_name.empty()) {
-					fprintf(active, "\t\treturn ::pas::tpcc_bool_to_boolean(s == this);\n");
+					fprintf(active, "\t\treturn ::u_system::tpcc_bool_to_boolean(s == this);\n");
 				} else {
-					fprintf(active, "\t\treturn ::pas::tpcc_bool_to_boolean(s == this || %s::m_meta::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn ::u_system::tpcc_bool_to_boolean(s == this || %s::m_meta::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
 				}
 				fprintf(active, "\t}\n");
 			}
@@ -1449,7 +1456,7 @@ void Emitter::emit_routine_reference(
 			    reference);
 		if (reference->code_only) {
 			fprintf(active,
-			    "pas::m_function_to_code_pointer(static_cast<");
+			    "::u_system::m_function_to_code_pointer(static_cast<");
 			emit_type_ref(procedure->ty->return_type);
 			fprintf(active, " (*)");
 			emit_formal_parameters(procedure->ty, false);
@@ -1483,7 +1490,7 @@ void Emitter::emit_routine_reference(
 		    "method routine reference owner has no C++ name",
 		    method->owner_class);
 
-	fprintf(active, "pas::m_bind_method<static_cast<");
+	fprintf(active, "::u_system::m_bind_method<static_cast<");
 	emit_type_ref(method->ty->return_type);
 	fprintf(active, " (%s::*)", owner.c_str());
 	emit_formal_parameters(method->ty, false);
@@ -1529,7 +1536,7 @@ void Emitter::emit_writable_expression(Node* expr) {
 void Emitter::emit_storage_ref(Node* expr) {
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
 		if (dynamic_cast<Builtin*>(property->property->write_accessor)) {
-			fprintf(active, "pas::tpcc_make_storage_ref(");
+			fprintf(active, "::u_system::tpcc_make_storage_ref(");
 			emit_expression(property->receiver);
 			for (Node* index : property->indexes) {
 				fprintf(active, ", ");
@@ -1539,7 +1546,7 @@ void Emitter::emit_storage_ref(Node* expr) {
 			return;
 		}
 	}
-	fprintf(active, "pas::tpcc_make_storage_ref(");
+	fprintf(active, "::u_system::tpcc_make_storage_ref(");
 	emit_writable_expression(expr);
 	fprintf(active, ")");
 }
@@ -1547,7 +1554,7 @@ void Emitter::emit_storage_ref(Node* expr) {
 void Emitter::emit_const_storage_ref(Node* expr) {
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
 		if (dynamic_cast<Builtin*>(property->property->read_accessor)) {
-			fprintf(active, "pas::tpcc_make_const_storage_ref(");
+			fprintf(active, "::u_system::tpcc_make_const_storage_ref(");
 			emit_expression(property->receiver);
 			for (Node* index : property->indexes) {
 				fprintf(active, ", ");
@@ -1557,7 +1564,7 @@ void Emitter::emit_const_storage_ref(Node* expr) {
 			return;
 		}
 	}
-	fprintf(active, "pas::tpcc_make_const_storage_ref(");
+	fprintf(active, "::u_system::tpcc_make_const_storage_ref(");
 	emit_expression(expr);
 	fprintf(active, ")");
 }
@@ -1629,7 +1636,7 @@ void Emitter::emit_expression(Node* expr) {
 		if (s->ty == char_type()) {
 			if (s->value.size() != 1)
 				unhandled_node("Char literal does not contain exactly one byte", s);
-			fprintf(active, "static_cast<pas::t_char>(static_cast<uint8_t>(%u))",
+			fprintf(active, "static_cast<::u_system::t_char>(static_cast<uint8_t>(%u))",
 				static_cast<unsigned>(static_cast<unsigned char>(s->value[0])));
 			return;
 		}
@@ -1639,7 +1646,7 @@ void Emitter::emit_expression(Node* expr) {
 				unhandled_node(
 				    "non-Char string literal has non-ShortString type",
 				    s);
-			fprintf(active, "pas::tpcc_shortstring_from_c<%u>(",
+			fprintf(active, "::u_system::tpcc_shortstring_from_c<%u>(",
 			    static_cast<unsigned>(shortstring->capacity));
 		fputc('"', active);
 		for (unsigned char ch : s->value)
@@ -1721,7 +1728,7 @@ void Emitter::emit_expression(Node* expr) {
 		auto set_type = dynamic_cast<FixedSetType*>(set->ty);
 		if (!set_type || set_type->item_type == unknown_type())
 			unhandled_node("set literal has no contextual item type", set);
-		fprintf(active, "pas::tpcc_make_set<");
+		fprintf(active, "::u_system::tpcc_make_set<");
 		emit_type_ref(set_type->item_type);
 		fprintf(active, ">({");
 		for (size_t i = 0; i < set->items.size(); ++i) {
@@ -1729,13 +1736,13 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, ", ");
 			const SetLiteral::Item& item = set->items[i];
 			if (item.upper) {
-				fprintf(active, "pas::tpcc_set_range(");
+				fprintf(active, "::u_system::tpcc_set_range(");
 				emit_expression(item.lower);
 				fprintf(active, ", ");
 				emit_expression(item.upper);
 				fprintf(active, ")");
 			} else {
-				fprintf(active, "pas::tpcc_set_single(");
+				fprintf(active, "::u_system::tpcc_set_single(");
 				emit_expression(item.lower);
 				fprintf(active, ")");
 			}
@@ -1884,7 +1891,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto equal = dynamic_cast<RoutineEqual*>(expr)) {
-		fprintf(active, "pas::m_equal(");
+		fprintf(active, "::u_system::m_equal(");
 		emit_expression(equal->a);
 		fprintf(active, ", ");
 		emit_expression(equal->b);
@@ -1892,7 +1899,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto ix = dynamic_cast<Index*>(expr)) {
-		fprintf(active, "pas::p_index(");
+		fprintf(active, "::u_system::p_index(");
 		emit_expression(ix->a);
 		fprintf(active, ", ");
 		emit_expression(ix->b);
@@ -2010,13 +2017,13 @@ void Emitter::emit_expression(Node* expr) {
 			        .c_str());
 			return;
 		}
-		fprintf(active, tb->kind == TypeBoundKind::Low ? "pas::p_low<" : "pas::p_high<");
+		fprintf(active, tb->kind == TypeBoundKind::Low ? "::u_system::p_low<" : "::u_system::p_high<");
 		emit_type_ref(tb->operand_type);
 		fprintf(active, ">()");
 		return;
 	}
 	if (auto size = dynamic_cast<SizeOf*>(expr)) {
-		fprintf(active, "static_cast<pas::t_sizeint>(sizeof(");
+		fprintf(active, "static_cast<::u_system::t_sizeint>(sizeof(");
 		emit_type_ref(size->operand_type);
 		fprintf(active, "))");
 		return;
@@ -2029,7 +2036,7 @@ void Emitter::emit_expression(Node* expr) {
 		    dynamic_cast<ShortStringType*>(ca->ty);
 		if (source_shortstring && target_shortstring) {
 			fprintf(active,
-			    "pas::tpcc_shortstring_cast<%u>(",
+			    "::u_system::tpcc_shortstring_cast<%u>(",
 			    static_cast<unsigned>(
 			        target_shortstring->capacity));
 			emit_expression(ca->a);
@@ -2043,7 +2050,7 @@ void Emitter::emit_expression(Node* expr) {
 		if (source_routine &&
 		    source_routine->kind == METHOD &&
 		    ca->ty == tmethod_type()) {
-			fprintf(active, "pas::m_method_to_tmethod(");
+			fprintf(active, "::u_system::m_method_to_tmethod(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
 			return;
@@ -2051,7 +2058,7 @@ void Emitter::emit_expression(Node* expr) {
 		if (ca->a && ca->a->ty == tmethod_type() &&
 		    target_routine &&
 		    target_routine->kind == METHOD) {
-			fprintf(active, "pas::m_tmethod_to_method<");
+			fprintf(active, "::u_system::m_tmethod_to_method<");
 			emit_function_type(target_routine);
 			fprintf(active, ">(");
 			emit_expression(ca->a);
@@ -2110,7 +2117,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto co = dynamic_cast<CoerceCheck*>(expr)) {
-		fprintf(active, "pas::tpcc_bool_to_boolean(dynamic_cast<");
+		fprintf(active, "::u_system::tpcc_bool_to_boolean(dynamic_cast<");
 		emit_type_ref(co->target_type);
 		fprintf(active, ">(");
 		emit_expression(co->a);
@@ -2180,7 +2187,7 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
-		fprintf(active, "pas::t_shortstring<%u>",
+		fprintf(active, "::u_system::t_shortstring<%u>",
 		    static_cast<unsigned>(shortstring->capacity));
 		return;
 	}
@@ -2263,16 +2270,16 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto f = dynamic_cast<TypedFileType*>(ty)) {
-		fprintf(active, "pas::t_typedfile<");
+		fprintf(active, "::u_system::t_typedfile<");
 		emit_type_ref(f->item_type);
 		fprintf(active, ">");
 		return;
 	}
 	if (auto rt = dynamic_cast<RoutineType*>(ty)) {
 		if (rt->kind == METHOD)
-			fprintf(active, "pas::m_method<");
+			fprintf(active, "::u_system::m_method<");
 		else if (rt->kind == ROUTINE)
-			fprintf(active, "pas::m_proc<");
+			fprintf(active, "::u_system::m_proc<");
 		else
 			unhandled_type(
 			    "declaration-only routine kind used as a routine value",
@@ -2282,7 +2289,7 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto s = dynamic_cast<FixedSetType*>(ty)) {
-		fprintf(active, "pas::t_set<");
+		fprintf(active, "::u_system::t_set<");
 		emit_type_ref(s->item_type);
 		fprintf(active, ">");
 		return;

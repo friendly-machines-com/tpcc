@@ -22,11 +22,11 @@ struct AdapterDerived : AdapterPrefix, AdapterOwner {};
 
 int main() {
 	AdapterDerived adjusted_object;
-	auto adjusted_method = pas::m_bind_method<
+	auto adjusted_method = ::u_system::m_bind_method<
 	    static_cast<int (AdapterOwner::*)(int)>(
 	        &AdapterOwner::add)>(&adjusted_object);
 	auto adjusted_raw =
-	    pas::m_method_to_tmethod(adjusted_method);
+	    ::u_system::m_method_to_tmethod(adjusted_method);
 	if (adjusted_raw.p_data != static_cast<void*>(
 	        static_cast<AdapterOwner*>(&adjusted_object)))
 		return 8;
@@ -49,16 +49,16 @@ int main() {
 		return 3;
 	if (p_methodfunctionresult != 130)
 		return 4;
-	if (p_plainequal != pas::p_true ||
-	    p_methodequal != pas::p_true)
+	if (p_plainequal != ::u_system::p_true ||
+	    p_methodequal != ::u_system::p_true)
 		return 5;
-	if (p_plainnil != pas::p_true ||
-	    p_plainnilequal != pas::p_true ||
-	    p_methodnil != pas::p_true ||
-	    p_methodnilequal != pas::p_true)
+	if (p_plainnil != ::u_system::p_true ||
+	    p_plainnilequal != ::u_system::p_true ||
+	    p_methodnil != ::u_system::p_true ||
+	    p_methodnilequal != ::u_system::p_true)
 		return 6;
 	if (p_rawcode == nullptr ||
-	    p_rawdata != static_cast<pas::t_pointer>(p_receiver) ||
+	    p_rawdata != static_cast<::u_system::t_pointer>(p_receiver) ||
 	    p_globalcode == nullptr ||
 	    p_methodcode == nullptr)
 		return 7;

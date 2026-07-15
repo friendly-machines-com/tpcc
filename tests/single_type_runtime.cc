@@ -3,7 +3,7 @@
 #undef main
 
 int main() {
-	static_assert(sizeof(pas::t_single) == 4);
+	static_assert(sizeof(::u_system::t_single) == 4);
 	p_base = new t_tchild;
 	if (tpcc_pascal_main() != 0)
 		return 1;
@@ -21,7 +21,7 @@ int main() {
 	    p_product != 7.5f ||
 	    p_quotient != 3.75f)
 		return 5;
-	if (p_singleless != pas::p_true ||
+	if (p_singleless != ::u_system::p_true ||
 	    p_singlesize != 4)
 		return 6;
 	if (p_ranksingle != 1 ||
@@ -35,7 +35,7 @@ int main() {
 	    p_parsed != 2.25f)
 		return 8;
 	if (p_child != p_base ||
-	    p_ischild != pas::p_true)
+	    p_ischild != ::u_system::p_true)
 		return 9;
 	delete p_base;
 	p_base = nullptr;

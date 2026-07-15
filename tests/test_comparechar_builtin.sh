@@ -10,11 +10,11 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/comparechar_builtin.cc" tests/comparechar_builtin.pp
 
-if ! rg -q 'pas::p_comparechar' "$tmp/comparechar_builtin.cc"; then
+if ! rg -q '::u_system::p_comparechar' "$tmp/comparechar_builtin.cc"; then
 	echo "CompareChar did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q 'pas::p_comparebyte' "$tmp/comparechar_builtin.cc"; then
+if ! rg -q '::u_system::p_comparebyte' "$tmp/comparechar_builtin.cc"; then
 	echo "CompareByte did not lower through the RTL" >&2
 	exit 1
 fi

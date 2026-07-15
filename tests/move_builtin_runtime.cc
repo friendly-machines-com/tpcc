@@ -4,69 +4,69 @@
 #include <stdexcept>
 
 int main() {
-	pas::t_shortstring<255> text =
-	    pas::tpcc_shortstring_from_c("abcdef", 6);
-	pas::p_move(
-	    pas::tpcc_make_const_storage_ref(text, 1),
-	    pas::tpcc_make_storage_ref(text, 2),
+	::u_system::t_shortstring<255> text =
+	    ::u_system::tpcc_shortstring_from_c("abcdef", 6);
+	::u_system::p_move(
+	    ::u_system::tpcc_make_const_storage_ref(text, 1),
+	    ::u_system::tpcc_make_storage_ref(text, 2),
 	    4);
-	if (pas::p_index(text, 1) != pas::t_char{'a'} ||
-	    pas::p_index(text, 2) != pas::t_char{'a'} ||
-	    pas::p_index(text, 3) != pas::t_char{'b'} ||
-	    pas::p_index(text, 4) != pas::t_char{'c'} ||
-	    pas::p_index(text, 5) != pas::t_char{'d'} ||
-	    pas::p_index(text, 6) != pas::t_char{'f'})
+	if (::u_system::p_index(text, 1) != ::u_system::t_char{'a'} ||
+	    ::u_system::p_index(text, 2) != ::u_system::t_char{'a'} ||
+	    ::u_system::p_index(text, 3) != ::u_system::t_char{'b'} ||
+	    ::u_system::p_index(text, 4) != ::u_system::t_char{'c'} ||
+	    ::u_system::p_index(text, 5) != ::u_system::t_char{'d'} ||
+	    ::u_system::p_index(text, 6) != ::u_system::t_char{'f'})
 		return EXIT_FAILURE;
 
-	pas::p_move(
-	    pas::tpcc_make_const_storage_ref(text, 1),
-	    pas::tpcc_make_storage_ref(text, 2),
+	::u_system::p_move(
+	    ::u_system::tpcc_make_const_storage_ref(text, 1),
+	    ::u_system::tpcc_make_storage_ref(text, 2),
 	    0);
-	pas::p_move(
-	    pas::tpcc_make_const_storage_ref(text, 1),
-	    pas::tpcc_make_storage_ref(text, 2),
+	::u_system::p_move(
+	    ::u_system::tpcc_make_const_storage_ref(text, 1),
+	    ::u_system::tpcc_make_storage_ref(text, 2),
 	    -1);
 
-	pas::t_fixedarray<pas::t_char, 6, 0> fixed{{
-	    pas::t_char{'a'},
-	    pas::t_char{'b'},
-	    pas::t_char{'c'},
-	    pas::t_char{'d'},
-	    pas::t_char{'e'},
-	    pas::t_char{'f'},
+	::u_system::t_fixedarray<::u_system::t_char, 6, 0> fixed{{
+	    ::u_system::t_char{'a'},
+	    ::u_system::t_char{'b'},
+	    ::u_system::t_char{'c'},
+	    ::u_system::t_char{'d'},
+	    ::u_system::t_char{'e'},
+	    ::u_system::t_char{'f'},
 	}};
-	pas::p_move(
-	    pas::tpcc_make_const_storage_ref(fixed, 0),
-	    pas::tpcc_make_storage_ref(fixed, 1),
+	::u_system::p_move(
+	    ::u_system::tpcc_make_const_storage_ref(fixed, 0),
+	    ::u_system::tpcc_make_storage_ref(fixed, 1),
 	    5);
-	if (pas::p_index(fixed, 0) != pas::t_char{'a'} ||
-	    pas::p_index(fixed, 1) != pas::t_char{'a'} ||
-	    pas::p_index(fixed, 5) != pas::t_char{'e'})
+	if (::u_system::p_index(fixed, 0) != ::u_system::t_char{'a'} ||
+	    ::u_system::p_index(fixed, 1) != ::u_system::t_char{'a'} ||
+	    ::u_system::p_index(fixed, 5) != ::u_system::t_char{'e'})
 		return EXIT_FAILURE;
 
-	pas::t_char* pointer = nullptr;
-	pas::p_getmem(pointer, 7);
-	pas::p_move(
-	    pas::tpcc_make_const_storage_ref(text, 1),
-	    pas::tpcc_make_storage_ref(pointer, 0),
+	::u_system::t_char* pointer = nullptr;
+	::u_system::p_getmem(pointer, 7);
+	::u_system::p_move(
+	    ::u_system::tpcc_make_const_storage_ref(text, 1),
+	    ::u_system::tpcc_make_storage_ref(pointer, 0),
 	    6);
-	pas::p_index(pointer, 6) = pas::t_char{0};
-	if (pas::p_strlen(pointer) != 6)
+	::u_system::p_index(pointer, 6) = ::u_system::t_char{0};
+	if (::u_system::p_strlen(pointer) != 6)
 		return EXIT_FAILURE;
-	pas::p_freemem(pointer, 7);
+	::u_system::p_freemem(pointer, 7);
 
-	pas::p_move(
-	    pas::tpcc_make_const_storage_ref(text, 1),
-	    pas::tpcc_make_storage_ref(text, 255),
+	::u_system::p_move(
+	    ::u_system::tpcc_make_const_storage_ref(text, 1),
+	    ::u_system::tpcc_make_storage_ref(text, 255),
 	    1);
-	if (pas::p_index(text, 255) != pas::t_char{'a'})
+	if (::u_system::p_index(text, 255) != ::u_system::t_char{'a'})
 		return EXIT_FAILURE;
 
 	bool rejected = false;
 	try {
-		pas::p_move(
-		    pas::tpcc_make_const_storage_ref(text, 1),
-		    pas::tpcc_make_storage_ref(text, 256),
+		::u_system::p_move(
+		    ::u_system::tpcc_make_const_storage_ref(text, 1),
+		    ::u_system::tpcc_make_storage_ref(text, 256),
 		    1);
 	} catch (const std::out_of_range&) {
 		rejected = true;

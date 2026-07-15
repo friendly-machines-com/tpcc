@@ -11,13 +11,13 @@ cd "$root"
 ./mp -Furtl -o"$tmp/single_type.cc" \
 	tests/single_type.pp
 
-if ! rg -q 'pas::t_single p_s;' "$tmp/single_type.cc"
+if ! rg -q '::u_system::t_single p_s;' "$tmp/single_type.cc"
 then
-	echo "Single did not lower to pas::t_single" >&2
+	echo "Single did not lower to ::u_system::t_single" >&2
 	exit 1
 fi
 if ! rg -q \
-	'p_coerced = static_cast<pas::t_single>\(p_e\);' \
+	'p_coerced = static_cast<::u_system::t_single>\(p_e\);' \
 	"$tmp/single_type.cc"
 then
 	echo "numeric Coerce did not lower to static_cast<Single>" >&2

@@ -12,16 +12,16 @@ cd "$root"
 	tests/shortstring_type.pp
 
 for expected in \
-	'pas::t_shortstring<2> p_tiny;' \
-	'pas::t_shortstring<5> p_name;' \
-	'pas::t_shortstring<255> p_ordinary;' \
-	'pas::tpcc_shortstring_from_c<2>' \
-	'pas::tpcc_shortstring_from_c<5>' \
-	'pas::tpcc_shortstring_cast<2>' \
-	'pas::tpcc_shortstring_cast<5>' \
-	'sizeof(pas::t_shortstring<2>)' \
-	'sizeof(pas::t_shortstring<5>)' \
-	'sizeof(pas::t_shortstring<255>)'
+	'::u_system::t_shortstring<2> p_tiny;' \
+	'::u_system::t_shortstring<5> p_name;' \
+	'::u_system::t_shortstring<255> p_ordinary;' \
+	'::u_system::tpcc_shortstring_from_c<2>' \
+	'::u_system::tpcc_shortstring_from_c<5>' \
+	'::u_system::tpcc_shortstring_cast<2>' \
+	'::u_system::tpcc_shortstring_cast<5>' \
+	'sizeof(::u_system::t_shortstring<2>)' \
+	'sizeof(::u_system::t_shortstring<5>)' \
+	'sizeof(::u_system::t_shortstring<255>)'
 do
 	if ! rg -Fq "$expected" "$tmp/shortstring_type.cc"; then
 		echo "missing ShortString lowering: $expected" >&2

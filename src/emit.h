@@ -14,6 +14,12 @@ class RoutineType;
 class RoutineRef;
 struct Parameter;
 
+struct UnitLifecycleNames {
+	std::string cxx_namespace;
+	std::string initialize;
+	std::string finalize;
+};
+
 /** No public name-mangling entry point. Prefixing (`t_` for type identifiers,
  *  `p_` for value identifiers) is applied inside Type / Node constructors
  *  where the kind is implicit -- callers pass Pascal names and the ctor
@@ -94,7 +100,7 @@ public:
 	void emit_var_decl(std::string cxx_name, Type* ty);
 	void emit_const_decl(std::string cxx_name, Type* ty, Node* initializer);
 	void emit_main_prologue(
-	    const std::vector<std::pair<std::string, std::string>>&
+	    const std::vector<UnitLifecycleNames>&
 	        unit_lifecycle_hooks);
 	void emit_main_epilogue();
 	void emit_statement(Node* stmt);

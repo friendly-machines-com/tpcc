@@ -10,7 +10,7 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/move_builtin.cc" tests/move_builtin.pp
 
-if ! rg -q 'pas::p_move' "$tmp/move_builtin.cc"; then
+if ! rg -q '::u_system::p_move' "$tmp/move_builtin.cc"; then
 	echo "Move did not lower through the RTL" >&2
 	exit 1
 fi

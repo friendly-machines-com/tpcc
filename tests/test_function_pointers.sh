@@ -12,20 +12,20 @@ cd "$root"
 	tests/function_pointers.pp
 
 if ! rg -q \
-	'pas::m_proc<void\(pas::t_integer\)> p_plainprocedure' \
+	'::u_system::m_proc<void\(::u_system::t_integer\)> p_plainprocedure' \
 	"$tmp/function_pointers.cc"
 then
 	echo "plain routine type did not use m_proc<Signature>" >&2
 	exit 1
 fi
 if ! rg -q \
-	'pas::m_method<void\(pas::t_integer\)> p_boundprocedure' \
+	'::u_system::m_method<void\(::u_system::t_integer\)> p_boundprocedure' \
 	"$tmp/function_pointers.cc"
 then
 	echo "method routine type did not use m_method<Signature>" >&2
 	exit 1
 fi
-if ! rg -q 'pas::m_bind_method<static_cast<' \
+if ! rg -q '::u_system::m_bind_method<static_cast<' \
 	"$tmp/function_pointers.cc"
 then
 	echo "method binding did not use the template adapter" >&2

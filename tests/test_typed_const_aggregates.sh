@@ -13,7 +13,7 @@ cd "$root"
 
 for expected in \
 	'const t_touter p_outer = [](' \
-	'pas::tpcc_make_set<t_tflag>' \
+	'::u_system::tpcc_make_set<t_tflag>' \
 	'p_packedvalues = {{[](' \
 	'tpcc_record.m_set_p_code' \
 	'tpcc_record.m_set_p_value'

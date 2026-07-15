@@ -9,7 +9,7 @@ mkdir -p "$tmp"
 cd "$root"
 
 ./mp -Furtl -o"$tmp/copy_builtin.cc" tests/copy_builtin.pp
-if ! rg -q 'pas::p_copy\(' "$tmp/copy_builtin.cc"; then
+if ! rg -q '::u_system::p_copy\(' "$tmp/copy_builtin.cc"; then
 	echo "Copy did not lower to its ordinary RTL call" >&2
 	exit 1
 fi

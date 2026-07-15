@@ -38,7 +38,7 @@
 #include <utility>
 #include <cstddef> // for std::byte
 
-namespace pas {
+namespace u_system {
 
 using t_byte     = uint8_t;
 using t_shortint = int8_t;
@@ -1951,4 +1951,4 @@ using t_tclass = m_iobject;
 
 //#define class_instance_new(X) (new X)
 
-} // namespace pas
+} // namespace u_system

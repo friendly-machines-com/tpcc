@@ -2,4 +2,4 @@
 
 
 enum t_boolean { p_false, p_true };
-using t_tclass = pas::m_iobject;
+using t_tclass = ::u_system::m_iobject;

@@ -5,13 +5,13 @@
 
 int main() {
 	try {
-		(void)pas::p_trunc(std::numeric_limits<pas::t_extended>::infinity());
+		(void)::u_system::p_trunc(std::numeric_limits<::u_system::t_extended>::infinity());
 		return 1;
 	} catch (const std::range_error&) {
 	}
 
 	try {
-		(void)pas::p_round(std::numeric_limits<pas::t_extended>::quiet_NaN());
+		(void)::u_system::p_round(std::numeric_limits<::u_system::t_extended>::quiet_NaN());
 		return 2;
 	} catch (const std::range_error&) {
 	}

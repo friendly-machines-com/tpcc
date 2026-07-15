@@ -9,15 +9,15 @@ mkdir -p "$tmp"
 cd "$root"
 
 ./mp -Furtl -o"$tmp/set_literals.cc" tests/set_literals.pp
-if ! rg -q 'pas::t_set<pas::t_char>' "$tmp/set_literals.cc"; then
+if ! rg -q '::u_system::t_set<::u_system::t_char>' "$tmp/set_literals.cc"; then
 	echo "Char set lost its item type" >&2
 	exit 1
 fi
-if ! rg -q 'pas::tpcc_set_range' "$tmp/set_literals.cc"; then
+if ! rg -q '::u_system::tpcc_set_range' "$tmp/set_literals.cc"; then
 	echo "set range did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q 'pas::p_in' "$tmp/set_literals.cc"; then
+if ! rg -q '::u_system::p_in' "$tmp/set_literals.cc"; then
 	echo "set membership did not lower through the RTL" >&2
 	exit 1
 fi
