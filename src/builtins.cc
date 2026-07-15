@@ -228,6 +228,49 @@ static ConstEvalResult fold_unary_plus(ConstEvalContext&, Type* result_ty, const
 	return fold_integer_result(i->value, i->negative, result_ty);
 }
 
+static ConstEvalResult fold_logical_not(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 1 || !const_integer_arg(args[0]))
+		return ConstEvalResult::not_constant();
+	OrdinalBounds bounds;
+	if (!integer_bounds(result_ty, &bounds))
+		return ConstEvalResult::not_constant();
+
+	// The Delphi operator name is LogicalNot for both Boolean negation and
+	// integer complement. For the integer overload, complement exactly the
+	// result carrier's width and convert the two's-complement bits back to
+	// Integer's magnitude/sign constant representation.
+	uint64_t width_value = bounds.signed_type
+	                           ? bounds.min_magnitude
+	                           : bounds.max_positive;
+	unsigned bits = 0;
+	do {
+		++bits;
+		width_value >>= 1;
+	} while (width_value != 0);
+	uint64_t mask = bits == 64
+	                    ? UINT64_MAX
+	                    : (uint64_t{1} << bits) - 1;
+	const Integer* value = const_integer_arg(args[0]);
+	uint64_t raw = value->negative
+	                   ? (uint64_t{0} - value->value) & mask
+	                   : value->value & mask;
+	uint64_t complemented = (~raw) & mask;
+	if (bounds.signed_type) {
+		uint64_t sign_bit =
+		    uint64_t{1} << (bits - 1);
+		if (complemented & sign_bit) {
+			uint64_t magnitude =
+			    (uint64_t{0} - complemented) & mask;
+			return fold_integer_result(
+			    magnitude, magnitude != 0, result_ty);
+		}
+	}
+	return fold_integer_result(
+	    complemented, false, result_ty);
+}
+
 static bool add_u64_checked(uint64_t a, uint64_t b, uint64_t* out) {
 	*out = a + b;
 	return *out >= a;
@@ -488,7 +531,7 @@ static const BuiltinDesc k_builtins[] = {
 
     // Delphi {"::u_system::p_logicalor", nullptr},
     // Delphi {"::u_system::p_logicaland", nullptr},
-    {"::u_system::p_logicalnot", nullptr},
+    {"::u_system::p_logicalnot", fold_logical_not},
     {"::u_system::p_logicalxor", nullptr},
 
     {"::u_system::p_add", fold_add},

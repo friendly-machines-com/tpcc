@@ -2398,6 +2398,13 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 				return new Integer(i->value, i->ty, !i->negative);
 			if (id == "+")
 				return x;
+			if (id == "not") {
+				// An untyped Pascal integer literal has Integer semantics in
+				// unary `not` (`not 1 = -2`). Pin it before overload
+				// resolution; otherwise every width-preserving integer
+				// LogicalNot signature is an equally exact literal match.
+				x->ty = integer_type();
+			}
 		}
 	}
 	auto fn = resolve_value(id);

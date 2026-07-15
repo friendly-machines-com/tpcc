@@ -1918,6 +1918,8 @@ inline t_sizeint p_sizeof(tpcc_typed_const_storage_ref<T>) {
 	inline t_boolean p_greaterthanorequal(T a, T b) { return tpcc_bool_to_boolean(a >= b); }
 
 #define TPCC_DEFINE_INTEGER_OPERATIONS(T) \
+	/* Delphi calls unary `not` LogicalNot even for integer bitwise complement; there is no separate BitwiseNot overload name. */ \
+	inline T p_logicalnot(T a) { return static_cast<T>(~a); } \
 	inline T p_bitwiseand(T a, T b) { return a & b; } \
 	inline T p_bitwiseor(T a, T b) { return a | b; } \
 	inline T p_bitwisexor(T a, T b) { return a ^ b; } \

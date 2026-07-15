@@ -131,6 +131,23 @@ operator >=(a, b: Cardinal): Boolean; external nil name '::u_system::p_greaterth
 operator div(a, b: Cardinal): Cardinal; external nil name '::u_system::p_intdivide';
 operator mod(a, b: Cardinal): Cardinal; external nil name '::u_system::p_modulus';
 
+// Delphi exposes only the named unary operator LogicalNot: the same `not`
+// token means Boolean negation for Boolean and width-preserving bitwise
+// complement for integers. Keep every concrete integer signature here so
+// overload resolution preserves the operand type instead of widening it.
+operator not(a: Byte): Byte; external nil name '::u_system::p_logicalnot';
+operator not(a: ShortInt): ShortInt; external nil name '::u_system::p_logicalnot';
+operator not(a: Word): Word; external nil name '::u_system::p_logicalnot';
+operator not(a: SmallInt): SmallInt; external nil name '::u_system::p_logicalnot';
+operator not(a: Cardinal): Cardinal; external nil name '::u_system::p_logicalnot';
+operator not(a: Integer): Integer; external nil name '::u_system::p_logicalnot';
+operator not(a: QWord): QWord; external nil name '::u_system::p_logicalnot';
+operator not(a: Int64): Int64; external nil name '::u_system::p_logicalnot';
+operator not(a: PtrInt): PtrInt; external nil name '::u_system::p_logicalnot';
+operator not(a: PtrUInt): PtrUInt; external nil name '::u_system::p_logicalnot';
+operator not(a: SizeInt): SizeInt; external nil name '::u_system::p_logicalnot';
+operator not(a: SizeUInt): SizeUInt; external nil name '::u_system::p_logicalnot';
+
 operator and(a, b: Cardinal): Cardinal; external nil name '::u_system::p_bitwiseand';
 operator or(a, b: Cardinal): Cardinal; external nil name '::u_system::p_bitwiseor';
 operator xor(a, b: Cardinal): Cardinal; external nil name '::u_system::p_bitwisexor';
