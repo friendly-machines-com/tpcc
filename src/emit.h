@@ -67,11 +67,18 @@ public:
 	// Emit a per-unit .h prologue: #include "rtl.h" plus an #include per
 	// interface-section `uses`d unit, so consumers of this header see the
 	// transitive types referenced by the interface declarations.
-	void emit_unit_interface_prologue(std::vector<std::string> used_unit_h_files);
+	void emit_unit_interface_prologue(
+	    std::string unit_namespace,
+	    std::vector<std::string> used_unit_h_files);
+	void emit_unit_interface_epilogue();
 	// Emit a per-unit .cc prologue: #include "<this_unit>.h" (the unit's own
 	// interface section) plus #include "rtl.h" and per-impl-`uses`d-unit
 	// #includes.
-	void emit_unit_implementation_prologue(std::string this_unit_h_file, std::vector<std::string> impl_used_unit_h_files);
+	void emit_unit_implementation_prologue(
+	    std::string unit_namespace,
+	    std::string this_unit_h_file,
+	    std::vector<std::string> impl_used_unit_h_files);
+	void emit_unit_implementation_epilogue();
 	void emit_unit_lifecycle_open(std::string cxx_name);
 	void emit_unit_lifecycle_close();
 	void emit_class_constructor_call(Method* method);
@@ -82,7 +89,8 @@ public:
 	// Emit `using <cxx_name> = <aliased_cxx_name>;` for `type B = A;` where A
 	// is an already-named aggregate/enum. Avoids re-emitting A's body under B's
 	// name (ODR violation in C++).
-	void emit_type_alias(std::string cxx_name, std::string aliased_cxx_name);
+	void emit_type_alias(
+	    std::string cxx_name, Type* aliased_type);
 	void emit_var_decl(std::string cxx_name, Type* ty);
 	void emit_const_decl(std::string cxx_name, Type* ty, Node* initializer);
 	void emit_main_prologue(

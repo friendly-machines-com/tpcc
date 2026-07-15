@@ -359,6 +359,10 @@ protected:
 	void push_declaration_frame(Frame* frame);
 	void pop_declaration_frame();
 	Frame* current_declaration_frame() const;
+	/** Return the source unit which directly owns declarations entering FRAME.
+	 * Programs, routine locals, and aggregate members have no unit namespace
+	 * owner here. */
+	Unit* declaration_unit(Frame* frame) const;
 	void maybe_parse_proc_attributes();
 	RoutineType* parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);

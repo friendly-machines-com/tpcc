@@ -12,6 +12,7 @@ class StorageSlot;
 class Property;
 class Method;
 class ErrorLetContext;
+class Unit;
 
 struct TypeLayout {
 	uint64_t size;
@@ -45,6 +46,9 @@ public:
 	// Descendant lookup walks the static type hierarchy when this is null.
 	// Built-in indexable types receive a compiler-synthesized property lazily.
 	Property* default_property = nullptr;
+	// Unit which owns this source-defined named type. Null for anonymous,
+	// local, aggregate-member, compiler-builtin, and external carrier types.
+	Unit* owning_unit = nullptr;
 
 	explicit Type(SourceLocation source_location);
 	virtual ~Type() = default;

@@ -6,6 +6,10 @@
 class Frame;
 class Method;
 
+/** C++ namespace token used to lower a Pascal unit. Pascal identifiers have
+ * already been normalized to lowercase by the tokenizer. */
+std::string cxx_unit_name(const std::string& pascal_name);
+
 /** Where along the parse timeline a Unit currently is. Values are ordered so
  *  transitions only go forward. A `uses` at interface time that resolves to a
  *  Unit still in InterfaceInProgress is the circular-interface-dependency
@@ -27,6 +31,7 @@ enum class UnitPhase {
 class Unit {
 public:
 	std::string name;
+	std::string cxx_namespace;
 	Frame* interface_frame;      // null for programs
 	Frame* implementation_frame; // always present
 	UnitPhase phase;

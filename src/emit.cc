@@ -3,6 +3,7 @@
 #include "cst.h"
 #include "frame.h"
 #include "types.h"
+#include "units.h"
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -11,6 +12,49 @@
 #include <typeinfo>
 
 static std::string owner_cxx_name(Type* owner);
+static std::string owner_cxx_reference_name(Type* owner);
+
+/** Spell a reference to a semantic declaration. Source-defined unit members
+ * carry a local C++ token plus their owning Unit; external/builtin/local
+ * declarations carry no owner and retain their existing spelling verbatim.
+ * Declaration sites do not use this helper because they are emitted inside
+ * the owning namespace. */
+static std::string owned_cxx_name(
+    const Unit* owner, const std::string& local_name) {
+	if (!owner)
+		return local_name;
+	return "::" + owner->cxx_namespace + "::" + local_name;
+}
+
+static std::string node_cxx_name(
+    const Node* node, const std::string& local_name) {
+	return owned_cxx_name(
+	    node ? node->owning_unit : nullptr, local_name);
+}
+
+static std::string type_cxx_name(
+    const Type* type, const std::string& local_name) {
+	return owned_cxx_name(
+	    type ? type->owning_unit : nullptr, local_name);
+}
+
+static std::string named_type_local_cxx_name(Type* type) {
+	if (auto r = dynamic_cast<RecordType*>(type))
+		return r->cxx_name;
+	if (auto r = dynamic_cast<PackedRecordType*>(type))
+		return r->cxx_name;
+	if (auto c = dynamic_cast<ClassType*>(type))
+		return c->cxx_name;
+	if (auto c = dynamic_cast<ClassRefType*>(type))
+		return c->cxx_name;
+	if (auto i = dynamic_cast<InterfaceType*>(type))
+		return i->cxx_name;
+	if (auto o = dynamic_cast<ObjectType*>(type))
+		return o->cxx_name;
+	if (auto e = dynamic_cast<EnumType*>(type))
+		return e->cxx_name;
+	return "";
+}
 
 // NODE may be null; SITE names the caller for the error message.
 [[noreturn]] static void unhandled_node(const char* site, const Node* node) {
@@ -123,7 +167,9 @@ void Emitter::emit_program_prologue(std::vector<std::string> used_unit_h_files) 
 	fprintf(active, "\n");
 }
 
-void Emitter::emit_unit_interface_prologue(std::vector<std::string> used_unit_h_files) {
+void Emitter::emit_unit_interface_prologue(
+    std::string unit_namespace,
+    std::vector<std::string> used_unit_h_files) {
 	if (!active)
 		return;
 	fprintf(active, "#pragma once\n");
@@ -131,10 +177,20 @@ void Emitter::emit_unit_interface_prologue(std::vector<std::string> used_unit_h_
 	fprintf(active, "#include <functional>\n");
 	for (auto& h : used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
-	fprintf(active, "\n");
+	fprintf(active, "\nnamespace %s {\n",
+	    unit_namespace.c_str());
 }
 
-void Emitter::emit_unit_implementation_prologue(std::string this_unit_h_file, std::vector<std::string> impl_used_unit_h_files) {
+void Emitter::emit_unit_interface_epilogue() {
+	if (!active)
+		return;
+	fprintf(active, "\n}\n");
+}
+
+void Emitter::emit_unit_implementation_prologue(
+    std::string unit_namespace,
+    std::string this_unit_h_file,
+    std::vector<std::string> impl_used_unit_h_files) {
 	if (!active)
 		return;
 	fprintf(active, "#include \"%s\"\n", this_unit_h_file.c_str());
@@ -142,7 +198,14 @@ void Emitter::emit_unit_implementation_prologue(std::string this_unit_h_file, st
 	fprintf(active, "#include <functional>\n");
 	for (auto& h : impl_used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
-	fprintf(active, "\n");
+	fprintf(active, "\nnamespace %s {\n",
+	    unit_namespace.c_str());
+}
+
+void Emitter::emit_unit_implementation_epilogue() {
+	if (!active)
+		return;
+	fprintf(active, "\n}\n");
 }
 
 void Emitter::emit_unit_lifecycle_open(std::string cxx_name) {
@@ -169,7 +232,9 @@ void Emitter::emit_class_constructor_call(Method* method) {
 	// so C++ metaclass inheritance cannot accidentally run a parent hook for
 	// a descendant that has no hook of its own.
 	fprintf(active, "\t%s::p_classtype()->m_init();\n",
-	    owner_cxx_name(method->owner_class).c_str());
+	    owner_cxx_reference_name(
+	        method->owner_class)
+	        .c_str());
 }
 
 void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
@@ -265,6 +330,11 @@ static std::string owner_cxx_name(Type* owner) {
 	if (auto o = dynamic_cast<ObjectType*>(owner))
 		return o->cxx_name;
 	return "";
+}
+
+static std::string owner_cxx_reference_name(Type* owner) {
+	return type_cxx_name(
+	    owner, owner_cxx_name(owner));
 }
 
 // Spelling of a Callable's C++ name token at any emit site. For destructors
@@ -575,7 +645,9 @@ void Emitter::emit_statement(Node* stmt) {
 		// Qualified-id `Parent::X(args)` -- C++ implicit-this injection makes
 		// this a member call on `this`. See InheritedCall's docstring in cst.h.
 		fprintf(active, "\t%s::%s(",
-			owner_cxx_name(m->owner_class).c_str(),
+			owner_cxx_reference_name(
+			    m->owner_class)
+			    .c_str(),
 			callable_cxx_name(ic->resolved).c_str());
 		for (size_t i = 0; i < ic->args.size(); i++) {
 			if (i > 0)
@@ -894,7 +966,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
 		bool first = true;
 		if (c->super) {
-			auto super_cxx_name = c->super->cxx_name;
+			auto super_cxx_name =
+			    type_cxx_name(
+			        c->super,
+			        c->super->cxx_name);
 			if (in_meta) {
 				super_cxx_name = super_cxx_name + "::m_meta";
 			}
@@ -904,7 +979,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		if (!in_meta) {
 			for (auto interface_type : c->implemented_interfaces) {
 				fprintf(active, first ? " : public %s" : ", public %s",
-					interface_type->cxx_name.c_str());
+					type_cxx_name(
+					    interface_type,
+					    interface_type->cxx_name)
+					    .c_str());
 				first = false;
 			}
 		} else {
@@ -914,12 +992,19 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		bool first = true;
 		for (auto interface_type : c->super_interfaces) {
 			fprintf(active, first ? " : public %s" : ", public %s",
-				interface_type->cxx_name.c_str());
+				type_cxx_name(
+				    interface_type,
+				    interface_type->cxx_name)
+				    .c_str());
 			first = false;
 		}
 	} else if (auto c = dynamic_cast<ObjectType*>(ty)) {
 		if (c->super)
-			fprintf(active, " : public %s", c->super->cxx_name.c_str());
+			fprintf(active, " : public %s",
+			    type_cxx_name(
+			        c->super,
+			        c->super->cxx_name)
+			        .c_str());
 	}
 
 	fprintf(active, " {\n");
@@ -929,12 +1014,19 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			target = target->super;
 		if (target->cxx_name.empty())
 			unhandled_type("metaclass API target name unknown", target);
-		return target->cxx_name + "::m_meta*";
+		return type_cxx_name(
+		           target, target->cxx_name) +
+		    "::m_meta*";
 	};
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			std::string class_name = c->cxx_name;					// FIXME: terrible name.
-			std::string parent_class_cxx_name = c->super ? c->super->cxx_name : ""; // FIXME: terrible name
+			std::string parent_class_cxx_name =
+			    c->super
+			    ? type_cxx_name(
+			          c->super,
+			          c->super->cxx_name)
+			    : ""; // FIXME: terrible name
 			if (c->super && parent_class_cxx_name.empty()) {
 				unhandled_type("parent class name unknown", c);
 			}
@@ -1328,10 +1420,19 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	}
 }
 
-void Emitter::emit_type_alias(std::string cxx_name, std::string aliased_cxx_name) {
+void Emitter::emit_type_alias(
+    std::string cxx_name, Type* aliased_type) {
 	if (!active)
 		return;
-	fprintf(active, "using %s = %s;\n", cxx_name.c_str(), aliased_cxx_name.c_str());
+	std::string target =
+	    named_type_local_cxx_name(aliased_type);
+	if (target.empty())
+		unhandled_type(
+		    "named type alias target has no C++ name",
+		    aliased_type);
+	fprintf(active, "using %s = %s;\n",
+	    cxx_name.c_str(),
+	    type_cxx_name(aliased_type, target).c_str());
 }
 
 void Emitter::emit_routine_reference(
@@ -1353,10 +1454,16 @@ void Emitter::emit_routine_reference(
 			fprintf(active, " (*)");
 			emit_formal_parameters(procedure->ty, false);
 			fprintf(active, ">(&%s))",
-			    callable_cxx_name(procedure).c_str());
+			    node_cxx_name(
+			        procedure,
+			        callable_cxx_name(procedure))
+			        .c_str());
 		} else {
 			fprintf(active, "&%s",
-			    callable_cxx_name(procedure).c_str());
+			    node_cxx_name(
+			        procedure,
+			        callable_cxx_name(procedure))
+			        .c_str());
 		}
 		return;
 	}
@@ -1369,7 +1476,8 @@ void Emitter::emit_routine_reference(
 		    "method routine reference is not a bound instance method",
 		    reference);
 	std::string owner =
-	    owner_cxx_name(method->owner_class);
+	    owner_cxx_reference_name(
+	        method->owner_class);
 	if (owner.empty())
 		unhandled_type(
 		    "method routine reference owner has no C++ name",
@@ -1473,7 +1581,10 @@ void Emitter::emit_expression(Node* expr) {
 			    "class-reference value has unnamed target",
 			    class_reference);
 		fprintf(active, "%s::p_classtype()",
-		    class_reference->target->cxx_name.c_str());
+		    type_cxx_name(
+		        class_reference->target,
+		        class_reference->target->cxx_name)
+		        .c_str());
 		return;
 	}
 	if (auto nil = dynamic_cast<NilLiteral*>(expr)) {
@@ -1633,11 +1744,13 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto s = dynamic_cast<StorageSlot*>(expr)) {
-		fprintf(active, "%s", s->cxx_name.c_str());
+		fprintf(active, "%s",
+		    node_cxx_name(s, s->cxx_name).c_str());
 		return;
 	}
 	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
-		fprintf(active, "%s", e->cxx_name.c_str());
+		fprintf(active, "%s",
+		    node_cxx_name(e, e->cxx_name).c_str());
 		return;
 	}
 	if (auto b = dynamic_cast<Builtin*>(expr)) {
@@ -1650,7 +1763,8 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto c = dynamic_cast<Callable*>(expr)) {
-		fprintf(active, "%s", c->cxx_name.c_str());
+		fprintf(active, "%s",
+		    node_cxx_name(c, c->cxx_name).c_str());
 		return;
 	}
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
@@ -1706,7 +1820,9 @@ void Emitter::emit_expression(Node* expr) {
 			// statically owned by the declaring Pascal class. Emitting the
 			// receiver would turn it into a per-metaclass field access.
 			fprintf(active, "%s::%s",
-			    owner_cxx_name(slot->owner_type).c_str(),
+			    owner_cxx_reference_name(
+			        slot->owner_type)
+			        .c_str(),
 			    slot->cxx_name.c_str());
 			return;
 		}
@@ -1790,7 +1906,11 @@ void Emitter::emit_expression(Node* expr) {
 			if (auto ty = dynamic_cast<RoutineType*>(pc->callee->ty)) {
 				if (ty->kind == CONSTRUCTOR) {
 					if (auto receiver_ty = dynamic_cast<ClassType*>(receiver->ty)) {
-						fprintf(active, "(new %s", receiver_ty->cxx_name.c_str()); // FIXME: escape
+						fprintf(active, "(new %s",
+						    type_cxx_name(
+						        receiver_ty,
+						        receiver_ty->cxx_name)
+						        .c_str()); // FIXME: escape
 						fprintf(active, ")->");
 						done = true;
 					} else {
@@ -1815,7 +1935,10 @@ void Emitter::emit_expression(Node* expr) {
 			}
 		}
 		if (auto c = dynamic_cast<Callable*>(pc->callee)) {
-			fprintf(active, "%s(", callable_cxx_name(c).c_str());
+			fprintf(active, "%s(",
+			    node_cxx_name(
+			        c, callable_cxx_name(c))
+			        .c_str());
 		} else {
 			emit_expression(pc->callee);
 			fprintf(active, "(");
@@ -1881,7 +2004,10 @@ void Emitter::emit_expression(Node* expr) {
 				unhandled_node(
 				    "low/high of empty enum type", tb);
 			fprintf(active, "%s",
-			    member->cxx_name.c_str());
+			    type_cxx_name(
+			        enum_type,
+			        member->cxx_name)
+			        .c_str());
 			return;
 		}
 		fprintf(active, tb->kind == TypeBoundKind::Low ? "pas::p_low<" : "pas::p_high<");
@@ -2008,7 +2134,9 @@ void Emitter::emit_expression(Node* expr) {
 		if (!m || !m->owner_class)
 			unhandled_node("inherited target is not a method", expr);
 		fprintf(active, "%s::%s(",
-			owner_cxx_name(m->owner_class).c_str(),
+			owner_cxx_reference_name(
+			    m->owner_class)
+			    .c_str(),
 			callable_cxx_name(ic->resolved).c_str());
 		for (size_t i = 0; i < ic->args.size(); i++) {
 			if (i > 0)
@@ -2033,7 +2161,8 @@ void Emitter::emit_template_value_arg(Node* expr) {
 		return;
 	}
 	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
-		fprintf(active, "%s", e->cxx_name.c_str());
+		fprintf(active, "%s",
+		    node_cxx_name(e, e->cxx_name).c_str());
 		return;
 	}
 	unhandled_node("emit_template_value_arg", expr);
@@ -2063,20 +2192,23 @@ void Emitter::emit_type_ref(Type* ty) {
 		if (r->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(active, "%s", r->cxx_name.c_str());
+			fprintf(active, "%s",
+			    type_cxx_name(r, r->cxx_name).c_str());
 		return;
 	}
 	if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
 		if (r->cxx_name.empty())
 			unhandled_type("anonymous packed record type reference", ty);
-		fprintf(active, "%s", r->cxx_name.c_str());
+		fprintf(active, "%s",
+		    type_cxx_name(r, r->cxx_name).c_str());
 		return;
 	}
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
 		if (c->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(active, "%s", c->cxx_name.c_str());
+			fprintf(active, "%s",
+			    type_cxx_name(c, c->cxx_name).c_str());
 		fprintf(active, "*");
 		return;
 	}
@@ -2086,7 +2218,8 @@ void Emitter::emit_type_ref(Type* ty) {
 			if (c->cxx_name.empty())
 				emit_aggregate_decl("", ty);
 			else
-				fprintf(active, "%s", c->cxx_name.c_str());
+				fprintf(active, "%s",
+				    type_cxx_name(c, c->cxx_name).c_str());
 		} else {
 			unhandled_type("emit_type_ref", ty);
 		}
@@ -2098,7 +2231,8 @@ void Emitter::emit_type_ref(Type* ty) {
 		if (c->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(active, "%s", c->cxx_name.c_str());
+			fprintf(active, "%s",
+			    type_cxx_name(c, c->cxx_name).c_str());
 		fprintf(active, "*");
 		return;
 	}
@@ -2106,7 +2240,8 @@ void Emitter::emit_type_ref(Type* ty) {
 		if (o->cxx_name.empty())
 			emit_aggregate_decl("", ty);
 		else
-			fprintf(active, "%s", o->cxx_name.c_str());
+			fprintf(active, "%s",
+			    type_cxx_name(o, o->cxx_name).c_str());
 		return;
 	}
 	if (auto e = dynamic_cast<EnumType*>(ty)) {
@@ -2118,7 +2253,8 @@ void Emitter::emit_type_ref(Type* ty) {
 		if (e->cxx_name.empty())
 			emit_enum_decl(e);
 		else
-			fprintf(active, "%s", e->cxx_name.c_str());
+			fprintf(active, "%s",
+			    type_cxx_name(e, e->cxx_name).c_str());
 		return;
 	}
 	if (auto p = dynamic_cast<PointerType*>(ty)) {

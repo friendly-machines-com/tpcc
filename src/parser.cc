@@ -223,6 +223,15 @@ Frame* Parser::current_declaration_frame() const {
 	return declaration_frames.back();
 }
 
+Unit* Parser::declaration_unit(Frame* frame) const {
+	if (!current_unit || !current_unit->interface_frame)
+		return nullptr; // program or no active source unit
+	if (frame == current_unit->interface_frame ||
+	    frame == current_unit->implementation_frame)
+		return current_unit;
+	return nullptr;
+}
+
 SourceLocation Parser::current_location() const {
 	return SourceLocation(input_file_name, input_file_line_number);
 }
@@ -3088,6 +3097,8 @@ Type* Parser::parse_enum_type() {
 	// Caller already consumed the `(` via maybe_parse_opening_paren in
 	// parse_type_expression.
 	auto et = new EnumType(current_location());
+	et->owning_unit =
+	    declaration_unit(current_declaration_frame());
 	int64_t next_value = 0;
 	do {
 		auto pas = parse_identifier();
@@ -3167,6 +3178,7 @@ Type* Parser::parse_enum_type() {
 		// the type. (A future compiler might add `{$scopedenums+}` and route
 		// them through the type; that is not this compiler.)
 		auto ref = new EnumMemberRef(cxx, value, et);
+		ref->owning_unit = et->owning_unit;
 		if (!current_declaration_frame()->register_variable(
 		        pas, ref, et))
 			raise_parse_error("duplicate identifier: " + pas);
@@ -3826,6 +3838,8 @@ void Parser::parse_const_block() {
 		parse_colon();
 		auto ty = parse_type_expression(false);
 		auto slot = new StorageSlot(cxx_value_name(name), ty);
+		slot->owning_unit =
+		    declaration_unit(scope);
 		scope->register_variable(name, slot, ty);
 		if (maybe_parse_equal()) {
 			Node* initializer = parse_typed_const_initializer(ty);
@@ -4171,7 +4185,6 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		IncompleteType* lhs_placeholder;
 		Type* rhs;
 		bool alias = false;
-		std::string alias_target_cxx;
 	};
 	std::vector<PendingTypeDecl> pending;
 	bool saved_parsing_type_block = parsing_type_block;
@@ -4251,8 +4264,22 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			existing_cxx = e->cxx_name;
 		if (!existing_cxx.empty() && existing_cxx != decl.cxx) {
 			decl.alias = true;
-			decl.alias_target_cxx = existing_cxx;
 		} else {
+			// The first source name owns the canonical emitted definition.
+			// Aliases retain their target's owner instead of moving that
+			// declaration into the aliasing unit.
+			const bool has_named_definition =
+			    dynamic_cast<RecordType*>(rhs) ||
+			    dynamic_cast<PackedRecordType*>(rhs) ||
+			    dynamic_cast<ClassType*>(rhs) ||
+			    dynamic_cast<ClassRefType*>(rhs) ||
+			    dynamic_cast<InterfaceType*>(rhs) ||
+			    dynamic_cast<ObjectType*>(rhs) ||
+			    dynamic_cast<EnumType*>(rhs);
+			if (has_named_definition &&
+			    !rhs->owning_unit)
+				rhs->owning_unit =
+				    declaration_unit(scope);
 			if (auto r = dynamic_cast<RecordType*>(rhs))
 				r->cxx_name = decl.cxx;
 			else if (auto r = dynamic_cast<PackedRecordType*>(rhs))
@@ -4273,7 +4300,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		return;
 	for (auto& decl : pending) {
 		if (decl.alias)
-			emitter->emit_type_alias(decl.cxx, decl.alias_target_cxx);
+			emitter->emit_type_alias(
+			    decl.cxx, decl.rhs);
 		else
 			emitter->emit_type_definition(decl.cxx, decl.rhs);
 	}
@@ -4324,6 +4352,9 @@ void Parser::parse_var_block() {
 			        ? *external_cxx_name
 			        : cxx_value_name(name),
 			    ty);
+			if (!external_cxx_name)
+				slot->owning_unit =
+				    declaration_unit(scope);
 			scope->register_variable(name, slot, ty);
 			if (emitter && !external_cxx_name)
 				emitter->emit_var_decl(slot->cxx_name, ty);
@@ -4851,6 +4882,8 @@ Procedure* Parser::match_or_create_procedure(
 	if (!target) {
 		target = new Procedure(cxx_value_name(pas_name), pas_name, sig, has_overload);
 		target->ty = sig;
+		target->owning_unit =
+		    declaration_unit(enclosing);
 		if (!enclosing->register_callable(pas_name, target)) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 		}
@@ -5097,6 +5130,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		    first_name, sig, had_paren, has_overload,
 		    short_form_implementation);
 		if (external_cxx_name) {
+			target->owning_unit = nullptr;
 			auto builtin = lookup_external_value(nullptr, *external_cxx_name);
 			if (builtin != nullptr) {
 				// This is basically making TARGET an ALIAS for BUILTIN.
@@ -5699,9 +5733,12 @@ void Parser::parse_unit_body() {
 		std::vector<std::string> h_files;
 		for (Unit* u : iface_units)
 			h_files.push_back(u->name + ".h");
-		emitter->emit_unit_interface_prologue(h_files);
+		emitter->emit_unit_interface_prologue(
+		    unit->cxx_namespace, h_files);
 	}
 	parse_decl_blocks(true);
+	if (emitter)
+		emitter->emit_unit_interface_epilogue();
 	unit->phase = UnitPhase::InterfaceDone;
 
 	parse_keyword("implementation");
@@ -5726,7 +5763,8 @@ void Parser::parse_unit_body() {
 		std::vector<std::string> h_files;
 		for (Unit* u : impl_units)
 			h_files.push_back(u->name + ".h");
-		emitter->emit_unit_implementation_prologue(name + ".h", h_files);
+		emitter->emit_unit_implementation_prologue(
+		    unit->cxx_namespace, name + ".h", h_files);
 	}
 	// Implementation section: same dispatcher; procedures with bodies attach
 	// to the interface prototypes via the lookup-then-adopt path in
@@ -5769,6 +5807,8 @@ void Parser::parse_unit_body() {
 	if (!consumed_end)
 		parse_keyword("end");
 	parse_period();
+	if (emitter)
+		emitter->emit_unit_implementation_epilogue();
 
 	pop_declaration_frame();
 	pop_scope(); // impl
@@ -5830,8 +5870,12 @@ void Parser::parse_program_or_unit() {
 				    !used->has_finalization)
 					continue;
 				lifecycle_hooks.emplace_back(
-				    used->initialization_cxx_name,
-				    used->finalization_cxx_name);
+				    "::" + used->cxx_namespace +
+				        "::" +
+				        used->initialization_cxx_name,
+				    "::" + used->cxx_namespace +
+				        "::" +
+				        used->finalization_cxx_name);
 			}
 			emitter->emit_main_prologue(lifecycle_hooks);
 			// Program-local class hooks have the same position as unit class

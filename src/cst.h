@@ -8,6 +8,7 @@ class Type;
 class Frame;
 class RoutineType;
 class Callable;
+class Unit;
 struct ClassType;
 class ErrorLetContext;
 struct BuiltinDesc;
@@ -28,6 +29,11 @@ public:
 	// single source of truth. Null on statement nodes (Block, Assign,
 	// Return) -- those don't have a value type.
 	Type* ty = nullptr;
+	// Non-null only for declarations owned directly by a Pascal unit.
+	// Aggregate members and routine locals are qualified through their
+	// receiver/lexical context instead. External declarations keep this null
+	// because their supplied C++ spelling already names the provider.
+	Unit* owning_unit = nullptr;
 	virtual ~Node() = default;
 	std::string str() const;
 };

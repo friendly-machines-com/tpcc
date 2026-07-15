@@ -3,8 +3,13 @@
 #include <cstdio>
 #include <cstdlib>
 
+std::string cxx_unit_name(const std::string& pascal_name) {
+	return "u_" + pascal_name;
+}
+
 Unit::Unit(std::string name, Frame* interface_frame, Frame* implementation_frame)
     : name(name),
+      cxx_namespace(cxx_unit_name(name)),
       interface_frame(interface_frame),
       implementation_frame(implementation_frame),
       phase(UnitPhase::Unparsed),
