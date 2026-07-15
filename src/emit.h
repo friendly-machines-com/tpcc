@@ -97,7 +97,9 @@ public:
 	// name (ODR violation in C++).
 	void emit_type_alias(
 	    std::string cxx_name, Type* aliased_type);
-	void emit_var_decl(std::string cxx_name, Type* ty);
+	void emit_var_decl(
+	    std::string cxx_name, Type* ty,
+	    Node* initializer = nullptr);
 	void emit_const_decl(std::string cxx_name, Type* ty, Node* initializer);
 	void emit_main_prologue(
 	    const std::vector<UnitLifecycleNames>&

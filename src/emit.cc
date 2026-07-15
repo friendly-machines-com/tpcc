@@ -237,11 +237,18 @@ void Emitter::emit_class_constructor_call(Method* method) {
 	        .c_str());
 }
 
-void Emitter::emit_var_decl(std::string cxx_name, Type* ty) {
+void Emitter::emit_var_decl(
+    std::string cxx_name, Type* ty,
+    Node* initializer) {
 	if (!active)
 		return;
 	emit_type_ref(ty);
-	fprintf(active, " %s;\n", cxx_name.c_str());
+	fprintf(active, " %s", cxx_name.c_str());
+	if (initializer) {
+		fprintf(active, " = ");
+		emit_expression(initializer);
+	}
+	fprintf(active, ";\n");
 }
 
 void Emitter::emit_const_decl(std::string cxx_name, Type* ty, Node* initializer) {

@@ -4477,6 +4477,17 @@ void Parser::parse_var_block() {
 			parse_directive("name");
 			external_cxx_name = parse_string_literal();
 		}
+		Node* initializer = nullptr;
+		if (maybe_parse_equal()) {
+			if (external_cxx_name)
+				raise_parse_error(
+				    "an external variable cannot have an initializer");
+			if (names.size() != 1)
+				raise_parse_error(
+				    "an initialized variable declaration must have exactly one name");
+			initializer = cast(
+			    parse_expression(), ty);
+		}
 		for (auto iter : names) {
 			auto name = iter;
 			// External variables name existing C++ storage, so their Pascal
@@ -4491,7 +4502,9 @@ void Parser::parse_var_block() {
 				    declaration_unit(scope);
 			scope->register_variable(name, slot, ty);
 			if (emitter && !external_cxx_name)
-				emitter->emit_var_decl(slot->cxx_name, ty);
+				emitter->emit_var_decl(
+				    slot->cxx_name, ty,
+				    initializer);
 		}
 		parse_semicolon();
 	} while (true);
