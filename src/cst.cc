@@ -187,6 +187,7 @@ Method::Method(std::string cxx_name,
 	       has_overload_directive),
       owner_class(owner_class),
       virtual_kind(virtual_kind),
+      is_final(false),
       vtable_slot(-1) {}
 
 OverloadSet::OverloadSet(std::vector<Callable*> members)
@@ -847,6 +848,9 @@ void Method::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstrea
 		out << "dynamic";
 		break;
 	}
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "final: " << (is_final ? "yes" : "no");
 }
 
 const char* OverloadSet::diagnostic_kind() const { return "overload_set"; }

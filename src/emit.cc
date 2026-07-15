@@ -1491,13 +1491,19 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				emit_callable_signature(
 				    call, Position::Declaration, "");
 				if (method) {
+					// C++ final is the exact enforcement mechanism for a
+					// Pascal virtual slot which may no longer be overridden.
+					// It is independent of override and must precede the
+					// pure-specifier on abstract/interface declarations.
+					if (method->virtual_kind ==
+					    Method::VirtualKind::Override)
+						fprintf(active, " override");
+					if (method->is_final)
+						fprintf(active, " final");
 					if (is_interface ||
 					    method->virtual_kind ==
 					        Method::VirtualKind::Abstract)
 						fprintf(active, " = 0");
-					else if (method->virtual_kind ==
-					         Method::VirtualKind::Override)
-						fprintf(active, " override");
 				}
 				fprintf(active, ";\n");
 			}

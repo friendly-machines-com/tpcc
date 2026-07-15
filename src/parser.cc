@@ -62,6 +62,7 @@ static std::unordered_set<std::string> keywords = {
     "end",
     "except",
     "file",
+    "final",
     "finally",
     "forward", // FIXME directive ?
     "for",
@@ -5722,7 +5723,7 @@ void Parser::parse_class_lifecycle_prototype(
 	// lifecycle hooks are instead compiler-scheduled, nonvirtual operations.
 	if (peek_keyword("overload") || peek_keyword("virtual") ||
 	    peek_keyword("dynamic") || peek_keyword("override") ||
-	    peek_keyword("abstract"))
+	    peek_keyword("abstract") || peek_keyword("final"))
 		raise_parse_error(
 		    std::string(lifecycle_name) +
 		    " cannot have routine directives");
@@ -5766,6 +5767,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 						   owner_class);
 	parse_semicolon();
 	bool has_overload = false;
+	bool is_final = false;
 	Method::VirtualKind vk = Method::VirtualKind::None;
 	while (true) {
 		if (maybe_parse_keyword("overload")) {
@@ -5783,9 +5785,25 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		} else if (maybe_parse_keyword("dynamic")) {
 			vk = Method::VirtualKind::Dynamic;
 			parse_semicolon();
+		} else if (maybe_parse_keyword("final")) {
+			is_final = true;
+			parse_semicolon();
 		} else
 			break;
 	}
+	// FPC accepts final only for a method which is virtual already. Keep final
+	// independent of VirtualKind because `override; final` is the normal
+	// spelling and both properties must reach the C++ declaration.
+	//
+	// Interface `final` is deliberately outside this rule: FPC accepts that
+	// spelling without preventing an implementing class from supplying the
+	// method, whereas C++ final would prohibit the implementation. This
+	// lowering therefore supports final only on explicit class/object virtual
+	// slots.
+	if (is_final &&
+	    vk == Method::VirtualKind::None)
+		raise_parse_error(
+		    "only virtual methods can be final");
 	if (auto object =
 	        dynamic_cast<ObjectType*>(owner_class)) {
 		if (is_constructor &&
@@ -5806,6 +5824,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		external = true;
 	}
 	auto m = new Method(cxx_name, pas_name, sig, has_overload, owner_class, vk);
+	m->is_final = is_final;
 	m->ty = sig; // The node's type IS the prototype.
 	if (external) {
 		m->has_body = true;

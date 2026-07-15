@@ -618,6 +618,9 @@ public:
 	enum class VirtualKind { None, Virtual, Override, Abstract, Dynamic };
 	Type* owner_class;
 	VirtualKind virtual_kind;
+	// Orthogonal to VirtualKind: the usual Pascal form is
+	// `override; final`, which must emit both C++ virt-specifiers.
+	bool is_final;
 	int vtable_slot;   // -1 = unassigned; populated at class-layout time
 	Method(std::string cxx_name,
 	       std::string pas_name,
