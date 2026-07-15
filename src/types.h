@@ -333,6 +333,7 @@ struct ObjectType: public Type {
 	Frame* children;
 	std::string cxx_name;
 	ObjectType* super;
+	bool needs_vmt = false;
 	ObjectType(SourceLocation source_location, Frame* children, ObjectType* super);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;

@@ -43,6 +43,11 @@
 
 namespace u_system {
 
+// `Fail` is constructor control flow, not a Pascal exception. Generated
+// Pascal except handlers immediately rethrow this marker; allocation or
+// direct-initializer boundaries are the only consumers.
+struct tpcc_constructor_fail final {};
+
 // try/finally needs cleanup on C++ return, break, continue, and outward goto.
 // Its generated catch path releases this guard before running finally, so the
 // destructor never runs a throwing finally body during exception unwinding.
@@ -2461,6 +2466,64 @@ inline void m_free_object(Object* object) {
 	delete object;
 }
 
+// Plain Pascal New allocates the exact pointed-to carrier. Deliberately omit
+// braces: old-style object and record scalar storage is not generally
+// zero-initialized. Native C++ default initialization still constructs
+// managed carrier members and, for polymorphic objects, installs the exact
+// vptr before any Pascal initializer method runs.
+template<typename T>
+inline T* m_new_value() {
+	return new T;
+}
+
+// An ordinary constructor call on existing storage has no result in Pascal.
+// Fail exits that initializer without becoming visible as a Pascal exception.
+// Allocation-owning calls use m_construct/m_new_object instead so they can
+// turn the same marker into nil and release their storage.
+template<typename Initializer>
+inline void m_invoke_initializer(
+    Initializer&& initializer) {
+	try {
+		std::forward<Initializer>(
+		    initializer)();
+	} catch (const tpcc_constructor_fail&) {
+	}
+}
+
+// Old-style object New owns allocation but not the initializer declaration.
+// T is the exact pointed-to object, while Initializer may name an inherited
+// nonvirtual constructor. Applying that base member pointer to T preserves
+// the already-installed most-derived C++ virtual dispatch inside its body.
+template<typename T, auto Initializer,
+         typename... Args>
+inline T* m_new_object(Args&&... args) {
+	std::unique_ptr<T> object(new T);
+	try {
+		(object.get()->*Initializer)(
+		    std::forward<Args>(args)...);
+	} catch (const tpcc_constructor_fail&) {
+		return nullptr;
+	}
+	return object.release();
+}
+
+template<typename T>
+inline void m_dispose_value(T* object) {
+	delete object;
+}
+
+// Pascal Done is an ordinary, possibly virtual method. The unique_ptr is
+// armed before entering it so carrier/managed-field teardown still occurs if
+// Done raises. Its hidden C++ virtual destructor contains no Pascal body and
+// solely makes deletion through a VMT-bearing ancestor exact.
+template<auto Finalizer, typename T>
+inline void m_dispose_object(T* object) {
+	if (!object)
+		return;
+	std::unique_ptr<T> storage(object);
+	(object->*Finalizer)();
+}
+
 // Construct is the one allocation boundary. Initializer remains an ordinary
 // Unit-returning object method, so inherited and virtual constructor bodies
 // use the already allocated most-derived C++ object. The pointer-to-member
@@ -2480,6 +2543,9 @@ inline Result* m_construct(
 		    std::forward<Args>(args)...);
 		object->p_afterconstruction();
 		return object;
+	} catch (const tpcc_constructor_fail&) {
+		delete object;
+		return nullptr;
 	} catch (...) {
 		delete object;
 		throw;

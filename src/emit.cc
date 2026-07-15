@@ -406,14 +406,26 @@ static std::string owner_cxx_reference_name(Type* owner) {
 	    owner, owner_cxx_name(owner));
 }
 
-// Spelling of a Callable's C++ name token at any emit site. For destructors
-// this is `~ClassName` so the token composes with `->` at the call site
+// Only Pascal class destructors are presently implemented by C++ destructors.
+// An old-style object is a value: its Pascal destructor is an ordinary,
+// optionally virtual method, while Dispose separately tears down its carrier.
+static bool callable_is_cxx_destructor(Callable* c) {
+	if (!c || c->ty->kind != DESTRUCTOR)
+		return false;
+	auto method = dynamic_cast<Method*>(c);
+	return method &&
+	       dynamic_cast<ClassType*>(
+	           method->owner_class);
+}
+
+// Spelling of a Callable's C++ name token at any emit site. For class
+// destructors this is `~ClassName` so the token composes with `->` at the call site
 // (obj->~Class()) and with `Owner::` for qualified destructor calls. Standard
 // citations: [expr.prim.id.dtor] for the spelling, [expr.ref] for member
 // access composition, [class.dtor]/15 for "A destructor can be called
 // explicitly." For non-destructors, the value cxx name as-is.
 static std::string callable_cxx_name(Callable* c) {
-	if (c->ty->kind == DESTRUCTOR) {
+	if (callable_is_cxx_destructor(c)) {
 		auto m = dynamic_cast<Method*>(c);
 		return m && m->owner_class ? "~" + owner_cxx_name(m->owner_class) : "~";
 	}
@@ -532,7 +544,12 @@ void Emitter::emit_try_except_prologue(
 		return;
 	fprintf(active, "\ttry {\n");
 	fwrite(try_body.data(), 1, try_body.size(), active);
-	fprintf(active, "\t} catch (...) {\n");
+	// Fail is constructor control flow, not a Pascal exception. It must pass
+	// through `except` handlers until an initializer boundary consumes it.
+	fprintf(active,
+	    "\t} catch (const ::u_system::tpcc_constructor_fail&) {\n"
+	    "\t\tthrow;\n"
+	    "\t} catch (...) {\n");
 }
 
 void Emitter::emit_try_except_epilogue() {
@@ -569,6 +586,11 @@ void Emitter::emit_try_finally(
 void Emitter::emit_statement(Node* stmt) {
 	if (!active)
 		return;
+	if (dynamic_cast<ConstructorFail*>(stmt)) {
+		fprintf(active,
+		    "\tthrow ::u_system::tpcc_constructor_fail{};\n");
+		return;
+	}
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
 		if (auto member =
 		        dynamic_cast<MemberAccess*>(a->a)) {
@@ -1036,15 +1058,17 @@ void Emitter::emit_function_type(RoutineType* ty) {
 	emit_formal_parameters(ty, false);
 }
 
-void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Position pos, std::string owner_qualifier) {
+void Emitter::emit_routine_signature(
+    RoutineType* ty, std::string cxx_text,
+    Position pos, std::string owner_qualifier,
+    bool cxx_destructor) {
 	if (!active)
 		return;
 	if (pos == Position::DeclarationFormalsOnly) {
 		emit_formal_parameters(ty, true);
 		return;
 	}
-	bool is_destructor = (ty->kind == DESTRUCTOR);
-	if (!is_destructor) {
+	if (!cxx_destructor) {
 		emit_type_ref(ty->return_type);
 		fprintf(active, " ");
 	} else if (ty->return_type != &unit_type()) {
@@ -1055,7 +1079,10 @@ void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Posi
 }
 
 void Emitter::emit_callable_signature(Callable* c, Position pos, std::string owner_qualifier) {
-	emit_routine_signature(c->ty, callable_cxx_name(c), pos, owner_qualifier);
+	emit_routine_signature(
+	    c->ty, callable_cxx_name(c), pos,
+	    owner_qualifier,
+	    callable_is_cxx_destructor(c));
 }
 
 void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
@@ -1205,6 +1232,25 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	}
 
 	fprintf(active, " {\n");
+	if (auto object =
+	        dynamic_cast<ObjectType*>(ty)) {
+		if (object->needs_vmt &&
+		    (!object->super ||
+		     !object->super->needs_vmt)) {
+			if (cxx_name.empty())
+				unhandled_type(
+				    "VMT-bearing anonymous old-style "
+				    "object has no C++ carrier binding",
+				    object);
+			// This destructor is not a Pascal `destructor Done`. It is
+			// carrier machinery only: it supplies the native vptr when
+			// needed and lets Dispose delete the exact derived carrier
+			// after the Pascal Done method has returned.
+			fprintf(active,
+			    "\tpublic: virtual ~%s() = default;\n",
+			    cxx_name.c_str());
+		}
+	}
 	auto classref_api_cxx_for = [&](ClassType* c) -> std::string {
 		ClassType* target = c;
 		while (target->super)
@@ -2319,6 +2365,91 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, ")");
 		return;
 	}
+	if (auto allocation =
+	        dynamic_cast<NewValue*>(expr)) {
+		if (!allocation->allocated_type)
+			unhandled_node(
+			    "typed New without allocated type",
+			    allocation);
+		if (!allocation->initializer) {
+			fprintf(active,
+			    "::u_system::m_new_value<");
+			emit_type_ref(
+			    allocation->allocated_type);
+			fprintf(active, ">()");
+			return;
+		}
+		Method* initializer =
+		    allocation->initializer;
+		if (!initializer->owner_class ||
+		    initializer->ty->kind != CONSTRUCTOR)
+			unhandled_node(
+			    "invalid old-object initializer",
+			    allocation);
+		std::string owner =
+		    owner_cxx_reference_name(
+		        initializer->owner_class);
+		fprintf(active,
+		    "::u_system::m_new_object<");
+		emit_type_ref(
+		    allocation->allocated_type);
+		fprintf(active, ", static_cast<");
+		emit_type_ref(
+		    initializer->ty->return_type);
+		fprintf(active, " (%s::*)",
+		    owner.c_str());
+		emit_formal_parameters(
+		    initializer->ty, false);
+		fprintf(active, ">(&%s::%s)>(",
+		    owner.c_str(),
+		    callable_cxx_name(initializer).c_str());
+		emit_call_arguments(
+		    initializer->ty,
+		    allocation->args);
+		fprintf(active, ")");
+		return;
+	}
+	if (auto disposal =
+	        dynamic_cast<DisposeValue*>(expr)) {
+		if (!disposal->pointer)
+			unhandled_node(
+			    "Dispose without pointer",
+			    disposal);
+		if (!disposal->finalizer) {
+			fprintf(active,
+			    "::u_system::m_dispose_value(");
+			emit_expression(
+			    disposal->pointer);
+			fprintf(active, ")");
+			return;
+		}
+		Method* finalizer =
+		    disposal->finalizer;
+		if (!finalizer->owner_class ||
+		    finalizer->ty->kind != DESTRUCTOR)
+			unhandled_node(
+			    "invalid old-object finalizer",
+			    disposal);
+		std::string owner =
+		    owner_cxx_reference_name(
+		        finalizer->owner_class);
+		fprintf(active,
+		    "::u_system::m_dispose_object<"
+		    "static_cast<");
+		emit_type_ref(
+		    finalizer->ty->return_type);
+		fprintf(active, " (%s::*)",
+		    owner.c_str());
+		emit_formal_parameters(
+		    finalizer->ty, false);
+		fprintf(active, ">(&%s::%s)>(",
+		    owner.c_str(),
+		    callable_cxx_name(finalizer).c_str());
+		emit_expression(
+		    disposal->pointer);
+		fprintf(active, ")");
+		return;
+	}
 	if (auto construct =
 	        dynamic_cast<Construct*>(expr)) {
 		auto result_type =
@@ -2382,6 +2513,13 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ")");
 			return;
 		}
+		const bool initializer_application =
+		    pc->receiver && callable &&
+		    callable->ty->kind == CONSTRUCTOR;
+		if (initializer_application)
+			fprintf(active,
+			    "::u_system::m_invoke_initializer"
+			    "([&]() { ");
 		if (pc->receiver) {
 			auto receiver = pc->receiver;
 			bool done = false;
@@ -2454,6 +2592,8 @@ void Emitter::emit_expression(Node* expr) {
 			        pc->callee->ty);
 		emit_call_arguments(call_ty, pc->args);
 		fprintf(active, ")");
+		if (initializer_application)
+			fprintf(active, "; })");
 		return;
 	}
 	if (auto tb = dynamic_cast<TypeBound*>(expr)) {

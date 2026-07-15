@@ -45,6 +45,8 @@ enum class BuiltinSyntaxKind {
 	SizeOf,
 	Write,
 	WriteLn,
+	NewValue,
+	DisposeValue,
 };
 
 enum class BuiltinCallConvention {

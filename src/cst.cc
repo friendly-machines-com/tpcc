@@ -45,6 +45,18 @@ Construct::Construct(
       args(std::move(args)) {
 	this->ty = result_type;
 }
+NewValue::NewValue(
+    Type* pointer_type, Type* allocated_type,
+    Method* initializer, std::vector<Node*> args)
+    : allocated_type(allocated_type), initializer(initializer),
+      args(std::move(args)) {
+	this->ty = pointer_type;
+}
+DisposeValue::DisposeValue(Node* pointer, Method* finalizer)
+    : pointer(pointer), finalizer(finalizer) {}
+ConstructorFail::ConstructorFail() {
+	this->ty = &unit_type();
+}
 UnitRef::UnitRef(Unit* unit) : unit(unit) {}
 WriteCall::WriteCall(
     bool newline, Node* file, std::vector<Item> items)
@@ -284,6 +296,15 @@ const char* ClassRefValue::diagnostic_kind() const {
 const char* Construct::diagnostic_kind() const {
 	return "construction";
 }
+const char* NewValue::diagnostic_kind() const {
+	return "new";
+}
+const char* DisposeValue::diagnostic_kind() const {
+	return "dispose";
+}
+const char* ConstructorFail::diagnostic_kind() const {
+	return "constructor_fail";
+}
 const char* UnitRef::diagnostic_kind() const {
 	return "unit_reference";
 }
@@ -303,6 +324,20 @@ void Construct::collect_diagnostic_edges(
 	ctx->add_value_edge(initializer);
 	for (Node* arg : args)
 		ctx->add_value_edge(arg);
+}
+void NewValue::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(allocated_type);
+	ctx->add_value_edge(initializer);
+	for (Node* arg : args)
+		ctx->add_value_edge(arg);
+}
+void DisposeValue::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(pointer);
+	ctx->add_value_edge(finalizer);
 }
 void ClassRefValue::print_diagnostic_definition(
     ErrorLetContext* ctx, std::ostringstream& out,
@@ -328,6 +363,34 @@ void Construct::print_diagnostic_definition(
 		out << "\n";
 		ctx->indent(out, indent + 1);
 		out << "arg: " << ctx->known_value_ref(arg);
+	}
+}
+void NewValue::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "new " << ctx->known_type_ref(allocated_type);
+	if (initializer) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "initializer: "
+		    << ctx->known_value_ref(initializer);
+	}
+	for (Node* arg : args) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "arg: " << ctx->known_value_ref(arg);
+	}
+	out << " : " << ctx->known_type_ref(ty);
+}
+void DisposeValue::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "dispose " << ctx->known_value_ref(pointer);
+	if (finalizer) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "finalizer: "
+		    << ctx->known_value_ref(finalizer);
 	}
 }
 

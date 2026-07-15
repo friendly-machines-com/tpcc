@@ -257,6 +257,11 @@ function octstr(value: LongInt; count: Byte): ShortString; overload; external na
 function octstr(value: Int64; count: Byte): ShortString; overload; external name '::u_system::p_octstr';
 function octstr(value: QWord; count: Byte): ShortString; overload; external name '::u_system::p_octstr';
 function strlen(value: PChar): SizeInt; external name '::u_system::p_strlen';
+// New and Dispose have compiler grammar because their first operand may be a
+// type and their optional second operand names an old-object lifecycle method.
+// These declarations provide ordinary lookup and shadowing only.
+procedure New; external name '::u_system::p_new';
+procedure Dispose; external name '::u_system::p_dispose';
 procedure getmem(out destination: Pointer; size: PtrUInt); overload; external name '::u_system::p_getmem';
 function getmem(size: PtrUInt): Pointer; overload; external name '::u_system::p_getmem';
 procedure freemem(value: Pointer; size: PtrUInt); overload; external name '::u_system::p_freemem';

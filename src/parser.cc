@@ -892,7 +892,14 @@ void Parser::maybe_parse_statement() {
 	    peek_keyword("except") || peek_keyword("finally")) {
 		return;
 	}
-	if (peek_keyword("break") || peek_keyword("continue")) {
+	if (peek_directive("fail") &&
+	    current_routine &&
+	    current_routine->ty->kind == CONSTRUCTOR) {
+		parse_directive("fail");
+		if (emitter)
+			emitter->emit_statement(
+			    new ConstructorFail());
+	} else if (peek_keyword("break") || peek_keyword("continue")) {
 		bool is_break = peek_keyword("break");
 		consume();
 		if (loop_depth == 0)
@@ -1596,6 +1603,144 @@ Node* Parser::parse_set_literal() {
 	    new FixedSetType(current_location(), item_type));
 }
 
+Node* Parser::parse_new_or_dispose(bool is_new) {
+	SourceLocation operation_location =
+	    current_location();
+	parse_opening_paren();
+
+	Node* destination_or_pointer = nullptr;
+	PointerType* pointer_type = nullptr;
+	bool functional_form = false;
+
+	// The first operand selects one of Pascal's two forms. Ordinary value
+	// lookup wins over type lookup, so a nearer variable shadows a pointer
+	// type with the same spelling just as it does elsewhere in expression
+	// syntax. Only New has a functional type form; Dispose always consumes a
+	// pointer value.
+	Node* visible_value =
+	    maybe_resolve_value(input_token);
+	if (visible_value || !is_new) {
+		destination_or_pointer =
+		    parse_designator();
+		pointer_type =
+		    dynamic_cast<PointerType*>(
+		        destination_or_pointer
+		            ? destination_or_pointer->ty
+		            : nullptr);
+	} else if (maybe_resolve_type(input_token)) {
+		Type* parsed_type =
+		    parse_type_expression(false);
+		pointer_type =
+		    dynamic_cast<PointerType*>(parsed_type);
+		functional_form = true;
+	} else {
+		raise_parse_error(
+		    "New first operand is neither a pointer "
+		    "variable nor a pointer type");
+	}
+
+	if (!pointer_type || pointer_type->is_untyped())
+		emit_parse_error_at(
+		    operation_location,
+		    std::string(is_new ? "New" : "Dispose") +
+		        " requires a typed pointer");
+	if (is_new && !functional_form &&
+	    !is_assignable(destination_or_pointer))
+		emit_parse_error_at(
+		    operation_location,
+		    "New destination is not assignable");
+
+	Type* allocated_type =
+	    pointer_type->item_type;
+
+	Method* lifecycle_method = nullptr;
+	std::vector<Node*> lifecycle_args;
+	if (maybe_parse_comma()) {
+		auto object =
+		    dynamic_cast<ObjectType*>(allocated_type);
+		if (!object)
+			emit_parse_error_at(
+			    operation_location,
+			    std::string(is_new ? "New" : "Dispose") +
+			        " lifecycle form requires a pointer "
+			        "to an old-style object");
+
+		std::string lifecycle_name =
+		    parse_identifier();
+		if (maybe_parse_opening_paren()) {
+			if (input_token != ")") {
+				if (!is_new)
+					emit_parse_error_at(
+					    operation_location,
+					    "Dispose destructor cannot have "
+					    "arguments");
+				lifecycle_args.push_back(
+				    parse_expression());
+				while (maybe_parse_comma())
+					lifecycle_args.push_back(
+					    parse_expression());
+			}
+			parse_closing_paren();
+		}
+
+		Node* candidates =
+		    object->children
+		        ? object->children->lookup_value(
+		              lifecycle_name)
+		        : nullptr;
+		if (!candidates)
+			emit_parse_error_at(
+			    operation_location,
+			    "no old-style object member '" +
+			        lifecycle_name + "'");
+
+		// Reuse ordinary member overload finalization. The receiver exists
+		// only to establish the already-known pointed-to object context;
+		// NewValue/DisposeValue later supply the actual runtime pointer.
+		auto semantic_receiver =
+		    new StorageSlot("", pointer_type);
+		auto target =
+		    new MemberAccess(
+		        semantic_receiver, candidates);
+		target->ty = candidates->ty;
+		auto finalized =
+		    finalize_call(
+		        target, lifecycle_args,
+		        lifecycle_name,
+		        operation_location);
+		lifecycle_method =
+		    dynamic_cast<Method*>(
+		        finalized.callee);
+		if (!lifecycle_method ||
+		    lifecycle_method->ty->kind !=
+		        (is_new ? CONSTRUCTOR : DESTRUCTOR))
+			emit_parse_error_at(
+			    operation_location,
+			    std::string(is_new ? "New" : "Dispose") +
+			        (is_new
+			             ? " second operand must select "
+			               "a constructor"
+			             : " second operand must select "
+			               "a destructor"));
+	}
+	parse_closing_paren();
+
+	if (is_new) {
+		auto value =
+		    new NewValue(
+		        pointer_type, allocated_type,
+		        lifecycle_method,
+		        std::move(lifecycle_args));
+		if (functional_form)
+			return value;
+		return mk_assign(
+		    destination_or_pointer, value);
+	}
+	return new DisposeValue(
+	    destination_or_pointer,
+	    lifecycle_method);
+}
+
 Node* Parser::parse_value() {
 	if (peek_keyword("inherited"))
 		return parse_inherited();
@@ -1694,6 +1839,18 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			return new TypeBound(*kind, target_ty);
 		}
 		BuiltinSyntaxKind syntax_kind = syntax_kind_for_builtin(value);
+		if (syntax_kind == BuiltinSyntaxKind::NewValue ||
+		    syntax_kind == BuiltinSyntaxKind::DisposeValue) {
+			if (input_token != "(")
+				raise_parse_error(
+				    syntax_kind ==
+				            BuiltinSyntaxKind::NewValue
+				        ? "New requires an argument list"
+				        : "Dispose requires an argument list");
+			return parse_new_or_dispose(
+			    syntax_kind ==
+			    BuiltinSyntaxKind::NewValue);
+		}
 		if (syntax_kind == BuiltinSyntaxKind::Write ||
 		    syntax_kind == BuiltinSyntaxKind::WriteLn) {
 			std::vector<WriteCall::Item> items;
@@ -1917,8 +2074,23 @@ Node* Parser::parse_inherited() {
 	n->resolved = resolved;
 	n->args = std::move(args);
 	n->ty = call_result_type(resolved);
-	if (current_routine->ty->kind == DESTRUCTOR && resolved->ty->kind == DESTRUCTOR)
-		n->dropped = true;
+	if (current_routine->ty->kind == DESTRUCTOR &&
+	    resolved->ty->kind == DESTRUCTOR) {
+		auto current_method =
+		    dynamic_cast<Method*>(current_routine);
+		auto resolved_method =
+		    dynamic_cast<Method*>(resolved);
+		// Class destructors currently use C++ destructor auto-chaining.
+		// Old-style object destructors deliberately do not: they are ordinary
+		// Pascal methods, and `inherited Done` is the only thing that invokes
+		// the ancestor body.
+		n->dropped =
+		    current_method && resolved_method &&
+		    dynamic_cast<ClassType*>(
+		        current_method->owner_class) &&
+		    dynamic_cast<ClassType*>(
+		        resolved_method->owner_class);
+	}
 	return n;
 }
 
@@ -4279,6 +4451,19 @@ struct TypeBlockResolver {
 				if (!normalize_node(arg))
 					return false;
 		}
+		if (auto n = dynamic_cast<NewValue*>(node)) {
+			if (!normalize_type(n->allocated_type) ||
+			    !normalize_node(n->initializer))
+				return false;
+			for (Node* arg : n->args)
+				if (!normalize_node(arg))
+					return false;
+		}
+		if (auto n = dynamic_cast<DisposeValue*>(node)) {
+			if (!normalize_node(n->pointer) ||
+			    !normalize_node(n->finalizer))
+				return false;
+		}
 		if (auto n = dynamic_cast<UnaryOperation*>(node)) {
 			if (!normalize_node(n->a))
 				return false;
@@ -5089,8 +5274,11 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 	}
 	Type* ret_ty = &unit_type();
 	if (kind == CONSTRUCTOR) {
-		if (!dynamic_cast<ClassType*>(owner)) {
-			raise_type_kind_mismatch("expected class as owner", "class", owner);
+		if (!dynamic_cast<ClassType*>(owner) &&
+		    !dynamic_cast<ObjectType*>(owner)) {
+			raise_type_kind_mismatch(
+			    "expected class or object as constructor owner",
+			    "class or object", owner);
 		}
 	} else if (kind == CLASS_CONSTRUCTOR ||
 	           kind == CLASS_DESTRUCTOR) {
@@ -5242,6 +5430,17 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			parse_semicolon();
 		} else
 			break;
+	}
+	if (auto object =
+	        dynamic_cast<ObjectType*>(owner_class)) {
+		if (is_constructor &&
+		    vk != Method::VirtualKind::None)
+			raise_parse_error(
+			    "old-style object constructors cannot be "
+			    "virtual, dynamic, override, abstract");
+		if (is_constructor || is_destructor ||
+		    vk != Method::VirtualKind::None)
+			object->needs_vmt = true;
 	}
 	std::string cxx_name = cxx_value_name(pas_name);
 	bool external = false;
@@ -5555,9 +5754,23 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		}
 		if (m->has_body)
 			raise_parse_error("duplicate implementation of '" + method_name + "'");
-		// If provided, update formal names for local body scope; FIXME: check count, types etc
-		if (sig->formals.size() > 0) {
-			static_cast<RoutineType*>(m->ty)->formals = sig->formals;
+		// Pascal permits implementation parameter names to differ from the
+		// prototype, but defaults belong to the prototype/call site. Replacing
+		// the complete formal objects here erased those defaults as soon as an
+		// out-of-line body was parsed.
+		auto declaration_sig =
+		    static_cast<RoutineType*>(m->ty);
+		if (sig->formals.size() !=
+		    declaration_sig->formals.size())
+			raise_parse_error(
+			    "implementation parameter count does not match "
+			    "method declaration");
+		for (size_t i = 0;
+		     i < sig->formals.size(); ++i) {
+			declaration_sig->formals[i].pas_name =
+			    sig->formals[i].pas_name;
+			declaration_sig->formals[i].cxx_name =
+			    sig->formals[i].cxx_name;
 		}
 		parse_routine_body(m, owner_frame);
 		return;

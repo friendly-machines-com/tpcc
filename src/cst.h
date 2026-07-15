@@ -126,6 +126,49 @@ public:
 	    unsigned indent) const override;
 };
 
+/** Typed-pointer allocation, optionally followed by one old-style object
+ *  constructor invocation. Unlike Construct, the result is `^T`, not a
+ *  Pascal class reference, and the exact pointee type determines storage. */
+class NewValue: public Node {
+public:
+	Type* allocated_type;
+	Method* initializer;
+	std::vector<Node*> args;
+	NewValue(Type* pointer_type, Type* allocated_type,
+	         Method* initializer, std::vector<Node*> args);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** Typed-pointer disposal, optionally preceded by one old-style object
+ *  destructor invocation. Pascal destruction and C++ carrier deletion remain
+ *  separate operations; direct calls of the destructor do not free storage. */
+class DisposeValue: public Node {
+public:
+	Node* pointer;
+	Method* finalizer;
+	DisposeValue(Node* pointer, Method* finalizer);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** `Fail` in an ordinary Pascal constructor. Emission uses private
+ *  constructor-control flow which is intercepted by allocation/application
+ *  boundaries, never by a Pascal `except` handler. */
+class ConstructorFail: public Node {
+public:
+	ConstructorFail();
+	const char* diagnostic_kind() const override;
+};
+
 /** The canonical designator for a Pascal unit environment. It is neither a
  * runtime value nor a type. MemberAccess uses it as the base for the same
  * `base.member` representation used by records, objects, and class
@@ -173,9 +216,9 @@ public:
  *  expression to spell. The parent class name is recovered at emit time from
  *  `resolved` (a Method*) -> `owner_class` -> `owner_cxx_name(...)`.
  *
- *  `dropped` is set when the enclosing routine is a destructor AND `resolved`
- *  is a destructor -- C++ destructors auto-chain (base destructors run
- *  automatically after derived body), so emit produces nothing. */
+ *  `dropped` is set only for class destructors: those currently lower to C++
+ *  destructors and auto-chain. Old-style object destructors are ordinary
+ *  methods, so their explicit inherited calls must remain. */
 class InheritedCall: public Node {
 public:
 	Callable* resolved = nullptr;

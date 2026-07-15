@@ -115,6 +115,7 @@ ObjectType::ObjectType(SourceLocation source_location, Frame* children, ObjectTy
     : Type(std::move(source_location)) {
 	this->children = children;
 	this->super = super;
+	this->needs_vmt = super && super->needs_vmt;
 }
 
 ModuleType::ModuleType(
@@ -735,10 +736,27 @@ int conversion_cost(Type* from, Type* to) {
 	}
 	// Pointer types are structural in Pascal. Independently-created `^T`
 	// nodes with the same target are assignment-compatible.
-	if (auto from_pointer = dynamic_cast<PointerType*>(from))
-		if (auto to_pointer = dynamic_cast<PointerType*>(to))
+	if (auto from_pointer = dynamic_cast<PointerType*>(from)) {
+		if (auto to_pointer = dynamic_cast<PointerType*>(to)) {
 			if (from_pointer->item_type == to_pointer->item_type)
 				return 0;
+			// Old-style objects are values, but pointers to them follow the
+			// same single-inheritance adjustment as the generated C++
+			// carriers. This permits ^Derived -> ^Base without pretending the
+			// ObjectType itself is a reference type.
+			auto from_object =
+			    dynamic_cast<ObjectType*>(
+			        from_pointer->item_type);
+			auto to_object =
+			    dynamic_cast<ObjectType*>(
+			        to_pointer->item_type);
+			int depth = 0;
+			for (ObjectType* current = from_object;
+			     current; current = current->super, ++depth)
+				if (current == to_object)
+					return depth;
+		}
+	}
 	// Pascal's untyped Pointer is assignment-compatible with every typed
 	// object pointer. Cast emission performs the corresponding C++ void*
 	// conversion; no pointer representation is copied bytewise.

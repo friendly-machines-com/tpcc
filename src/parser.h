@@ -234,6 +234,7 @@ protected:
 	void parse_operator(std::string s);
 	Node* parse_value();
 	Node* parse_value_from_identifier(std::string id);
+	Node* parse_new_or_dispose(bool is_new);
 	// Parse `inherited Name[(args)]` or anonymous `inherited;`. Returns an
 	// InheritedCall node. The enclosing routine must be a Method on a
 	// composite type with a parent (else: parse error).

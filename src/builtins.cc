@@ -82,10 +82,10 @@ const bool k_tmethod_initialized = []() {
 	k_tmethod.children->register_variable(
 	    "data", k_tmethod_data_field, &k_pointer);
 	k_tmethod.fields.push_back(
-	    RecordType::Field{
+	    AggregateField{
 	        "code", k_tmethod_code_field, &k_pointer});
 	k_tmethod.fields.push_back(
-	    RecordType::Field{
+	    AggregateField{
 	        "data", k_tmethod_data_field, &k_pointer});
 	return true;
 }();
@@ -460,6 +460,16 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_val", nullptr},
     {"::u_system::p_octstr", nullptr},
     {"::u_system::p_strlen", nullptr},
+    {
+        .cxx_name = "::u_system::p_new",
+        .const_fold = nullptr,
+        .syntax_kind = BuiltinSyntaxKind::NewValue,
+    },
+    {
+        .cxx_name = "::u_system::p_dispose",
+        .const_fold = nullptr,
+        .syntax_kind = BuiltinSyntaxKind::DisposeValue,
+    },
     {"::u_system::p_getmem", nullptr},
     {"::u_system::p_freemem", nullptr},
     {"::u_system::p_rewrite", nullptr},

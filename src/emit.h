@@ -174,7 +174,10 @@ public:
 	// owner_qualifier is `Foo::` or empty (namespace only -- orthogonal to
 	// prototype-vs-definition, which is expressed at the function level via
 	// which wrapper the caller invokes).
-	void emit_routine_signature(RoutineType* ty, std::string cxx_text, Position pos, std::string owner_qualifier);
+	void emit_routine_signature(
+	    RoutineType* ty, std::string cxx_text,
+	    Position pos, std::string owner_qualifier,
+	    bool cxx_destructor = false);
 	// emit_callable_signature is a thin wrapper for callers that hold a
 	// Callable*. Forwards (c->ty, callable_cxx_name(c), pos, owner_qualifier)
 	// to emit_routine_signature.
