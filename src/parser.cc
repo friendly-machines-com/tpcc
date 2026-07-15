@@ -1484,6 +1484,11 @@ static Type* parent_of(Type* ty) {
 	return nullptr;
 }
 
+static Frame* make_aggregate_body_frame(Type* owner) {
+	return new Frame(
+	    owner ? get_type_body_frame(parent_of(owner)) : nullptr);
+}
+
 // Walk the parent chain from STARTING_AT, looking up NAME in each level's
 // body Frame. Returns the first hit as Node* (Callable* or OverloadSet*),
 // or nullptr if not found. Caller (parse_inherited) routes the result
@@ -2832,7 +2837,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	// as the Frame's structural parent relation instead of teaching every
 	// caller (`Self.X`, `class of T`.X, unqualified method-body lookup, etc.)
 	// to walk superclasses separately.
-	Frame* body = new Frame(owner_class ? get_type_body_frame(parent_of(owner_class)) : nullptr);
+	Frame* body = make_aggregate_body_frame(owner_class);
 	push_scope(body);
 	push_declaration_frame(body);
 	std::string visibility = "published";
@@ -3077,7 +3082,8 @@ Type* Parser::parse_class_type() {
 	}
 	ClassType* super_ty = nullptr;
 	std::vector<InterfaceType*> implemented_interfaces;
-	if (maybe_parse_opening_paren()) {
+	const bool has_ancestor_list = maybe_parse_opening_paren();
+	if (has_ancestor_list) {
 		auto s_ty = parse_type_expression(false);
 		super_ty = dynamic_cast<ClassType*>(s_ty);
 		if (super_ty == nullptr) {
@@ -3110,6 +3116,15 @@ Type* Parser::parse_class_type() {
 			super_ty = lookup_implicit_tobject_superclass();
 	}
 	auto ct = new ClassType(current_location(), nullptr, std::move(implemented_interfaces), super_ty);
+	if (has_ancestor_list && input_token == ";") {
+		// `TChild = class(TParent);` is FPC's completed empty-descendant
+		// shorthand. Give it the same inherited member Frame as an explicit
+		// `class(TParent) end`; leave the semicolon for the enclosing type
+		// declaration parser. Bare `TChild = class;` is a forward declaration
+		// and deliberately does not enter this path.
+		ct->children = make_aggregate_body_frame(ct);
+		return ct;
+	}
 	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
 	return ct;

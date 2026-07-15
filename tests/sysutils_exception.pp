@@ -4,8 +4,7 @@ uses
   SysUtils;
 
 type
-  EChild = class(Exception)
-  end;
+  EChild = class(Exception);
 
 var
   E: Exception;
