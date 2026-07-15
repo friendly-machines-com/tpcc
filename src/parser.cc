@@ -2857,6 +2857,19 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 		} else if (maybe_parse_directive("private")) {
 			visibility = "private";
 			continue;
+		} else if (maybe_parse_directive("strict")) {
+			// Member access is not enforced yet, but retain the exact current
+			// visibility just like the existing one-word directives do.
+			// Recognizing `strict` only at this aggregate-section boundary
+			// also leaves it usable as an identifier elsewhere.
+			if (maybe_parse_directive("private"))
+				visibility = "strict private";
+			else if (maybe_parse_directive("protected"))
+				visibility = "strict protected";
+			else
+				raise_parse_error(
+				    "expected private or protected after strict");
+			continue;
 		} else if (peek_keyword("type")) {
 			if (is_class) {
 				raise_parse_error("class type unsupported");

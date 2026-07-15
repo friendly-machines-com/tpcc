@@ -29,6 +29,13 @@ type
     property Cells[X, Y: Integer]: Integer read GetCell write SetCell; default;
   end;
 
+  TStrictVisibility = object
+  strict private
+    StrictPrivateField: Integer;
+  strict protected
+    StrictProtectedField: Integer;
+  end;
+
 var
   Box: TBox;
   Child: TChildBox;
