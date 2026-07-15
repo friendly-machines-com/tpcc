@@ -1,6 +1,8 @@
 program metaclass_construction;
 
 type
+  TBoundNoArgs = procedure of object;
+
   TBase = class(TObject)
   public
     class var AfterCount: Integer;
@@ -38,7 +40,12 @@ end;
 var
   C: class of TBase = TChild;
   Instance: TBase;
+  NilInstance: TBase;
+  NilFree: TBoundNoArgs;
 begin
+  NilInstance.Free;
+  NilFree := @NilInstance.Free;
+  NilFree();
   Instance := C.Create(7);
   WriteLn(Instance.Value);
   WriteLn(Instance.Kind);

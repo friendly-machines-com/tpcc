@@ -38,7 +38,7 @@ type
   public
     constructor Create;
     destructor Destroy; virtual;
-    procedure Free;
+    procedure Free; external nil name '::u_system::m_free_object';
     
     // Class methods live on the generated m_meta class. A class name supplies
     // its exact metaclass; an object supplies its dynamic metaclass through
@@ -264,8 +264,6 @@ implementation
 
 function tpcc_new_instance(meta: TClass): TObject;
   external nil name '::u_system::m_new_instance';
-procedure tpcc_free_object(instance: TObject);
-  external nil name '::u_system::m_free_object';
 
 constructor TObject.Create;
 begin
@@ -273,11 +271,6 @@ end;
 
 destructor TObject.Destroy;
 begin
-end;
-
-procedure TObject.Free;
-begin
-  tpcc_free_object(Self)
 end;
 
 class function TObject.NewInstance: TObject;

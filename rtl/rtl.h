@@ -135,6 +135,36 @@ inline auto m_bind_method(Object* object) noexcept {
 	};
 }
 
+template<auto Function>
+struct m_receiver_function_adapter;
+
+template<typename Owner, typename Result, typename... Args,
+         Result (*Function)(Owner*, Args...)>
+struct m_receiver_function_adapter<Function> {
+	using owner_type = Owner;
+	using signature_type = Result(Args...);
+
+	static Result invoke(void* data, Args... args) {
+		return Function(
+		    static_cast<Owner*>(data),
+		    std::forward<Args>(args)...);
+	}
+};
+
+template<auto Function, typename Object>
+inline auto m_bind_receiver_function(
+    Object* object) noexcept {
+	using adapter =
+	    m_receiver_function_adapter<Function>;
+	using owner = typename adapter::owner_type;
+	using signature = typename adapter::signature_type;
+	owner* adjusted = static_cast<owner*>(object);
+	return m_method<signature>{
+	    m_function_to_code_pointer(&adapter::invoke),
+	    static_cast<void*>(adjusted),
+	};
+}
+
 static_assert(std::is_standard_layout_v<t_tmethod>);
 static_assert(std::is_trivially_copyable_v<t_tmethod>);
 static_assert(std::is_standard_layout_v<m_method<void()>>);

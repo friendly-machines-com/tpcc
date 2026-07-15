@@ -437,7 +437,11 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_setlength", nullptr},
     {"::u_system::p_uniquestring", nullptr},
     {"::u_system::m_new_instance", nullptr},
-    {"::u_system::m_free_object", nullptr},
+    {
+        .cxx_name = "::u_system::m_free_object",
+        .const_fold = nullptr,
+        .call_convention = BuiltinCallConvention::ReceiverFirst,
+    },
     {
         .cxx_name = "::u_system::p_length",
         .const_fold = fold_length,

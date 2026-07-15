@@ -4933,6 +4933,12 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	if (external) {
 		m->has_body = true;
 		m->is_external = true;
+		// An external method normally names a C++ member supplied by the
+		// external provider (for example TObject.ClassType/p_classtype).
+		// A registered builtin may instead declare an explicit receiver ABI;
+		// retain its descriptor so call emission can honor that ABI without
+		// recognizing a Pascal method name.
+		m->builtin_desc = lookup_builtin_desc(cxx_name);
 	}
 	if (!body->register_callable(pas_name, m)) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);

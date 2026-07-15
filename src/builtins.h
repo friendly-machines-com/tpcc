@@ -47,12 +47,24 @@ enum class BuiltinSyntaxKind {
 	WriteLn,
 };
 
+enum class BuiltinCallConvention {
+	Function,
+	// The Pascal declaration is a method, but the RTL implementation is a
+	// free C++ function whose first argument is the Pascal receiver. This is
+	// needed for operations such as TObject.Free: Pascal permits nil.Free,
+	// whereas entering a C++ member function through a null pointer is
+	// undefined behavior even if the function body checks `this`.
+	ReceiverFirst,
+};
+
 struct BuiltinDesc {
 	std::string_view cxx_name;    // e.g. "::u_system::p_ord"
 	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
 	std::optional<TypeBoundKind> type_bound_kind = {};
 	BuiltinGenericKind generic_kind = BuiltinGenericKind::None;
 	BuiltinSyntaxKind syntax_kind = BuiltinSyntaxKind::None;
+	BuiltinCallConvention call_convention =
+	    BuiltinCallConvention::Function;
 };
 
 struct IntrinsicTypeDesc {

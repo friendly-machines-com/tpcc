@@ -1531,6 +1531,39 @@ void Emitter::emit_routine_reference(
 		    "method routine reference owner has no C++ name",
 		    method->owner_class);
 
+	if (method->builtin_desc &&
+	    method->builtin_desc->call_convention ==
+	        BuiltinCallConvention::ReceiverFirst) {
+		// A receiver-first RTL method has no C++ pointer-to-member. Bind the
+		// same external function and receiver into the ordinary two-word
+		// Pascal method value; its adapter preserves the method ABI seen by
+		// callers of `procedure of object`.
+		fprintf(active,
+		    "::u_system::m_bind_receiver_function<static_cast<");
+		emit_type_ref(method->ty->return_type);
+		fprintf(active, " (*)(%s*", owner.c_str());
+		for (const Parameter& formal :
+		     method->ty->formals) {
+			fprintf(active, ", ");
+			emit_formal_parameter(formal, false);
+		}
+		fprintf(active, ")>(&%.*s)>(",
+		    (int)method->builtin_desc->cxx_name.size(),
+		    method->builtin_desc->cxx_name.data());
+		if (reference->receiver->ty &&
+		    reference->receiver->ty->is_reference_type()) {
+			emit_expression(reference->receiver);
+		} else {
+			fprintf(active, "std::addressof(");
+			emit_expression(reference->receiver);
+			fprintf(active, ")");
+		}
+		fprintf(active, ")");
+		if (reference->code_only)
+			fprintf(active, ".p_code");
+		return;
+	}
+
 	fprintf(active, "::u_system::m_bind_method<static_cast<");
 	emit_type_ref(method->ty->return_type);
 	fprintf(active, " (%s::*)", owner.c_str());
@@ -2036,6 +2069,27 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
+		auto callable =
+		    dynamic_cast<Callable*>(pc->callee);
+		if (pc->receiver && callable &&
+		    callable->builtin_desc &&
+		    callable->builtin_desc->call_convention ==
+		        BuiltinCallConvention::ReceiverFirst) {
+			// Do not enter a C++ member function to implement this Pascal
+			// method. In particular, `nil.Free` must reach the nil-safe RTL
+			// operation without first forming `nil->p_free()`. Passing the
+			// receiver as a function argument also evaluates it exactly once.
+			fprintf(active, "%.*s(",
+			    (int)callable->builtin_desc->cxx_name.size(),
+			    callable->builtin_desc->cxx_name.data());
+			emit_expression(pc->receiver);
+			if (!pc->args.empty())
+				fprintf(active, ", ");
+			emit_call_arguments(
+			    callable->ty, pc->args);
+			fprintf(active, ")");
+			return;
+		}
 		if (pc->receiver) {
 			auto receiver = pc->receiver;
 			bool done = false;
@@ -2084,8 +2138,7 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "(");
 		}
 		RoutineType* call_ty = nullptr;
-		if (auto callable =
-		        dynamic_cast<Callable*>(pc->callee))
+		if (callable)
 			call_ty = callable->ty;
 		else
 			call_ty =

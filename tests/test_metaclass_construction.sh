@@ -29,6 +29,23 @@ then
 	echo "class-reference constructor call did not emit Construct" >&2
 	exit 1
 fi
+if ! rg -Fq '::u_system::m_free_object(p_nilinstance)' \
+	"$tmp/construction.cc"
+then
+	echo "nil-safe Free did not use the receiver-first RTL operation" >&2
+	exit 1
+fi
+if rg -Fq -- '->p_free(' "$tmp/construction.cc"
+then
+	echo "Free still enters a C++ member function through its receiver" >&2
+	exit 1
+fi
+if ! rg -Fq '::u_system::m_bind_receiver_function<static_cast<' \
+	"$tmp/construction.cc"
+then
+	echo "method reference to Free did not use the receiver-first adapter" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \
@@ -36,13 +53,15 @@ fi
 	-Wextra \
 	-Wpedantic \
 	-Werror \
+	-fsanitize=address,undefined \
+	-fno-sanitize-recover=all \
 	-I"$tmp" \
 	-Irtl \
 	"$tmp/construction.cc" \
 	"$tmp/system.cc" \
 	-o "$tmp/construction"
 
-actual=$("$tmp/construction")
+actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/construction")
 expected='7
 2
 1'
