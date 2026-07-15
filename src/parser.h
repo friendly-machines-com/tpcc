@@ -77,6 +77,15 @@ class Frame;
 struct ScopeEntry {
 	const Frame* frame;
 	Node* qualifier = nullptr;
+
+	/** True for an environment opened by an object/class/record receiver.
+	 *  Unit qualifiers deliberately remain lexical overload environments:
+	 *  unlike a class receiver, they have no structural inheritance chain. */
+	bool is_receiver_environment() const;
+	/** Perform value lookup according to this environment's kind. A lexical
+	 *  entry examines exactly its frame; a receiver entry applies member
+	 *  lookup to the receiver's complete structural parent chain. */
+	Node* lookup_value(const std::string& name) const;
 };
 class Parser {
 private:

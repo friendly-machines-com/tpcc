@@ -34,6 +34,18 @@ then
 	echo "inherited method did not resolve through the completed superclass" >&2
 	exit 1
 fi
+if ! rg -Fq 'this->p_setvalue(' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "implicit Self did not resolve an inherited-only method" >&2
+	exit 1
+fi
+if ! rg -Fq 'this->p_value = ' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "implicit Self did not resolve an inherited-only field" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \

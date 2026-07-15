@@ -1302,6 +1302,18 @@ static Node* lookup_member_binding(const Frame* frame,
 	return new OverloadSet(std::move(callables));
 }
 
+bool ScopeEntry::is_receiver_environment() const {
+	return qualifier &&
+	       !dynamic_cast<UnitRef*>(qualifier);
+}
+
+Node* ScopeEntry::lookup_value(
+    const std::string& name) const {
+	if (is_receiver_environment())
+		return lookup_member_binding(frame, name);
+	return frame->lookup_value_local(name);
+}
+
 static Node* bind_lookup_result(Node* qualifier, Node* binding) {
 	if (!qualifier || dynamic_cast<UnitRef*>(qualifier))
 		return binding;
@@ -1333,19 +1345,14 @@ Node* Parser::maybe_resolve_value(std::string name) {
 				return unit;
 			break;
 		}
-		// The parser scope stack is already the chain being searched here. Use the
-		// local Frame lookup so a parent Frame reached through lookup_value() is not
-		// seen again when the loop later visits that parent scope entry.
-		Node* hit = it->frame->lookup_value_local(name);
+		Node* hit = it->lookup_value(name);
 		if (!hit)
 			continue;
-		if (it->qualifier &&
-		    !dynamic_cast<UnitRef*>(it->qualifier)) {
+		if (it->is_receiver_environment()) {
 			if (!collected.empty())
 				break;
 			return bind_lookup_result(
-			    it->qualifier,
-			    lookup_member_binding(it->frame, name));
+			    it->qualifier, hit);
 		}
 		auto as_call = dynamic_cast<Callable*>(hit);
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
@@ -1422,7 +1429,7 @@ Node* Parser::active_function_result_lvalue(Callable* c) const {
 /** value that can be assigned to */
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Node* hit = it->frame->lookup_value(name)) {
+		if (Node* hit = it->lookup_value(name)) {
 			if (auto c = dynamic_cast<Callable*>(hit)) {
 				if (Node* result = active_function_result_lvalue(c))
 					return result;
@@ -1432,14 +1439,8 @@ Node* Parser::resolve_lvalue(std::string name) {
 						return result;
 				}
 			}
-			if (it->qualifier) {
-				if (auto property = dynamic_cast<Property*>(hit))
-					return new PropertyAccess(it->qualifier, property, {});
-				auto m = new MemberAccess(it->qualifier, hit);
-				m->ty = hit->ty;
-				return m;
-			}
-			return hit;
+			return bind_lookup_result(
+			    it->qualifier, hit);
 		}
 	}
 	raise_parse_error("unresolved lvalue identifier: " + name);
