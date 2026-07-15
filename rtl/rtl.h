@@ -758,6 +758,14 @@ struct t_ansistring {
 	t_char length;
 	t_char data[capacity + 1];
 
+	// FPC's explicit Pointer(AnsiString) and PtrInt(AnsiString)
+	// conversions expose the address of character 1, never the address of
+	// the managed-string variable/carrier. Keep that representation fact on
+	// the string carrier so conversion emission does not know its layout.
+	t_pointer m_pointer() const noexcept {
+		return const_cast<t_char*>(data);
+	}
+
 	template<typename I>
 	t_char& index(I index) {
 		const std::ptrdiff_t actual =

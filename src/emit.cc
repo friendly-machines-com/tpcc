@@ -2213,6 +2213,57 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ")");
 			return;
 		}
+		const bool source_ansistring =
+		    ca->a && ca->a->ty == ansistring_type();
+		auto target_pointer =
+		    dynamic_cast<PointerType*>(ca->ty);
+		const bool target_pointer_integer =
+		    ca->ty == ptrint_type() ||
+		    ca->ty == ptruint_type();
+		if (source_ansistring &&
+		    (target_pointer ||
+		     target_pointer_integer)) {
+			if (target_pointer &&
+			    target_pointer->is_untyped()) {
+				fprintf(active, "(");
+				emit_expression(ca->a);
+				fprintf(active, ").m_pointer()");
+			} else {
+				fprintf(active,
+				    target_pointer_integer
+				        ? "reinterpret_cast<"
+				        : "static_cast<");
+				emit_type_ref(ca->ty);
+				fprintf(active, ">((");
+				emit_expression(ca->a);
+				fprintf(active, ").m_pointer())");
+			}
+			return;
+		}
+		auto source_pointer =
+		    dynamic_cast<PointerType*>(
+		        ca->a ? ca->a->ty : nullptr);
+		OrdinalBounds source_integer_bounds;
+		const bool source_integer =
+		    ca->a &&
+		    integer_bounds(
+		        ca->a->ty,
+		        &source_integer_bounds);
+		if ((source_pointer &&
+		     (target_pointer ||
+		      target_pointer_integer)) ||
+		    (source_integer &&
+		     target_pointer)) {
+			// Pascal explicit casts expose the pointer representation.
+			// C++ static_cast cannot express integer/pointer crossings or
+			// arbitrary typed-pointer reinterpretation.
+			fprintf(active, "reinterpret_cast<");
+			emit_type_ref(ca->ty);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+			return;
+		}
 		auto source_routine = dynamic_cast<RoutineType*>(
 		    ca->a ? ca->a->ty : nullptr);
 		auto target_routine =

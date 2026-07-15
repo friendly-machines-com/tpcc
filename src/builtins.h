@@ -131,6 +131,8 @@ Type* sizeint_type();
 Type* qword_type();
 Type* int64_type();
 Type* pointer_type();
+Type* ptrint_type();
+Type* ptruint_type();
 Type* boolean_type();
 Type* char_type();
 ShortStringType* shortstring_type(uint8_t capacity = 255);

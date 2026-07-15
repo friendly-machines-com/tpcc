@@ -143,6 +143,8 @@ Type* sizeint_type() { return &k_sizeint; }
 Type* qword_type() { return &k_qword; }
 Type* int64_type() { return &k_int64; }
 Type* pointer_type() { return &k_pointer; }
+Type* ptrint_type() { return &k_ptrint; }
+Type* ptruint_type() { return &k_ptruint; }
 Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 ShortStringType* shortstring_type(uint8_t capacity) {
