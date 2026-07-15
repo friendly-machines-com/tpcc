@@ -423,6 +423,16 @@ static std::pair<std::string, std::string> split_directive(const std::string& bo
 	return {name, rest};
 }
 
+static std::string compact_directive_argument(
+    const std::string& argument) {
+	std::string compact;
+	for (unsigned char ch : argument)
+		if (!std::isspace(ch))
+			compact.push_back(
+			    static_cast<char>(std::tolower(ch)));
+	return compact;
+}
+
 // Extract the content of a single-quoted string literal token (with '' escape).
 // FIXME: Remove and use evaluate().
 static std::string extract_string_literal(const std::string& token) {
@@ -489,6 +499,21 @@ void Parser::handle_directive(const std::string& body) {
 		ifdef_stack.push_back({outer, cond, outer && cond});
 		return;
 	}
+	if (name == "ifopt") {
+		const std::string option =
+		    compact_directive_argument(rest);
+		if (option.size() != 2 ||
+		    option[0] < 'a' || option[0] > 'z' ||
+		    (option[1] != '+' && option[1] != '-'))
+			raise_parse_error(
+			    "$ifopt expects one option letter followed by + or -");
+		const bool requested = option[1] == '+';
+		const bool cond =
+		    option_switches[option[0] - 'a'] == requested;
+		const bool outer = current_active();
+		ifdef_stack.push_back({outer, cond, outer && cond});
+		return;
+	}
 	if (name == "else") {
 		if (ifdef_stack.empty())
 			raise_parse_error("$else without matching $ifdef");
@@ -550,7 +575,22 @@ void Parser::handle_directive(const std::string& body) {
 		// their status in IOResult in either mode; recognizing the switch
 		// here prevents the tokenizer from treating "+" or "-" as an
 		// include filename.
+		option_switches['i' - 'a'] = rest == "+";
 		return;
+	}
+	if (name.size() == 1 &&
+	    name[0] >= 'a' && name[0] <= 'z') {
+		const std::string state =
+		    compact_directive_argument(rest);
+		if (state == "+" || state == "-") {
+			// Conditional compilation observes option directives even when
+			// the corresponding runtime/code-generation behavior is not yet
+			// implemented. Like {$define}, a switch in an inactive branch
+			// cannot change the state seen after that branch.
+			option_switches[name[0] - 'a'] =
+			    state == "+";
+			return;
+		}
 	}
 	if (name == "i" || name == "include") {
 		if (rest.size() >= 2 && rest.front() == '%' && rest.back() == '%') {

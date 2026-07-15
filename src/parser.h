@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdio>
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -147,12 +148,16 @@ private:
 	Emitter* emitter;
 	// Shared across the top-level parser and any sub-parsers it spawns.
 	CompilerOptions* options;
-	// One frame per open {$ifdef}/{$if}/{$ifndef}. Empty = top of file, always
-	// active. `outer` records the enclosing state at push time so $else and
-	// $elseif can restore correctly. `taken` records whether any prior branch
-	// at this level has been taken (so $else after a taken $if doesn't
-	// re-activate). `active` is the current visible state; the tokenizer skips
-	// tokens whenever the top frame's active is false.
+	// Current A..Z source option states queried by {$ifopt X+/-}. TPCC has no
+	// command-line option-switch flags, so all begin off; active source
+	// directives such as {$Q+} update the corresponding entry.
+	std::array<bool, 26> option_switches{};
+	// One frame per open {$ifdef}/{$if}/{$ifndef}/{$ifopt}. Empty = top of
+	// file, always active. `outer` records the enclosing state at push time so
+	// $else and $elseif can restore correctly. `taken` records whether any
+	// prior branch at this level has been taken (so $else after a taken $if
+	// doesn't re-activate). `active` is the current visible state; the
+	// tokenizer skips tokens whenever the top frame's active is false.
 	struct IfdefFrame {
 		bool outer;
 		bool taken;
@@ -165,8 +170,9 @@ private:
 		return ifdef_stack.empty() || ifdef_stack.back().active;
 	}
 	// Interpret the body of a `{$...}` directive (without the leading `$` or
-	// trailing `}`). Handles ifdef/ifndef/if/else/elseif/endif/define/undef/
-	// include; other directives are consumed and ignored.
+	// trailing `}`). Handles ifdef/ifndef/if/ifopt/else/elseif/endif,
+	// define/undef, option switches, and include; other directives are
+	// consumed and ignored.
 	void handle_directive(const std::string& body);
 	// Expand a `%NAME%` argument in `{$I %NAME%}` to the source text spliced
 	// at that position (a Pascal string literal for %DATE%). Only %DATE% is
