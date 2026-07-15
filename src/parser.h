@@ -207,6 +207,7 @@ protected:
 	void parse_var_block();
 	/** Parse declarations into the current declaration frame. */
 	void parse_decl_blocks(bool is_decl_only);
+	void validate_class_forwards(Frame* frame);
 	void parse_block();
 	void parse_semicolon();
 	void maybe_parse_statement();
@@ -287,7 +288,9 @@ protected:
 	Type* parse_procedure_type();
 	Type* parse_function_type();
 	Type* parse_operator_type();
-	Type* parse_class_type();
+	Type* parse_class_type(
+	    ClassType* completing_forward = nullptr,
+	    bool allow_forward_declaration = false);
 	Type* parse_interface_type();
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);

@@ -97,6 +97,8 @@ public:
 	// type. Fields and method prototypes go inside; method bodies are still
 	// emitted separately (outside the class) by emit_procedure_open.
 	void emit_type_definition(std::string cxx_name, Type* ty);
+	void emit_class_forward_declaration(
+	    std::string cxx_name);
 	// Emit `using <cxx_name> = <aliased_cxx_name>;` for `type B = A;` where A
 	// is an already-named aggregate/enum. Avoids re-emitting A's body under B's
 	// name (ODR violation in C++).

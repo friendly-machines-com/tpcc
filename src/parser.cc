@@ -3000,6 +3000,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			break;
 		}
 	} while (true);
+	validate_class_forwards(body);
 	pop_declaration_frame();
 	pop_scope();
 	if (is_class) {
@@ -3070,9 +3071,14 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 	}
 }
 
-Type* Parser::parse_class_type() {
+Type* Parser::parse_class_type(
+    ClassType* completing_forward,
+    bool allow_forward_declaration) {
 	parse_keyword("class");
 	if (maybe_parse_keyword("of")) {
+		if (completing_forward)
+			raise_parse_error(
+			    "forward class declaration must be completed by a class definition");
 		auto target_ty = parse_type_expression(true);
 		if (auto target_class_ty = dynamic_cast<IncompleteType*>(target_ty)) {
 			return new ClassRefType(current_location(), target_class_ty);
@@ -3084,12 +3090,31 @@ Type* Parser::parse_class_type() {
 		// FIXME: return lookup_builtin_type("::u_system::m_iobject");
 		// return somehow target_ty->cxx_name + "::m_meta" but that would make the metaclass first-class;
 	}
+	if (input_token == ";") {
+		if (!allow_forward_declaration)
+			raise_parse_error(
+			    "class forward declaration is only valid as a named type declaration");
+		if (completing_forward)
+			raise_parse_error(
+			    "duplicate forward class declaration");
+		auto ct = new ClassType(
+		    current_location(), nullptr, {}, nullptr);
+		ct->is_forward_declaration = true;
+		return ct;
+	}
 	ClassType* super_ty = nullptr;
 	std::vector<InterfaceType*> implemented_interfaces;
 	const bool has_ancestor_list = maybe_parse_opening_paren();
 	if (has_ancestor_list) {
 		auto s_ty = parse_type_expression(false);
 		super_ty = dynamic_cast<ClassType*>(s_ty);
+		if (super_ty &&
+		    super_ty->is_forward_declaration) {
+			raise_parse_error(
+			    "superclass forward declaration '" +
+			    super_ty->forward_name +
+			    "' must be resolved before it is inherited");
+		}
 		if (super_ty == nullptr) {
 			if (auto incomplete =
 			        dynamic_cast<IncompleteType*>(s_ty);
@@ -3119,7 +3144,15 @@ Type* Parser::parse_class_type() {
 		if (!defining_system_tobject)
 			super_ty = lookup_implicit_tobject_superclass();
 	}
-	auto ct = new ClassType(current_location(), nullptr, std::move(implemented_interfaces), super_ty);
+	auto ct = completing_forward
+	    ? completing_forward
+	    : new ClassType(
+	          current_location(), nullptr, {},
+	          nullptr);
+	ct->implemented_interfaces =
+	    std::move(implemented_interfaces);
+	ct->super = super_ty;
+	ct->is_forward_declaration = false;
 	if (has_ancestor_list && input_token == ";") {
 		// `TChild = class(TParent);` is FPC's completed empty-descendant
 		// shorthand. Give it the same inherited member Frame as an explicit
@@ -4388,10 +4421,15 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	// overlays (`uses`, `with`, implicit Self) cannot redirect these bindings.
 	Frame* scope = current_declaration_frame();
 	struct PendingTypeDecl {
+		enum class Kind {
+			Definition,
+			ClassForward,
+		};
 		std::string name;
 		std::string cxx;
 		IncompleteType* lhs_placeholder;
 		Type* rhs;
+		Kind kind;
 		bool alias = false;
 	};
 	std::vector<PendingTypeDecl> pending;
@@ -4405,10 +4443,19 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		parse_equals();
 		Type* existing = scope->lookup_type(name); // FIXME: WTF
 		IncompleteType* lhs_placeholder = nullptr;
+		ClassType* completing_forward = nullptr;
 		if (existing) {
 			lhs_placeholder = dynamic_cast<IncompleteType*>(existing);
-			if (!lhs_placeholder ||
-			    lhs_placeholder->resolved) {
+			completing_forward =
+			    dynamic_cast<ClassType*>(existing);
+			if (completing_forward &&
+			    !completing_forward
+			         ->is_forward_declaration)
+				completing_forward = nullptr;
+			if ((!lhs_placeholder &&
+			     !completing_forward) ||
+			    (lhs_placeholder &&
+			     lhs_placeholder->resolved)) {
 				raise_type_parse_error("duplicate type name: " + name);
 			}
 		} else {
@@ -4418,16 +4465,52 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		std::string saved_type_declaration_name =
 		    std::move(current_type_declaration_name);
 		current_type_declaration_name = name;
-		Type* rhs = parse_type_expression(true);
+		Type* rhs = nullptr;
+		if (completing_forward &&
+		    !peek_keyword("class"))
+			raise_type_parse_error(
+			    "duplicate type name: " + name);
+		if (peek_keyword("class"))
+			rhs = parse_class_type(
+			    completing_forward, true);
+		else
+			rhs = parse_type_expression(true);
 		current_type_declaration_name =
 		    std::move(saved_type_declaration_name);
-		// Publish a completed declaration before parsing the next one.
-		// References already holding this placeholder remain valid and are
-		// normalized at block end; fresh lookups peel the resolved placeholder
-		// in maybe_resolve_type(). This is essential for inheritance, whose
-		// parser needs the earlier class body immediately.
-		lhs_placeholder->resolved = rhs;
-		pending.push_back(PendingTypeDecl{name, cxx_type_name(name), lhs_placeholder, rhs});
+		auto forward_class =
+		    dynamic_cast<ClassType*>(rhs);
+		if (forward_class &&
+		    forward_class->is_forward_declaration) {
+			// Unlike an implicit same-block IncompleteType, an explicit class
+			// forward remains usable across later declaration sections. Give
+			// it stable class identity and its emitted name immediately.
+			forward_class->cxx_name =
+			    cxx_type_name(name);
+			forward_class->forward_name = name;
+			forward_class->owning_unit =
+			    declaration_unit(scope);
+			if (lhs_placeholder)
+				lhs_placeholder->resolved =
+				    forward_class;
+			scope->rebind_type(
+			    name, forward_class);
+			pending.push_back(PendingTypeDecl{
+			    name, cxx_type_name(name), nullptr,
+			    forward_class,
+			    PendingTypeDecl::Kind::ClassForward});
+		} else {
+			// Publish a completed declaration before parsing the next one.
+			// References already holding this placeholder remain valid and are
+			// normalized at block end; fresh lookups peel the resolved
+			// placeholder. This is essential for inheritance, whose parser
+			// needs the earlier class body immediately.
+			if (lhs_placeholder)
+				lhs_placeholder->resolved = rhs;
+			pending.push_back(PendingTypeDecl{
+			    name, cxx_type_name(name),
+			    lhs_placeholder, rhs,
+			    PendingTypeDecl::Kind::Definition});
+		}
 		parse_semicolon();
 	} while (true);
 	parsing_type_block = saved_parsing_type_block;
@@ -4437,14 +4520,25 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	// block has been seen, and reject missing or cyclic definitions.
 	TypeBlockResolver resolver;
 	for (auto& decl : pending) {
+		if (decl.kind ==
+		    PendingTypeDecl::Kind::ClassForward)
+			continue;
 		if (!resolver.normalize_type(decl.rhs))
 			raise_type_parse_error(resolver.error);
-		decl.lhs_placeholder->resolved = decl.rhs;
+		if (decl.lhs_placeholder)
+			decl.lhs_placeholder->resolved =
+			    decl.rhs;
 	}
 	for (auto& decl : pending)
-		scope->rebind_type(decl.name, decl.rhs);
+		if (decl.kind ==
+		    PendingTypeDecl::Kind::Definition)
+			scope->rebind_type(
+			    decl.name, decl.rhs);
 
 	for (auto& decl : pending) {
+		if (decl.kind ==
+		    PendingTypeDecl::Kind::ClassForward)
+			continue;
 		Type* rhs = decl.rhs;
 		// Attach the LHS Pascal name (as its C++ identifier) to record-family
 		// types and enums so emit_type_ref has a name to spell instead of
@@ -4507,7 +4601,12 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	if (!emitter)
 		return;
 	for (auto& decl : pending) {
-		if (decl.alias)
+		if (decl.kind ==
+		    PendingTypeDecl::Kind::ClassForward)
+			emitter
+			    ->emit_class_forward_declaration(
+			        decl.cxx);
+		else if (decl.alias)
 			emitter->emit_type_alias(
 			    decl.cxx, decl.rhs);
 		else
@@ -4753,6 +4852,25 @@ void Parser::parse_equals() {
 	}
 }
 
+void Parser::validate_class_forwards(Frame* frame) {
+	if (!frame)
+		return;
+	for (const auto& declaration :
+	     frame->type_declarations()) {
+		auto class_type =
+		    dynamic_cast<ClassType*>(
+		        declaration.second);
+		if (!class_type ||
+		    !class_type->is_forward_declaration)
+			continue;
+		emit_parse_error_at(
+		    class_type->source_location,
+		    "forward class declaration '" +
+		        class_type->forward_name +
+		        "' was not resolved");
+	}
+}
+
 void Parser::parse_decl_blocks(bool is_decl_only) {
 	bool is_class = false;
 	while (true) {
@@ -4806,6 +4924,12 @@ void Parser::parse_decl_blocks(bool is_decl_only) {
 	if (is_class) {
 		raise_type_parse_error("'class' prefix wasn't consumed");
 	}
+	// FPC permits a class forward to survive across multiple `type` sections
+	// and intervening declarations, but not past the declaration part that
+	// owns it. Ordinary implicit IncompleteType references remain confined to
+	// one type block and are checked there.
+	validate_class_forwards(
+	    current_declaration_frame());
 }
 
 void Parser::parse_block() {

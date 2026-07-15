@@ -1480,6 +1480,14 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 	fprintf(active, "}");
 }
 
+void Emitter::emit_class_forward_declaration(
+    std::string cxx_name) {
+	if (!active)
+		return;
+	fprintf(active, "struct %s;\n",
+	    cxx_name.c_str());
+}
+
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	if (!active)
 		return;

@@ -46,6 +46,30 @@ then
 	echo "implicit Self did not resolve an inherited-only field" >&2
 	exit 1
 fi
+if ! rg -Fq 'struct t_tforward;' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "explicit class forward did not emit a C++ forward declaration" >&2
+	exit 1
+fi
+if ! rg -Fq 't_tforward* p_ref;' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "an earlier class did not retain the forward class identity" >&2
+	exit 1
+fi
+if ! rg -Fq 't_tforward* p_forwardglobal;' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "a variable between forward declaration and completion lost its class type" >&2
+	exit 1
+fi
+if ! rg -Fq 't_tforwarduser* p_user;' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "the completed class did not retain the mutually-referencing class type" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \
@@ -60,6 +84,22 @@ fi
 	"$tmp/system.cc" \
 	-o "$tmp/type_block_publication"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/type_block_publication"
+
+for test_case in \
+	TEST_UNRESOLVED_CLASS_FORWARD \
+	TEST_DUPLICATE_CLASS_FORWARD \
+	TEST_WRONG_CLASS_FORWARD_COMPLETION \
+	TEST_FORWARD_CLASS_SUPER
+do
+	if ./mp -Furtl -d"$test_case" \
+		-o"$tmp/rejected.cc" \
+		tests/type_block_publication.pp \
+		>"$tmp/stdout" 2>"$tmp/stderr"
+	then
+		echo "accepted invalid class-forward case $test_case" >&2
+		exit 1
+	fi
+done
 
 ./mp -Furtl -o"$tmp/inherited_overload_scope.cc" \
 	tests/inherited_overload_scope.pp

@@ -66,13 +66,12 @@ public:
 	virtual bool is_reference_type() const { return false; }
 };
 
-/** Placeholder for a type name that has been introduced but whose full
- *  definition has not yet arrived. Sources: implicit forward reference in
- *  pointer position (`^TFoo` before TFoo is declared), explicit class-forward
- *  (`TFoo = class;`), and LHS pre-registration to permit self-recursive RHS.
- *  Must be patched (resolved != nullptr) by the end of the containing type
- *  block; any Type* consumer that needs semantic information should unwrap
- *  through `resolved`. */
+/** Placeholder created internally while parsing one type block. Sources are
+ *  implicit RHS forward references (`^TFoo` before TFoo is declared) and LHS
+ *  pre-registration for self-recursive definitions. It must be resolved by
+ *  type-block end. An explicit Pascal `TFoo = class;` instead publishes an
+ *  incomplete ClassType: FPC permits its definition in a later type section,
+ *  and intervening declarations already need its class identity. */
 struct IncompleteType: public Type {
 	std::string name;
 	Type* resolved;
@@ -291,6 +290,11 @@ struct ClassType: public Type {
 	std::string cxx_name;
 	std::vector<InterfaceType*> implemented_interfaces; // FIXME: not transitive ?
 	ClassType* super;
+	// `TFoo = class;` publishes this same ClassType object immediately, so
+	// intervening fields/variables can retain stable `TFoo` type identity.
+	// The later full declaration fills this object and clears the flag.
+	bool is_forward_declaration = false;
+	std::string forward_name;
 	// A Pascal `class constructor Name` is a lifecycle hook, not a value
 	// member named Name. Keeping it out of `children` makes it impossible for
 	// ordinary member lookup, calls, or routine references to expose it.

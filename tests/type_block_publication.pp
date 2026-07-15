@@ -13,6 +13,48 @@ type
     function GetValue: LongInt; override;
   end;
 
+  TForward = class;
+
+  TForwardUser = class
+  public
+    Ref: TForward;
+  end;
+
+var
+  ForwardGlobal: TForward;
+
+type
+  TForward = class
+  public
+    User: TForwardUser;
+  end;
+
+{$ifdef TEST_UNRESOLVED_CLASS_FORWARD}
+type
+  TUnresolvedClass = class;
+{$endif}
+
+{$ifdef TEST_DUPLICATE_CLASS_FORWARD}
+type
+  TDuplicateClass = class;
+  TDuplicateClass = class;
+{$endif}
+
+{$ifdef TEST_WRONG_CLASS_FORWARD_COMPLETION}
+type
+  TWrongClass = class;
+  TWrongClass = Integer;
+{$endif}
+
+{$ifdef TEST_FORWARD_CLASS_SUPER}
+type
+  TForwardSuper = class;
+  TBadChild = class(TForwardSuper)
+  end;
+  TForwardSuper = class
+  end;
+{$endif}
+
 procedure TBase.SetValue(NewValue: LongInt);
 begin
   Value := NewValue
@@ -35,4 +77,5 @@ begin
 end;
 
 begin
+  ForwardGlobal := nil
 end.
