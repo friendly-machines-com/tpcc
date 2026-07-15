@@ -195,9 +195,9 @@ private:
 	Node* mk_unary_same(std::string id, Node* x);
 	Node* mk_assign(Node* a, Node* b);
 	Node* cast(Node* a, Type* target_ty);
-	RoutineRef* resolve_routine_reference(
+	Node* resolve_routine_reference(
 	    RoutineRef* reference, RoutineType* target_ty);
-	RoutineRef* resolve_routine_code_reference(
+	Node* resolve_routine_code_reference(
 	    RoutineRef* reference);
 	Type* reuse_subrange_type(Node* lower_bound, Node* upper_bound);
 	ClassType* lookup_implicit_tobject_superclass();
@@ -354,6 +354,9 @@ protected:
 	struct FinalizedCall {
 		Node* receiver;
 		Node* callee;
+		// A qualifier which Pascal evaluates even though the selected callable
+		// has no receiver ABI. make_call lowers it through EvaluateThen.
+		Node* qualifier_effect = nullptr;
 	};
 	/** Given a resolved target (Callable, OverloadSet, MemberAccess-wrapping
 	 *  either of those, or a Builtin) and parsed args, peel any MemberAccess
@@ -396,6 +399,10 @@ protected:
 	 *  expression. These never change declaration ownership. */
 	void push_scope(const Frame* scope, Node* qualifier = nullptr);
 	void pop_scope();
+	/** Bind a lookup result to its selecting expression and enforce whether
+	 *  that expression denotes an instance/class receiver or only a static
+	 *  type-member environment. */
+	Node* bind_lookup_result(Node* qualifier, Node* binding);
 	/** Enter/leave the frame which owns declarations currently being parsed. */
 	void push_declaration_frame(Frame* frame);
 	void pop_declaration_frame();

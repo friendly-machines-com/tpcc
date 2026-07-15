@@ -31,12 +31,21 @@ BinaryOperation::BinaryOperation(Node* a, Node* b) {
 	this->b = b;
 }
 
+EvaluateThen::EvaluateThen(Node* a, Node* b)
+    : BinaryOperation(a, b) {
+	this->ty = b ? b->ty : nullptr;
+}
+
 ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
     : receiver(receiver), callee(callee), args(std::move(args)) {}
 ClassRefValue::ClassRefValue(ClassType* target)
     : target(target) {
 	this->ty = new ClassRefType(
 	    target ? target->source_location : SourceLocation{}, target);
+}
+TypeMemberQualifier::TypeMemberQualifier(Type* target)
+    : target(target) {
+	this->ty = target;
 }
 Construct::Construct(
     Node* class_reference, Method* initializer,
@@ -187,6 +196,7 @@ Method::Method(std::string cxx_name,
 	       has_overload_directive),
       owner_class(owner_class),
       virtual_kind(virtual_kind),
+      is_static(false),
       is_final(false),
       vtable_slot(-1) {}
 
@@ -250,6 +260,14 @@ void BinaryOperation::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 void BinaryOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " " << ctx->known_value_ref(a) << ", " << ctx->known_value_ref(b) << " : " << ctx->known_type_ref(ty); }
 
 const char* ProcCall::diagnostic_kind() const { return "call"; }
+const char* EvaluateThen::diagnostic_kind() const {
+	return "evaluate_then";
+}
+ConstEvalResult EvaluateThen::const_eval(
+    ConstEvalContext&) const {
+	// The left expression exists specifically for its runtime effects.
+	return ConstEvalResult::not_constant();
+}
 void ProcCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(receiver);
@@ -294,6 +312,9 @@ void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 const char* ClassRefValue::diagnostic_kind() const {
 	return "class_reference_value";
 }
+const char* TypeMemberQualifier::diagnostic_kind() const {
+	return "type_member_qualifier";
+}
 const char* Construct::diagnostic_kind() const {
 	return "construction";
 }
@@ -314,6 +335,11 @@ void UnitRef::print_diagnostic_definition(
 	out << " " << (unit ? unit->name : "<null>");
 }
 void ClassRefValue::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(target);
+}
+void TypeMemberQualifier::collect_diagnostic_edges(
     ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(target);
@@ -346,6 +372,12 @@ void ClassRefValue::print_diagnostic_definition(
 	out << "class reference "
 	    << ctx->known_type_ref(target)
 	    << " : " << ctx->known_type_ref(ty);
+}
+void TypeMemberQualifier::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned) const {
+	out << "type member qualifier "
+	    << ctx->known_type_ref(target);
 }
 void Construct::print_diagnostic_definition(
     ErrorLetContext* ctx, std::ostringstream& out,
@@ -849,6 +881,9 @@ void Method::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstrea
 		break;
 	}
 	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "static: " << (is_static ? "yes" : "no")
+	    << "\n";
 	ctx->indent(out, indent + 1);
 	out << "final: " << (is_final ? "yes" : "no");
 }

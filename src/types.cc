@@ -551,9 +551,25 @@ static bool routine_signature_type_equal(
 
 bool routine_types_compatible(
     const RoutineType* from, const RoutineType* to) {
-	if (!from || !to || from->kind != to->kind)
+	if (!from || !to)
 		return false;
-	if (from->kind != ROUTINE && from->kind != METHOD)
+	// A receiver-bearing class method is stored as CLASS_METHOD so the
+	// declaration emitter routes it to m_meta. Once bound to its metaclass
+	// receiver, however, its Pascal value representation is exactly the same
+	// two-word `of object` category as an instance method.
+	auto value_kind = [](RoutineKind kind) {
+		return kind == CLASS_METHOD
+		    ? METHOD
+		    : kind;
+	};
+	RoutineKind from_kind =
+	    value_kind(from->kind);
+	RoutineKind to_kind =
+	    value_kind(to->kind);
+	if (from_kind != to_kind)
+		return false;
+	if (from_kind != ROUTINE &&
+	    from_kind != METHOD)
 		return false;
 	if (!routine_signature_type_equal(
 	        from->return_type, to->return_type) ||

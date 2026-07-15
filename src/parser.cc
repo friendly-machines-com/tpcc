@@ -1325,9 +1325,53 @@ ScopeValueLookup ScopeEntry::lookup_value(
 	        callable_binding_opens_parent(binding)};
 }
 
-static Node* bind_lookup_result(Node* qualifier, Node* binding) {
+Node* Parser::bind_lookup_result(
+    Node* qualifier, Node* binding) {
 	if (!qualifier || dynamic_cast<UnitRef*>(qualifier))
 		return binding;
+
+	// A class reference and a record type qualifier open a member environment,
+	// but neither supplies an instance receiver. Reject an already-selected
+	// instance member here; overload sets remain intact until their visible
+	// arguments select one declaration in finalize_call.
+	const bool class_reference =
+	    dynamic_cast<ClassRefType*>(
+	        qualifier->ty) != nullptr;
+	const bool type_qualifier =
+	    dynamic_cast<TypeMemberQualifier*>(
+	        qualifier) != nullptr;
+	if (class_reference || type_qualifier) {
+		if (auto slot =
+		        dynamic_cast<StorageSlot*>(binding);
+		    slot &&
+		    slot->kind !=
+		        StorageSlot::Kind::StaticMember)
+			raise_parse_error(
+			    "instance field cannot be accessed through a " +
+			    std::string(type_qualifier
+			            ? "type"
+			            : "class reference"));
+		if (dynamic_cast<Property*>(binding))
+			raise_parse_error(
+			    "instance property cannot be accessed through a " +
+			    std::string(type_qualifier
+			            ? "type"
+			            : "class reference"));
+		if (auto method =
+		        dynamic_cast<Method*>(binding)) {
+			const bool allowed =
+			    method->is_static ||
+			    (!type_qualifier &&
+			     (method->ty->kind == CLASS_METHOD ||
+			      method->ty->kind == CONSTRUCTOR));
+			if (!allowed)
+				raise_parse_error(
+				    "instance method cannot be accessed through a " +
+				    std::string(type_qualifier
+				            ? "type"
+				            : "class reference"));
+		}
+	}
 	if (auto property = dynamic_cast<Property*>(binding))
 		return new PropertyAccess(qualifier, property, {});
 	auto access = new MemberAccess(qualifier, binding);
@@ -1801,11 +1845,20 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 	if (maybe_parse_period()) {
 		Node* base = maybe_resolve_value(id);
 		if (!base) {
+			Type* qualifier_type =
+			    maybe_resolve_type(id);
 			if (auto class_type =
 			        dynamic_cast<ClassType*>(
-			            maybe_resolve_type(id)))
+			            qualifier_type))
 				base =
 				    new ClassRefValue(class_type);
+			else if (dynamic_cast<RecordType*>(
+			             qualifier_type) ||
+			         dynamic_cast<PackedRecordType*>(
+			             qualifier_type))
+				base =
+				    new TypeMemberQualifier(
+				        qualifier_type);
 		}
 		if (!base)
 			raise_parse_error(
@@ -2295,11 +2348,7 @@ Node* Parser::parse_member_selection(Node* base) {
 	if (!member)
 		raise_parse_error(
 		    "no member '" + member_name + "'");
-	if (auto property = dynamic_cast<Property*>(member))
-		return new PropertyAccess(base, property, {});
-	auto result = new MemberAccess(base, member);
-	result->ty = member->ty;
-	return result;
+	return bind_lookup_result(base, member);
 }
 
 Node* Parser::parse_designator_tail(Node* result) {
@@ -3147,14 +3196,23 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			}
 			is_class = true;
 			consume();
-			if (dynamic_cast<ClassType*>(owner_class) != nullptr) {
+			if (dynamic_cast<ClassType*>(
+			        owner_class) != nullptr ||
+			    dynamic_cast<RecordType*>(
+			        owner_class) != nullptr ||
+			    dynamic_cast<PackedRecordType*>(
+			        owner_class) != nullptr) {
 				continue;
 			} else {
-				raise_parse_error("expected a class container");
+				raise_parse_error(
+				    "class method requires a class or record container");
 			}
 		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
-			if (dynamic_cast<PackedRecordType*>(owner_class))
-				raise_parse_error("methods inside packed records are not implemented");
+			if (dynamic_cast<PackedRecordType*>(
+			        owner_class) &&
+			    !is_class)
+				raise_parse_error(
+				    "instance methods inside packed records are not implemented");
 			if (is_class &&
 			    (peek_keyword("constructor") ||
 			     peek_keyword("destructor"))) {
@@ -4587,6 +4645,20 @@ struct TypeBlockResolver {
 				return fail(
 				    "class-reference value target resolved to non-class type");
 		}
+		if (auto n =
+		        dynamic_cast<TypeMemberQualifier*>(
+		            node)) {
+			if (!normalize_type(n->target))
+				return false;
+			if (!dynamic_cast<RecordType*>(
+			        n->target) &&
+			    !dynamic_cast<PackedRecordType*>(
+			        n->target))
+				return fail(
+				    "type member qualifier target resolved to "
+				    "non-record type");
+			n->ty = n->target;
+		}
 		if (auto n = dynamic_cast<WriteCall*>(node)) {
 			if (!normalize_node(n->file))
 				return false;
@@ -5674,11 +5746,17 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 
 	if (owner) {
 		if (is_class && kind == METHOD) {
-			if (dynamic_cast<ClassType*>(owner))
+			// Records permit only the receiverless `class ... static` form.
+			// The directive follows the signature, so retain the provisional
+			// class-method category until parse_method_prototype validates the
+			// directives and changes its ABI to ROUTINE.
+			if (dynamic_cast<ClassType*>(owner) ||
+			    dynamic_cast<RecordType*>(owner) ||
+			    dynamic_cast<PackedRecordType*>(owner))
 				kind = CLASS_METHOD;
 			else
 				raise_type_kind_mismatch(
-				    "class method owner", "class", owner);
+				    "class method owner", "class or record", owner);
 		}
 	} else {
 		if (kind != ROUTINE)
@@ -5730,7 +5808,8 @@ void Parser::parse_class_lifecycle_prototype(
 	// lifecycle hooks are instead compiler-scheduled, nonvirtual operations.
 	if (peek_keyword("overload") || peek_keyword("virtual") ||
 	    peek_keyword("dynamic") || peek_keyword("override") ||
-	    peek_keyword("abstract") || peek_keyword("final"))
+	    peek_keyword("abstract") || peek_keyword("final") ||
+	    peek_keyword("static"))
 		raise_parse_error(
 		    std::string(lifecycle_name) +
 		    " cannot have routine directives");
@@ -5774,6 +5853,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 						   owner_class);
 	parse_semicolon();
 	bool has_overload = false;
+	bool is_static = false;
 	bool is_final = false;
 	Method::VirtualKind vk = Method::VirtualKind::None;
 	while (true) {
@@ -5803,8 +5883,41 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		} else if (maybe_parse_keyword("final")) {
 			is_final = true;
 			parse_semicolon();
+		} else if (maybe_parse_keyword("static")) {
+			is_static = true;
+			parse_semicolon();
+		} else if (maybe_parse_keyword("inline")) {
+			// C++ emission already places the declaration in the class
+			// definition; retain Pascal acceptance without changing ABI.
+			parse_semicolon();
+		} else if (maybe_parse_keyword("noreturn")) {
+			// FIXME: retain this directive for C++ attributes.
+			parse_semicolon();
 		} else
 			break;
+	}
+	if (is_static) {
+		if (!is_class)
+			raise_parse_error(
+			    "static requires a class method declaration");
+		if (is_constructor || is_destructor)
+			raise_parse_error(
+			    "constructors and destructors cannot be static methods");
+		if (vk != Method::VirtualKind::None ||
+		    is_final)
+			raise_parse_error(
+			    "static methods cannot be virtual, dynamic, override, "
+			    "abstract, or final");
+		// Static methods remain class-owned Method declarations, but their
+		// value and call ABI is exactly the ordinary receiverless routine ABI.
+		sig->kind = ROUTINE;
+	} else if (is_class &&
+	           (dynamic_cast<RecordType*>(
+	                owner_class) ||
+	            dynamic_cast<PackedRecordType*>(
+	                owner_class))) {
+		raise_parse_error(
+		    "record class methods must be static");
 	}
 	// FPC accepts final only for a method which is virtual already. Keep final
 	// independent of VirtualKind because `override; final` is the normal
@@ -5844,6 +5957,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		external = true;
 	}
 	auto m = new Method(cxx_name, pas_name, sig, has_overload, owner_class, vk);
+	m->is_static = is_static;
 	m->is_final = is_final;
 	m->ty = sig; // The node's type IS the prototype.
 	// Install an AbstractError VMT stub.
@@ -5968,35 +6082,58 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	bool nested_lambda = saved_routine && dynamic_cast<Procedure*>(target);
 	current_routine = target;
 	StorageSlot* receiver_slot = nullptr;
+	bool pushed_owner_scope = false;
 	if (auto m = dynamic_cast<Method*>(target)) {
-		// Pascal class-method Self is the class reference, not an instance.
-		// Keep that as the same Type used for `class of Foo`. Its C++ carrier
-		// is Foo's empty metaclass marker base; the emitter recovers the exact
-		// Foo::m_meta receiver only when applying a class operation.
-		//
-		// Instance Self is a reference to the owner instance. ClassType and
-		// InterfaceType are already reference-shaped; ObjectType is value-shaped
-		// and needs a pointer wrapper for member-access emission.
-		Type* self_ty = nullptr;
-		if (target->ty->kind == CLASS_METHOD ||
-		    target->ty->kind == CLASS_CONSTRUCTOR ||
-		    target->ty->kind == CLASS_DESTRUCTOR) {
-			self_ty = new ClassRefType(current_location(), m->owner_class);
-		} else if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
-			self_ty = m->owner_class;
+		if (m->is_static) {
+			// A static method has no Pascal Self and no hidden C++ receiver.
+			// Its declaring member environment nevertheless remains the first
+			// lookup domain. A class designator lets unqualified ordinary class
+			// methods bind to the declaring class; a record designator permits
+			// only static members. Neither designator is passed to this method.
+			Node* owner_qualifier = nullptr;
+			if (auto owner =
+			        dynamic_cast<ClassType*>(
+			            m->owner_class))
+				owner_qualifier =
+				    new ClassRefValue(owner);
+			else
+				owner_qualifier =
+				    new TypeMemberQualifier(
+				        m->owner_class);
+			push_scope(
+			    owner_frame, owner_qualifier);
+			pushed_owner_scope = true;
 		} else {
-			self_ty = new PointerType(current_location(), m->owner_class);
+			// Pascal class-method Self is the class reference, not an instance.
+			// Keep that as the same Type used for `class of Foo`. Its C++ carrier
+			// is Foo's empty metaclass marker base; the emitter recovers the exact
+			// Foo::m_meta receiver only when applying a class operation.
+			//
+			// Instance Self is a reference to the owner instance. ClassType and
+			// InterfaceType are already reference-shaped; ObjectType is value-shaped
+			// and needs a pointer wrapper for member-access emission.
+			Type* self_ty = nullptr;
+			if (target->ty->kind == CLASS_METHOD ||
+			    target->ty->kind == CLASS_CONSTRUCTOR ||
+			    target->ty->kind == CLASS_DESTRUCTOR) {
+				self_ty = new ClassRefType(current_location(), m->owner_class);
+			} else if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
+				self_ty = m->owner_class;
+			} else {
+				self_ty = new PointerType(current_location(), m->owner_class);
+			}
+			receiver_slot = new StorageSlot("this", self_ty);
+			// The generated m_meta lifecycle body needs a C++ receiver so class
+			// members can be lowered through the exact class reference. FPC treats
+			// both lifecycle hooks as static class methods, so neither has a
+			// Pascal-visible Self identifier.
+			if (target->ty->kind != CLASS_CONSTRUCTOR &&
+			    target->ty->kind != CLASS_DESTRUCTOR)
+				body_frame->register_variable(
+				    "self", receiver_slot, self_ty);
+			push_scope(owner_frame, receiver_slot);
+			pushed_owner_scope = true;
 		}
-		receiver_slot = new StorageSlot("this", self_ty);
-		// The generated m_meta lifecycle body needs a C++ receiver so class
-		// members can be lowered through the exact class reference. FPC treats
-		// both lifecycle hooks as static class methods, so neither has a
-		// Pascal-visible Self identifier.
-		if (target->ty->kind != CLASS_CONSTRUCTOR &&
-		    target->ty->kind != CLASS_DESTRUCTOR)
-			body_frame->register_variable(
-			    "self", receiver_slot, self_ty);
-		push_scope(owner_frame, receiver_slot);
 	}
 	push_scope(body_frame);
 	push_declaration_frame(body_frame);
@@ -6020,7 +6157,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		emitter->emit_procedure_close(target, nested_lambda);
 	pop_declaration_frame();
 	pop_scope(); // pop body_frame
-	if (receiver_slot)
+	if (pushed_owner_scope)
 		pop_scope(); // pop the with_scope
 	current_routine = saved_routine;
 }
@@ -6139,6 +6276,13 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// exposing the frame's declaration table by name.
 		if (!m || m->owner_class != owner_ty)
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
+		const bool declaration_is_class_method =
+		    m->is_static ||
+		    m->ty->kind == CLASS_METHOD;
+		if (is_class != declaration_is_class_method)
+			raise_parse_error(
+			    "method implementation does not match its class "
+			    "method declaration");
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR
 																      : METHOD,
 							   owner_ty);
@@ -6434,7 +6578,7 @@ static std::vector<Callable*> routine_reference_candidates(
 	return {};
 }
 
-RoutineRef* Parser::resolve_routine_reference(
+Node* Parser::resolve_routine_reference(
     RoutineRef* reference, RoutineType* target_ty) {
 	if (!reference || !target_ty)
 		raise_parse_error("invalid contextual routine reference");
@@ -6454,13 +6598,22 @@ RoutineRef* Parser::resolve_routine_reference(
 		bool category_matches = false;
 		if (target_ty->kind == ROUTINE) {
 			category_matches =
-			    dynamic_cast<Procedure*>(candidate) &&
-			    candidate->ty->kind == ROUTINE &&
-			    reference->receiver == nullptr;
+			    (dynamic_cast<Procedure*>(
+			         candidate) &&
+			     candidate->ty->kind == ROUTINE &&
+			     reference->receiver == nullptr) ||
+			    (dynamic_cast<Method*>(
+			         candidate) &&
+			     static_cast<Method*>(
+			         candidate)->is_static &&
+			     candidate->ty->kind == ROUTINE);
 		} else {
 			category_matches =
 			    dynamic_cast<Method*>(candidate) &&
-			    candidate->ty->kind == METHOD &&
+			    !static_cast<Method*>(
+			         candidate)->is_static &&
+			    (candidate->ty->kind == METHOD ||
+			     candidate->ty->kind == CLASS_METHOD) &&
 			    reference->receiver != nullptr;
 		}
 		if (category_matches &&
@@ -6491,10 +6644,24 @@ RoutineRef* Parser::resolve_routine_reference(
 
 	reference->resolved = compatible.front();
 	reference->ty = target_ty;
+	if (auto method =
+	        dynamic_cast<Method*>(
+	            reference->resolved);
+	    method && method->is_static) {
+		Node* qualifier = reference->receiver;
+		reference->receiver = nullptr;
+		if (qualifier &&
+		    !dynamic_cast<ClassRefValue*>(
+		        qualifier) &&
+		    !dynamic_cast<TypeMemberQualifier*>(
+		        qualifier))
+			return new EvaluateThen(
+			    qualifier, reference);
+	}
 	return reference;
 }
 
-RoutineRef* Parser::resolve_routine_code_reference(
+Node* Parser::resolve_routine_code_reference(
     RoutineRef* reference) {
 	if (!reference)
 		raise_parse_error("invalid routine code reference");
@@ -6507,12 +6674,17 @@ RoutineRef* Parser::resolve_routine_code_reference(
 		    "non-overloaded routine");
 	Callable* candidate = candidates.front();
 	bool valid_plain =
-	    dynamic_cast<Procedure*>(candidate) &&
-	    candidate->ty->kind == ROUTINE &&
-	    reference->receiver == nullptr;
+	    (dynamic_cast<Procedure*>(candidate) &&
+	     candidate->ty->kind == ROUTINE &&
+	     reference->receiver == nullptr) ||
+	    (dynamic_cast<Method*>(candidate) &&
+	     static_cast<Method*>(candidate)->is_static &&
+	     candidate->ty->kind == ROUTINE);
 	bool valid_method =
 	    dynamic_cast<Method*>(candidate) &&
-	    candidate->ty->kind == METHOD &&
+	    !static_cast<Method*>(candidate)->is_static &&
+	    (candidate->ty->kind == METHOD ||
+	     candidate->ty->kind == CLASS_METHOD) &&
 	    reference->receiver != nullptr;
 	if (!valid_plain && !valid_method)
 		raise_parse_error(
@@ -6529,6 +6701,19 @@ RoutineRef* Parser::resolve_routine_code_reference(
 	reference->resolved = candidate;
 	reference->code_only = true;
 	reference->ty = pointer_type();
+	if (auto method =
+	        dynamic_cast<Method*>(candidate);
+	    method && method->is_static) {
+		Node* qualifier = reference->receiver;
+		reference->receiver = nullptr;
+		if (qualifier &&
+		    !dynamic_cast<ClassRefValue*>(
+		        qualifier) &&
+		    !dynamic_cast<TypeMemberQualifier*>(
+		        qualifier))
+			return new EvaluateThen(
+			    qualifier, reference);
+	}
 	return reference;
 }
 
@@ -6549,6 +6734,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	}
 	Callable* chosen = nullptr;
 	RoutineType* value_rty = nullptr;
+	Node* qualifier_effect = nullptr;
 	if (auto c = dynamic_cast<Callable*>(target)) {
 		if (name_for_error.empty() && !c->pas_name.empty()) {
 			name_for_error = c->pas_name;
@@ -6612,13 +6798,33 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			    "routine value has the wrong result type");
 	}
 	if (auto method = dynamic_cast<Method*>(chosen)) {
-		if (!receiver)
+		if (method->is_static) {
+			if (method->ty->kind != ROUTINE)
+				emit_parse_error_at(
+				    error_location,
+				    "static method does not have routine ABI");
+			// FPC evaluates an explicit object/class-reference qualifier
+			// exactly once even though a static method neither dereferences
+			// nor receives it. Exact type/class designators are compile-time
+			// member selectors and have no runtime evaluation.
+			if (receiver &&
+			    !dynamic_cast<ClassRefValue*>(
+			        receiver) &&
+			    !dynamic_cast<TypeMemberQualifier*>(
+			        receiver))
+				qualifier_effect = receiver;
+			receiver = nullptr;
+		} else if (!receiver) {
 			emit_parse_error_at(
 			    error_location,
 			    "method '" + name_for_error +
 			        "' has no bound receiver");
+		}
 		auto receiver_class_ref =
-		    dynamic_cast<ClassRefType*>(receiver->ty);
+		    receiver
+		    ? dynamic_cast<ClassRefType*>(
+		          receiver->ty)
+		    : nullptr;
 		switch (method->ty->kind) {
 		case CLASS_METHOD: {
 			auto owner =
@@ -6652,6 +6858,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			break;
 		case METHOD:
 		case DESTRUCTOR:
+			if (dynamic_cast<TypeMemberQualifier*>(
+			        receiver))
+				emit_parse_error_at(
+				    error_location,
+				    "instance method '" +
+				        name_for_error +
+				        "' cannot be called through a type");
 			if (receiver_class_ref)
 				emit_parse_error_at(
 				    error_location,
@@ -6666,9 +6879,10 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			    "class lifecycle hook is not user-callable");
 			break;
 		case ROUTINE:
-			emit_parse_error_at(
-			    error_location,
-			    "method declaration has routine receiver kind");
+			if (!method->is_static)
+				emit_parse_error_at(
+				    error_location,
+				    "non-static method declaration has routine ABI");
 			break;
 		}
 	}
@@ -6790,7 +7004,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		args[i] = cast(args[i], t);
 	}
 	return FinalizedCall{
-	    receiver, chosen ? static_cast<Node*>(chosen) : target};
+	    receiver, chosen ? static_cast<Node*>(chosen) : target,
+	    qualifier_effect};
 }
 
 Node* Parser::make_call(
@@ -6818,7 +7033,10 @@ Node* Parser::make_call(
 	    finalized.receiver, finalized.callee,
 	    std::move(args));
 	call->ty = call_result_type(finalized.callee);
-	return call;
+	if (!finalized.qualifier_effect)
+		return call;
+	return new EvaluateThen(
+	    finalized.qualifier_effect, call);
 }
 
 Unit* Parser::load_or_get_unit(std::string name) {

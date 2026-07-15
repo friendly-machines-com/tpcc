@@ -75,6 +75,18 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Compiler-generated sequencing expression. Evaluate `a` for its effects,
+ *  discard its value, then evaluate and yield `b`. Pascal has no source comma
+ *  operator; this node preserves evaluation required by constructs whose
+ *  qualifier selects a declaration but is not part of that declaration's
+ *  runtime ABI. */
+class EvaluateThen: public BinaryOperation {
+public:
+	EvaluateThen(Node* a, Node* b);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
+};
+
 class ProcCall: public Node {
 public:
 	// null for standalone calls; the receiver expression for calls whose
@@ -100,6 +112,20 @@ class ClassRefValue: public Node {
 public:
 	ClassType* target;
 	explicit ClassRefValue(ClassType* target);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** A non-class aggregate type used only to select a static member, as in
+ *  `TRecord.StaticMethod`. Unlike ClassRefValue this is not a Pascal runtime
+ *  value and must disappear when the selected static operation is formed. */
+class TypeMemberQualifier: public Node {
+public:
+	Type* target;
+	explicit TypeMemberQualifier(Type* target);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(
@@ -618,6 +644,10 @@ public:
 	enum class VirtualKind { None, Virtual, Override, Abstract, Dynamic };
 	Type* owner_class;
 	VirtualKind virtual_kind;
+	// A static class method remains a Method because it belongs to the
+	// aggregate's member environment, but its RoutineType kind is ROUTINE:
+	// it has neither an object nor a metaclass receiver.
+	bool is_static;
 	// Orthogonal to VirtualKind: the usual Pascal form is
 	// `override; final`, which must emit both C++ virt-specifiers.
 	bool is_final;

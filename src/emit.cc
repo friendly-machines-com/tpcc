@@ -1479,7 +1479,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				fprintf(active, "\t");
 				auto method =
 				    dynamic_cast<Method*>(call);
-				if (method &&
+				if (method && method->is_static)
+					fprintf(active, "static ");
+				else if (method &&
 				    (is_interface ||
 				     method->virtual_kind ==
 				         Method::VirtualKind::Virtual ||
@@ -1637,14 +1639,41 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 		fprintf(active, "\t}\n");
 	}
 	for (const auto& item :
-	     p->children->value_declarations())
+	     p->children->value_declarations()) {
+		Node* value = item.second.value;
 		if (auto slot =
 		        dynamic_cast<StorageSlot*>(
-		            item.second.value);
+		            value);
 		    slot &&
 		    slot->kind ==
-		        StorageSlot::Kind::StaticMember)
+		        StorageSlot::Kind::StaticMember) {
 			emit_static_member_declaration(slot);
+			continue;
+		}
+		std::vector<Callable*> callables;
+		if (auto callable =
+		        dynamic_cast<Callable*>(value))
+			callables.push_back(callable);
+		else if (auto overloads =
+		             dynamic_cast<OverloadSet*>(
+		                 value))
+			callables = overloads->members;
+		for (Callable* callable : callables) {
+			auto method =
+			    dynamic_cast<Method*>(callable);
+			if (!method || !method->is_static ||
+			    method->ty->kind != ROUTINE)
+				unhandled_node(
+				    "packed record contains a non-static method",
+				    callable);
+			if (callable->is_external)
+				continue;
+			fprintf(active, "\tstatic ");
+			emit_callable_signature(
+			    callable, Position::Declaration, "");
+			fprintf(active, ";\n");
+		}
+	}
 	fprintf(active, "}");
 }
 
@@ -1882,10 +1911,47 @@ void Emitter::emit_routine_reference(
 
 	auto method =
 	    dynamic_cast<Method*>(reference->resolved);
-	if (!method || !reference->receiver ||
-	    method->ty->kind != METHOD)
+	if (!method)
 		unhandled_node(
-		    "method routine reference is not a bound instance method",
+		    "routine reference resolved to neither procedure nor method",
+		    reference);
+	if (method->is_static) {
+		if (reference->receiver ||
+		    method->ty->kind != ROUTINE)
+			unhandled_node(
+			    "static method routine reference retained a receiver",
+			    reference);
+		std::string owner =
+		    owner_cxx_reference_name(
+		        method->owner_class);
+		if (owner.empty())
+			unhandled_type(
+			    "static method routine reference owner has no C++ name",
+			    method->owner_class);
+		if (reference->code_only) {
+			fprintf(active,
+			    "::u_system::m_function_to_code_pointer(static_cast<");
+			emit_type_ref(method->ty->return_type);
+			fprintf(active, " (*)");
+			emit_formal_parameters(
+			    method->ty, false);
+			fprintf(active, ">(&%s::%s))",
+			    owner.c_str(),
+			    callable_cxx_name(
+			        method).c_str());
+		} else {
+			fprintf(active, "&%s::%s",
+			    owner.c_str(),
+			    callable_cxx_name(
+			        method).c_str());
+		}
+		return;
+	}
+	if (!reference->receiver ||
+	    (method->ty->kind != METHOD &&
+	     method->ty->kind != CLASS_METHOD))
+		unhandled_node(
+		    "method routine reference is not receiver-bearing",
 		    reference);
 	std::string owner =
 	    owner_cxx_reference_name(
@@ -1894,6 +1960,8 @@ void Emitter::emit_routine_reference(
 		unhandled_type(
 		    "method routine reference owner has no C++ name",
 		    method->owner_class);
+	if (method->ty->kind == CLASS_METHOD)
+		owner += "::m_meta";
 
 	if (method->builtin_desc &&
 	    method->builtin_desc->call_convention ==
@@ -1934,7 +2002,39 @@ void Emitter::emit_routine_reference(
 	emit_formal_parameters(method->ty, false);
 	fprintf(active, ">(&%s::%s)>(",
 	    owner.c_str(), callable_cxx_name(method).c_str());
-	if (reference->receiver->ty &&
+	if (method->ty->kind ==
+	    CLASS_METHOD) {
+		if (auto classref =
+		        dynamic_cast<ClassRefType*>(
+		            reference->receiver->ty)) {
+			auto target =
+			    dynamic_cast<ClassType*>(
+			        classref->target);
+			if (!target ||
+			    target->cxx_name.empty())
+				unhandled_type(
+				    "class-method routine-reference target",
+				    classref->target);
+			fprintf(active,
+			    "static_cast<%s::m_meta*>(",
+			    type_cxx_name(
+			        target,
+			        target->cxx_name)
+			        .c_str());
+			emit_expression(
+			    reference->receiver);
+			fprintf(active, ")");
+		} else if (dynamic_cast<ClassType*>(
+		               reference->receiver->ty)) {
+			emit_expression(
+			    reference->receiver);
+			fprintf(active, "->m_classref()");
+		} else {
+			unhandled_type(
+			    "class-method routine-reference receiver",
+			    reference->receiver->ty);
+		}
+	} else if (reference->receiver->ty &&
 	    reference->receiver->ty->is_reference_type()) {
 		emit_expression(reference->receiver);
 	} else {
@@ -2097,6 +2197,15 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 void Emitter::emit_expression(Node* expr) {
 	if (!active)
 		return;
+	if (auto sequence =
+	        dynamic_cast<EvaluateThen*>(expr)) {
+		fprintf(active, "(static_cast<void>(");
+		emit_expression(sequence->a);
+		fprintf(active, "), ");
+		emit_expression(sequence->b);
+		fprintf(active, ")");
+		return;
+	}
 	if (auto class_reference =
 	        dynamic_cast<ClassRefValue*>(expr)) {
 		if (!class_reference->target ||
@@ -2111,6 +2220,10 @@ void Emitter::emit_expression(Node* expr) {
 		        .c_str());
 		return;
 	}
+	if (dynamic_cast<TypeMemberQualifier*>(expr))
+		unhandled_node(
+		    "type member qualifier reached value emission",
+		    expr);
 	if (auto nil = dynamic_cast<NilLiteral*>(expr)) {
 		auto routine =
 		    dynamic_cast<RoutineType*>(nil->ty);
@@ -2566,6 +2679,29 @@ void Emitter::emit_expression(Node* expr) {
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
 		auto callable =
 		    dynamic_cast<Callable*>(pc->callee);
+		if (auto method =
+		        dynamic_cast<Method*>(pc->callee);
+		    method && method->is_static) {
+			if (pc->receiver ||
+			    method->ty->kind != ROUTINE)
+				unhandled_node(
+				    "static method call retained a receiver",
+				    pc);
+			std::string owner =
+			    owner_cxx_reference_name(
+			        method->owner_class);
+			if (owner.empty())
+				unhandled_type(
+				    "static method owner has no C++ name",
+				    method->owner_class);
+			fprintf(active, "%s::%s(",
+			    owner.c_str(),
+			    callable_cxx_name(method).c_str());
+			emit_call_arguments(
+			    method->ty, pc->args);
+			fprintf(active, ")");
+			return;
+		}
 		if (pc->receiver && callable &&
 		    callable->builtin_desc &&
 		    callable->builtin_desc->call_convention ==
