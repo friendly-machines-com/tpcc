@@ -34,7 +34,7 @@ static ErrorLetContext make_error_let_context_from_scopes(const std::vector<Scop
 	std::vector<DiagnosticScope> diagnostic_scopes;
 	diagnostic_scopes.reserve(scopes.size());
 	for (const ScopeEntry& scope : scopes) {
-		diagnostic_scopes.push_back(DiagnosticScope{scope.frame, scope.unwrap_via});
+		diagnostic_scopes.push_back(DiagnosticScope{scope.frame, scope.qualifier});
 	}
 	return ErrorLetContext(std::move(diagnostic_scopes), max_depth);
 }
@@ -184,20 +184,8 @@ void Parser::push_input_file_and_buffer(FILE* input_file, std::string input_file
 	input_char = fgetc(input_file);
 }
 
-void Parser::push_scope(const Frame* scope) {
-	this->scopes.push_back(ScopeEntry{scope, nullptr, current_type_block});
-	current_type_block = const_cast<Frame*>(scope);
-}
-
-// `with` introduces an alias overlay for value lookup only (member names of
-// the with-target). It is NOT a declaration site -- new type/var/const decls
-// encountered inside the with-body still belong to the enclosing declaration
-// Frame, so we don't update current_type_block here. We DO push a ScopeEntry
-// so name-resolution walks through the with-target's frame; on pop, the
-// saved_type_block we record (the enclosing decl Frame, untouched) restores
-// trivially.
-void Parser::push_with_scope(const Frame* scope, Node* unwrap_via) {
-	this->scopes.push_back(ScopeEntry{scope, unwrap_via, current_type_block});
+void Parser::push_scope(const Frame* scope, Node* qualifier) {
+	this->scopes.push_back(ScopeEntry{scope, qualifier});
 }
 
 void Parser::pop_scope() {
@@ -205,8 +193,34 @@ void Parser::pop_scope() {
 		fprintf(stderr, "internal compiler error: pop_scope on empty scope stack\n");
 		abort();
 	}
-	current_type_block = scopes.back().saved_type_block;
 	this->scopes.pop_back();
+}
+
+void Parser::push_declaration_frame(Frame* frame) {
+	if (!frame) {
+		fprintf(stderr,
+		    "internal compiler error: null declaration frame\n");
+		abort();
+	}
+	declaration_frames.push_back(frame);
+}
+
+void Parser::pop_declaration_frame() {
+	if (declaration_frames.empty()) {
+		fprintf(stderr,
+		    "internal compiler error: pop on empty declaration-frame stack\n");
+		abort();
+	}
+	declaration_frames.pop_back();
+}
+
+Frame* Parser::current_declaration_frame() const {
+	if (declaration_frames.empty()) {
+		fprintf(stderr,
+		    "internal compiler error: no current declaration frame\n");
+		abort();
+	}
+	return declaration_frames.back();
 }
 
 SourceLocation Parser::current_location() const {
@@ -1030,7 +1044,7 @@ void Parser::maybe_parse_statement() {
 		auto alias_slot = new StorageSlot("tpcc_with_target", target_slot->ty);
 		if (emitter)
 			emitter->emit_with_prologue(alias_slot->cxx_name, target);
-		push_with_scope(body_frame, alias_slot);
+		push_scope(body_frame, alias_slot);
 		parse_statement();
 		pop_scope();
 		if (emitter)
@@ -1192,10 +1206,10 @@ Node* Parser::maybe_resolve_value(std::string name) {
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
 		if (collected.empty() && !as_call && !as_set) {
 			// First (and terminating) hit is a non-callable value.
-			if (it->unwrap_via) {
+			if (it->qualifier) {
 				if (auto property = dynamic_cast<Property*>(hit))
-					return new PropertyAccess(it->unwrap_via, property, {});
-				auto m = new MemberAccess(it->unwrap_via, hit);
+					return new PropertyAccess(it->qualifier, property, {});
+				auto m = new MemberAccess(it->qualifier, hit);
 				m->ty = hit->ty;
 				return m;
 			}
@@ -1264,10 +1278,10 @@ Node* Parser::resolve_lvalue(std::string name) {
 						return result;
 				}
 			}
-			if (it->unwrap_via) {
+			if (it->qualifier) {
 				if (auto property = dynamic_cast<Property*>(hit))
-					return new PropertyAccess(it->unwrap_via, property, {});
-				auto m = new MemberAccess(it->unwrap_via, hit);
+					return new PropertyAccess(it->qualifier, property, {});
+				auto m = new MemberAccess(it->qualifier, hit);
 				m->ty = hit->ty;
 				return m;
 			}
@@ -1320,7 +1334,7 @@ static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
 
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
- *  IncompleteType under NAME in current_type_block and return it. That is
+ *  IncompleteType in the current declaration frame and return it. That is
  *  legal only while parse_type_block is consuming RHS types; outside that
  *  narrow window Pascal does not have general declaration-order backpatching.
  *  If allow_forward is false, or no type block is active, an unresolved name
@@ -1328,9 +1342,10 @@ static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
 Type* Parser::resolve_type(std::string name, bool allow_forward) {
 	if (Type* hit = maybe_resolve_type(name))
 		return hit;
-	if (allow_forward && parsing_type_block && current_type_block) {
+	if (allow_forward && parsing_type_block &&
+	    !declaration_frames.empty()) {
 		auto inc = new IncompleteType(current_location(), name);
-		current_type_block->register_type(name, inc);
+		current_declaration_frame()->register_type(name, inc);
 		return inc;
 	}
 	raise_parse_error("unresolved type identifier: " + name);
@@ -2659,6 +2674,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	// to walk superclasses separately.
 	Frame* body = new Frame(owner_class ? get_type_body_frame(parent_of(owner_class)) : nullptr);
 	push_scope(body);
+	push_declaration_frame(body);
 	std::string visibility = "published";
 	do {
 		if (peek_keyword("end"))
@@ -2815,6 +2831,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			break;
 		}
 	} while (true);
+	pop_declaration_frame();
 	pop_scope();
 	if (is_class) {
 		raise_parse_error("internal error: someone forgot to consume 'class'");
@@ -3150,7 +3167,8 @@ Type* Parser::parse_enum_type() {
 		// the type. (A future compiler might add `{$scopedenums+}` and route
 		// them through the type; that is not this compiler.)
 		auto ref = new EnumMemberRef(cxx, value, et);
-		if (!current_type_block->register_variable(pas, ref, et))
+		if (!current_declaration_frame()->register_variable(
+		        pas, ref, et))
 			raise_parse_error("duplicate identifier: " + pas);
 		next_value = value + 1;
 		if (!maybe_parse_comma())
@@ -3785,7 +3803,7 @@ Node* Parser::parse_typed_const_initializer(Type* ty) {
 void Parser::parse_const_block() {
 	parse_keyword("const");
 	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
-	Frame* scope = const_cast<Frame*>(scopes.back().frame);
+	Frame* scope = current_declaration_frame();
 	do {
 		auto name = parse_identifier();
 		if (maybe_parse_equal()) {
@@ -4144,12 +4162,9 @@ DELPHI_AUTO_END: will automatically stop at some aggregate control directives (l
 // No emitter path should need to unwrap IncompleteType as normal control flow.
 void Parser::parse_type_block(bool delphi_auto_end) {
 	parse_keyword("type");
-	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
-	// current_type_block still points at the enclosing decl Frame (set by the
-	// most recent push_scope), which is what parse_enum_type and the IncompleteType
-	// forward-decl machinery need: new types land in the same Frame that future
-	// lookups (including cross-unit, after `uses`) walk.
-	Frame* scope = const_cast<Frame*>(scopes.back().frame);
+	// Type blocks declare directly in the explicit declaration owner. Lookup
+	// overlays (`uses`, `with`, implicit Self) cannot redirect these bindings.
+	Frame* scope = current_declaration_frame();
 	struct PendingTypeDecl {
 		std::string name;
 		std::string cxx;
@@ -4274,11 +4289,9 @@ void Parser::parse_var_block() {
 	// Register each var directly into the enclosing declaration scope
 	// (unit interface_frame, program impl_frame, or procedure body_frame).
 	// We deliberately do NOT create a sub-frame: the var decls must persist
-	// past this block parse so callers in OTHER compilation units can resolve
-	// them after `uses`. The `pushed++` in parse_decl_blocks used to compensate
-	// for the push_scope here; with no push, parse_decl_blocks stays at 0 for
-	// var blocks.
-	Frame* scope = const_cast<Frame*>(scopes.back().frame);
+	// past this block parse so callers in other compilation units can resolve
+	// them after `uses`.
+	Frame* scope = current_declaration_frame();
 	do {
 		std::vector<std::string> names;
 		auto name_optional = maybe_parse_identifier();
@@ -4488,8 +4501,7 @@ void Parser::parse_equals() {
 	}
 }
 
-size_t Parser::parse_decl_blocks(bool is_decl_only) {
-	size_t pushed = 0;
+void Parser::parse_decl_blocks(bool is_decl_only) {
 	bool is_class = false;
 	while (true) {
 		if (peek_keyword("label")) {
@@ -4542,16 +4554,13 @@ size_t Parser::parse_decl_blocks(bool is_decl_only) {
 	if (is_class) {
 		raise_type_parse_error("'class' prefix wasn't consumed");
 	}
-	return pushed;
 }
 
 void Parser::parse_block() {
-	size_t pushed = parse_decl_blocks(false);
+	parse_decl_blocks(false);
 	parse_keyword("begin");
 	parse_block_body();
 	parse_keyword("end");
-	for (size_t i = 0; i < pushed; i++)
-		pop_scope();
 }
 
 void Parser::maybe_parse_proc_attributes() {
@@ -4760,7 +4769,7 @@ Procedure* Parser::match_or_create_procedure(
     const std::string& pas_name, RoutineType* sig,
     bool had_paren, bool has_overload,
     bool short_form_implementation) {
-	Frame* enclosing = const_cast<Frame*>(this->scopes.back().frame);
+	Frame* enclosing = current_declaration_frame();
 	Node* existing = enclosing->lookup_value(pas_name);
 
 	auto sig_matches = [&](Callable* c) -> bool {
@@ -4886,9 +4895,10 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 		if (target->ty->kind != CLASS_CONSTRUCTOR)
 			body_frame->register_variable(
 			    "self", receiver_slot, self_ty);
-		push_with_scope(owner_frame, receiver_slot);
+		push_scope(owner_frame, receiver_slot);
 	}
 	push_scope(body_frame);
+	push_declaration_frame(body_frame);
 	if (target->ty->return_type != &unit_type()) { // function
 		auto result_slot = new StorageSlot("p_result", target->ty->return_type);
 		body_frame->register_variable("result", result_slot, target->ty->return_type);
@@ -4899,7 +4909,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	}
 	if (emitter)
 		emitter->emit_procedure_open(target, nested_lambda);
-	size_t pushed = parse_decl_blocks(false);
+	parse_decl_blocks(false);
 	parse_keyword("begin");
 	parse_block_body();
 	target->has_body = true;
@@ -4907,8 +4917,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	parse_semicolon();
 	if (emitter)
 		emitter->emit_procedure_close(target, nested_lambda);
-	for (size_t i = 0; i < pushed; i++)
-		pop_scope();
+	pop_declaration_frame();
 	pop_scope(); // pop body_frame
 	if (receiver_slot)
 		pop_scope(); // pop the with_scope
@@ -5668,12 +5677,10 @@ void Parser::parse_unit_body() {
 	unit->phase = UnitPhase::InterfaceInProgress;
 
 	parse_keyword("interface");
-	// A uses clause contributes lookup scopes; it does not change which symbol
-	// table owns the declarations that follow it. Install System and explicit
-	// interface uses first, in source order, then put this unit's interface
-	// frame on top. Reverse scope lookup therefore sees this unit first, the
-	// last used unit next, and System last. Since only IFACE is exported by a
-	// later `uses X`, none of these lookup scopes are re-exported through X.
+	// Install the interface lookup path in increasing precedence. Declaration
+	// ownership is independent and is set explicitly after this path exists.
+	// Since a user of X opens only X's interface Frame, X's own uses do not
+	// become re-exports.
 	std::vector<Unit*> iface_units;
 	if (Unit* sys = implicit_uses(name))
 		iface_units.push_back(sys);
@@ -5686,6 +5693,7 @@ void Parser::parse_unit_body() {
 	for (Unit* used : iface_units)
 		push_scope(used->interface_frame);
 	push_scope(iface);
+	push_declaration_frame(iface);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Header);
 		std::vector<std::string> h_files;
@@ -5693,8 +5701,7 @@ void Parser::parse_unit_body() {
 			h_files.push_back(u->name + ".h");
 		emitter->emit_unit_interface_prologue(h_files);
 	}
-	// Interface section: parse_decl_blocks handles type/const/var/proc/func.
-	size_t iface_decls = parse_decl_blocks(true);
+	parse_decl_blocks(true);
 	unit->phase = UnitPhase::InterfaceDone;
 
 	parse_keyword("implementation");
@@ -5704,18 +5711,16 @@ void Parser::parse_unit_body() {
 		impl_units = parse_uses_clause(false, name);
 		parse_semicolon();
 	}
-	// Implementation uses must be visible below both of this unit's own
-	// symbol tables but above interface uses. The interface frame was the
-	// innermost scope while its declarations were parsed; remove it, install
-	// the implementation-only lookup scopes, then restore it and finally put
-	// the private implementation frame on top.
-	for (size_t i = 0; i < iface_decls; i++)
-		pop_scope();
+	// Rebuild only the lookup path for the implementation's precedence:
+	// private declarations, this unit's interface, implementation uses,
+	// interface uses. Declaration ownership is changed independently below.
+	pop_declaration_frame();
 	pop_scope(); // iface
 	for (Unit* used : impl_units)
 		push_scope(used->interface_frame);
 	push_scope(iface);
 	push_scope(impl);
+	push_declaration_frame(impl);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Implementation);
 		std::vector<std::string> h_files;
@@ -5726,7 +5731,7 @@ void Parser::parse_unit_body() {
 	// Implementation section: same dispatcher; procedures with bodies attach
 	// to the interface prototypes via the lookup-then-adopt path in
 	// parse_procedure_or_function.
-	size_t impl_decls = parse_decl_blocks(false);
+	parse_decl_blocks(false);
 
 	bool consumed_end = false;
 	if (emitter)
@@ -5765,10 +5770,7 @@ void Parser::parse_unit_body() {
 		parse_keyword("end");
 	parse_period();
 
-	// Pop in reverse lookup order: private implementation frame, restored
-	// interface frame, implementation uses, then interface uses.
-	for (size_t i = 0; i < impl_decls; i++)
-		pop_scope();
+	pop_declaration_frame();
 	pop_scope(); // impl
 	pop_scope(); // iface
 	for (size_t i = 0; i < impl_units.size(); i++)
@@ -5793,9 +5795,8 @@ void Parser::parse_program_or_unit() {
 		Unit* unit = unit_registry->register_new(name, nullptr, impl);
 		current_unit = unit;
 		unit->phase = UnitPhase::InterfaceInProgress;
-		// Load dependencies before installing the program's own frame. Used
-		// units are lookup sources, not declaration destinations; the program
-		// frame must be innermost while its declarations are parsed.
+		// Load dependencies, then install the lookup path in increasing
+		// precedence. The program's declaration owner is set independently.
 		std::vector<Unit*> prog_units;
 		if (Unit* sys = implicit_uses(name))
 			prog_units.push_back(sys);
@@ -5808,6 +5809,7 @@ void Parser::parse_program_or_unit() {
 		for (Unit* used : prog_units)
 			push_scope(used->interface_frame);
 		push_scope(impl);
+		push_declaration_frame(impl);
 		if (emitter) {
 			std::vector<std::string> h_files;
 			for (Unit* u : prog_units)
@@ -5817,7 +5819,7 @@ void Parser::parse_program_or_unit() {
 		// Inlined equivalent of parse_block; we need to bracket the body-block
 		// with main() emission hooks, which parse_block itself doesn't know
 		// about (it's also called from procedure bodies).
-		size_t pushed = parse_decl_blocks(false);
+		parse_decl_blocks(false);
 		parse_keyword("begin");
 		if (emitter) {
 			std::vector<std::pair<std::string, std::string>>
@@ -5842,8 +5844,7 @@ void Parser::parse_program_or_unit() {
 		parse_keyword("end");
 		if (emitter)
 			emitter->emit_main_epilogue();
-		for (size_t i = 0; i < pushed; i++)
-			pop_scope();
+		pop_declaration_frame();
 		pop_scope(); // program
 		for (size_t i = 0; i < prog_units.size(); i++)
 			pop_scope();

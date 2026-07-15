@@ -89,8 +89,8 @@ ErrorLetContext::ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned m
 	// from innermost to outermost so the first recorded name matches lookup
 	// preference.
 	for (auto it = naming_scopes.rbegin(); it != naming_scopes.rend(); ++it) {
-		if (it->unwrap_via) {
-			add_value_edge(it->unwrap_via);
+		if (it->qualifier) {
+			add_value_edge(it->qualifier);
 			index_frame(it->frame, DiagnosticFrameUse::AggregateMembers);
 		} else {
 			index_frame(it->frame, DiagnosticFrameUse::NamingScope);

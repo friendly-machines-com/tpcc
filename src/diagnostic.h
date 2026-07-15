@@ -22,7 +22,7 @@ enum class DiagnosticFrameUse {
 
 struct DiagnosticScope {
 	const Frame* frame;
-	const Node* unwrap_via; // non-null for Parser with-scopes; otherwise null
+	const Node* qualifier = nullptr;
 };
 
 class ErrorLetContext {

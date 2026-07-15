@@ -69,26 +69,13 @@ public:
 
 class Frame;
 
-/** One entry on the parser's scope stack. `frame` is the declaration frame
- *  (locals, unit interface, record body, etc.). `unwrap_via` is null for
- *  every kind of scope except a `with` push: when non-null, a resolve hit in
- *  this frame is wrapped as `MemberAccess(unwrap_via, hit)` before being
- *  returned to the caller, so `field` inside `with rec do ...` produces
- *  `rec.field` at emit time.
- *
- *  `saved_type_block` records the value of `Parser::current_type_block` at
- *  push time so pop_scope can restore it. Each Frame interleaves TWO name
- *  namespaces (types and values -- see Frame's `type_items` and
- *  `value_items`); `current_type_block` is the Frame new decls land in
- *  right now, i.e. whichever declaration Frame was most recently pushed.
- *  push_scope updates it; push_with_scope deliberately does NOT -- a `with`
- *  scope is an alias overlay for value lookup only, not a declaration
- *  site, so new type/var decls inside a `with` body still belong to the
- *  enclosing declaration Frame and must register there. */
+/** One environment in the active name-lookup path. `qualifier` optionally
+ *  binds values found in that environment to an expression; a resolved value
+ *  is then represented as MemberAccess(qualifier, value). Lookup environments
+ *  never own declarations. */
 struct ScopeEntry {
 	const Frame* frame;
-	Node* unwrap_via;
-	Frame* saved_type_block;
+	Node* qualifier = nullptr;
 };
 class Parser {
 private:
@@ -104,16 +91,15 @@ private:
 	void parse_keyword(std::string s);
 	bool maybe_parse_keyword(std::string s);
 	std::vector<ParserInputFile> input_files; // TODO: stack
-	std::vector<ScopeEntry> scopes; // TODO: stack
-	// The type-block scope currently being parsed, or nullptr. Used as the
-	// registration site for implicit forward references (`^TFoo` before TFoo
-	// is declared); those must land in the enclosing type block's scope, not
-	// in whatever inner scope (record/class body) happens to be on top.
-	Frame* current_type_block = nullptr;
+	std::vector<ScopeEntry> scopes; // name-lookup stack
+	// Declaration ownership is deliberately independent of name lookup.
+	// `uses`, `with`, and implicit Self push lookup entries only; actual
+	// declaration constructs push this stack explicitly.
+	std::vector<Frame*> declaration_frames;
 	// Forward type references are a Pascal type-block feature, not a general
-	// declaration-scope feature. `current_type_block` names the registration
-	// frame for all declaration scopes; this flag narrows placeholder creation
-	// to the period where parse_type_block is actually consuming RHS types.
+	// declaration-scope feature. The current declaration frame is the
+	// registration site; this flag narrows placeholder creation to the period
+	// where parse_type_block is actually consuming RHS types.
 	bool parsing_type_block = false;
 	// LHS name whose type expression is currently being parsed. Class parsing
 	// uses this to distinguish the one root declaration `System.TObject =
@@ -197,11 +183,8 @@ protected:
 	void parse_label_block();
 	void parse_type_block(bool delphi_auto_end);
 	void parse_var_block();
-	/** Parse a sequence of top-of-block declarations in any order (Pascal
-	 *  allows `type`, `const`, `var` blocks and `procedure`/`function` decls
-	 *  interleaved freely). Returns the count of scopes pushed so the caller
-	 *  can pop that many after the body. */
-	size_t parse_decl_blocks(bool is_decl_only);
+	/** Parse declarations into the current declaration frame. */
+	void parse_decl_blocks(bool is_decl_only);
 	void parse_block();
 	void parse_semicolon();
 	void maybe_parse_statement();
@@ -368,12 +351,14 @@ protected:
 	void parse_period();
 	bool maybe_parse_period_period();
 	void parse_period_period();
-	/** Push a plain declaration frame. */
-	void push_scope(const Frame* scope);
-	/** Push a frame that participates in resolution as a `with` binding:
-	 *  hits in FRAME are wrapped as MemberAccess(UNWRAP_VIA, hit). */
-	void push_with_scope(const Frame* scope, Node* unwrap_via);
+	/** Add/remove a lookup environment, optionally selected through an
+	 *  expression. These never change declaration ownership. */
+	void push_scope(const Frame* scope, Node* qualifier = nullptr);
 	void pop_scope();
+	/** Enter/leave the frame which owns declarations currently being parsed. */
+	void push_declaration_frame(Frame* frame);
+	void pop_declaration_frame();
+	Frame* current_declaration_frame() const;
 	void maybe_parse_proc_attributes();
 	RoutineType* parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);
