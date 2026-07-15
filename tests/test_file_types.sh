@@ -31,7 +31,7 @@ if ! rg -Fq \
 	'::u_system::t_typedfile<t_tnode> p_nodes;' \
 	"$tmp/file_types.cc"
 then
-	echo "file-of forward element type was not resolved" >&2
+	echo "typed-file element type was not emitted" >&2
 	exit 1
 fi
 

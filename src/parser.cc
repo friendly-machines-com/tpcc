@@ -20,6 +20,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 // Forward declarations of file-static helpers defined further down.
@@ -1501,18 +1502,19 @@ static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
 
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
- *  IncompleteType in the current declaration frame and return it. That is
- *  legal only while parse_type_block is consuming RHS types; outside that
- *  narrow window Pascal does not have general declaration-order backpatching.
+ *  IncompleteType in the active type block's owning frame and return it. That
+ *  owner remains stable while parsing an aggregate RHS; the aggregate's
+ *  member frame is not the declaration environment for sibling type names.
+ *  This is legal only while parse_type_block is consuming RHS types; outside
+ *  that narrow window Pascal has no general declaration-order backpatching.
  *  If allow_forward is false, or no type block is active, an unresolved name
  *  is a hard error. */
 Type* Parser::resolve_type(std::string name, bool allow_forward) {
 	if (Type* hit = maybe_resolve_type(name))
 		return hit;
-	if (allow_forward && parsing_type_block &&
-	    !declaration_frames.empty()) {
+	if (allow_forward && !type_block_frames.empty()) {
 		auto inc = new IncompleteType(current_location(), name);
-		current_declaration_frame()->register_type(name, inc);
+		type_block_frames.back()->register_type(name, inc);
 		return inc;
 	}
 	raise_parse_error("unresolved type identifier: " + name);
@@ -2464,7 +2466,8 @@ bool Parser::property_read_is_place(PropertyAccess* access) {
 bool Parser::is_referenceable(Node* n) {
 	if (!n)
 		return false;
-	if (dynamic_cast<StorageSlot*>(n) || dynamic_cast<Dereference*>(n))
+	if (dynamic_cast<StorageSlot*>(n) ||
+	    dynamic_cast<Dereference*>(n))
 		return true;
 	if (auto property = dynamic_cast<PropertyAccess*>(n))
 		return property_read_is_place(property);
@@ -2862,8 +2865,6 @@ Node* Parser::parse_expression() {
 Property* Parser::default_property_for_type(Type* ty) {
 	if (!ty)
 		return nullptr;
-	if (auto incomplete = dynamic_cast<IncompleteType*>(ty))
-		return incomplete->resolved ? default_property_for_type(incomplete->resolved) : nullptr;
 	if (ty->default_property)
 		return ty->default_property;
 
@@ -3088,12 +3089,14 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			}
 			parse_type_block(true);
 			is_class = false;
+			continue; // type declarations consume their terminating semicolons
 		} else if (peek_keyword("const")) {
 			if (is_class) {
 				raise_parse_error("class const unsupported");
 			}
-			parse_const_block();
+			parse_const_block(owner_class);
 			is_class = false;
+			continue; // const declarations consume their terminating semicolons
 		} else if (peek_keyword("var")) {
 			bool class_variables = is_class;
 			if (class_variables &&
@@ -3122,7 +3125,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 					// every metaclass instance: that would give Base.X and
 					// Child.X different storage, unlike Pascal.
 					auto kind = class_variables
-					    ? StorageSlot::Kind::ClassVariable
+					    ? StorageSlot::Kind::StaticMember
 					    : StorageSlot::Kind::AggregateMember;
 					auto slot = new StorageSlot(
 					    cxx_value_name(member_name), ty, kind,
@@ -3542,10 +3545,13 @@ Type* Parser::parse_array_type() {
 	} while (maybe_parse_comma());
 	parse_closing_bracket();
 	parse_keyword("of");
-	Type* item_type = parse_type_expression(true);
+	// Pascal forward-type syntax does not make arbitrary by-value array
+	// elements order-independent. Only pointer targets and `class of` targets
+	// open the implicit-forward path.
+	Type* item_type = parse_type_expression(false);
 	for (auto it = bounds_types.rbegin(); it != bounds_types.rend(); ++it) {
 		OrdinalRange range;
-		if (!parsing_type_block) {
+		if (type_block_frames.empty()) {
 			std::string error;
 			if (!ordinal_range_for_type(*it, &range, &error))
 				return raise_type_parse_error(error);
@@ -4047,13 +4053,13 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
-		return new FixedSetType(current_location(), parse_type_expression(true));
+		return new FixedSetType(current_location(), parse_type_expression(false));
 	} else if (peek_keyword("file")) {
 		parse_keyword("file");
 		if (!maybe_parse_keyword("of"))
 			return file_type();
 		return typed_file_type(
-		    current_location(), parse_type_expression(true));
+		    current_location(), parse_type_expression(false));
 	} else if (peek_keyword("array")) {
 		return parse_array_type();
 	} else if (peek_keyword("object")) {
@@ -4176,11 +4182,11 @@ static bool ordinal_constant_matches_range_type(Type* base_type, const FoldedSub
 	return is_integer_semantic_type(base_type) && value.kind == FoldedSubrangeBound::Kind::Integer;
 }
 
-Node* Parser::parse_typed_const_initializer(Type* ty) {
+Node* Parser::parse_storage_initializer(Type* ty) {
 	while (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
 		if (!incomplete->resolved)
 			raise_parse_error(
-			    "typed constant uses unresolved type '" +
+			    "initialized storage uses unresolved type '" +
 			    incomplete->name + "'");
 		ty = incomplete->resolved;
 	}
@@ -4190,7 +4196,7 @@ Node* Parser::parse_typed_const_initializer(Type* ty) {
 		std::vector<Node*> elements;
 		if (input_token != ")") {
 			do {
-				elements.push_back(parse_typed_const_initializer(arr->item_type));
+				elements.push_back(parse_storage_initializer(arr->item_type));
 			} while (maybe_parse_comma());
 		}
 		parse_closing_paren();
@@ -4233,7 +4239,7 @@ Node* Parser::parse_typed_const_initializer(Type* ty) {
 			parse_colon();
 			fields.push_back(RecordLiteral::Field{
 			    found->slot,
-			    parse_typed_const_initializer(found->ty),
+			    parse_storage_initializer(found->ty),
 			});
 			next_field = field_index + 1;
 
@@ -4293,7 +4299,7 @@ Node* Parser::parse_typed_const_initializer(Type* ty) {
 	return checked.node;
 }
 
-void Parser::parse_const_block() {
+void Parser::parse_const_block(Type* aggregate_owner) {
 	parse_keyword("const");
 	// See parse_var_block: register into the enclosing decl scope, no sub-frame.
 	Frame* scope = current_declaration_frame();
@@ -4312,20 +4318,52 @@ void Parser::parse_const_block() {
 				raise_parse_error("constant expression expected");
 			if (folded.kind == ConstEvalResult::Kind::Error)
 				raise_parse_error(folded.message);
-			scope->register_variable(name, folded.node, folded.node ? folded.node->ty : nullptr);
+			if (aggregate_owner) {
+				auto constant = new ConstantDecl(
+				    cxx_value_name(name),
+				    folded.node ? folded.node->ty : nullptr,
+				    folded.node,
+				    aggregate_owner);
+				scope->register_variable(
+				    name, constant,
+				    constant->ty);
+			} else {
+				scope->register_variable(
+				    name, folded.node,
+				    folded.node ? folded.node->ty : nullptr);
+			}
 			parse_semicolon();
 			continue;
 		}
 		parse_colon();
 		auto ty = parse_type_expression(false);
-		auto slot = new StorageSlot(cxx_value_name(name), ty);
+		if (aggregate_owner) {
+			if (!maybe_parse_equal())
+				raise_parse_error(
+				    "aggregate storage declaration requires an initializer");
+			Node* initializer =
+			    parse_storage_initializer(ty);
+			auto slot = new StorageSlot(
+			    cxx_value_name(name), ty,
+			    StorageSlot::Kind::StaticMember,
+			    aggregate_owner);
+			slot->initializer = initializer;
+			scope->register_variable(
+			    name, slot, ty);
+			parse_semicolon();
+			continue;
+		}
+		auto slot = new StorageSlot(
+		    cxx_value_name(name), ty);
 		slot->owning_unit =
 		    declaration_unit(scope);
 		scope->register_variable(name, slot, ty);
 		if (maybe_parse_equal()) {
-			Node* initializer = parse_typed_const_initializer(ty);
+			Node* initializer = parse_storage_initializer(ty);
 			if (emitter)
-				emitter->emit_const_decl(slot->cxx_name, ty, initializer);
+				emitter->emit_initialized_storage_decl(
+				    slot->cxx_name, ty, initializer,
+				    current_routine != nullptr);
 		}
 		parse_semicolon();
 	} while (input_token.size() && keywords.find(input_token) == keywords.end());
@@ -4342,7 +4380,15 @@ struct TypeBlockResolver {
 	std::unordered_set<IncompleteType*> resolving_incomplete;
 	std::unordered_set<Node*> done_nodes;
 	std::unordered_set<Frame*> done_frames;
+	std::unordered_map<Type*, std::size_t>
+	    completing_types;
+	std::vector<Type*> completion_path;
+	std::unordered_set<Type*> completed_types;
+	std::unordered_set<Type*> validating_storage;
+	std::unordered_set<Type*> validated_storage;
+	std::unordered_set<Type*> validated_definitions;
 	std::string error;
+	std::string validating_type_name;
 
 	bool fail(std::string message) {
 		error = std::move(message);
@@ -4419,6 +4465,10 @@ struct TypeBlockResolver {
 			return true;
 		if (!normalize_type(node->ty))
 			return false;
+		if (auto n = dynamic_cast<Block*>(node))
+			for (Node* statement : n->statements)
+				if (!normalize_node(statement))
+					return false;
 		if (auto n = dynamic_cast<TypeBound*>(node)) {
 			if (!normalize_type(n->operand_type))
 				return false;
@@ -4470,6 +4520,47 @@ struct TypeBlockResolver {
 		}
 		if (auto n = dynamic_cast<BinaryOperation*>(node)) {
 			if (!normalize_node(n->a) || !normalize_node(n->b))
+				return false;
+		}
+		if (auto n = dynamic_cast<ConstantDecl*>(node)) {
+			if (!normalize_type(n->owner_type) ||
+			    !normalize_node(n->initializer))
+				return false;
+		}
+		if (auto n = dynamic_cast<StorageSlot*>(node)) {
+			if (!normalize_type(n->owner_type) ||
+			    !normalize_node(n->initializer))
+				return false;
+		}
+		if (auto n = dynamic_cast<Property*>(node)) {
+			for (Type*& index_type : n->index_types)
+				if (!normalize_type(index_type))
+					return false;
+			if (!normalize_node(n->read_accessor) ||
+			    !normalize_node(n->write_accessor))
+				return false;
+		}
+		if (auto n = dynamic_cast<PropertyAccess*>(node)) {
+			if (!normalize_node(n->receiver) ||
+			    !normalize_node(n->property))
+				return false;
+			for (Node* index : n->indexes)
+				if (!normalize_node(index))
+					return false;
+		}
+		if (auto n = dynamic_cast<Coerce*>(node)) {
+			if (!normalize_type(n->target_type))
+				return false;
+			n->ty = n->target_type;
+		}
+		if (auto n = dynamic_cast<CoerceCheck*>(node)) {
+			if (!normalize_type(n->target_type))
+				return false;
+		}
+		if (auto n = dynamic_cast<RoutineRef*>(node)) {
+			if (!normalize_node(n->receiver) ||
+			    !normalize_node(n->candidates) ||
+			    !normalize_node(n->resolved))
 				return false;
 		}
 		if (auto n = dynamic_cast<ProcCall*>(node)) {
@@ -4588,9 +4679,15 @@ struct TypeBlockResolver {
 	}
 
 	bool normalize_type_contents(Type* ty) {
-			if (dynamic_cast<IntrinsicType*>(ty) ||
-			    dynamic_cast<ShortStringType*>(ty) ||
-			    dynamic_cast<UnitType*>(ty) ||
+		// A source-declared default property is also present in the aggregate
+		// frame, but the Type pointer is a semantic edge in its own right.
+		// Visiting it here keeps normalization exhaustive even for lazily
+		// synthesized/default-property representations.
+		if (!normalize_node(ty->default_property))
+			return false;
+		if (dynamic_cast<IntrinsicType*>(ty) ||
+		    dynamic_cast<ShortStringType*>(ty) ||
+		    dynamic_cast<UnitType*>(ty) ||
 		    dynamic_cast<UntypedIntegerType*>(ty) ||
 		    dynamic_cast<EnumType*>(ty))
 			return true;
@@ -4691,6 +4788,228 @@ struct TypeBlockResolver {
 			return normalize_frame(m->children);
 		return true;
 	}
+
+	static bool nominal_type_anchor(Type* ty) {
+		return dynamic_cast<RecordType*>(ty) ||
+		       dynamic_cast<PackedRecordType*>(ty) ||
+		       dynamic_cast<ClassType*>(ty) ||
+		       dynamic_cast<InterfaceType*>(ty) ||
+		       dynamic_cast<ObjectType*>(ty);
+	}
+
+	bool validate_complete_frame(Frame* frame) {
+		if (!frame)
+			return true;
+		for (const auto& item :
+		     frame->value_declarations()) {
+			auto slot =
+			    dynamic_cast<StorageSlot*>(
+			        item.second.value);
+			if (!slot ||
+			    slot->kind !=
+			        StorageSlot::Kind::AggregateMember)
+				continue;
+			if (!validate_complete_type(slot->ty))
+				return false;
+		}
+		return true;
+	}
+
+	bool validate_complete_type(Type* ty) {
+		if (!ty || completed_types.count(ty))
+			return true;
+		if (auto found =
+		        completing_types.find(ty);
+		    found != completing_types.end()) {
+			// A legal recursive definition must be anchored by a nominal
+			// aggregate. `P = ^R; R = record Next: P end` has the Record
+			// identity that completes P's target. Equations made solely from
+			// constructors (`T = ^T`, `file of T`, recursive routine aliases,
+			// and mutual aliases) never define the promised target type.
+			for (std::size_t i = found->second;
+			     i < completion_path.size(); ++i)
+				if (nominal_type_anchor(
+				        completion_path[i]))
+					return true;
+			return fail(
+			    "type '" + validating_type_name +
+			    "' is not completely defined");
+		}
+
+		completing_types.emplace(
+		    ty, completion_path.size());
+		completion_path.push_back(ty);
+		bool ok = true;
+		if (auto array =
+		        dynamic_cast<FixedArrayType*>(ty))
+			ok = validate_complete_type(array->bounds) &&
+			     validate_complete_type(array->item_type);
+		else if (auto set =
+		             dynamic_cast<FixedSetType*>(ty))
+			ok = validate_complete_type(set->item_type);
+		else if (auto file =
+		             dynamic_cast<TypedFileType*>(ty))
+			ok = validate_complete_type(file->item_type);
+		else if (auto pointer =
+		             dynamic_cast<PointerType*>(ty))
+			ok = pointer->is_untyped() ||
+			     validate_complete_type(
+			         pointer->item_type);
+		else if (auto class_ref =
+		             dynamic_cast<ClassRefType*>(ty))
+			ok = validate_complete_type(
+			    class_ref->target);
+		else if (auto routine =
+		             dynamic_cast<RoutineType*>(ty)) {
+			ok = validate_complete_type(
+			    routine->return_type);
+			for (const auto& formal :
+			     routine->formals)
+				if (ok &&
+				    !validate_complete_type(
+				        formal.ty))
+					ok = false;
+		} else if (auto subrange =
+		            dynamic_cast<SubrangeType*>(ty))
+			ok = validate_complete_type(
+			    subrange->base_type);
+		else if (auto record =
+		             dynamic_cast<RecordType*>(ty))
+			ok = validate_complete_frame(
+			    record->children);
+		else if (auto record =
+		             dynamic_cast<PackedRecordType*>(ty))
+			ok = validate_complete_frame(
+			    record->children);
+		else if (auto class_type =
+		             dynamic_cast<ClassType*>(ty)) {
+			ok = validate_complete_type(
+			    class_type->super);
+			for (InterfaceType* iface :
+			     class_type->implemented_interfaces)
+				if (ok &&
+				    !validate_complete_type(iface))
+					ok = false;
+			if (ok)
+				ok = validate_complete_frame(
+				    class_type->children);
+		} else if (auto interface_type =
+		            dynamic_cast<InterfaceType*>(ty)) {
+			for (InterfaceType* iface :
+			     interface_type->super_interfaces)
+				if (ok &&
+				    !validate_complete_type(iface))
+					ok = false;
+			if (ok)
+				ok = validate_complete_frame(
+				    interface_type->children);
+		} else if (auto object =
+		            dynamic_cast<ObjectType*>(ty))
+			ok = validate_complete_type(
+			         object->super) &&
+			     validate_complete_frame(
+			         object->children);
+		else if (auto module =
+		            dynamic_cast<ModuleType*>(ty))
+			ok = validate_complete_frame(
+			    module->children);
+
+		completion_path.pop_back();
+		completing_types.erase(ty);
+		if (ok)
+			completed_types.insert(ty);
+		return ok;
+	}
+
+	bool validate_aggregate_storage(Frame* frame) {
+		if (!frame)
+			return true;
+		for (const auto& item :
+		     frame->value_declarations()) {
+			auto slot =
+			    dynamic_cast<StorageSlot*>(
+			        item.second.value);
+			if (!slot ||
+			    slot->kind !=
+			        StorageSlot::Kind::AggregateMember)
+				continue;
+			if (!validate_storage_type(slot->ty))
+				return false;
+		}
+		return true;
+	}
+
+	bool validate_storage_type(Type* ty) {
+		if (!ty)
+			return true;
+
+		// These carriers do not contain an object of the referenced type.
+		// Recursion through them is therefore finite: a pointer/class value,
+		// routine value, set, or file handle has a fixed representation
+		// independent of the referent/element definition.
+		if (dynamic_cast<PointerType*>(ty) ||
+		    dynamic_cast<ClassType*>(ty) ||
+		    dynamic_cast<InterfaceType*>(ty) ||
+		    dynamic_cast<ClassRefType*>(ty) ||
+		    dynamic_cast<RoutineType*>(ty) ||
+		    dynamic_cast<FixedSetType*>(ty) ||
+		    dynamic_cast<TypedFileType*>(ty))
+			return true;
+
+		if (validated_storage.count(ty))
+			return true;
+		if (!validating_storage.insert(ty).second)
+			return fail(
+			    "type '" + validating_type_name +
+			    "' contains itself by value");
+
+		bool ok = true;
+		if (auto array =
+		        dynamic_cast<FixedArrayType*>(ty))
+			ok = validate_storage_type(
+			    array->item_type);
+		else if (auto record =
+		             dynamic_cast<RecordType*>(ty))
+			ok = validate_aggregate_storage(
+			    record->children);
+		else if (auto record =
+		             dynamic_cast<PackedRecordType*>(ty))
+			ok = validate_aggregate_storage(
+			    record->children);
+		else if (auto object =
+		             dynamic_cast<ObjectType*>(ty))
+			ok = validate_aggregate_storage(
+			    object->children);
+
+		validating_storage.erase(ty);
+		if (ok)
+			validated_storage.insert(ty);
+		return ok;
+	}
+
+	bool validate_definition(
+	    Type* ty, const std::string& name) {
+		if (!ty ||
+		    !validated_definitions.insert(ty).second)
+			return true;
+		validating_type_name = name;
+		if (!validate_complete_type(ty))
+			return false;
+
+		// A class/interface value is a reference, but its declaration still
+		// owns fields which must themselves have finite storage. Inspect the
+		// definition once; when the same class type is encountered as a field,
+		// validate_storage_type correctly stops at the reference carrier.
+		if (auto class_type =
+		        dynamic_cast<ClassType*>(ty))
+			return validate_aggregate_storage(
+			    class_type->children);
+		if (auto interface_type =
+		        dynamic_cast<InterfaceType*>(ty))
+			return validate_aggregate_storage(
+			    interface_type->children);
+		return validate_storage_type(ty);
+	}
 };
 
 /** Postcondition: this has a side effect of push_scope, so you should do pop_scope eventually.
@@ -4700,8 +5019,10 @@ DELPHI_AUTO_END: will automatically stop at some aggregate control directives (l
 // Special cases this handles:
 //   type PX = ^TX; TX = record ... end;        (cross-decl forward via pointer)
 //   type TMeta = class of TObject; TObject = class ... end;
-//   type TList = array[0..3] of TItem; TItem = record ... end;
-// Pascal only grants this forward-reference latitude inside a type block.
+// Pascal grants implicit forward-reference latitude to pointer targets and
+// `class of` targets inside a type block. Arrays, sets, files, aliases, and
+// other by-value constructions still require their element/target type to
+// have been declared already.
 // The parser therefore opens a narrow placeholder-creation window while
 // parsing this block, then closes it before semantic normalization/emission.
 // No emitter path should need to unwrap IncompleteType as normal control flow.
@@ -4720,11 +5041,11 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		IncompleteType* lhs_placeholder;
 		Type* rhs;
 		Kind kind;
+		bool needs_cxx_forward = false;
 		bool alias = false;
 	};
 	std::vector<PendingTypeDecl> pending;
-	bool saved_parsing_type_block = parsing_type_block;
-	parsing_type_block = true;
+	type_block_frames.push_back(scope);
 	do {
 		auto name_optional = maybe_parse_identifier();
 		if (!name_optional)
@@ -4734,8 +5055,12 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		Type* existing = scope->lookup_type(name); // FIXME: WTF
 		IncompleteType* lhs_placeholder = nullptr;
 		ClassType* completing_forward = nullptr;
+		bool needs_cxx_forward = false;
 		if (existing) {
 			lhs_placeholder = dynamic_cast<IncompleteType*>(existing);
+			needs_cxx_forward =
+			    lhs_placeholder &&
+			    !lhs_placeholder->resolved;
 			completing_forward =
 			    dynamic_cast<ClassType*>(existing);
 			if (completing_forward &&
@@ -4764,7 +5089,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			rhs = parse_class_type(
 			    completing_forward, true);
 		else
-			rhs = parse_type_expression(true);
+			rhs = parse_type_expression(false);
 		current_type_declaration_name =
 		    std::move(saved_type_declaration_name);
 		auto forward_class =
@@ -4787,7 +5112,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			pending.push_back(PendingTypeDecl{
 			    name, cxx_type_name(name), nullptr,
 			    forward_class,
-			    PendingTypeDecl::Kind::ClassForward});
+			    PendingTypeDecl::Kind::ClassForward,
+			    needs_cxx_forward});
 		} else {
 			// Publish a completed declaration before parsing the next one.
 			// References already holding this placeholder remain valid and are
@@ -4799,11 +5125,12 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			pending.push_back(PendingTypeDecl{
 			    name, cxx_type_name(name),
 			    lhs_placeholder, rhs,
-			    PendingTypeDecl::Kind::Definition});
+			    PendingTypeDecl::Kind::Definition,
+			    needs_cxx_forward});
 		}
 		parse_semicolon();
 	} while (true);
-	parsing_type_block = saved_parsing_type_block;
+	type_block_frames.pop_back();
 
 	// Every completed declaration was published during the parse loop. Resolve
 	// the forward references carried inside their RHS types now that the whole
@@ -4818,6 +5145,15 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		if (decl.lhs_placeholder)
 			decl.lhs_placeholder->resolved =
 			    decl.rhs;
+	}
+	for (auto& decl : pending) {
+		if (decl.kind ==
+		    PendingTypeDecl::Kind::ClassForward)
+			continue;
+		if (!resolver.validate_definition(
+		        decl.rhs, decl.name))
+			raise_type_parse_error(
+			    resolver.error);
 	}
 	for (auto& decl : pending)
 		if (decl.kind ==
@@ -4890,6 +5226,25 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	}
 	if (!emitter)
 		return;
+	// C++ needs the tag declaration before an earlier Pascal pointer field
+	// can name a later aggregate from the same type block. Emit all aggregate
+	// tags first; by-value recursion has already been rejected above, while
+	// legal pointer/class-reference recursion now has exactly the declaration
+	// boundary C++20 requires.
+	for (auto& decl : pending) {
+		if (decl.alias ||
+		    !decl.needs_cxx_forward)
+			continue;
+		if (decl.kind ==
+		        PendingTypeDecl::Kind::ClassForward ||
+		    dynamic_cast<RecordType*>(decl.rhs) ||
+		    dynamic_cast<PackedRecordType*>(decl.rhs) ||
+		    dynamic_cast<ClassType*>(decl.rhs) ||
+		    dynamic_cast<InterfaceType*>(decl.rhs) ||
+		    dynamic_cast<ObjectType*>(decl.rhs))
+			emitter->emit_class_forward_declaration(
+			    decl.cxx);
+	}
 	for (auto& decl : pending) {
 		if (decl.kind ==
 		    PendingTypeDecl::Kind::ClassForward)
@@ -6404,13 +6759,9 @@ Node* Parser::make_call(
 		if (auto class_reference =
 		        dynamic_cast<ClassRefType*>(
 		            finalized.receiver->ty)) {
-			Type* target = class_reference->target;
-			while (auto incomplete =
-			           dynamic_cast<IncompleteType*>(
-			               target))
-				target = incomplete->resolved;
 			auto result_type =
-			    dynamic_cast<ClassType*>(target);
+			    dynamic_cast<ClassType*>(
+			        class_reference->target);
 			if (!result_type)
 				raise_parse_error(
 				    "constructor class reference does not target a class");

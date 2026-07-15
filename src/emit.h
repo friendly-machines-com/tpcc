@@ -13,6 +13,7 @@ class Callable;
 class Method;
 class RoutineType;
 class RoutineRef;
+class StorageSlot;
 struct Parameter;
 
 struct UnitLifecycleNames {
@@ -108,7 +109,9 @@ public:
 	void emit_var_decl(
 	    std::string cxx_name, Type* ty,
 	    Node* initializer = nullptr);
-	void emit_const_decl(std::string cxx_name, Type* ty, Node* initializer);
+	void emit_initialized_storage_decl(
+	    std::string cxx_name, Type* ty,
+	    Node* initializer, bool routine_local);
 	void emit_main_prologue(
 	    const std::vector<UnitLifecycleNames>&
 	        unit_lifecycle_hooks,
@@ -212,6 +215,12 @@ public:
 	// already-defined named enum do NOT go through here -- those just
 	// spell the cxx name.
 	void emit_enum_decl(EnumType* e);
+	// Emit storage owned by an aggregate rather than by each instance.
+	// Initialized storage uses a function-local static behind an inline
+	// accessor, which is valid even when the Pascal aggregate is lowered to a
+	// C++ local class (local classes cannot have static data members).
+	void emit_static_member_declaration(
+	    StorageSlot* slot);
 	// Emit the opaque byte carrier and generated direct-field accessors for a
 	// PackedRecordType. Packed records deliberately do not flow through
 	// emit_aggregate_decl because they have no C++ field members.

@@ -265,6 +265,8 @@ class MemberAccess: public BinaryOperation {
 public:
 	MemberAccess(Node* a, Node* b);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(
+	    ConstEvalContext& ctx) const override;
 };
 
 /** A Pascal property declaration. Accessors are ordinary semantic symbols:
@@ -330,22 +332,53 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** A true Pascal constant declared inside an aggregate (`const X = expr`).
+ * Its folded value has no mutable storage and may be substituted at each use.
+ * The colon form (`const X: T = expr`) instead declares initialized static
+ * storage and remains a StorageSlot. */
+class ConstantDecl: public Node {
+public:
+	std::string cxx_name;
+	Node* initializer;
+	Type* owner_type;
+	ConstantDecl(
+	    std::string cxx_name, Type* ty,
+	    Node* initializer, Type* owner_type);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(
+	    ConstEvalContext& ctx) const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
 struct StorageSlot: public Node {
 	enum class Kind {
 		Ordinary,
 		AggregateMember,
-		ClassVariable,
+		// Storage owned by the aggregate rather than by each instance.
+		// Covers both `class var` and initialized storage declared in an
+		// aggregate's const section.
+		StaticMember,
 	};
 	std::string cxx_name;
 	Kind kind;
-	// Non-null for aggregate members and class variables. In particular a
-	// class variable is owned by its declaring outer class even when source
-	// lookup reaches it through a descendant class or a metaclass receiver.
+	// Non-null for aggregate members and static members. Static storage is
+	// owned by its declaring aggregate even when lookup reaches it through a
+	// descendant class or a metaclass receiver.
 	Type* owner_type;
+	// Non-null for initialized storage declarations. Aggregate-owned
+	// initializers stay in the semantic graph until the enclosing type block
+	// is normalized and are emitted with that aggregate, never during parse.
+	Node* initializer = nullptr;
 	StorageSlot(std::string cxx_name, Type* ty,
 	            Kind kind = Kind::Ordinary,
 	            Type* owner_type = nullptr);
 	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 

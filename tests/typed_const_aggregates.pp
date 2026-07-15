@@ -45,6 +45,17 @@ const
     Present: 9
   );
 
+function NextCounter: LongInt;
+const
+  Counter: LongInt = 0;
+begin
+  Counter := Counter + 1;
+  Result := Counter
+end;
+
+var
+  OuterAddress: ^TOuter;
+
 begin
   if Outer.Items[0].Id <> 7 then
     Halt(1);
@@ -71,5 +82,13 @@ begin
   if Partial.Present <> 9 then
     Halt(12);
   if Partial.Omitted <> 0 then
-    Halt(13)
+    Halt(13);
+  OuterAddress := @Outer;
+  Outer.Items[0].Id := 9;
+  if OuterAddress^.Items[0].Id <> 9 then
+    Halt(14);
+  if NextCounter <> 1 then
+    Halt(15);
+  if NextCounter <> 2 then
+    Halt(16)
 end.

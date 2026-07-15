@@ -12,7 +12,7 @@ cd "$root"
 	tests/typed_const_aggregates.pp
 
 for expected in \
-	'const t_touter p_outer = [](' \
+	't_touter p_outer = [](' \
 	'::u_system::tpcc_make_set<t_tflag>' \
 	'p_packedvalues = {{[](' \
 	'tpcc_record.m_set_p_code' \

@@ -110,6 +110,35 @@ void Emitter::emit_enum_decl(EnumType* e) {
 	fprintf(active, " }");
 }
 
+void Emitter::emit_static_member_declaration(
+    StorageSlot* slot) {
+	if (!slot ||
+	    slot->kind !=
+	        StorageSlot::Kind::StaticMember)
+		unhandled_node(
+		    "non-static slot passed to static-member emitter",
+		    slot);
+	fprintf(active, "\tpublic: ");
+	if (slot->initializer) {
+		fprintf(active, "inline static ");
+		emit_type_ref(slot->ty);
+		fprintf(active, "& %s() {\n",
+		    slot->cxx_name.c_str());
+		fprintf(active, "\t\tstatic ");
+		emit_type_ref(slot->ty);
+		fprintf(active, " m_value = ");
+		emit_expression(slot->initializer);
+		fprintf(active, ";\n");
+		fprintf(active, "\t\treturn m_value;\n");
+		fprintf(active, "\t}\n");
+		return;
+	}
+	fprintf(active, "inline static ");
+	emit_type_ref(slot->ty);
+	fprintf(active, " %s{};\n",
+	    slot->cxx_name.c_str());
+}
+
 // Apply the `p_` prefix to a Pascal value identifier.
 std::string cxx_value_name(std::string pas_name) {
 	return "p_" + pas_name;
@@ -252,6 +281,10 @@ void Emitter::emit_var_decl(
     Node* initializer) {
 	if (!active)
 		return;
+	// Pascal permits unused variables. C++'s unused-variable warning cannot
+	// serve as a Pascal semantic check: it would reject a valid source program
+	// whenever the generated C++ is compiled with -Werror.
+	fprintf(active, "[[maybe_unused]] ");
 	// A unit interface is emitted as a C++ header. C++20 inline variables
 	// preserve Pascal's one unit-owned storage object while permitting that
 	// definition in every translation unit which includes the interface.
@@ -266,10 +299,20 @@ void Emitter::emit_var_decl(
 	fprintf(active, ";\n");
 }
 
-void Emitter::emit_const_decl(std::string cxx_name, Type* ty, Node* initializer) {
+void Emitter::emit_initialized_storage_decl(
+    std::string cxx_name, Type* ty,
+    Node* initializer, bool routine_local) {
 	if (!active)
 		return;
-	fprintf(active, "const ");
+	// `const X: T = value` is Pascal initialized storage, not a true
+	// compile-time constant. At routine scope that storage persists across
+	// calls; at unit/program scope ordinary static storage duration already
+	// supplies the same lifetime.
+	fprintf(active, "[[maybe_unused]] ");
+	if (routine_local)
+		fprintf(active, "static ");
+	else if (active == out_h)
+		fprintf(active, "inline ");
 	emit_type_ref(ty);
 	fprintf(active, " %s = ", cxx_name.c_str());
 	emit_expression(initializer);
@@ -456,8 +499,6 @@ static std::optional<std::string> variant_member_path(
 
 static std::optional<std::string>
 record_variant_path(Type* owner, StorageSlot* slot) {
-	while (auto incomplete = dynamic_cast<IncompleteType*>(owner))
-		owner = incomplete->resolved;
 	auto record = dynamic_cast<RecordType*>(owner);
 	if (!record || !slot)
 		return std::nullopt;
@@ -1392,6 +1433,13 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	for (auto& kv : body->value_declarations()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
+			if (slot->kind ==
+			    StorageSlot::Kind::StaticMember) {
+				if (!(is_class && in_meta))
+					emit_static_member_declaration(
+					    slot);
+				continue;
+			}
 			if (is_interface) {
 				unhandled_type("emit_aggregate_decl interfaces cannot have variables", ty);
 				continue;
@@ -1401,21 +1449,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			if (is_class && in_meta)
 				continue;
 			fprintf(active, "\t");
-			if (slot->kind ==
-			    StorageSlot::Kind::ClassVariable) {
-				// `inline` is solely the C++20 ODR mechanism that
-				// permits header definition. `static` supplies the
-				// Pascal semantics: one storage location owned by the
-				// declaring class and inherited by name. A field in
-				// m_meta would instead create one copy in every exact
-				// class's metaclass object.
-				fprintf(active, "inline static ");
-			}
 			emit_type_ref(slot->ty);
 			fprintf(active, " %s", slot->cxx_name.c_str());
-			if (slot->kind ==
-			    StorageSlot::Kind::ClassVariable)
-				fprintf(active, "{}");
 			fprintf(active, ";\n");
 		} else {
 			std::vector<Callable*> callables;
@@ -1582,6 +1617,15 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 		fprintf(active, "\t\tstd::memcpy(m_storage.data() + m_field_%zu_offset, &value, sizeof value);\n", i);
 		fprintf(active, "\t}\n");
 	}
+	for (const auto& item :
+	     p->children->value_declarations())
+		if (auto slot =
+		        dynamic_cast<StorageSlot*>(
+		            item.second.value);
+		    slot &&
+		    slot->kind ==
+		        StorageSlot::Kind::StaticMember)
+			emit_static_member_declaration(slot);
 	fprintf(active, "}");
 }
 
@@ -2121,9 +2165,6 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto record = dynamic_cast<RecordLiteral*>(expr)) {
 		Type* record_type = record->ty;
-		while (auto incomplete =
-		           dynamic_cast<IncompleteType*>(record_type))
-			record_type = incomplete->resolved;
 		const bool packed =
 		    dynamic_cast<PackedRecordType*>(record_type);
 		if (!packed &&
@@ -2203,7 +2244,22 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, "})");
 		return;
 	}
+	if (auto constant =
+	        dynamic_cast<ConstantDecl*>(expr)) {
+		emit_expression(constant->initializer);
+		return;
+	}
 	if (auto s = dynamic_cast<StorageSlot*>(expr)) {
+		if (s->kind ==
+		    StorageSlot::Kind::StaticMember) {
+			fprintf(active, "%s::%s",
+			    owner_cxx_reference_name(
+			        s->owner_type).c_str(),
+			    s->cxx_name.c_str());
+			if (s->initializer)
+				fprintf(active, "()");
+			return;
+		}
 		fprintf(active, "%s",
 		    node_cxx_name(s, s->cxx_name).c_str());
 		return;
@@ -2280,18 +2336,15 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(m->b);
 			return;
 		}
+		if (auto constant =
+		        dynamic_cast<ConstantDecl*>(m->b)) {
+			emit_expression(constant);
+			return;
+		}
 		if (auto slot = dynamic_cast<StorageSlot*>(m->b);
 		    slot &&
-		    slot->kind == StorageSlot::Kind::ClassVariable) {
-			// Class-variable lookup may arrive through a descendant class or
-			// through the current metaclass receiver, but the storage is
-			// statically owned by the declaring Pascal class. Emitting the
-			// receiver would turn it into a per-metaclass field access.
-			fprintf(active, "%s::%s",
-			    owner_cxx_reference_name(
-			        slot->owner_type)
-			        .c_str(),
-			    slot->cxx_name.c_str());
+		    slot->kind == StorageSlot::Kind::StaticMember) {
+			emit_expression(slot);
 			return;
 		}
 		if (auto packed = dynamic_cast<PackedRecordType*>(m->a->ty)) {

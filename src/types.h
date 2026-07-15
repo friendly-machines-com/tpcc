@@ -316,7 +316,9 @@ struct ClassType: public Type {
 
 struct ClassRefType : public Type // metaclass
 {
-	Type* target; // ClassType or IncompleteType
+	// May be an IncompleteType only while the containing type block is open;
+	// TypeBlockResolver replaces it with a ClassType before later semantics.
+	Type* target;
 	std::string cxx_name;
 
 	explicit ClassRefType(SourceLocation source_location, Type* c)

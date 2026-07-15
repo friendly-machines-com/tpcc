@@ -451,6 +451,17 @@ const char* Assign::diagnostic_kind() const { return "assign"; }
 const char* ShortCircuitOperation::diagnostic_kind() const { return kind == AND ? "and" : "or"; }
 void ShortCircuitOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { BinaryOperation::print_diagnostic_definition(ctx, out, 0); }
 const char* MemberAccess::diagnostic_kind() const { return "member_access"; }
+ConstEvalResult MemberAccess::const_eval(
+    ConstEvalContext& ctx) const {
+	// Aggregate static constants remain constants when selected through an
+	// instance. The left operand is only a qualifier; FPC does not evaluate
+	// it, just as it does not evaluate an instance qualifier for class/static
+	// storage.
+	if (auto constant =
+	        dynamic_cast<ConstantDecl*>(b))
+		return constant->const_eval(ctx);
+	return ConstEvalResult::not_constant();
+}
 const char* Index::diagnostic_kind() const { return "index"; }
 const char* Return::diagnostic_kind() const { return "return"; }
 
@@ -474,7 +485,44 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 }
 void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }
 
+ConstantDecl::ConstantDecl(
+    std::string cxx_name, Type* ty,
+    Node* initializer, Type* owner_type)
+    : cxx_name(std::move(cxx_name)),
+      initializer(initializer),
+      owner_type(owner_type) {
+	this->ty = ty;
+}
+const char* ConstantDecl::diagnostic_kind() const {
+	return "constant";
+}
+ConstEvalResult ConstantDecl::const_eval(
+    ConstEvalContext& ctx) const {
+	return initializer
+	    ? initializer->const_eval(ctx)
+	    : ConstEvalResult::not_constant();
+}
+void ConstantDecl::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(initializer);
+	ctx->add_type_edge(owner_type);
+}
+void ConstantDecl::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned) const {
+	out << "constant "
+	    << ctx->known_value_ref(initializer)
+	    << " : " << ctx->known_type_ref(ty);
+}
+
 const char* StorageSlot::diagnostic_kind() const { return "slot"; }
+void StorageSlot::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(owner_type);
+	ctx->add_value_edge(initializer);
+}
 void StorageSlot::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "slot : " << ctx->known_type_ref(ty); }
 
 const char* Property::diagnostic_kind() const { return "property"; }

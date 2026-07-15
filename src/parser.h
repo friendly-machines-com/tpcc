@@ -115,11 +115,13 @@ private:
 	// `uses`, `with`, and implicit Self push lookup entries only; actual
 	// declaration constructs push this stack explicitly.
 	std::vector<Frame*> declaration_frames;
-	// Forward type references are a Pascal type-block feature, not a general
-	// declaration-scope feature. The current declaration frame is the
-	// registration site; this flag narrows placeholder creation to the period
-	// where parse_type_block is actually consuming RHS types.
-	bool parsing_type_block = false;
+	// Each active Pascal `type` block owns the implicit forward names created
+	// anywhere in its RHS, including inside a record/class body. An aggregate
+	// body has its own declaration frame for members, but `field: ^TLater`
+	// still refers to a sibling declaration in the surrounding type block.
+	// A stack, rather than a boolean, preserves that ownership when an
+	// aggregate contains a nested `type` section of its own.
+	std::vector<Frame*> type_block_frames;
 	// LHS name whose type expression is currently being parsed. Class parsing
 	// uses this to distinguish the one root declaration `System.TObject =
 	// class ... end` from every other bare class, which implicitly inherits
@@ -207,7 +209,7 @@ protected:
 	void maybe_parse_const_block();
 	void maybe_parse_type_block(bool delphi_auto_end);
 	void maybe_parse_var_block();
-	void parse_const_block();
+	void parse_const_block(Type* aggregate_owner = nullptr);
 	void parse_label_block();
 	void parse_type_block(bool delphi_auto_end);
 	void parse_var_block();
@@ -222,7 +224,7 @@ protected:
 	Node* maybe_parse_numeral();
 	Node* parse_numeral();
 	Node* parse_set_literal();
-	Node* parse_typed_const_initializer(Type* ty);
+	Node* parse_storage_initializer(Type* ty);
 	Node* resolve_lvalue(std::string name);
 	Node* maybe_resolve_value(std::string name);
 	UnitRef* resolve_unit_type_qualifier(std::string name);

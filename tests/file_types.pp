@@ -4,10 +4,10 @@ type
   TIntegerFile = file of Integer;
   TOtherIntegerFile = file of Integer;
   TByteFile = file of Byte;
-  TNodeFile = file of TNode;
   TNode = record
     Value: Integer;
   end;
+  TNodeFile = file of TNode;
 
 var
   BinaryFile: File;

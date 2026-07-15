@@ -778,7 +778,9 @@ int conversion_cost(Type* from, Type* to) {
 		if (auto from_classref = dynamic_cast<ClassRefType*>(from)) {
 			if (auto to_classref = dynamic_cast<ClassRefType*>(to)) {
 				int depth = 0;
-				// FIXME: Handle IncompleteType.
+				// Class-reference targets are normalized when their type
+				// block closes. Call scoring is a post-declaration phase and
+				// must not backpatch parser placeholders.
 				for (ClassType* cur = dynamic_cast<ClassType*>(from_classref->target); cur; cur = cur->super, ++depth) {
 					if (cur == to_classref->target)
 						return depth;
