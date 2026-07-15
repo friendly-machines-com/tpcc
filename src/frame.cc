@@ -29,17 +29,55 @@ Type* Frame::lookup_type(std::string name) const {
 		return nullptr;
 	}
 }
-Node* Frame::lookup_value(std::string name) const {
-	auto iter = value_items.find(name);
-	if (iter != value_items.end()) {
-		auto result = iter->second.value;
-		assert(result);
-		return result;
-	} else if (parent) {
-		return parent->lookup_value(name);
-	} else {
-		return nullptr;
+bool callable_binding_opens_parent(Node* binding) {
+	if (auto callable = dynamic_cast<Callable*>(binding))
+		return callable->has_overload_directive;
+	if (auto overloads = dynamic_cast<OverloadSet*>(binding)) {
+		for (Callable* callable : overloads->members)
+			if (callable->has_overload_directive)
+				return true;
 	}
+	return false;
+}
+
+Node* Frame::lookup_value(std::string name) const {
+	std::vector<Callable*> callables;
+	for (const Frame* current = this; current;
+	     current = current->parent) {
+		auto found = current->value_items.find(name);
+		if (found == current->value_items.end())
+			continue;
+		Node* binding = found->second.value;
+		assert(binding);
+
+		auto callable =
+		    dynamic_cast<Callable*>(binding);
+		auto overloads =
+		    dynamic_cast<OverloadSet*>(binding);
+		if (!callable && !overloads) {
+			if (callables.empty())
+				return binding;
+			break;
+		}
+		if (callable)
+			callables.push_back(callable);
+		else
+			callables.insert(
+			    callables.end(),
+			    overloads->members.begin(),
+			    overloads->members.end());
+
+		// `overload` opens only the structural family represented by this
+		// Frame chain. Whether a completed family may continue into another
+		// lexical/unit scope is decided by ScopeEntry, not by Frame.
+		if (!callable_binding_opens_parent(binding))
+			break;
+	}
+	if (callables.empty())
+		return nullptr;
+	if (callables.size() == 1)
+		return callables.front();
+	return new OverloadSet(std::move(callables));
 }
 
 void Frame::rebind_type(std::string name, Type* ty) {

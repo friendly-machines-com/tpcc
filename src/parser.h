@@ -70,6 +70,13 @@ public:
 
 class Frame;
 
+struct ScopeValueLookup {
+	Node* binding;
+	// True only when this completed binding is allowed to attach overloads
+	// from the next lexical/unit ScopeEntry.
+	bool opens_parent;
+};
+
 /** One environment in the active name-lookup path. `qualifier` optionally
  *  binds values found in that environment to an expression; a resolved value
  *  is then represented as MemberAccess(qualifier, value). Lookup environments
@@ -82,10 +89,11 @@ struct ScopeEntry {
 	 *  Unit qualifiers deliberately remain lexical overload environments:
 	 *  unlike a class receiver, they have no structural inheritance chain. */
 	bool is_receiver_environment() const;
-	/** Perform value lookup according to this environment's kind. A lexical
-	 *  entry examines exactly its frame; a receiver entry applies member
-	 *  lookup to the receiver's complete structural parent chain. */
-	Node* lookup_value(const std::string& name) const;
+	/** Resolve one complete binding in this environment. Frame lookup already
+	 *  includes structural parents; opens_parent says whether lexical lookup
+	 *  may continue to attach another overload family. */
+	ScopeValueLookup lookup_value(
+	    const std::string& name) const;
 };
 class Parser {
 private:

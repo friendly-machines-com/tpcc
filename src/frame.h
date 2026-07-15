@@ -39,6 +39,9 @@ public:
 
     Frame(Frame* parent);
     Type* lookup_type(std::string name) const; /* TODO: or maybe a lookup with flags whether type and/or value is okay */
+    /** Resolve NAME in this structural frame chain. The current frame is
+     *  searched first; a callable marked overload may extend its family into
+     *  parent frames, while every other hit shadows the remaining parents. */
     Node* lookup_value(std::string name) const; /* result: usually a StorageSlot */
     bool register_type(std::string name, Type* ty);
     /** Replace an existing type binding (used when patching a placeholder with
@@ -58,13 +61,11 @@ public:
      *  duplicate identifier. Returns true on success, false on a duplicate /
      *  overload-mismatch error (caller reports the diagnostic with location). */
     bool register_callable(std::string name, Callable* c);
-    bool declares_value(const std::string& name) const {
-	    return value_items.find(name) != value_items.end();
-    }
-    const std::map<std::string, Type*>& declared_types() const {
-	    return type_items;
-    }
-    const std::map<std::string, FrameValueEntry>& declared_values() const {
-	    return value_items;
-    }
+    const std::map<std::string, Type*>& types_local() const { return type_items; }
+    const std::map<std::string, FrameValueEntry>& values_local() const { return value_items; }
 };
+
+/** Whether BINDING's Pascal overload directive opens the family into the
+ *  next enclosing environment. Shared by structural Frame lookup and the
+ *  parser's lexical scope walk so this rule has one implementation. */
+bool callable_binding_opens_parent(Node* binding);

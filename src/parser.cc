@@ -1256,74 +1256,24 @@ Node* Parser::parse_numeral() {
 	}
 }
 
-static bool callable_group_opens_parent(Node* binding) {
-	if (auto callable = dynamic_cast<Callable*>(binding))
-		return callable->has_overload_directive;
-	if (auto overloads = dynamic_cast<OverloadSet*>(binding)) {
-		for (Callable* callable : overloads->members)
-			if (callable->has_overload_directive)
-				return true;
-	}
-	return false;
-}
-
-/** Inspect declarations owned by exactly FRAME. This is storage access for
- *  the explicit environment/parent walkers below, not a name-lookup policy. */
-static Node* find_declared_value(
-    const Frame* frame, const std::string& name) {
-	const auto& values = frame->declared_values();
-	auto found = values.find(name);
-	return found == values.end()
-	           ? nullptr
-	           : found->second.value;
-}
-
-/** Resolve one member name through a structural parent chain. A member
- *  overload directive opens the same member family into the parent class or
- *  object; it never opens lookup into a lexical or unit-global routine family.
- *  The first closed parent group is included and then ends the family. */
-static Node* lookup_member_binding(const Frame* frame,
-    const std::string& name) {
-	std::vector<Callable*> callables;
-	for (const Frame* current = frame; current;
-	     current = current->parent) {
-		Node* binding =
-		    find_declared_value(current, name);
-		if (!binding)
-			continue;
-		auto callable = dynamic_cast<Callable*>(binding);
-		auto overloads = dynamic_cast<OverloadSet*>(binding);
-		if (!callable && !overloads) {
-			if (callables.empty())
-				return binding;
-			break;
-		}
-		if (callable)
-			callables.push_back(callable);
-		else
-			callables.insert(
-			    callables.end(), overloads->members.begin(),
-			    overloads->members.end());
-		if (!callable_group_opens_parent(binding))
-			break;
-	}
-	if (callables.empty())
-		return nullptr;
-	if (callables.size() == 1)
-		return callables.front();
-	return new OverloadSet(std::move(callables));
-}
-
 bool ScopeEntry::is_receiver_environment() const {
 	return qualifier &&
 	       !dynamic_cast<UnitRef*>(qualifier);
 }
 
-Node* ScopeEntry::lookup_value(
+ScopeValueLookup ScopeEntry::lookup_value(
     const std::string& name) const {
-	if (is_receiver_environment())
-		return lookup_member_binding(frame, name);
-	return find_declared_value(frame, name);
+	Node* binding = frame->lookup_value(name);
+	// A receiver Frame has already consumed every overload that is visible
+	// through class/object inheritance. Its completed member binding shadows
+	// lower lexical and unit-global scopes exactly like any ordinary scoped
+	// declaration. UnitRef is deliberately not a receiver here: used-unit
+	// globals share the global overload domain and may attach across entries.
+	return ScopeValueLookup{
+	    binding,
+	    binding &&
+	        !is_receiver_environment() &&
+	        callable_binding_opens_parent(binding)};
 }
 
 static Node* bind_lookup_result(Node* qualifier, Node* binding) {
@@ -1357,14 +1307,16 @@ Node* Parser::maybe_resolve_value(std::string name) {
 				return unit;
 			break;
 		}
-		Node* hit = it->lookup_value(name);
+		ScopeValueLookup lookup =
+		    it->lookup_value(name);
+		Node* hit = lookup.binding;
 		if (!hit)
 			continue;
-		if (it->is_receiver_environment()) {
-			if (!collected.empty())
-				break;
-			return bind_lookup_result(
-			    it->qualifier, hit);
+		if (!lookup.opens_parent) {
+			if (collected.empty())
+				return bind_lookup_result(
+				    it->qualifier, hit);
+			break;
 		}
 		auto as_call = dynamic_cast<Callable*>(hit);
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
@@ -1441,7 +1393,8 @@ Node* Parser::active_function_result_lvalue(Callable* c) const {
 /** value that can be assigned to */
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Node* hit = it->lookup_value(name)) {
+		if (Node* hit =
+		        it->lookup_value(name).binding) {
 			if (auto c = dynamic_cast<Callable*>(hit)) {
 				if (Node* result = active_function_result_lvalue(c))
 					return result;
@@ -1536,15 +1489,8 @@ static Type* parent_of(Type* ty) {
 // or nullptr if not found. Caller (parse_inherited) routes the result
 // through finalize_call, which ranks overload sets by argument cost.
 static Node* lookup_method_in_ancestors(std::string name, Type* starting_at) {
-	for (Type* t = starting_at; t; t = parent_of(t)) {
-		Frame* body = body_frame_of(t);
-		if (!body)
-			continue;
-		if (Node* hit =
-		        find_declared_value(body, name))
-			return hit;
-	}
-	return nullptr;
+	Frame* body = body_frame_of(starting_at);
+	return body ? body->lookup_value(name) : nullptr;
 }
 
 static bool is_set_item_type(Type* ty) {
@@ -2123,8 +2069,8 @@ Node* Parser::parse_member_selection(Node* base) {
 	if (!members)
 		raise_parse_error(
 		    "member access on non-composite type");
-	Node* member = lookup_member_binding(
-	    members, member_name);
+	Node* member =
+	    members->lookup_value(member_name);
 	if (!member)
 		raise_parse_error(
 		    "no member '" + member_name + "'");
@@ -4235,7 +4181,7 @@ struct TypeBlockResolver {
 			return true;
 
 		std::vector<std::pair<std::string, Type*>> local_types;
-		for (const auto& item : frame->declared_types())
+		for (const auto& item : frame->types_local())
 			local_types.push_back(item);
 		for (auto& item : local_types) {
 			Type* ty = item.second;
@@ -4245,7 +4191,7 @@ struct TypeBlockResolver {
 		}
 
 		std::vector<std::pair<std::string, FrameValueEntry>> local_values;
-		for (const auto& item : frame->declared_values())
+		for (const auto& item : frame->values_local())
 			local_values.push_back(item);
 		for (auto& item : local_values) {
 			Node* value = item.second.value;
@@ -5098,19 +5044,11 @@ Procedure* Parser::match_or_create_procedure(
 	};
 
 	consider_existing(existing);
-	if (!target) {
-		// Unit implementation frames can have local declarations while their
-		// interface prototypes live in an outer/parser scope (and also as the
-		// Frame::parent). Search the actual parser scope stack for an unimplemented
-		// matching prototype before creating a new callable, otherwise an
-		// implementation can become a second overload candidate instead of the body
-		// of its interface declaration. Use local lookup here to avoid seeing the
-		// same parent frame more than once through structural parents.
-		for (auto it = scopes.rbegin(); it != scopes.rend() && !target; ++it)
-			consider_existing(
-			    find_declared_value(
-			        it->frame, pas_name));
-	}
+	// A unit's interface and implementation deliberately mutate one owning
+	// Frame, so every prototype eligible for this body is already in
+	// ENCLOSING. Searching the name-lookup stack here would be wrong: those
+	// lower entries are used-unit dependencies, not declarations owned by
+	// the unit whose implementation is being parsed.
 	if (!target && short_form_implementation && existing)
 		raise_parse_error("no unimplemented prototype");
 
@@ -5284,7 +5222,18 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		//		method_name = "~" + class_type->cxx_name;
 		//	}
 		// }
-		Node* hit = owner_frame->lookup_value(method_name);
+		// An out-of-line `T.Method` body implements a declaration owned by
+		// exactly T. Normal Frame lookup includes inherited members, but an
+		// ancestor declaration belongs to the ancestor and cannot acquire a
+		// second body under T.
+		const auto& owner_declarations =
+		    owner_frame->values_local();
+		auto owner_method =
+		    owner_declarations.find(method_name);
+		Node* hit =
+		    owner_method == owner_declarations.end()
+		        ? nullptr
+		        : owner_method->second.value;
 		auto m = dynamic_cast<Method*>(hit);
 		if (!m)
 			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");

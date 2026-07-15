@@ -61,6 +61,36 @@ fi
 	-o "$tmp/type_block_publication"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/type_block_publication"
 
+./mp -Furtl -o"$tmp/inherited_overload_scope.cc" \
+	tests/inherited_overload_scope.pp
+if ! rg -Fq 'this->p_base_select(p_i)' \
+	"$tmp/inherited_overload_scope.cc"
+then
+	echo "inherited member overload was absent from the class Frame lookup" >&2
+	exit 1
+fi
+if ! rg -Fq 'this->p_child_select(p_q)' \
+	"$tmp/inherited_overload_scope.cc"
+then
+	echo "local member overload was absent from the class Frame lookup" >&2
+	exit 1
+fi
+
+if ./mp -Furtl -o"$tmp/member_global_scope.cc" \
+	tests/member_global_scope.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "mixed a member overload family with a global family" >&2
+	exit 1
+fi
+expected=$(sed -n '1p' tests/member_global_scope.error)
+if ! rg -Fq "$expected" "$tmp/stderr"
+then
+	echo "wrong member/global scope diagnostic; expected: $expected" >&2
+	sed -n '1,20p' "$tmp/stderr" >&2
+	exit 1
+fi
+
 if ./mp -Furtl -o"$tmp/rejected.cc" \
 	tests/type_block_unresolved_super.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
