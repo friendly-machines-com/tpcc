@@ -330,8 +330,14 @@ struct ObjectType: public Type {
 };
 
 struct PointerType: public Type {
+	// Null denotes Pascal's builtin untyped Pointer. A non-null item_type
+	// denotes the ordinary `^T` construction. Both are pointers semantically;
+	// only the untyped form lacks a readable pointee value.
 	Type* item_type;
-	PointerType(SourceLocation source_location, Type* item_type);
+	std::string cxx_name;
+	PointerType(SourceLocation source_location, Type* item_type,
+	            std::string cxx_name = {});
+	bool is_untyped() const { return item_type == nullptr; }
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

@@ -1608,6 +1608,16 @@ void Emitter::emit_writable_expression(Node* expr) {
 }
 
 void Emitter::emit_storage_ref(Node* expr) {
+	if (auto dereference =
+	        dynamic_cast<Dereference*>(expr);
+	    dereference &&
+	    dereference->ty == unknown_type()) {
+		fprintf(active,
+		    "::u_system::tpcc_dereference_storage(");
+		emit_expression(dereference->a);
+		fprintf(active, ")");
+		return;
+	}
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
 		if (dynamic_cast<Builtin*>(property->property->write_accessor)) {
 			fprintf(active, "::u_system::tpcc_make_storage_ref(");
@@ -1626,6 +1636,17 @@ void Emitter::emit_storage_ref(Node* expr) {
 }
 
 void Emitter::emit_const_storage_ref(Node* expr) {
+	if (auto dereference =
+	        dynamic_cast<Dereference*>(expr);
+	    dereference &&
+	    dereference->ty == unknown_type()) {
+		fprintf(active,
+		    "::u_system::tpcc_make_const_storage_ref("
+		    "::u_system::tpcc_dereference_storage(");
+		emit_expression(dereference->a);
+		fprintf(active, "))");
+		return;
+	}
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
 		if (dynamic_cast<Builtin*>(property->property->read_accessor)) {
 			fprintf(active, "::u_system::tpcc_make_const_storage_ref(");
@@ -2275,6 +2296,13 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
 		if (const char* op = cxx_unary_operator(u)) {
+			if (auto dereference =
+			        dynamic_cast<Dereference*>(u);
+			    dereference &&
+			    dereference->ty == unknown_type())
+				unhandled_node(
+				    "untyped pointer dereference used as a value",
+				    dereference);
 			fprintf(active, "%s", op);
 			if (dynamic_cast<AddrOf*>(u))
 				emit_writable_expression(u->a);
@@ -2414,8 +2442,17 @@ void Emitter::emit_type_ref(Type* ty) {
 		return;
 	}
 	if (auto p = dynamic_cast<PointerType*>(ty)) {
-		emit_type_ref(p->item_type);
-		fprintf(active, "*");
+		if (p->is_untyped()) {
+			if (p->cxx_name.empty())
+				unhandled_type(
+				    "untyped pointer has no C++ carrier",
+				    p);
+			fprintf(active, "%s",
+			    p->cxx_name.c_str());
+		} else {
+			emit_type_ref(p->item_type);
+			fprintf(active, "*");
+		}
 		return;
 	}
 	if (auto f = dynamic_cast<TypedFileType*>(ty)) {

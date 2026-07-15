@@ -58,7 +58,9 @@ ShortStringType k_shortstring(SourceLocation::builtin(), 255);
 IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{256, 1});
 IntrinsicType k_text(SourceLocation::builtin(), "::u_system::t_text", {}, {}, TypeLayout{8, 8});
 IntrinsicType k_file(SourceLocation::builtin(), "::u_system::t_file", {}, {}, TypeLayout{8, 8});
-IntrinsicType k_pointer(SourceLocation::builtin(), "::u_system::t_pointer", {}, {}, TypeLayout{8, 8});
+PointerType k_pointer(
+    SourceLocation::builtin(), nullptr,
+    "::u_system::t_pointer");
 IntrinsicType k_ptrint(SourceLocation::builtin(), "::u_system::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_ptruint(SourceLocation::builtin(), "::u_system::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8});
 IntrinsicType k_sizeint(SourceLocation::builtin(), "::u_system::t_sizeint", 8, signed_bounds(64), TypeLayout{8, 8});
@@ -521,6 +523,11 @@ Type* lookup_builtin_type(std::string cxx_name) {
 			}
 		} else if (auto q = dynamic_cast<RecordType*>(t)) {
 			if (q->cxx_name == cxx_name) {
+				return q;
+			}
+		} else if (auto q = dynamic_cast<PointerType*>(t)) {
+			if (q->is_untyped() &&
+			    q->cxx_name == cxx_name) {
 				return q;
 			}
 		}

@@ -74,10 +74,12 @@ TypedFileType::TypedFileType(
     : Type(std::move(source_location)), item_type(item_type) {
 }
 
-PointerType::PointerType(SourceLocation source_location, Type* item_type)
-    : Type(std::move(source_location)) {
-	this->item_type = item_type;
-}
+PointerType::PointerType(
+    SourceLocation source_location, Type* item_type,
+    std::string cxx_name)
+    : Type(std::move(source_location)),
+      item_type(item_type),
+      cxx_name(std::move(cxx_name)) {}
 
 RecordType::RecordType(SourceLocation source_location, Frame* children)
     : Type(std::move(source_location)) {
@@ -986,16 +988,22 @@ void ObjectType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 void ObjectType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
 
 const char* PointerType::diagnostic_kind() const { return "pointer"; }
-void PointerType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
+void PointerType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	if (item_type)
+		ctx->add_type_edge(item_type);
+}
 void PointerType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "to: " << ctx->known_type_ref(item_type);
+	if (item_type)
+		out << "to: " << ctx->known_type_ref(item_type);
+	else
+		out << "untyped";
 }
 void PointerType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "to: ...";
+	out << (item_type ? "to: ..." : "untyped");
 }
 
 const char* ModuleType::diagnostic_kind() const { return "module"; }

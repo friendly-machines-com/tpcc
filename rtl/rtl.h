@@ -439,6 +439,23 @@ inline tpcc_storage_ref tpcc_make_storage_ref(tpcc_storage_ref value) {
 	return value;
 }
 
+// Dereferencing Pascal's untyped Pointer does not produce a C++ value: void
+// has no object representation that can be named by `*pointer`. It produces
+// an unbounded raw storage place, which can be consumed by Pascal's omitted-
+// type var/out/const parameters. Keep this operation distinct from
+// tpcc_make_storage_ref(pointer_variable), which refers to the bytes occupied
+// by the pointer variable itself.
+inline tpcc_storage_ref tpcc_dereference_storage(
+    t_pointer value) {
+	if (!value)
+		throw std::out_of_range(
+		    "Pascal untyped pointer dereference through nil");
+	return tpcc_storage_ref{
+	    reinterpret_cast<std::byte*>(value),
+	    std::numeric_limits<std::size_t>::max(),
+	};
+}
+
 inline tpcc_const_storage_ref tpcc_make_const_storage_ref(
     tpcc_const_storage_ref value) {
 	return value;

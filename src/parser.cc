@@ -2125,7 +2125,13 @@ Node* Parser::parse_designator_tail(Node* result) {
 			if (!p)
 				raise_parse_error("deref of non-pointer type");
 			auto d = new Dereference(result);
-			d->ty = p->item_type;
+			// Untyped Pointer^ is a Pascal place, not a readable value of
+			// some fabricated element type. unknown_type() lets only
+			// place-aware consumers such as an omitted-type var formal use
+			// it; emission must never attempt C++ unary `*` on void*.
+			d->ty = p->is_untyped()
+			    ? unknown_type()
+			    : p->item_type;
 			result = d;
 		} else {
 			break;
@@ -2139,8 +2145,8 @@ bool Parser::is_assignable(Node* n) {
 		return false;
 	if (dynamic_cast<StorageSlot*>(n))
 		return true;
-	if (dynamic_cast<Dereference*>(n))
-		return true;
+	if (auto dereference = dynamic_cast<Dereference*>(n))
+		return dereference->ty != unknown_type();
 	if (dynamic_cast<Index*>(n))
 		return true;
 	if (auto property = dynamic_cast<PropertyAccess*>(n)) {
@@ -2621,6 +2627,8 @@ Property* Parser::default_property_for_type(Type* ty) {
 		return ty->default_property;
 	}
 	if (auto pointer = dynamic_cast<PointerType*>(ty)) {
+		if (pointer->is_untyped())
+			return nullptr;
 		auto accessor = create_builtin_value("::u_system::p_index");
 		pointer->default_property = new Property(
 		    "items", pointer->item_type, {integer_type()},
@@ -4214,7 +4222,8 @@ struct TypeBlockResolver {
 		if (auto f = dynamic_cast<TypedFileType*>(ty))
 			return normalize_type(f->item_type);
 		if (auto p = dynamic_cast<PointerType*>(ty))
-			return normalize_type(p->item_type);
+			return p->is_untyped() ||
+			       normalize_type(p->item_type);
 		if (auto r = dynamic_cast<ClassRefType*>(ty)) {
 			if (!normalize_type(r->target))
 				return false;
