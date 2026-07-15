@@ -242,6 +242,11 @@ void Emitter::emit_var_decl(
     Node* initializer) {
 	if (!active)
 		return;
+	// A unit interface is emitted as a C++ header. C++20 inline variables
+	// preserve Pascal's one unit-owned storage object while permitting that
+	// definition in every translation unit which includes the interface.
+	if (active == out_h)
+		fprintf(active, "inline ");
 	emit_type_ref(ty);
 	fprintf(active, " %s", cxx_name.c_str());
 	if (initializer) {
