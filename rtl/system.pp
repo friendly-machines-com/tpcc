@@ -31,8 +31,9 @@ type
   PShortString = ^shortstring;
   PChar = ^Char;
   AnsiString = external nil name '::u_system::t_ansistring';
-  // `class of X` is a real class-reference type in the compiler.  The C++
-  // representation is the target class's metaclass pointer: X::m_meta*.
+  // `class of X` is a real class-reference type in the compiler. Its C++
+  // carrier is a pointer to the empty target-specific base implemented by
+  // X's metaclass, so X may still be incomplete at the declaration site.
   TClass = class of TObject;
   TObject = class
   public

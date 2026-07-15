@@ -15,9 +15,12 @@ type
 
   TForward = class;
 
+  TForwardClass = class of TForward;
+
   TForwardUser = class
   public
     Ref: TForward;
+    Meta: TForwardClass;
   end;
 
 var
@@ -27,6 +30,21 @@ type
   TForward = class
   public
     User: TForwardUser;
+  end;
+
+  TLeftForward = class;
+  TRightForward = class;
+  TLeftForwardClass = class of TLeftForward;
+  TRightForwardClass = class of TRightForward;
+
+  TLeftForward = class
+  public
+    RightClass: TRightForwardClass;
+  end;
+
+  TRightForward = class
+  public
+    LeftClass: TLeftForwardClass;
   end;
 
 {$ifdef TEST_UNRESOLVED_CLASS_FORWARD}

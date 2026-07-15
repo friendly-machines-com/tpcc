@@ -58,6 +58,23 @@ then
 	echo "an earlier class did not retain the forward class identity" >&2
 	exit 1
 fi
+if ! rg -Fq \
+	'::u_system::m_classref<t_tforward>* p_meta;' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "class-of-forward did not use the incomplete-safe class-reference carrier" >&2
+	exit 1
+fi
+if ! rg -Fq \
+	'::u_system::m_classref<t_trightforward>* p_rightclass;' \
+	"$tmp/type_block_publication.cc" ||
+   ! rg -Fq \
+	'::u_system::m_classref<t_tleftforward>* p_leftclass;' \
+	"$tmp/type_block_publication.cc"
+then
+	echo "mutually dependent class-of-forward carriers were not emitted" >&2
+	exit 1
+fi
 if ! rg -Fq 't_tforward* p_forwardglobal;' \
 	"$tmp/type_block_publication.cc"
 then

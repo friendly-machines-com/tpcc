@@ -52,7 +52,8 @@ then
 	echo "derived object did not override its dynamic metaclass bridge" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::t_tobject::m_meta* t_tfoo::m_meta::p_meta()' \
+if ! rg -Fq \
+	'::u_system::m_classref<::u_system::t_tobject>* t_tfoo::m_meta::p_meta()' \
 	"$tmp/class_method.cc"
 then
 	echo "class method body was not emitted as an ordinary m_meta method" >&2
@@ -88,10 +89,14 @@ fi
 	"$tmp/system.cc" \
 	-o "$tmp/class_method"
 actual=$("$tmp/class_method")
-if test "$actual" != "child"
+expected='child
+base:t_tfoo
+child:t_tchild
+t_tchild'
+if test "$actual" != "$expected"
 then
-	echo "object-selected class method did not dispatch through the dynamic metaclass" >&2
-	printf 'expected: child\nactual: %s\n' "$actual" >&2
+	echo "class-reference dispatch or target-specific overload signatures failed" >&2
+	printf 'expected:\n%s\nactual:\n%s\n' "$expected" "$actual" >&2
 	exit 1
 fi
 

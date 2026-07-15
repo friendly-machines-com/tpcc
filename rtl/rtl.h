@@ -89,6 +89,17 @@ using t_single = float;
 using t_double = double;
 using t_extended = long double;
 
+// Runtime handle base for Pascal `class of T`. The target is allowed to be
+// incomplete: this empty specialization never inspects T. Every generated
+// T::m_meta inherits m_classref<T>, so a class-reference value is an ordinary
+// pointer to that marker subobject. Different T arguments remain different
+// C++ types (and therefore keep overload signatures distinct) without adding
+// a pointer field or requiring T::m_meta to be nameable at the declaration.
+template<typename Target>
+struct m_classref {};
+
+static_assert(std::is_empty_v<m_classref<void>>);
+
 // Pascal's public, untyped method-pointer view. The compiler registers these
 // members under the Pascal spellings Code and Data; their C++ spellings follow
 // the RTL p_<name> convention for Pascal-visible values.
@@ -2437,10 +2448,12 @@ inline T* m_allocate_object() {
 // Default TObject.NewInstance preserves the dynamic metaclass receiver. Every
 // generated metaclass overrides m_allocate covariantly, so an inherited
 // NewInstance body allocates the exact represented object class.
-template<typename Meta>
-inline auto m_new_instance(Meta* meta)
-    -> decltype(meta->m_allocate()) {
-	return meta->m_allocate();
+template<typename Object>
+inline Object* m_new_instance(
+    m_classref<Object>* meta) {
+	return static_cast<typename Object::m_meta*>(
+	           meta)
+	    ->m_allocate();
 }
 
 template<typename Object>

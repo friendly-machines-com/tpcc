@@ -1132,6 +1132,19 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			fprintf(active, " : public %s", super_cxx_name.c_str());
 			first = false;
 		}
+		if (in_meta) {
+			if (c->cxx_name.empty())
+				unhandled_type(
+				    "metaclass marker target has no emitted type binding",
+				    c);
+			fprintf(active,
+			    first
+			        ? " : public ::u_system::m_classref<%s>"
+			        : ", public ::u_system::m_classref<%s>",
+			    type_cxx_name(
+			        c, c->cxx_name).c_str());
+			first = false;
+		}
 		if (!in_meta) {
 			for (auto interface_type : c->implemented_interfaces) {
 				fprintf(active, first ? " : public %s" : ", public %s",
@@ -1170,9 +1183,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			target = target->super;
 		if (target->cxx_name.empty())
 			unhandled_type("metaclass API target name unknown", target);
-		return type_cxx_name(
-		           target, target->cxx_name) +
-		    "::m_meta*";
+		return "::u_system::m_classref<" +
+		    type_cxx_name(
+		        target, target->cxx_name) +
+		    ">*";
 	};
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
@@ -2249,8 +2263,11 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, ">(&%s::%s)>(",
 		    owner.c_str(),
 		    callable_cxx_name(initializer).c_str());
+		fprintf(active, "static_cast<%s::m_meta*>(",
+		    result_cxx_name.c_str());
 		emit_expression(
 		    construct->class_reference);
+		fprintf(active, ")");
 		if (!construct->args.empty())
 			fprintf(active, ", ");
 		emit_call_arguments(
@@ -2287,12 +2304,28 @@ void Emitter::emit_expression(Node* expr) {
 			if (auto method =
 			        dynamic_cast<Method*>(pc->callee)) {
 				if (method->ty->kind == CLASS_METHOD) {
-					emit_expression(receiver);
-					if (dynamic_cast<ClassRefType*>(
-					        receiver->ty)) {
-						fprintf(active, "->");
+					if (auto classref =
+					        dynamic_cast<ClassRefType*>(
+					            receiver->ty)) {
+						auto target =
+						    dynamic_cast<ClassType*>(
+						        classref->target);
+						if (!target ||
+						    target->cxx_name.empty())
+							unhandled_type(
+							    "class-method class-reference target",
+							    classref->target);
+						fprintf(active,
+						    "static_cast<%s::m_meta*>(",
+						    type_cxx_name(
+						        target,
+						        target->cxx_name)
+						        .c_str());
+						emit_expression(receiver);
+						fprintf(active, ")->");
 					} else if (dynamic_cast<ClassType*>(
 					               receiver->ty)) {
+						emit_expression(receiver);
 						fprintf(active,
 						    "->m_classref()->");
 					} else {
@@ -2454,6 +2487,42 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ">(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
+			return;
+		}
+		auto source_classref =
+		    dynamic_cast<ClassRefType*>(
+		        ca->a ? ca->a->ty : nullptr);
+		auto target_classref =
+		    dynamic_cast<ClassRefType*>(ca->ty);
+		if (source_classref && target_classref) {
+			auto source_class =
+			    dynamic_cast<ClassType*>(
+			        source_classref->target);
+			auto target_class =
+			    dynamic_cast<ClassType*>(
+			        target_classref->target);
+			if (!source_class || !target_class ||
+			    source_class->cxx_name.empty() ||
+			    target_class->cxx_name.empty())
+				unhandled_type(
+				    "class-reference conversion target",
+				    ca->ty);
+			fprintf(active,
+			    "static_cast<::u_system::m_classref<%s>*>(static_cast<%s::m_meta*>(static_cast<%s::m_meta*>(",
+			    type_cxx_name(
+			        target_class,
+			        target_class->cxx_name)
+			        .c_str(),
+			    type_cxx_name(
+			        target_class,
+			        target_class->cxx_name)
+			        .c_str(),
+			    type_cxx_name(
+			        source_class,
+			        source_class->cxx_name)
+			        .c_str());
+			emit_expression(ca->a);
+			fprintf(active, ")))");
 			return;
 		}
 		if (auto packed = dynamic_cast<PackedRecordType*>(ca->ty)) {
@@ -2621,14 +2690,16 @@ void Emitter::emit_type_ref(Type* ty) {
 		ty = r->target;
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			if (c->cxx_name.empty())
-				emit_aggregate_decl("", ty);
-			else
-				fprintf(active, "%s",
-				    type_cxx_name(c, c->cxx_name).c_str());
+				unhandled_type(
+				    "class-reference target has no emitted type binding",
+				    c);
+			fprintf(active,
+			    "::u_system::m_classref<%s>",
+			    type_cxx_name(
+			        c, c->cxx_name).c_str());
 		} else {
 			unhandled_type("emit_type_ref", ty);
 		}
-		fprintf(active, "::m_meta");
 		fprintf(active, "*");
 		return;
 	}

@@ -5269,8 +5269,9 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	StorageSlot* receiver_slot = nullptr;
 	if (auto m = dynamic_cast<Method*>(target)) {
 		// Pascal class-method Self is the class reference, not an instance.
-		// Keep that as the same Type used for `class of Foo`; emit_type_ref
-		// then spells both explicit class refs and hidden Self as Foo::m_meta*.
+		// Keep that as the same Type used for `class of Foo`. Its C++ carrier
+		// is Foo's empty metaclass marker base; the emitter recovers the exact
+		// Foo::m_meta receiver only when applying a class operation.
 		//
 		// Instance Self is a reference to the owner instance. ClassType and
 		// InterfaceType are already reference-shaped; ObjectType is value-shaped
