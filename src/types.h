@@ -148,13 +148,29 @@ struct TypedFileType: public Type {
 TypedFileType* typed_file_type(
     SourceLocation source_location, Type* item_type);
 
+struct AggregateField {
+	std::string pas_name;
+	StorageSlot* slot;
+	Type* ty;
+};
+
+struct VariantPart;
+
 struct VariantArm {
-	struct Field {
-		std::string pas_name;
-		StorageSlot* slot;
-		Type* ty;
-	};
-	std::vector<Field> fields;
+	std::vector<AggregateField> fields;
+	// A variant part, when present, is the last item in this arm's field
+	// sequence. Its selector follows the preceding fields; its arms then
+	// overlap at that new position.
+	VariantPart* variant = nullptr;
+};
+
+struct VariantPart {
+	bool has_selector = false;
+	std::string selector_name;
+	std::string selector_cxx_name;
+	Type* selector_type = nullptr;
+	StorageSlot* selector_slot = nullptr;
+	std::vector<VariantArm> arms;
 };
 
 struct EnumType: public Type {
@@ -184,22 +200,17 @@ struct EnumType: public Type {
 };
 
 struct RecordType: public Type {
-	struct Field {
-		std::string pas_name;
-		StorageSlot* slot;
-		Type* ty;
-	};
-
 	Frame* children;
 	// C++ identifier emitted for this record. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
 	// Pascal declaration order. Frame remains lookup-only: its map ordering
 	// must never influence C++ member emission or layout reconstruction.
-	std::vector<Field> fields;
+	std::vector<AggregateField> fields;
 
-	// Variant part. Pascal allows AT MOST ONE variant part, declared last
-	// in the record body as `case [<sel_name> ':'] <TagType> of <arms>`:
+	// Top-level variant part. Pascal allows AT MOST ONE here, declared last
+	// in the record body as `case [<sel_name> ':'] <TagType> of <arms>`;
+	// each arm may recursively end in another VariantPart:
 	//
 	//   fixed_field_a: Integer;
 	//   fixed_field_b: Real;
@@ -213,12 +224,7 @@ struct RecordType: public Type {
 	// arm structs, so different arms overlap while fields within an arm retain
 	// Pascal declaration order. The selector, when present, is an ordinary
 	// field emitted ahead of that union.
-	bool has_selector = false;
-	std::string selector_name;
-	std::string selector_cxx_name;
-	Type* selector_type = nullptr;
-	StorageSlot* selector_slot = nullptr;
-	std::vector<VariantArm> arms;
+	VariantPart* variant = nullptr;
 
 	RecordType(SourceLocation source_location, Frame* children);
 	const char* diagnostic_kind() const override;
@@ -236,17 +242,12 @@ struct RecordType: public Type {
  * lowering through dynamic_cast<RecordType*>.
  */
 struct PackedRecordType: public Type {
-	struct Field {
-		std::string pas_name;
-		StorageSlot* slot;
-		Type* ty;
-	};
-
 	Frame* children;
 	std::string cxx_name;
 	// Pascal source order. Frame is for lookup and intentionally cannot be
 	// used for layout because it stores values in name order.
-	std::vector<Field> fields;
+	std::vector<AggregateField> fields;
+	VariantPart* variant = nullptr;
 
 	PackedRecordType(SourceLocation source_location, Frame* children);
 	const char* diagnostic_kind() const override;
@@ -271,6 +272,8 @@ struct RecordLayout {
 // independent assertions emitted for ordinary C++ records.
 std::optional<TypeLayout> type_layout(Type* ty);
 std::optional<RecordLayout> record_layout(RecordType* record);
+std::optional<RecordLayout> packed_record_layout(
+    PackedRecordType* record);
 
 struct InterfaceType: public Type {
 	Frame* children;

@@ -2954,14 +2954,21 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			continue; // property parser consumes its terminating semicolon(s)
 		} else if (peek_keyword("case")) {
 			auto rt = dynamic_cast<RecordType*>(owner_class);
-			if (dynamic_cast<PackedRecordType*>(owner_class))
-				raise_parse_error("variant parts inside packed records are not implemented");
+			auto packed =
+			    dynamic_cast<PackedRecordType*>(
+			        owner_class);
 			if (is_class) {
 				raise_parse_error("variant part only valid in a record, not in a metaclass");
 			}
-			if (!rt)
+			if (!rt && !packed)
 				raise_parse_error("variant part only valid in a record");
-			parse_record_variant(rt, body);
+			auto variant =
+			    parse_record_variant(
+			        owner_class, body);
+			if (rt)
+				rt->variant = variant;
+			else
+				packed->variant = variant;
 			break; // variant part must come last; do not require a trailing ';'
 		} else {
 			if (is_class) {
@@ -3009,7 +3016,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	return body;
 }
 
-void Parser::parse_record_variant(RecordType* rt, Frame* body) {
+VariantPart* Parser::parse_record_variant(
+    Type* owner, Frame* body) {
+	auto variant = new VariantPart;
+	const bool packed =
+	    dynamic_cast<PackedRecordType*>(owner);
 	parse_keyword("case");
 	// `case <sel_name> ':' <TagType> of ...` introduces a selector field;
 	// `case <TagType> of ...` is tag-less. Single-token lookahead: take an
@@ -3019,20 +3030,24 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 	auto first = parse_identifier();
 	Type* tag_type;
 	if (maybe_parse_colon()) {
-		rt->has_selector = true;
-		rt->selector_name = first;
-		rt->selector_cxx_name = cxx_value_name(first);
+		variant->has_selector = true;
+		variant->selector_name = first;
+		variant->selector_cxx_name =
+		    cxx_value_name(first);
 		tag_type = parse_type_expression(false);
 
-		auto slot = new StorageSlot(rt->selector_cxx_name, tag_type);
+		auto slot = new StorageSlot(
+		    variant->selector_cxx_name, tag_type,
+		    StorageSlot::Kind::AggregateMember, owner);
 		body->register_variable(first, slot, tag_type);
-		rt->selector_slot = slot;
+		variant->selector_slot = slot;
 	} else {
 		tag_type = resolve_type(first, false);
 	}
-	rt->selector_type = tag_type;
+	variant->selector_type = tag_type;
 	parse_keyword("of");
-	while (!peek_keyword("end")) {
+	while (!peek_keyword("end") &&
+	       input_token != ")") {
 		// Case label list -- comma-separated constant expressions. Values
 		// are discarded: layout is a flat overlapping union regardless of
 		// which label is active.
@@ -3044,31 +3059,50 @@ void Parser::parse_record_variant(RecordType* rt, Frame* body) {
 		VariantArm arm;
 		if (input_token != ")") {
 			do {
-				auto fname = parse_identifier();
+				if (peek_keyword("case")) {
+					arm.variant =
+					    parse_record_variant(
+					        owner, body);
+					break;
+				}
+				std::vector<std::string> names{
+				    parse_identifier()};
+				while (maybe_parse_comma())
+					names.push_back(
+					    parse_identifier());
 				parse_colon();
 				auto fty = parse_type_expression(false);
-				auto slot = new StorageSlot(
-				    cxx_value_name(fname), fty,
-				    StorageSlot::Kind::AggregateMember, rt);
-				// Variant slots live in the SAME Frame as fixed fields
-				// (Pascal requires globally-distinct field names within a
-				// record, so duplicate-name detection via register_variable
-				// is the language-level check we want) AND in the arm's
-				// field list (preserves source order and arm grouping for
-				// the emitter's union reconstruction). Storing the slot
-				// pointer in both gives the emitter identity-based
-				// "is this a variant slot?" without name lookups.
-				body->register_variable(fname, slot, fty);
-				arm.fields.push_back({fname, slot, fty});
+				if (auto intrinsic =
+				        dynamic_cast<IntrinsicType*>(fty);
+				    packed && intrinsic &&
+				    intrinsic->cxx_name ==
+				        "::u_system::t_ansistring")
+					raise_parse_error(
+					    "managed fields inside packed records are not implemented");
+				for (const auto& fname : names) {
+					auto slot = new StorageSlot(
+					    cxx_value_name(fname), fty,
+					    StorageSlot::Kind::AggregateMember,
+					    owner);
+					// Every variant field shares the record's one member
+					// namespace. The recursive arm tree exists only for
+					// layout and emission.
+					body->register_variable(
+					    fname, slot, fty);
+					arm.fields.push_back(
+					    {fname, slot, fty});
+				}
 				if (!maybe_parse_semicolon())
 					break;
 			} while (input_token != ")");
 		}
 		parse_closing_paren();
-		rt->arms.push_back(std::move(arm));
+		variant->arms.push_back(
+		    std::move(arm));
 		if (!maybe_parse_semicolon())
 			break;
 	}
+	return variant;
 }
 
 Type* Parser::parse_class_type(
@@ -3986,14 +4020,19 @@ Node* Parser::parse_typed_const_initializer(Type* ty) {
 	};
 
 	if (auto record = dynamic_cast<RecordType*>(ty)) {
-		if (record->has_selector || !record->arms.empty())
+		if (record->variant)
 			raise_parse_error(
 			    "variant record constant initializers are not "
 			    "implemented");
 		return parse_record(record->fields);
 	}
-	if (auto record = dynamic_cast<PackedRecordType*>(ty))
+	if (auto record = dynamic_cast<PackedRecordType*>(ty)) {
+		if (record->variant)
+			raise_parse_error(
+			    "variant record constant initializers are not "
+			    "implemented");
 		return parse_record(record->fields);
+	}
 
 	Node* expr = parse_expression();
 	ConstEvalContext ctx;
@@ -4287,6 +4326,29 @@ struct TypeBlockResolver {
 		return true;
 	}
 
+	bool normalize_variant(VariantPart* variant) {
+		if (!variant)
+			return true;
+		if (!normalize_type(variant->selector_type) ||
+		    !normalize_node(variant->selector_slot))
+			return false;
+		if (variant->selector_slot)
+			variant->selector_slot->ty =
+			    variant->selector_type;
+		for (auto& arm : variant->arms) {
+			for (auto& field : arm.fields) {
+				if (!normalize_type(field.ty) ||
+				    !normalize_node(field.slot))
+					return false;
+				if (field.slot)
+					field.slot->ty = field.ty;
+			}
+			if (!normalize_variant(arm.variant))
+				return false;
+		}
+		return true;
+	}
+
 	bool normalize_type_contents(Type* ty) {
 			if (dynamic_cast<IntrinsicType*>(ty) ||
 			    dynamic_cast<ShortStringType*>(ty) ||
@@ -4339,8 +4401,8 @@ struct TypeBlockResolver {
 			return true;
 		}
 		if (auto r = dynamic_cast<RecordType*>(ty)) {
-			if (!normalize_type(r->selector_type) ||
-			    !normalize_frame(r->children))
+			if (!normalize_frame(r->children) ||
+			    !normalize_variant(r->variant))
 				return false;
 			for (auto& field : r->fields) {
 				if (!normalize_type(field.ty))
@@ -4350,20 +4412,11 @@ struct TypeBlockResolver {
 				if (!normalize_node(field.slot))
 					return false;
 			}
-			for (auto& arm : r->arms) {
-				for (auto& field : arm.fields) {
-					if (!normalize_type(field.ty))
-						return false;
-					if (field.slot)
-						field.slot->ty = field.ty;
-					if (!normalize_node(field.slot))
-						return false;
-				}
-			}
 			return true;
 		}
 		if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
-			if (!normalize_frame(r->children))
+			if (!normalize_frame(r->children) ||
+			    !normalize_variant(r->variant))
 				return false;
 			for (auto& field : r->fields) {
 				if (!normalize_type(field.ty))

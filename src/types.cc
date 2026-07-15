@@ -185,6 +185,62 @@ bool append_aligned_field(SequentialLayout& layout,
 	return true;
 }
 
+bool append_aligned_variant(SequentialLayout& layout,
+    VariantPart* variant, std::set<Type*>& visiting) {
+	if (!variant)
+		return true;
+	if (variant->has_selector &&
+	    !append_aligned_field(
+	        layout, variant->selector_slot,
+	        variant->selector_type, visiting))
+		return false;
+	if (variant->arms.empty())
+		return true;
+
+	uint64_t union_size = 0;
+	uint64_t union_alignment = 1;
+	std::vector<std::vector<AggregateFieldLayout>> arm_fields;
+	for (const auto& arm : variant->arms) {
+		SequentialLayout arm_layout;
+		for (const auto& field : arm.fields)
+			if (!append_aligned_field(
+			        arm_layout, field.slot,
+			        field.ty, visiting))
+				return false;
+		if (!append_aligned_variant(
+		        arm_layout, arm.variant, visiting))
+			return false;
+
+		uint64_t arm_size;
+		if (!align_up_u64(
+		        arm_layout.offset == 0 ? 1 : arm_layout.offset,
+		        arm_layout.alignment, &arm_size))
+			return false;
+		union_size = std::max(union_size, arm_size);
+		union_alignment =
+		    std::max(union_alignment, arm_layout.alignment);
+		arm_fields.push_back(std::move(arm_layout.fields));
+	}
+
+	uint64_t union_offset;
+	if (!align_up_u64(
+	        layout.offset, union_alignment, &union_offset) ||
+	    !checked_add_u64(
+	        union_offset, union_size, &layout.offset))
+		return false;
+	layout.alignment =
+	    std::max(layout.alignment, union_alignment);
+	for (auto& fields : arm_fields)
+		for (auto& field : fields) {
+			if (!checked_add_u64(
+			        field.offset, union_offset,
+			        &field.offset))
+				return false;
+			layout.fields.push_back(field);
+		}
+	return true;
+}
+
 std::optional<RecordLayout> record_layout_impl(
     RecordType* record, std::set<Type*>& visiting) {
 	if (!visiting.insert(record).second)
@@ -198,57 +254,10 @@ std::optional<RecordLayout> record_layout_impl(
 			return std::nullopt;
 		}
 	}
-	if (record->has_selector &&
-	    !append_aligned_field(
-	        fixed, record->selector_slot,
-	        record->selector_type, visiting)) {
+	if (!append_aligned_variant(
+	        fixed, record->variant, visiting)) {
 		visiting.erase(record);
 		return std::nullopt;
-	}
-
-	if (!record->arms.empty()) {
-		uint64_t union_size = 0;
-		uint64_t union_alignment = 1;
-		std::vector<std::vector<AggregateFieldLayout>> arm_fields;
-		for (const auto& arm : record->arms) {
-			SequentialLayout arm_layout;
-			for (const auto& field : arm.fields) {
-				if (!append_aligned_field(
-				        arm_layout, field.slot,
-				        field.ty, visiting)) {
-					visiting.erase(record);
-					return std::nullopt;
-				}
-			}
-			uint64_t arm_size;
-			if (!align_up_u64(
-			        arm_layout.offset == 0 ? 1 : arm_layout.offset,
-			        arm_layout.alignment, &arm_size)) {
-				visiting.erase(record);
-				return std::nullopt;
-			}
-			union_size = std::max(union_size, arm_size);
-			union_alignment =
-			    std::max(union_alignment, arm_layout.alignment);
-			arm_fields.push_back(std::move(arm_layout.fields));
-		}
-
-		uint64_t union_offset;
-		if (!align_up_u64(
-		        fixed.offset, union_alignment, &union_offset) ||
-		    !checked_add_u64(
-		        union_offset, union_size, &fixed.offset)) {
-			visiting.erase(record);
-			return std::nullopt;
-		}
-		fixed.alignment =
-		    std::max(fixed.alignment, union_alignment);
-		for (auto& fields : arm_fields) {
-			for (auto& field : fields) {
-				field.offset += union_offset;
-				fixed.fields.push_back(field);
-			}
-		}
 	}
 
 	uint64_t size;
@@ -262,6 +271,92 @@ std::optional<RecordLayout> record_layout_impl(
 	return RecordLayout{
 	    TypeLayout{size, fixed.alignment},
 	    std::move(fixed.fields),
+	};
+}
+
+struct PackedSequentialLayout {
+	uint64_t offset = 0;
+	std::vector<AggregateFieldLayout> fields;
+};
+
+bool append_packed_field(PackedSequentialLayout& layout,
+    StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
+	auto field_layout = type_layout_impl(ty, visiting);
+	if (!field_layout)
+		return false;
+	uint64_t end;
+	if (!checked_add_u64(
+	        layout.offset, field_layout->size, &end))
+		return false;
+	layout.fields.push_back(
+	    AggregateFieldLayout{
+	        slot, ty, layout.offset, field_layout->size});
+	layout.offset = end;
+	return true;
+}
+
+bool append_packed_variant(PackedSequentialLayout& layout,
+    VariantPart* variant, std::set<Type*>& visiting) {
+	if (!variant)
+		return true;
+	if (variant->has_selector &&
+	    !append_packed_field(
+	        layout, variant->selector_slot,
+	        variant->selector_type, visiting))
+		return false;
+	if (variant->arms.empty())
+		return true;
+
+	const uint64_t union_offset = layout.offset;
+	uint64_t union_size = 0;
+	std::vector<std::vector<AggregateFieldLayout>> arm_fields;
+	for (const auto& arm : variant->arms) {
+		PackedSequentialLayout arm_layout;
+		for (const auto& field : arm.fields)
+			if (!append_packed_field(
+			        arm_layout, field.slot,
+			        field.ty, visiting))
+				return false;
+		if (!append_packed_variant(
+		        arm_layout, arm.variant, visiting))
+			return false;
+		union_size = std::max(union_size, arm_layout.offset);
+		arm_fields.push_back(std::move(arm_layout.fields));
+	}
+	if (!checked_add_u64(
+	        union_offset, union_size, &layout.offset))
+		return false;
+	for (auto& fields : arm_fields)
+		for (auto& field : fields) {
+			if (!checked_add_u64(
+			        field.offset, union_offset,
+			        &field.offset))
+				return false;
+			layout.fields.push_back(field);
+		}
+	return true;
+}
+
+std::optional<RecordLayout> packed_record_layout_impl(
+    PackedRecordType* record, std::set<Type*>& visiting) {
+	if (!visiting.insert(record).second)
+		return std::nullopt;
+	PackedSequentialLayout layout;
+	for (const auto& field : record->fields)
+		if (!append_packed_field(
+		        layout, field.slot, field.ty, visiting)) {
+			visiting.erase(record);
+			return std::nullopt;
+		}
+	if (!append_packed_variant(
+	        layout, record->variant, visiting)) {
+		visiting.erase(record);
+		return std::nullopt;
+	}
+	visiting.erase(record);
+	return RecordLayout{
+	    TypeLayout{layout.offset == 0 ? 1 : layout.offset, 1},
+	    std::move(layout.fields),
 	};
 }
 
@@ -309,21 +404,11 @@ std::optional<TypeLayout> type_layout_impl(
 		    : std::nullopt;
 	}
 	if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
-		if (!visiting.insert(packed).second)
-			return std::nullopt;
-		uint64_t size = 0;
-		for (const auto& field : packed->fields) {
-			auto field_layout =
-			    type_layout_impl(field.ty, visiting);
-			if (!field_layout ||
-			    !checked_add_u64(
-			        size, field_layout->size, &size)) {
-				visiting.erase(packed);
-				return std::nullopt;
-			}
-		}
-		visiting.erase(packed);
-		return TypeLayout{size == 0 ? 1 : size, 1};
+		auto layout =
+		    packed_record_layout_impl(packed, visiting);
+		return layout
+		    ? std::optional<TypeLayout>{layout->type}
+		    : std::nullopt;
 	}
 	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
 		if (routine->kind == METHOD)
@@ -343,6 +428,12 @@ std::optional<TypeLayout> type_layout(Type* ty) {
 std::optional<RecordLayout> record_layout(RecordType* record) {
 	std::set<Type*> visiting;
 	return record_layout_impl(record, visiting);
+}
+
+std::optional<RecordLayout> packed_record_layout(
+    PackedRecordType* record) {
+	std::set<Type*> visiting;
+	return packed_record_layout_impl(record, visiting);
 }
 
 // Integer widening rank; -1 for non-integer types.
@@ -850,38 +941,56 @@ void EnumType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 	out << "end";
 }
 
+static void collect_variant_diagnostic_edges(
+    ErrorLetContext* ctx, const VariantPart* variant) {
+	if (!variant)
+		return;
+	if (variant->selector_type)
+		ctx->add_type_edge(variant->selector_type);
+	for (const auto& arm : variant->arms) {
+		for (const auto& field : arm.fields)
+			ctx->add_type_edge(field.ty);
+		collect_variant_diagnostic_edges(ctx, arm.variant);
+	}
+}
+
+static void print_variant_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent, const VariantPart* variant) {
+	if (!variant)
+		return;
+	ctx->indent(out, indent);
+	out << "case ";
+	if (variant->has_selector)
+		out << variant->selector_name << ": ";
+	out << ctx->known_type_ref(variant->selector_type) << " of\n";
+	for (size_t i = 0; i < variant->arms.size(); ++i) {
+		ctx->indent(out, indent + 1);
+		out << "arm " << (i + 1) << ":\n";
+		for (const auto& field : variant->arms[i].fields) {
+			ctx->indent(out, indent + 2);
+			out << (field.pas_name.empty()
+			        ? "<field>" : field.pas_name)
+			    << ": " << ctx->known_type_ref(field.ty)
+			    << ";\n";
+		}
+		print_variant_diagnostic_definition(
+		    ctx, out, indent + 2,
+		    variant->arms[i].variant);
+	}
+}
+
 const char* RecordType::diagnostic_kind() const { return "record"; }
 void RecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
-	ctx->add_type_edge(selector_type);
-	for (const auto& arm : arms)
-		for (const auto& field : arm.fields)
-			ctx->add_type_edge(field.ty);
+	collect_variant_diagnostic_edges(ctx, variant);
 }
 void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->print_frame_members(out, children, indent + 1);
-	if (has_selector) {
-		ctx->indent(out, indent + 1);
-		out << "case " << selector_name << ": " << ctx->known_type_ref(selector_type) << " of\n";
-		// Variant labels are parsed for layout/selection but not retained in
-		// VariantArm yet; the diagnostic can still show the important structural
-		// information: which overlapping fields exist in each arm and their types.
-		// Use numbered arms until VariantArm stores source labels.
-		for (size_t i = 0; i < arms.size(); ++i) {
-			ctx->indent(out, indent + 2);
-			out << "arm " << (i + 1) << ":\n";
-			for (const auto& field : arms[i].fields) {
-				ctx->indent(out, indent + 3);
-				if (!field.pas_name.empty())
-					out << field.pas_name;
-				else
-					out << "<field>";
-				out << ": " << ctx->known_type_ref(field.ty) << ";\n";
-			}
-		}
-	}
+	print_variant_diagnostic_definition(
+	    ctx, out, indent + 1, variant);
 	ctx->indent(out, indent);
 	out << "end";
 }
@@ -891,12 +1000,13 @@ const char* PackedRecordType::diagnostic_kind() const { return "packed record"; 
 void PackedRecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
-	for (const auto& field : fields)
-		ctx->add_type_edge(field.ty);
+	collect_variant_diagnostic_edges(ctx, variant);
 }
 void PackedRecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->print_frame_members(out, children, indent + 1);
+	print_variant_diagnostic_definition(
+	    ctx, out, indent + 1, variant);
 	ctx->indent(out, indent);
 	out << "end";
 }

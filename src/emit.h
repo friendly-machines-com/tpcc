@@ -8,6 +8,7 @@ class Node;
 class Type;
 class EnumType;
 class PackedRecordType;
+struct VariantPart;
 class Callable;
 class Method;
 class RoutineType;
@@ -212,6 +213,12 @@ public:
 	// PackedRecordType. Packed records deliberately do not flow through
 	// emit_aggregate_decl because they have no C++ field members.
 	void emit_packed_record_decl(std::string cxx_name, PackedRecordType* p);
+	// Emit one ordinary-record variant part. Nested Pascal variant parts are
+	// recursively nested in the corresponding C++ arm structure, preserving
+	// both sequential fields within an arm and overlap between arms.
+	void emit_record_variant_decl(
+	    VariantPart* variant, unsigned indent,
+	    unsigned depth);
 	// Emit a record/class/object body: `<kw> [NAME] { <fields> <variant-union> }`
 	// -- no leading newline, no trailing semicolon. Caller frames those. Used
 	// by emit_type_definition (named, top-level) and emit_type_ref's anonymous

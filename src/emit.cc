@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <limits>
 #include <set>
 #include <typeinfo>
@@ -419,22 +420,49 @@ static std::string callable_cxx_name(Callable* c) {
 	return c->cxx_name;
 }
 
-static std::optional<std::pair<size_t, size_t>>
+static std::optional<std::string> variant_member_path(
+    const VariantPart* variant, StorageSlot* slot) {
+	if (!variant || !slot)
+		return std::nullopt;
+	if (variant->selector_slot == slot)
+		return std::string{};
+	for (size_t arm_index = 0;
+	     arm_index < variant->arms.size(); ++arm_index) {
+		const auto& arm = variant->arms[arm_index];
+		const std::string prefix =
+		    "m_variant.m_arm_" +
+		    std::to_string(arm_index) + ".";
+		for (const auto& field : arm.fields)
+			if (field.slot == slot)
+				return prefix;
+		if (auto nested =
+		        variant_member_path(arm.variant, slot))
+			return prefix + *nested;
+	}
+	return std::nullopt;
+}
+
+static std::optional<std::string>
 record_variant_path(Type* owner, StorageSlot* slot) {
 	while (auto incomplete = dynamic_cast<IncompleteType*>(owner))
 		owner = incomplete->resolved;
 	auto record = dynamic_cast<RecordType*>(owner);
 	if (!record || !slot)
 		return std::nullopt;
-	for (size_t arm_index = 0;
-	     arm_index < record->arms.size(); ++arm_index) {
-		const auto& arm = record->arms[arm_index];
-		for (size_t field_index = 0;
-		     field_index < arm.fields.size(); ++field_index)
-			if (arm.fields[field_index].slot == slot)
-				return std::pair{arm_index, field_index};
-	}
-	return std::nullopt;
+	return variant_member_path(record->variant, slot);
+}
+
+static std::string variant_arm_type_name(
+    unsigned depth, size_t arm_index) {
+	// A nested arm type is declared inside its containing arm type. Reusing
+	// the same name there (for example, arm 1 nested in arm 1) would give a
+	// C++ member class the name of its enclosing class, which is reserved for
+	// constructors. The depth component makes every nested helper distinct;
+	// depth zero retains the original, readable spelling.
+	return depth == 0
+	    ? "m_variant_arm_" + std::to_string(arm_index) + "_type"
+	    : "m_variant_" + std::to_string(depth) + "_arm_" +
+	          std::to_string(arm_index) + "_type";
 }
 
 void Emitter::emit_label(std::string cxx_label_name) {
@@ -1305,15 +1333,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	//   struct, and one union contains those arm structs. Fields within an arm
 	//   are therefore sequential; different arms overlap at the union offset.
 	//
-	//   Slot identity: variant slots are registered in the SAME Frame as
-	//   fixed slots (so name lookup via body_frame_of sees them) AND in
-	//   RecordType::arms (for source-order grouping). We skip them in the
-	//   main walk by StorageSlot* identity.
-	std::set<StorageSlot*> variant_slots;
-	if (rec)
-		for (auto& arm : rec->arms)
-			for (auto& f : arm.fields)
-				variant_slots.insert(f.slot);
+	//   Every slot is registered in the SAME Frame so Pascal lookup remains
+	//   flat. RecordType::fields and VariantPart retain only the source-order
+	//   layout tree; the generic frame walk must not emit record fields again.
 	if (rec) {
 		for (const auto& field : rec->fields) {
 			fprintf(active, "\t");
@@ -1328,8 +1350,6 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				unhandled_type("emit_aggregate_decl interfaces cannot have variables", ty);
 				continue;
 			}
-			if (variant_slots.count(slot))
-				continue;
 			if (rec)
 				continue;
 			if (is_class && in_meta)
@@ -1402,39 +1422,63 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			}
 		}
 	}
-	// Variant part: selector (if present) emits as a regular field; arms
-	// collapse into a single anonymous union. See the strategy comment
-	// above the body walk for the rationale.
-	if (rec) {
-		if (rec->has_selector) {
-			fprintf(active, "\t");
-			emit_type_ref(rec->selector_type);
-			fprintf(active, " %s;\n", rec->selector_cxx_name.c_str());
-		}
-		if (!rec->arms.empty()) {
-			for (size_t arm_index = 0;
-			     arm_index < rec->arms.size(); ++arm_index) {
-				fprintf(active,
-				    "\tstruct m_variant_arm_%zu_type {\n",
-				    arm_index);
-				for (auto& f : rec->arms[arm_index].fields) {
-					fprintf(active, "\t\t");
-					emit_type_ref(f.ty);
-					fprintf(active, " %s;\n", f.slot->cxx_name.c_str());
-				}
-				fprintf(active, "\t};\n");
-			}
-			fprintf(active, "\tunion m_variant_type {\n");
-			for (size_t arm_index = 0;
-			     arm_index < rec->arms.size(); ++arm_index) {
-				fprintf(active,
-				    "\t\tm_variant_arm_%zu_type m_arm_%zu;\n",
-				    arm_index, arm_index);
-			}
-			fprintf(active, "\t} m_variant;\n");
-		}
-	}
+	if (rec)
+		emit_record_variant_decl(rec->variant, 1, 0);
 	fprintf(active, "}");
+}
+
+void Emitter::emit_record_variant_decl(
+    VariantPart* variant, unsigned indent,
+    unsigned depth) {
+	if (!variant)
+		return;
+	auto emit_indent = [&]() {
+		for (unsigned i = 0; i < indent; ++i)
+			fputc('\t', active);
+	};
+	if (variant->has_selector) {
+		emit_indent();
+		emit_type_ref(variant->selector_type);
+		fprintf(active, " %s;\n",
+		    variant->selector_cxx_name.c_str());
+	}
+	if (variant->arms.empty())
+		return;
+	for (size_t arm_index = 0;
+	     arm_index < variant->arms.size(); ++arm_index) {
+		emit_indent();
+		fprintf(active,
+		    "struct %s {\n",
+		    variant_arm_type_name(
+		        depth, arm_index).c_str());
+		for (const auto& field :
+		     variant->arms[arm_index].fields) {
+			for (unsigned i = 0; i < indent + 1; ++i)
+				fputc('\t', active);
+			emit_type_ref(field.ty);
+			fprintf(active, " %s;\n",
+			    field.slot->cxx_name.c_str());
+		}
+		emit_record_variant_decl(
+		    variant->arms[arm_index].variant,
+		    indent + 1, depth + 1);
+		emit_indent();
+		fprintf(active, "};\n");
+	}
+	emit_indent();
+	fprintf(active, "union m_variant_type {\n");
+	for (size_t arm_index = 0;
+	     arm_index < variant->arms.size(); ++arm_index) {
+		for (unsigned i = 0; i < indent + 1; ++i)
+			fputc('\t', active);
+		fprintf(active,
+		    "%s m_arm_%zu;\n",
+		    variant_arm_type_name(
+		        depth, arm_index).c_str(),
+		    arm_index);
+	}
+	emit_indent();
+	fprintf(active, "} m_variant;\n");
 }
 
 void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p) {
@@ -1442,10 +1486,13 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 		return;
 	if (cxx_name.empty())
 		unhandled_type("anonymous packed records are not implemented", p);
+	auto layout = packed_record_layout(p);
+	if (!layout)
+		unhandled_type("packed record layout is not known", p);
 
 	fprintf(active, "struct %s {\n", cxx_name.c_str());
-	for (size_t i = 0; i < p->fields.size(); ++i) {
-		auto& field = p->fields[i];
+	for (size_t i = 0; i < layout->fields.size(); ++i) {
+		const auto& field = layout->fields[i];
 		fprintf(active, "\tusing m_field_%zu_type = ", i);
 		emit_type_ref(field.ty);
 		fprintf(active, ";\n");
@@ -1457,27 +1504,25 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 		// An enumerator is not a data member, remains an integral constant
 		// expression, and is still addressable syntactically as
 		// `PackedType::m_field_N_offset`.
-		fprintf(active, "\tenum : std::size_t { m_field_%zu_offset = ", i);
-		if (i == 0)
-			fprintf(active, "0");
-		else
-			fprintf(active, "m_field_%zu_offset + sizeof(m_field_%zu_type)", i - 1, i - 1);
-		fprintf(active, " };\n");
+		// Offsets come from the shared compiler layout. They cannot be
+		// reconstructed from the preceding emitted field once variants are
+		// present: the next arm restarts at the same union offset, and a
+		// nested variant restarts again inside its containing arm.
+		fprintf(active,
+		    "\tenum : std::size_t { m_field_%zu_offset = %llu };\n",
+		    i, (unsigned long long)field.offset);
 	}
 	// Same local-class restriction as the field offsets above.
-	fprintf(active, "\tenum : std::size_t { m_storage_size = ");
-	if (p->fields.empty())
-		fprintf(active, "1");
-	else
-		fprintf(active, "m_field_%zu_offset + sizeof(m_field_%zu_type)", p->fields.size() - 1, p->fields.size() - 1);
-	fprintf(active, " };\n");
+	fprintf(active,
+	    "\tenum : std::size_t { m_storage_size = %llu };\n",
+	    (unsigned long long)layout->type.size);
 	fprintf(active, "\nprivate:\n");
 	fprintf(active, "\tstd::array<std::byte, m_storage_size> m_storage{};\n");
 	fprintf(active, "\npublic:\n");
 	fprintf(active, "\tstd::byte* m_data() noexcept { return m_storage.data(); }\n");
 	fprintf(active, "\tconst std::byte* m_data() const noexcept { return m_storage.data(); }\n");
-	for (size_t i = 0; i < p->fields.size(); ++i) {
-		auto& field = p->fields[i];
+	for (size_t i = 0; i < layout->fields.size(); ++i) {
+		const auto& field = layout->fields[i];
 		fprintf(active, "\tm_field_%zu_type m_get_%s() const noexcept {\n", i, field.slot->cxx_name.c_str());
 		fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<m_field_%zu_type>, \"packed field must be trivially copyable\");\n", i);
 		fprintf(active, "\t\tstatic_assert(m_field_%zu_offset + sizeof(m_field_%zu_type) <= m_storage_size, \"packed field exceeds carrier storage\");\n", i, i);
@@ -1590,39 +1635,81 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 				emit_field_assertions(
 				    field.slot, offset.c_str(), type.c_str());
 			}
-			if (record->has_selector) {
-				std::string offset =
-				    "offsetof(" + cxx_name + ", " +
-				    record->selector_cxx_name + ")";
-				std::string type =
-				    "decltype(" + cxx_name + "::" +
-				    record->selector_cxx_name + ")";
-				emit_field_assertions(
-				    record->selector_slot,
-				    offset.c_str(), type.c_str());
-			}
-			for (size_t arm_index = 0;
-			     arm_index < record->arms.size(); ++arm_index) {
-				for (const auto& field :
-				     record->arms[arm_index].fields) {
-					std::string offset =
-					    "offsetof(" + cxx_name +
-					    ", m_variant) + offsetof(" +
-					    cxx_name + "::m_variant_arm_" +
-					    std::to_string(arm_index) +
-					    "_type, " +
-					    field.slot->cxx_name + ")";
-					std::string type =
-					    "decltype(" + cxx_name +
-					    "::m_variant_arm_" +
-					    std::to_string(arm_index) +
-					    "_type::" +
-					    field.slot->cxx_name + ")";
+			auto add_offset = [](const std::string& a,
+			                      const std::string& b) {
+				return a == "0"
+				    ? b : a + " + " + b;
+			};
+			std::function<void(
+			    VariantPart*, const std::string&,
+			    const std::string&, unsigned)>
+			    emit_variant_assertions;
+			emit_variant_assertions =
+			    [&](VariantPart* variant,
+			        const std::string& context_type,
+			        const std::string& context_offset,
+			        unsigned depth) {
+				if (!variant)
+					return;
+				if (variant->has_selector) {
+					const std::string offset =
+					    add_offset(
+					        context_offset,
+					        "offsetof(" + context_type +
+					        ", " +
+					        variant->selector_cxx_name +
+					        ")");
+					const std::string type =
+					    "decltype(" + context_type +
+					    "::" +
+					    variant->selector_cxx_name +
+					    ")";
 					emit_field_assertions(
-					    field.slot, offset.c_str(),
-					    type.c_str());
+					    variant->selector_slot,
+					    offset.c_str(), type.c_str());
 				}
-			}
+				if (variant->arms.empty())
+					return;
+				const std::string union_offset =
+				    add_offset(
+				        context_offset,
+				        "offsetof(" + context_type +
+				        ", m_variant)");
+				for (size_t arm_index = 0;
+				     arm_index < variant->arms.size();
+				     ++arm_index) {
+					const auto& arm =
+					    variant->arms[arm_index];
+					const std::string arm_type =
+					    context_type + "::" +
+					    variant_arm_type_name(
+					        depth, arm_index);
+					for (const auto& field :
+					     arm.fields) {
+						const std::string offset =
+						    add_offset(
+						        union_offset,
+						        "offsetof(" +
+						        arm_type + ", " +
+						        field.slot->cxx_name +
+						        ")");
+						const std::string type =
+						    "decltype(" +
+						    arm_type + "::" +
+						    field.slot->cxx_name +
+						    ")";
+						emit_field_assertions(
+						    field.slot,
+						    offset.c_str(),
+						    type.c_str());
+					}
+					emit_variant_assertions(
+					    arm.variant, arm_type,
+					    union_offset, depth + 1);
+				}
+			};
+			emit_variant_assertions(
+			    record->variant, cxx_name, "0", 0);
 			fprintf(active,
 			    "static_assert(sizeof(%s) == %llu, \"ordinary-record total size mismatch\");\n",
 			    cxx_name.c_str(),
@@ -2029,9 +2116,8 @@ void Emitter::emit_expression(Node* expr) {
 				if (auto path =
 				        record_variant_path(
 				            record_type, slot))
-					fprintf(active,
-					    "m_variant.m_arm_%zu.",
-					    path->first);
+					fprintf(active, "%s",
+					    path->c_str());
 				fprintf(active, "%s = tpcc_field_%zu; ",
 				    slot->cxx_name.c_str(), i);
 			}
@@ -2193,9 +2279,7 @@ void Emitter::emit_expression(Node* expr) {
 		if (auto slot = dynamic_cast<StorageSlot*>(m->b)) {
 			if (auto path =
 			        record_variant_path(m->a->ty, slot)) {
-				fprintf(active,
-				    "m_variant.m_arm_%zu.",
-				    path->first);
+				fprintf(active, "%s", path->c_str());
 			}
 		}
 		emit_expression(m->b);

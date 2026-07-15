@@ -39,6 +39,20 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/23_packed_record"
 	-o "$tmp/packed_overlay"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_overlay"
 
+./mp -Furtl -o"$tmp/packed_variant.cc" tests/packed_variant.pp
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Werror=address-of-packed-member \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/packed_variant.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/packed_variant"
+ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_variant"
+
 for source in tests/packed_rejected/*.pp; do
 	base=${source%.pp}
 	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then

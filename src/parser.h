@@ -302,7 +302,7 @@ protected:
 	PropertyAccess* apply_property(Node* receiver, Property* property, std::vector<Node*> indexes);
 	bool property_read_is_place(PropertyAccess* access);
 	bool is_referenceable(Node* n);
-	void parse_record_variant(RecordType* rt, Frame* body);
+	VariantPart* parse_record_variant(Type* owner, Frame* body);
 	/** Parse a method prototype inside a class/record/object body. Registers
 	 *  the Method in BODY under its Pascal name (via register_callable, so
 	 *  overload directives interact the same way as for standalone callables). */
