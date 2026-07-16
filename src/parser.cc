@@ -1722,13 +1722,12 @@ void Parser::maybe_parse_statement() {
 						emitter
 						    ->emit_try_finally_epilogue();
 						emitter
-						    ->emit_try_control_epilogue(
+						    ->emit_for_in_cleanup_control_epilogue(
 							this_try_depth,
 							current_routine
 							    ? current_routine
 								  ->ty
-							    : nullptr,
-							true);
+							    : nullptr);
 					}
 					restore_exception_block(
 					    enclosing_exception_block);
@@ -3262,7 +3261,8 @@ Parser::maybe_resolve_custom_for_in(
 
 	auto parameterless_call =
 	    [this](Node* target,
-		   const std::string& name) {
+		   const std::string& name,
+		   bool allow_destructor) {
 		    std::vector<Node*> arguments;
 		    FinalizedCall finalized =
 			finalize_call(
@@ -3274,8 +3274,9 @@ Parser::maybe_resolve_custom_for_in(
 		    if (!method ||
 			method->ty->kind ==
 			    CONSTRUCTOR ||
-			method->ty->kind ==
-			    DESTRUCTOR ||
+			(!allow_destructor &&
+			 method->ty->kind ==
+			     DESTRUCTOR) ||
 			method->ty->kind ==
 			    CLASS_CONSTRUCTOR ||
 			method->ty->kind ==
@@ -3291,7 +3292,8 @@ Parser::maybe_resolve_custom_for_in(
 
 	Node* get_call =
 	    parameterless_call(
-		get_member, "GetEnumerator");
+		get_member, "GetEnumerator",
+		false);
 	Type* enumerator_type =
 	    get_call ? get_call->ty : nullptr;
 	if (!custom_enumerator_value_type(
@@ -3318,7 +3320,8 @@ Parser::maybe_resolve_custom_for_in(
 		    "for-in enumerator has no MoveNext member");
 	Node* move_call =
 	    parameterless_call(
-		move_member, "MoveNext");
+		move_member, "MoveNext",
+		false);
 	if (move_call->ty != boolean_type())
 		raise_type_mismatch(
 		    "for-in MoveNext result",
@@ -3353,7 +3356,8 @@ Parser::maybe_resolve_custom_for_in(
 			    "class enumerator has no Free member");
 		cleanup =
 		    parameterless_call(
-			free_member, "Free");
+			free_member, "Free",
+			false);
 		if (cleanup->ty != &unit_type())
 			raise_type_mismatch(
 			    "class enumerator Free result",
@@ -3376,7 +3380,8 @@ Parser::maybe_resolve_custom_for_in(
 			    parameterless_call(
 				destructor,
 				destructors.front()
-				    ->pas_name);
+				    ->pas_name,
+				true);
 			if (cleanup->ty !=
 			    &unit_type())
 				raise_type_mismatch(

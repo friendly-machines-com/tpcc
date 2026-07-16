@@ -57,6 +57,8 @@ private:
 	FILE* out_h;       // null for programs
 	FILE* out_cc;
 	FILE* active;      // points at out_h or out_cc; null until a section is set
+	void emit_return_transfer_handler(
+	    unsigned try_depth, RoutineType* routine);
 
 public:
 	Emitter();
@@ -137,6 +139,11 @@ public:
 	void emit_try_control_epilogue(
 	    unsigned try_depth, RoutineType* routine,
 	    bool inside_loop);
+	// Close a generated cleanup region which contains its loop. A break that
+	// reaches this boundary is already complete; emitting a C++ break here
+	// would be outside the loop.
+	void emit_for_in_cleanup_control_epilogue(
+	    unsigned try_depth, RoutineType* routine);
 	void emit_with_prologue(std::string alias_cxx_name, Node* target);
 	void emit_with_epilogue();
 	// Control-flow framing. Each is parse-time emission: parser parses the

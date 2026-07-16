@@ -719,32 +719,38 @@ void Emitter::emit_try_finally_epilogue() {
 		"tpcc_pending_exception);\n");
 }
 
+void Emitter::emit_return_transfer_handler(
+    unsigned try_depth, RoutineType* routine) {
+	if (!routine)
+		return;
+	fprintf(active,
+		" catch (::u_system::tpcc_return_transfer<");
+	emit_type_ref(routine->return_type);
+	fprintf(active,
+		">& tpcc_return) {\n"
+		"\t\tif (tpcc_return.next_try_depth != %u)\n"
+		"\t\t\tthrow;\n"
+		"\t\t--tpcc_return.next_try_depth;\n"
+		"\t\tif (tpcc_return.next_try_depth != 0)\n"
+		"\t\t\tthrow;\n",
+		try_depth);
+	if (routine->return_type == &unit_type())
+		fprintf(active, "\t\treturn;\n");
+	else
+		fprintf(active,
+			"\t\treturn std::move("
+			"tpcc_return.value);\n");
+	fprintf(active, "\t}");
+}
+
 void Emitter::emit_try_control_epilogue(
     unsigned try_depth, RoutineType* routine,
     bool inside_loop) {
 	if (!active)
 		return;
 	fprintf(active, "\t}");
-	if (routine) {
-		fprintf(active,
-			" catch (::u_system::tpcc_return_transfer<");
-		emit_type_ref(routine->return_type);
-		fprintf(active,
-			">& tpcc_return) {\n"
-			"\t\tif (tpcc_return.next_try_depth != %u)\n"
-			"\t\t\tthrow;\n"
-			"\t\t--tpcc_return.next_try_depth;\n"
-			"\t\tif (tpcc_return.next_try_depth != 0)\n"
-			"\t\t\tthrow;\n",
-			try_depth);
-		if (routine->return_type == &unit_type())
-			fprintf(active, "\t\treturn;\n");
-		else
-			fprintf(active,
-				"\t\treturn std::move("
-				"tpcc_return.value);\n");
-		fprintf(active, "\t}");
-	}
+	emit_return_transfer_handler(
+	    try_depth, routine);
 	if (inside_loop) {
 		fprintf(active,
 			" catch (::u_system::tpcc_loop_transfer& "
@@ -767,6 +773,32 @@ void Emitter::emit_try_control_epilogue(
 			"\t\tthrow;\n"
 			"\t}");
 	fprintf(active, "\n");
+}
+
+void Emitter::emit_for_in_cleanup_control_epilogue(
+    unsigned try_depth, RoutineType* routine) {
+	if (!active)
+		return;
+	fprintf(active, "\t}");
+	emit_return_transfer_handler(
+	    try_depth, routine);
+	// This generated try contains the while loop. A break reaching its target
+	// has already left that while, so consuming the carrier completes the
+	// source break. Continue targets the still-active loop depth and should
+	// never unwind as far as this boundary.
+	fprintf(active,
+		" catch (::u_system::tpcc_loop_transfer& "
+		"tpcc_loop) {\n"
+		"\t\tif (tpcc_loop.next_try_depth != %u)\n"
+		"\t\t\tthrow;\n"
+		"\t\t--tpcc_loop.next_try_depth;\n"
+		"\t\tif (tpcc_loop.next_try_depth != "
+		"tpcc_loop.target_try_depth)\n"
+		"\t\t\tthrow;\n"
+		"\t\tif (!tpcc_loop.is_break)\n"
+		"\t\t\tthrow;\n"
+		"\t}\n",
+		try_depth);
 }
 
 void Emitter::emit_statement(Node* stmt) {
