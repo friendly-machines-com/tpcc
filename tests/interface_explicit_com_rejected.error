@@ -1,0 +1,1 @@
+COM interfaces are not implemented; use {$interfaces corba}

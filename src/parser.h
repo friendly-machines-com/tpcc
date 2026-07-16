@@ -106,12 +106,20 @@ enum class DirectiveSwitchCategory {
 	EnumPacking,
 };
 
+enum class InterfaceModel {
+	COM,
+	CORBA,
+};
+
 /** Source-visible compiler-directive state.
  *
  *  The category split is semantic: local and representation settings are
  *  scoped by PUSH/POP, while module and optimizer settings persist. IFOPT and
  *  switch assignment consult this same state instead of maintaining a second
- *  table of answers. */
+ *  table of answers. The interface model is likewise persistent across
+ *  PUSH/POP: it selects the model of each interface declaration encountered
+ *  after the directive rather than describing a locally scoped code-generation
+ *  option. */
 class DirectiveState {
 	friend class SavedDirectiveState;
 	std::array<bool, 26> local_switches{};
@@ -119,10 +127,17 @@ class DirectiveState {
 	std::array<bool, 26> optimizer_switches{};
 	bool record_packing = false;
 	bool enum_packing = false;
+	InterfaceModel interface_model = InterfaceModel::COM;
 
 public:
 	bool switch_enabled(char letter) const;
 	void set_switch(char letter, bool enabled);
+	InterfaceModel get_interface_model() const {
+		return interface_model;
+	}
+	void set_interface_model(InterfaceModel model) {
+		interface_model = model;
+	}
 };
 
 /** Exactly the PUSH/POP-scoped subset of DirectiveState. */

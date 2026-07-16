@@ -685,6 +685,26 @@ void Parser::handle_directive(
 		saved_directive_states.pop_back();
 		return;
 	}
+	if (name == "interfaces") {
+		const std::string model =
+		    compact_directive_argument(rest);
+		if (model == "corba") {
+			directive_state.set_interface_model(
+			    InterfaceModel::CORBA);
+		} else if (model == "com" ||
+		           model == "default") {
+			// Native Pascal's initial interface model is COM. TPCC has no
+			// command-line override for that initial setting, so DEFAULT
+			// returns to COM rather than to the most recent directive.
+			directive_state.set_interface_model(
+			    InterfaceModel::COM);
+		} else {
+			::emit_parse_error_at(
+			    directive_location,
+			    "$interfaces expects COM, CORBA, or DEFAULT");
+		}
+		return;
+	}
 	if (name == "define") {
 		// `{$define X}` sets X with no value; `{$define X := VALUE}` stores
 		// VALUE (trimmed) so numeric-compare {$if X < N} etc. can consume it.
@@ -3887,6 +3907,14 @@ ClassType* Parser::lookup_implicit_tobject_superclass() {
 }
 
 Type* Parser::parse_interface_type() {
+	// InterfaceType currently denotes TPCC's non-refcounted interface ABI.
+	// Reject COM at the declaration boundary: accepting it here would make a
+	// source-visible COM type silently use CORBA ownership and conversion
+	// semantics throughout type checking and C++ lowering.
+	if (directive_state.get_interface_model() ==
+	    InterfaceModel::COM)
+		raise_type_parse_error(
+		    "COM interfaces are not implemented; use {$interfaces corba}");
 	parse_keyword("interface");
 	std::vector<InterfaceType*> implemented_interfaces;
 	if (maybe_parse_opening_paren()) {

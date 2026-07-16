@@ -1,5 +1,7 @@
 program InterfaceGuid;
 
+{$interfaces corba}
+
 type
   IBase = interface
     ['{51BE3F89-C9C5-4965-9C83-AE7490C92E3E}']

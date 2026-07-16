@@ -1,5 +1,7 @@
 program AbstractMethods;
 
+{$interfaces corba}
+
 type
   IContract = interface
     procedure InterfaceMethod;
