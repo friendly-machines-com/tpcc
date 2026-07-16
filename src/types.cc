@@ -931,7 +931,21 @@ FixedSetType::value_conversion_from(
 	// Set is the powerset constructor. Widening its ordinal domain preserves
 	// every member and therefore needs no element-wise value conversion.
 	// The emitter may still copy between distinct target-specific carriers.
-	return direct_conversion();
+	//
+	// Preserve the element-domain widening distance for overload ranking:
+	// an anonymous `set of Byte` constant is a direct match for both a
+	// separately declared `set of Byte` and `set of Word`, but the former
+	// must win. This remains one set conversion; it does not recursively
+	// materialize or apply an element conversion.
+	if (item_type == set->item_type)
+		return direct_conversion();
+	auto item_conversion =
+	    item_type->value_conversion_from(
+		set->item_type);
+	return direct_conversion(
+	    item_conversion
+		? item_conversion->distance
+		: 0);
 }
 
 static bool interface_is_or_extends(
