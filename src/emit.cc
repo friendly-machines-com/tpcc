@@ -141,6 +141,31 @@ void Emitter::emit_static_member_declaration(
 
 // Apply the `p_` prefix to a Pascal value identifier.
 std::string cxx_value_name(std::string pas_name) {
+	static constexpr std::pair<
+	    std::string_view,
+	    std::string_view> operator_names[] = {
+	    {":=", "assign"},
+	    {"+", "plus"},
+	    {"-", "minus"},
+	    {"*", "multiply"},
+	    {"/", "divide"},
+	    {"**", "power"},
+	    {"=", "equal"},
+	    {"<", "less"},
+	    {"<=", "less_equal"},
+	    {">", "greater"},
+	    {">=", "greater_equal"},
+	    {"><", "symmetric_difference"},
+	};
+	for (const auto& [spelling, name] :
+	     operator_names)
+		if (pas_name == spelling)
+			// Pascal operator tokens are ordinary callable-family names, but
+			// punctuation is not a C++ identifier. Give the entire family one
+			// stable readable spelling; overload selection still uses the
+			// original Pascal token and never this backend name.
+			return "p_operator_" +
+			       std::string(name);
 	return "p_" + pas_name;
 }
 

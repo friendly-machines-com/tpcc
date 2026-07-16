@@ -297,11 +297,16 @@ private:
 	std::optional<MatchRank> match_argument(
 	    const Parameter& formal, Node* actual,
 	    const BuiltinDesc* builtin,
-	    size_t parameter_index);
+	    size_t parameter_index,
+	    bool allow_user_conversion = true);
 	std::optional<std::vector<MatchRank>>
 	match_callable_arguments(
 	    Callable* callable,
-	    const std::vector<Node*>& args);
+	    const std::vector<Node*>& args,
+	    bool allow_user_conversion = true);
+	std::optional<MatchRank>
+	match_user_conversion(
+	    Node* actual, Type* target);
 	Node* cast(Node* a, Type* target_ty);
 	Node* resolve_routine_reference(
 	    RoutineRef* reference, RoutineType* target_ty);

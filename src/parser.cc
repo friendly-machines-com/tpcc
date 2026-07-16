@@ -4551,8 +4551,8 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		if (!maybe_parse_keyword("of"))
 			return file_type();
 		// `file of T` is generative even when another definition has the same
-		// element type. The two definitions share a carrier and are
-		// structurally compatible, but they are not the same Pascal type.
+		// element type. Such definitions may erase to the same backend carrier,
+		// but they remain distinct Pascal types, particularly for typed var/out.
 		return new TypedFileType(
 		    current_location(), parse_type_expression(false));
 	} else if (peek_keyword("array")) {
@@ -7025,7 +7025,8 @@ static bool is_ordinal_intrinsic_argument(Type* ty) {
 std::optional<MatchRank> Parser::match_argument(
     const Parameter& formal, Node* actual,
     const BuiltinDesc* builtin,
-    size_t parameter_index) {
+    size_t parameter_index,
+    bool allow_user_conversion) {
 	Type* source = actual ? actual->ty : nullptr;
 	Type* target = formal.ty;
 
@@ -7150,20 +7151,24 @@ std::optional<MatchRank> Parser::match_argument(
 
 	auto conversion =
 	    target->value_conversion_from(source);
-	if (!conversion)
-		return std::nullopt;
-	return MatchRank{
-	    conversion->kind ==
-	            ValueConversionClass::Direct
-	        ? MatchRank::Tier::Direct
-	        : MatchRank::Tier::Convert,
-	    conversion->distance};
+	if (conversion)
+		return MatchRank{
+		    conversion->kind ==
+		            ValueConversionClass::Direct
+		        ? MatchRank::Tier::Direct
+		        : MatchRank::Tier::Convert,
+		    conversion->distance};
+	if (allow_user_conversion)
+		return match_user_conversion(
+		    actual, target);
+	return std::nullopt;
 }
 
 std::optional<std::vector<MatchRank>>
 Parser::match_callable_arguments(
     Callable* callable,
-    const std::vector<Node*>& args) {
+    const std::vector<Node*>& args,
+    bool allow_user_conversion) {
 	auto signature =
 	    static_cast<RoutineType*>(callable->ty);
 	if (args.size() > signature->formals.size())
@@ -7184,7 +7189,8 @@ Parser::match_callable_arguments(
 	for (size_t i = 0; i < args.size(); ++i) {
 		auto rank = match_argument(
 		    signature->formals[i], args[i],
-		    builtin, i);
+		    builtin, i,
+		    allow_user_conversion);
 		if (!rank)
 			return std::nullopt;
 		ranks[i] = *rank;
@@ -7198,6 +7204,70 @@ static bool rank_less(
 		return static_cast<unsigned>(a.tier) <
 		       static_cast<unsigned>(b.tier);
 	return a.distance < b.distance;
+}
+
+std::optional<MatchRank>
+Parser::match_user_conversion(
+    Node* actual, Type* target) {
+	Node* family = maybe_resolve_value(":=");
+	if (auto member =
+	        dynamic_cast<MemberAccess*>(family)) {
+		// Unit qualification opens a standalone operator environment; an
+		// object member environment would be a different, unsupported
+		// operator model.
+		if (!dynamic_cast<UnitRef*>(
+		        member->a))
+			return std::nullopt;
+		family = member->b;
+	}
+
+	std::vector<Callable*> candidates;
+	if (auto callable =
+	        dynamic_cast<Callable*>(family))
+		candidates.push_back(callable);
+	else if (auto overloads =
+	             dynamic_cast<OverloadSet*>(
+	                 family))
+		candidates = overloads->members;
+
+	std::optional<MatchRank> best;
+	for (Callable* candidate : candidates) {
+		if (!dynamic_cast<Procedure*>(
+		        candidate) ||
+		    candidate->ty->kind != ROUTINE ||
+		    candidate->ty->return_type !=
+		        target ||
+		    candidate->ty->formals.size() != 1)
+			continue;
+		const BuiltinDesc* builtin =
+		    candidate->builtin_desc
+		        ? candidate->builtin_desc
+		        : lookup_builtin_desc(
+		              candidate->cxx_name);
+		auto source_match = match_argument(
+		    candidate->ty->formals[0],
+		    actual, builtin, 0, false);
+		if (!source_match)
+			continue;
+		if (!best ||
+		    rank_less(*source_match, *best))
+			best = *source_match;
+	}
+	if (!best)
+		return std::nullopt;
+
+	// A source-defined conversion is one explicit language operation. Do not
+	// recursively search for a conversion into its own source parameter:
+	// that would invent arbitrary implicit conversion chains and could
+	// recurse through the same operator family forever. Preserve the source
+	// match quality only as a tie-breaker below every intrinsic conversion.
+	const unsigned tier_distance =
+	    static_cast<unsigned>(best->tier) *
+	        10000u +
+	    std::min(best->distance, 9999u);
+	return MatchRank{
+	    MatchRank::Tier::Convert,
+	    100000u + tier_distance};
 }
 
 static bool dominates(

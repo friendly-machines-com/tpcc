@@ -559,10 +559,13 @@ std::optional<RecordLayout> packed_record_layout(
 }
 
 // Integer widening rank; -1 for non-integer types.
-static int integer_widening_rank(Type* ty) {
-	while (auto s = dynamic_cast<SubrangeType*>(ty))
+static int integer_widening_rank(
+    const Type* ty) {
+	while (auto s =
+	           dynamic_cast<const SubrangeType*>(ty))
 		ty = s->base_type;
-	auto it = dynamic_cast<IntrinsicType*>(ty);
+	auto it =
+	    dynamic_cast<const IntrinsicType*>(ty);
 	if (!it)
 		return -1;
 	if (!it->rank)
@@ -573,7 +576,8 @@ static int integer_widening_rank(Type* ty) {
 // Pascal real-family widening order. Keep this independent from the integer
 // rank stored on IntrinsicType: those ranks describe ordinal overloads and
 // bounds, while real widening has different semantics.
-static int real_widening_rank(Type* ty) {
+static int real_widening_rank(
+    const Type* ty) {
 	if (ty == single_type())
 		return 0;
 	if (ty == double_type())
@@ -591,10 +595,12 @@ static bool ordinal_bounds_contain_range(const OrdinalBounds& outer, const Ordin
 	return outer.max_positive >= inner.max_positive;
 }
 
-static bool integer_like_bounds(Type* ty, OrdinalBounds* out) {
+static bool integer_like_bounds(
+    const Type* ty, OrdinalBounds* out) {
 	if (integer_bounds(ty, out))
 		return true;
-	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+	if (auto s =
+	        dynamic_cast<const SubrangeType*>(ty)) {
 		ConstEvalContext ctx;
 		ConstEvalResult lower = s->lower_bound->const_eval(ctx);
 		ConstEvalResult upper = s->upper_bound->const_eval(ctx);
@@ -641,7 +647,8 @@ static int bit_width(uint64_t value) {
 	return result;
 }
 
-static int integer_conversion_cost(Type* from, Type* to) {
+static int integer_conversion_cost(
+    const Type* from, const Type* to) {
 	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
 	if (rfrom < 0 || rto < 0)
 		return -1;
@@ -675,8 +682,8 @@ static ValueConversion implicit_conversion(unsigned distance = 0) {
 std::optional<ValueConversion>
 IntrinsicType::value_conversion_from(
     const Type* source_const) const {
-	auto source = const_cast<Type*>(source_const);
-	auto target = const_cast<IntrinsicType*>(this);
+	auto source = source_const;
+	auto target = this;
 	if (source == &untyped_integer_type()) {
 		// The expression matcher checks the literal's actual magnitude. At the
 		// type level it is a contextual integer value, not another nominal

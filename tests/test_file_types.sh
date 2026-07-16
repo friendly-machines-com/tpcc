@@ -49,18 +49,23 @@ fi
 	-o "$tmp/file_types"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/file_types"
 
-if ./mp -Furtl -o"$tmp/mismatch.cc" \
+for source in \
 	tests/file_types_mismatch.pp \
-	>"$tmp/stdout" 2>"$tmp/stderr"
-then
-	echo "accepted file of Byte as file of Integer" >&2
-	exit 1
-fi
-if ! rg -Fq 'no matching overload' "$tmp/stderr"
-then
-	echo "wrong diagnostic for incompatible typed files" >&2
-	sed -n '1,20p' "$tmp/stderr" >&2
-	exit 1
-fi
+	tests/file_types_identity_mismatch.pp
+do
+	if ./mp -Furtl -o"$tmp/mismatch.cc" \
+		"$source" \
+		>"$tmp/stdout" 2>"$tmp/stderr"
+	then
+		echo "accepted incompatible typed-file var argument: $source" >&2
+		exit 1
+	fi
+	if ! rg -Fq 'no matching overload' "$tmp/stderr"
+	then
+		echo "wrong diagnostic for incompatible typed files: $source" >&2
+		sed -n '1,20p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
 
 echo "file type tests passed"

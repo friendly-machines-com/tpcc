@@ -38,22 +38,18 @@ fi
 
 for define in TEST_INSTANCE TEST_CLASS
 do
-	./mp -Furtl -d"$define" \
+	if ./mp -Furtl -d"$define" \
 		-o"$tmp/rejected.cc" \
-		tests/final_method_override_rejected.pp
-	if "${CXX:-g++}" \
-		-std=c++20 \
-		-Wall \
-		-Wextra \
-		-Wpedantic \
-		-Werror \
-		-Irtl \
-		-I"$tmp" \
-		-fsyntax-only \
-		"$tmp/rejected.cc" \
+		tests/final_method_override_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
-		echo "C++ accepted an override of a final Pascal method: $define" >&2
+		echo "accepted an override of a final Pascal method: $define" >&2
+		exit 1
+	fi
+	if ! rg -Fq 'overrides a final method' "$tmp/stderr"
+	then
+		echo "wrong final-override diagnostic: $define" >&2
+		sed -n '1,20p' "$tmp/stderr" >&2
 		exit 1
 	fi
 done

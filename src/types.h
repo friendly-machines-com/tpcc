@@ -521,8 +521,7 @@ public:
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-// Cost of converting FROM to TO: 0 = same (or Untyped fits), positive =
-// implicit conversion, -1 = no implicit conversion. Integer conversions are
-// ordered by target range distance so overload resolution can prefer the
-// closest fitting ordinal type.
+// Legacy integer cost adapter for callers not yet migrated to
+// value_conversion_from(): 0 means identity, positive means a destination
+// conversion, and -1 means incompatible.
 int conversion_cost(Type* from, Type* to);

@@ -179,15 +179,18 @@ StorageSlot* tmethod_data_field() {
 }
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
-	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+	auto intrinsic =
+	    dynamic_cast<const IntrinsicType*>(ty);
 	if (!intrinsic || !intrinsic->ordinal_bounds)
 		return false;
 	*out = *intrinsic->ordinal_bounds;
 	return true;
 }
 
-bool integer_bounds(Type* ty, OrdinalBounds* out) {
-	auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
+bool integer_bounds(
+    const Type* ty, OrdinalBounds* out) {
+	auto intrinsic =
+	    dynamic_cast<const IntrinsicType*>(ty);
 	if (!intrinsic || !intrinsic->rank || !intrinsic->ordinal_bounds)
 		return false;
 	*out = *intrinsic->ordinal_bounds;

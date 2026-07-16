@@ -158,7 +158,7 @@ StorageSlot* tmethod_code_field();
 StorageSlot* tmethod_data_field();
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out);
-bool integer_bounds(Type* ty, OrdinalBounds* out);
+bool integer_bounds(const Type* ty, OrdinalBounds* out);
 Type* lookup_builtin_type(std::string cxx_name);
 const BuiltinDesc* lookup_builtin_desc(std::string_view cxx_name);
 Builtin* create_builtin_value(std::string cxx_name);

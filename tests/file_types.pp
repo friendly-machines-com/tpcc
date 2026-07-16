@@ -2,6 +2,7 @@ program FileTypes;
 
 type
   TIntegerFile = file of Integer;
+  TIntegerFileAlias = TIntegerFile;
   TOtherIntegerFile = file of Integer;
   TByteFile = file of Byte;
   TNode = record
@@ -13,6 +14,7 @@ var
   BinaryFile: File;
   TextAlias: TextFile;
   Integers: TIntegerFile;
+  AliasIntegers: TIntegerFileAlias;
   OtherIntegers: TOtherIntegerFile;
   Bytes: TByteFile;
   Nodes: TNodeFile;
@@ -24,8 +26,7 @@ begin
 end;
 
 begin
-  AcceptIntegerFile(OtherIntegers);
-  AcceptIntegerFile(InlineIntegers);
+  AcceptIntegerFile(AliasIntegers);
   if SizeOf(File) <> SizeOf(Pointer) then
     Halt(1);
   if SizeOf(BinaryFile) <> SizeOf(Pointer) then
