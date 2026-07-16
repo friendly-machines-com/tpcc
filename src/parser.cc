@@ -7678,6 +7678,25 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		if (name_for_error.empty() && !c->pas_name.empty()) {
 			name_for_error = c->pas_name;
 		}
+		if (args.size() >
+		    c->ty->formals.size())
+			emit_parse_error_at(
+			    error_location,
+			    "too many arguments to '" +
+			        name_for_error + "'");
+		for (size_t i = args.size();
+		     i < c->ty->formals.size(); ++i)
+			if (!c->ty->formals[i]
+			         .default_value)
+				// A singleton has no competing arity to rank. Report the
+				// missing source parameter directly while still using the
+				// shared matcher for every supplied argument.
+				emit_parse_error_at(
+				    error_location,
+				    "missing argument for parameter '" +
+				        c->ty->formals[i].pas_name +
+				        "' in call to '" +
+				        name_for_error + "'");
 		auto match =
 		    match_callable_arguments(c, args);
 		if (!match) {
