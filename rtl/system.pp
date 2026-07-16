@@ -118,10 +118,10 @@ operator/(a, b: Int64): Extended; external name '::u_system::p_divide';
 // candidates and therefore return Extended as well.
 operator/(a, b: Extended): Extended; external name '::u_system::p_divide';
 
-operator :=(a: Cardinal): Cardinal; external name '::u_system::p_assign';
-operator :=(a: Boolean): Boolean; external name '::u_system::p_assign';
-operator :=(a: Char): Char; external name '::u_system::p_assign';
-operator :=(a: Char): ShortString; external name '::u_system::p_char_to_shortstring';
+operator :=(a: Cardinal): Cardinal; external name '::u_system::p_implicit';
+operator :=(a: Boolean): Boolean; external name '::u_system::p_implicit';
+operator :=(a: Char): Char; external name '::u_system::p_implicit';
+operator :=(a: Char): ShortString; external name '::u_system::p_implicit';
 
 operator <(a, b: Char): Boolean; external name '::u_system::p_lessthan';
 operator <=(a, b: Char): Boolean; external name '::u_system::p_lessthanorequal';
@@ -331,7 +331,7 @@ operator not(a: Boolean): Boolean; external name '::u_system::p_logicalnot';
 
 operator =(a, b: shortstring): Boolean; external name '::u_system::p_equal';
 operator +(a, b: shortstring): shortstring; external name '::u_system::p_add';
-operator :=(a: shortstring): ansistring; external name '::u_system::p_assign';
+operator :=(a: shortstring): ansistring; external name '::u_system::p_implicit';
 
 procedure SetLength(var destination: AnsiString; value: LongInt); external name '::u_system::p_setlength';
 procedure UniqueString(var value: AnsiString); external name '::u_system::p_uniquestring';

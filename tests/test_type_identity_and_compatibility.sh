@@ -33,6 +33,24 @@ cd "$root"
 ./mp -Furtl -o"$tmp/type_identity.cc" \
 	tests/type_identity_and_compatibility.pp
 
+for required in \
+	'p_implicit(' \
+	'm_implicit_target<t_tconversionresulta>' \
+	'm_implicit_target<t_tconversionresultb>'
+do
+	if ! rg -Fq "$required" "$tmp/type_identity.cc"
+	then
+		echo "missing implicit-conversion lowering: $required" >&2
+		exit 1
+	fi
+done
+
+if rg -Fq 'p_operator_assign' "$tmp/type_identity.cc"
+then
+	echo "implicit conversion retained the old C++ operator name" >&2
+	exit 1
+fi
+
 "${CXX:-g++}" \
 	-std=c++20 \
 	-Wall \
@@ -192,28 +210,29 @@ do
 done
 
 if ./mp -Furtl \
-	-o"$tmp/conversion_carrier_collision.cc" \
-	tests/conversion_carrier_collision_rejected.pp \
+	-dTEST_CONVERSION \
+	-o"$tmp/implicit_conversion_erased_target.cc" \
+	tests/type_carrier_collision_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then
-	echo "accepted conversion operators distinguished only by result" >&2
+	echo "accepted indistinguishable implicit-conversion target tags" >&2
 	exit 1
 fi
 for required in \
-	"tests/conversion_carrier_collision_rejected.pp(14)" \
-	"tests/conversion_carrier_collision_rejected.pp(15)" \
+	"tests/type_carrier_collision_rejected.pp(59)" \
+	"tests/type_carrier_collision_rejected.pp(60)" \
 	'incoming declaration:' \
 	'conflicting declaration:' \
 	'existing overload family:' \
-	'Pascal distinguishes these conversion operators by destination type' \
-	'C++ does not use a function result to distinguish overloads' \
-	'type tsource' \
-	'type tresulta' \
-	'type tresultb'
+	'Pascal distinguishes these implicit conversions by destination type' \
+	'hidden destination tags still have the same C++ carrier' \
+	'type tconversionsource' \
+	'type tstringa' \
+	'type tstringb'
 do
 	if ! rg -Fq "$required" "$tmp/stderr"
 	then
-		echo "incomplete conversion-carrier diagnostic: $required" >&2
+		echo "incomplete implicit-conversion carrier diagnostic: $required" >&2
 		sed -n '1,120p' "$tmp/stderr" >&2
 		exit 1
 	fi

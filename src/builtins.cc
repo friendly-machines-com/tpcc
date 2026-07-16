@@ -541,7 +541,6 @@ static const BuiltinDesc k_builtins[] = {
     },
     {"::u_system::p_index", nullptr},
     {"::u_system::tpcc_index_write", nullptr},
-    {"::u_system::p_char_to_shortstring", nullptr},
     {"::u_system::p_chr", fold_chr},
     {"::u_system::p_fillchar", nullptr},
     {"::u_system::p_move", nullptr},
@@ -600,7 +599,10 @@ static const BuiltinDesc k_builtins[] = {
      .const_fold = fold_intdivide,
      .numeric_operation =
          BuiltinNumericOperation::IntegerDivide},
-    {"::u_system::p_assign", nullptr}, // delphi doesnt have it; well it has some kind of "implicit" operator that does the same.
+    {"::u_system::p_implicit", nullptr},
+    // Old-style file Assign is an ordinary procedure, not an implicit
+    // conversion despite sharing the Pascal spelling "assign".
+    {"::u_system::p_assign", nullptr},
     {.cxx_name = "::u_system::p_modulus",
      .const_fold = fold_modulus,
      .numeric_operation =

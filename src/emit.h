@@ -181,14 +181,18 @@ public:
 	// for callable cases, or empty for DeclarationFormalsOnly.
 	// owner_qualifier is `Foo::` or empty (namespace only -- orthogonal to
 	// prototype-vs-definition, which is expressed at the function level via
-	// which wrapper the caller invokes).
+	// which wrapper the caller invokes). implicit_conversion_target is null
+	// for every ordinary routine; otherwise it appends the backend-only
+	// destination tag which makes a Pascal implicit conversion representable
+	// in the C++ overload set.
 	void emit_routine_signature(
 	    RoutineType* ty, std::string cxx_text,
 	    Position pos, std::string owner_qualifier,
-	    bool cxx_destructor = false);
+	    bool cxx_destructor,
+	    Type* implicit_conversion_target);
 	// emit_callable_signature is a thin wrapper for callers that hold a
-	// Callable*. Forwards (c->ty, callable_cxx_name(c), pos, owner_qualifier)
-	// to emit_routine_signature.
+	// Callable*. It also derives the implicit-conversion target tag from the
+	// callable category; ordinary callers of emit_routine_signature pass null.
 	void emit_callable_signature(Callable* c, Position position, std::string owner_qualifier);
 	// emit_callable_prototype emits `<prefix><sig><suffix>;\n`. THE prototype
 	// emitter for every case: standalone procedure prototypes, in-class method
@@ -205,8 +209,12 @@ public:
 	// The parameter-type spelling is shared by declarations, routine-value
 	// types, and method-adapter pointer-to-member casts. `with_name` controls
 	// only whether the Pascal formal's generated C++ identifier follows it.
+	// A non-null implicit_conversion_target appends an unnamed C++ tag after
+	// all Pascal-visible formals.
 	void emit_formal_parameter(const Parameter& formal, bool with_name);
-	void emit_formal_parameters(RoutineType* ty, bool with_names);
+	void emit_formal_parameters(
+	    RoutineType* ty, bool with_names,
+	    Type* implicit_conversion_target);
 	// Emit the function type `Result(Args...)` (not a pointer and not a
 	// declaration). m_proc and m_method both take this as their template
 	// argument.

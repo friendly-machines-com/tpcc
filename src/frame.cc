@@ -135,10 +135,27 @@ static bool same_emitted_callable_name(
 
 bool cxx_callable_signatures_collide(
     Callable* a, Callable* b) {
-	return a && b &&
-	       same_emitted_callable_name(a, b) &&
-	       a->ty->same_cxx_parameter_list_as(
-	           b->ty);
+	if (!a || !b ||
+	    !same_emitted_callable_name(a, b))
+		return false;
+	const bool a_conversion =
+	    a->is_implicit_conversion();
+	const bool b_conversion =
+	    b->is_implicit_conversion();
+	// An implicit conversion has one extra C++ parameter carrying the
+	// compiler-selected destination. A non-conversion with the same emitted
+	// name therefore has a different C++ arity. Between two conversions, the
+	// destination tag distinguishes results exactly when their emitted target
+	// carriers are distinct.
+	if (a_conversion != b_conversion)
+		return false;
+	if (a_conversion &&
+	    !a->ty->return_type
+	         ->same_cxx_carrier_as(
+	             b->ty->return_type))
+		return false;
+	return a->ty->same_cxx_parameter_list_as(
+	    b->ty);
 }
 
 static bool same_emitted_declaration_scope(
@@ -176,14 +193,16 @@ static CallableRegistration::Kind callable_pair_result(
 	if (existing->ty
 	        ->same_overload_signature_as(
 	            incoming->ty)) {
-		// `operator :=` is the one callable family whose destination is
-		// source-visible through assignment context rather than through an
-		// argument. Distinct result Type* values therefore distinguish its
-		// declarations. Ordinary routines and every other operator cannot
-		// overload by result.
+		// Delphi `operator implicit` and FPC `operator :=` are one conversion
+		// family. Its destination is supplied by value context rather than by
+		// an ordinary source argument, so exact result Type* identity is part
+		// of this family's Pascal overload key. Ordinary routines and every
+		// other operator cannot overload by result.
 		const bool distinct_conversion_results =
-		    existing->pas_name == ":=" &&
-		    incoming->pas_name == ":=" &&
+		    existing
+		        ->is_implicit_conversion() &&
+		    incoming
+		        ->is_implicit_conversion() &&
 		    existing->ty->return_type !=
 		        incoming->ty->return_type;
 		if (!distinct_conversion_results)

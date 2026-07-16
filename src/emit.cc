@@ -168,18 +168,18 @@ std::string cxx_value_name(std::string pas_name) {
 	static constexpr std::pair<
 	    std::string_view,
 	    std::string_view> operator_names[] = {
-	    {":=", "assign"},
-	    {"+", "plus"},
-	    {"-", "minus"},
-	    {"*", "multiply"},
-	    {"/", "divide"},
-	    {"**", "power"},
-	    {"=", "equal"},
-	    {"<", "less"},
-	    {"<=", "less_equal"},
-	    {">", "greater"},
-	    {">=", "greater_equal"},
-	    {"><", "symmetric_difference"},
+	    {":=", "p_implicit"},
+	    {"+", "p_operator_plus"},
+	    {"-", "p_operator_minus"},
+	    {"*", "p_operator_multiply"},
+	    {"/", "p_operator_divide"},
+	    {"**", "p_operator_power"},
+	    {"=", "p_operator_equal"},
+	    {"<", "p_operator_less"},
+	    {"<=", "p_operator_less_equal"},
+	    {">", "p_operator_greater"},
+	    {">=", "p_operator_greater_equal"},
+	    {"><", "p_operator_symmetric_difference"},
 	};
 	for (const auto& [spelling, name] :
 	     operator_names)
@@ -188,9 +188,16 @@ std::string cxx_value_name(std::string pas_name) {
 			// punctuation is not a C++ identifier. Give the entire family one
 			// stable readable spelling; overload selection still uses the
 			// original Pascal token and never this backend name.
-			return "p_operator_" +
-			       std::string(name);
+			return std::string(name);
 	return "p_" + pas_name;
+}
+
+static Type* implicit_conversion_target(
+    const Callable* callable) {
+	return callable &&
+	               callable->is_implicit_conversion()
+	    ? callable->ty->return_type
+	    : nullptr;
 }
 
 // Apply the `t_` prefix to a Pascal type identifier.
@@ -1246,29 +1253,41 @@ void Emitter::emit_formal_parameter(
 }
 
 void Emitter::emit_formal_parameters(
-    RoutineType* ty, bool with_names) {
+    RoutineType* ty, bool with_names,
+    Type* conversion_target) {
 	fprintf(active, "(");
 	for (size_t i = 0; i < ty->formals.size(); i++) {
 		if (i > 0)
 			fprintf(active, ", ");
 		emit_formal_parameter(ty->formals[i], with_names);
 	}
+	if (conversion_target) {
+		if (!ty->formals.empty())
+			fprintf(active, ", ");
+		fprintf(active,
+		    "::u_system::m_implicit_target<");
+		emit_type_ref(conversion_target);
+		fprintf(active, ">");
+	}
 	fprintf(active, ")");
 }
 
 void Emitter::emit_function_type(RoutineType* ty) {
 	emit_type_ref(ty->return_type);
-	emit_formal_parameters(ty, false);
+	emit_formal_parameters(
+	    ty, false, nullptr);
 }
 
 void Emitter::emit_routine_signature(
     RoutineType* ty, std::string cxx_text,
     Position pos, std::string owner_qualifier,
-    bool cxx_destructor) {
+    bool cxx_destructor,
+    Type* conversion_target) {
 	if (!active)
 		return;
 	if (pos == Position::DeclarationFormalsOnly) {
-		emit_formal_parameters(ty, true);
+		emit_formal_parameters(
+		    ty, true, conversion_target);
 		return;
 	}
 	if (!cxx_destructor) {
@@ -1278,14 +1297,16 @@ void Emitter::emit_routine_signature(
 		unhandled_type("non-unit return type on destructor is not allowed", ty);
 	}
 	fprintf(active, "%s%s", owner_qualifier.c_str(), cxx_text.c_str());
-	emit_formal_parameters(ty, true);
+	emit_formal_parameters(
+	    ty, true, conversion_target);
 }
 
 void Emitter::emit_callable_signature(Callable* c, Position pos, std::string owner_qualifier) {
 	emit_routine_signature(
 	    c->ty, callable_cxx_name(c), pos,
 	    owner_qualifier,
-	    callable_is_cxx_destructor(c));
+	    callable_is_cxx_destructor(c),
+	    implicit_conversion_target(c));
 }
 
 void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
@@ -1294,7 +1315,11 @@ void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 	fprintf(active, "\n");
 	if (nested_lambda) {
 		fprintf(active, "\tauto %s = [&]", callable_cxx_name(c).c_str());
-		emit_routine_signature(c->ty, "", Position::DeclarationFormalsOnly, "");
+		emit_routine_signature(
+		    c->ty, "",
+		    Position::DeclarationFormalsOnly,
+		    "", false,
+		    implicit_conversion_target(c));
 		if (c->ty->return_type != &unit_type()) {
 			fprintf(active, " -> ");
 			emit_type_ref(c->ty->return_type);
@@ -2054,7 +2079,9 @@ void Emitter::emit_routine_reference(
 			    "::u_system::m_function_to_code_pointer(static_cast<");
 			emit_type_ref(procedure->ty->return_type);
 			fprintf(active, " (*)");
-			emit_formal_parameters(procedure->ty, false);
+			emit_formal_parameters(
+			    procedure->ty, false,
+			    nullptr);
 			fprintf(active, ">(&%s))",
 			    node_cxx_name(
 			        procedure,
@@ -2095,7 +2122,8 @@ void Emitter::emit_routine_reference(
 			emit_type_ref(method->ty->return_type);
 			fprintf(active, " (*)");
 			emit_formal_parameters(
-			    method->ty, false);
+			    method->ty, false,
+			    nullptr);
 			fprintf(active, ">(&%s::%s))",
 			    owner.c_str(),
 			    callable_cxx_name(
@@ -2160,7 +2188,8 @@ void Emitter::emit_routine_reference(
 	fprintf(active, "::u_system::m_bind_method<static_cast<");
 	emit_type_ref(method->ty->return_type);
 	fprintf(active, " (%s::*)", owner.c_str());
-	emit_formal_parameters(method->ty, false);
+	emit_formal_parameters(
+	    method->ty, false, nullptr);
 	fprintf(active, ">(&%s::%s)>(",
 	    owner.c_str(), callable_cxx_name(method).c_str());
 	if (method->ty->kind ==
@@ -2762,7 +2791,8 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, " (%s::*)",
 		    owner.c_str());
 		emit_formal_parameters(
-		    initializer->ty, false);
+		    initializer->ty, false,
+		    nullptr);
 		fprintf(active, ">(&%s::%s)>(",
 		    owner.c_str(),
 		    callable_cxx_name(initializer).c_str());
@@ -2804,7 +2834,8 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, " (%s::*)",
 		    owner.c_str());
 		emit_formal_parameters(
-		    finalizer->ty, false);
+		    finalizer->ty, false,
+		    nullptr);
 		fprintf(active, ">(&%s::%s)>(",
 		    owner.c_str(),
 		    callable_cxx_name(finalizer).c_str());
@@ -2837,7 +2868,8 @@ void Emitter::emit_expression(Node* expr) {
 		    initializer->ty->return_type);
 		fprintf(active, " (%s::*)", owner.c_str());
 		emit_formal_parameters(
-		    initializer->ty, false);
+		    initializer->ty, false,
+		    nullptr);
 		fprintf(active, ">(&%s::%s)>(",
 		    owner.c_str(),
 		    callable_cxx_name(initializer).c_str());
@@ -2977,6 +3009,16 @@ void Emitter::emit_expression(Node* expr) {
 			    dynamic_cast<RoutineType*>(
 			        pc->callee->ty);
 		emit_call_arguments(call_ty, pc->args);
+		if (callable &&
+		    callable->is_implicit_conversion()) {
+			if (!pc->args.empty())
+				fprintf(active, ", ");
+			fprintf(active,
+			    "::u_system::m_implicit_target<");
+			emit_type_ref(
+			    callable->ty->return_type);
+			fprintf(active, ">{}");
+		}
 		fprintf(active, ")");
 		if (initializer_application)
 			fprintf(active, "; })");

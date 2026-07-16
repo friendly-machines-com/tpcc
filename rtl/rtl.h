@@ -44,6 +44,14 @@
 
 namespace u_system {
 
+// C++ does not include a function result in overload identity. Pascal
+// implicit-conversion selection does include the context-requested
+// destination, so generated p_implicit declarations and calls carry this
+// otherwise-empty backend parameter. It is not a Pascal formal and the
+// conversion remains an ordinary value-returning operation.
+template<typename Destination>
+struct m_implicit_target {};
+
 // `Fail` is constructor control flow, not a Pascal exception. Pascal except
 // handlers catch only tpcc_pascal_exception, so this marker passes through
 // them to an allocation or direct-initializer boundary.
@@ -1804,7 +1812,9 @@ inline t_shortstring<Capacity> tpcc_shortstring_from_c(
 	return result;
 }
 
-inline t_shortstring<255> p_char_to_shortstring(t_char value) {
+inline t_shortstring<255> p_implicit(
+    t_char value,
+    m_implicit_target<t_shortstring<255>>) {
 	t_shortstring<255> result{};
 	result.length = 1;
 	result.data[0] = value;
@@ -2069,9 +2079,15 @@ inline t_boolean p_greaterthanorequal(
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) >= 0);
 }
 
-inline t_char p_assign(t_char value) { return value; }
+inline t_char p_implicit(
+    t_char value,
+    m_implicit_target<t_char>) {
+	return value;
+}
 template<std::size_t Capacity>
-inline t_ansistring p_assign(t_shortstring<Capacity> value) {
+inline t_ansistring p_implicit(
+    t_shortstring<Capacity> value,
+    m_implicit_target<t_ansistring>) {
 	t_ansistring result{};
 	result.assign(value);
 	return result;
@@ -2134,7 +2150,7 @@ inline t_sizeint p_sizeof(tpcc_typed_const_storage_ref<T>) {
 	inline T p_negative(T b) { return -b; } \
 	inline T p_multiply(T a, T b) { return a * b; } \
 	inline DIV_RESULT p_divide(T a, T b) { return static_cast<DIV_RESULT>(a) / static_cast<DIV_RESULT>(b); } \
-	inline T p_assign(T source) { T target = source; return target; } \
+	inline T p_implicit(T source, m_implicit_target<T>) { T target = source; return target; } \
 	inline t_boolean p_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
 	inline t_boolean p_lessthanorequal(T a, T b) { return tpcc_bool_to_boolean(a <= b); } \
 	inline t_boolean p_equal(T a, T b) { return tpcc_bool_to_boolean(a == b); } \
@@ -2239,7 +2255,9 @@ inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
 	return tpcc_bool_to_boolean(((a != 0) ^ (b != 0)) != 0);
 }
 
-inline t_boolean p_assign(t_boolean b) {
+inline t_boolean p_implicit(
+    t_boolean b,
+    m_implicit_target<t_boolean>) {
 	return b;
 }
 

@@ -502,8 +502,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	        conflicting_type) &&
 	    incoming_type->return_type !=
 	        conflicting_type->return_type) {
-		sst << "\n  Pascal distinguishes these conversion "
-		       "operators by destination type: "
+		sst << "\n  Pascal distinguishes these implicit "
+		       "conversions by destination type: "
 		    << conflicting_type_ref << " returns "
 		    << ctx.type_ref(
 		           conflicting_type->return_type)
@@ -511,8 +511,9 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 		    << " returns "
 		    << ctx.type_ref(
 		           incoming_type->return_type)
-		    << ". C++ does not use a function result "
-		       "to distinguish overloads.";
+		    << ". Their hidden destination tags still "
+		       "have the same C++ carrier, so this "
+		       "backend cannot distinguish them.";
 	} else {
 		sst << "\n  distinct Pascal parameter types "
 		       "collapse to the same C++ parameter "
@@ -6928,7 +6929,13 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		}
 		parse_keyword("operator");
 		// Assumption: there are no method operators.
-		first_name = input_token; // TODO: well, parse_operator();
+		// Delphi names this conversion operator `implicit`; FPC spells the
+		// same source-to-destination operation `:=`. Keep one Pascal family so
+		// either spelling declares and implements the same conversions.
+		first_name =
+		    input_token == "implicit"
+		    ? ":="
+		    : input_token; // TODO: well, parse_operator();
 		consume();
 		has_overload = true; // I think those should be implicitly "overload;"
 	} else if (maybe_parse_keyword("destructor")) {

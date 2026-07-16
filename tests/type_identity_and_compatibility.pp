@@ -38,6 +38,16 @@ type
   TEnumA = (EnumA0, EnumA1);
   TEnumB = (EnumB0, EnumB1);
 
+  TConversionSource = record
+    Value: Integer;
+  end;
+  TConversionResultA = record
+    Value: Integer;
+  end;
+  TConversionResultB = record
+    Value: Integer;
+  end;
+
 var
   PointerA: TPointerA;
   PointerB: TPointerB;
@@ -61,6 +71,22 @@ var
   RecordAlias: TRecordAlias;
   EnumA: TEnumA;
   EnumB: TEnumB;
+  ConversionSource: TConversionSource;
+  ConversionResultA: TConversionResultA;
+  ConversionResultB: TConversionResultB;
+
+operator :=(const Source: TConversionSource): TConversionResultA; forward;
+operator implicit(const Source: TConversionSource): TConversionResultB; forward;
+
+operator implicit(const Source: TConversionSource): TConversionResultA;
+begin
+  Result.Value := Source.Value + 10
+end;
+
+operator :=(const Source: TConversionSource): TConversionResultB;
+begin
+  Result.Value := Source.Value + 20
+end;
 
 procedure Sink(Value: Integer);
 begin
@@ -153,5 +179,13 @@ begin
   if not Assigned(RoutineA) then
     Halt(10);
   if not (7 in WideSet) then
-    Halt(11)
+    Halt(11);
+
+  ConversionSource.Value := 1;
+  ConversionResultA := ConversionSource;
+  ConversionResultB := ConversionSource;
+  if ConversionResultA.Value <> 11 then
+    Halt(12);
+  if ConversionResultB.Value <> 21 then
+    Halt(13)
 end.

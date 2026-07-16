@@ -180,6 +180,10 @@ Callable::Callable(std::string cxx_name,
       body_frame(nullptr) {
 }
 
+bool Callable::is_implicit_conversion() const {
+	return pas_name == ":=";
+}
+
 Procedure::Procedure(std::string cxx_name,
 		     std::string pas_name,
 		     RoutineType* ty,

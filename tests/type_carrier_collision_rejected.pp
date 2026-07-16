@@ -19,6 +19,9 @@ type
   end;
   TClassRefA = class of TObjectClass;
   TClassRefB = class of TObjectClass;
+  TConversionSource = record
+    Value: Integer;
+  end;
 
 {$ifdef TEST_POINTER}
 function Clash(Value: TPointerA): Integer; overload; forward;
@@ -51,6 +54,10 @@ function Clash(Value: TRoutineB): Integer; overload; forward;
 {$ifdef TEST_CLASSREF}
 function Clash(Value: TClassRefA): Integer; overload; forward;
 function Clash(Value: TClassRefB): Integer; overload; forward;
+{$endif}
+{$ifdef TEST_CONVERSION}
+operator :=(const Source: TConversionSource): TStringA; forward;
+operator implicit(const Source: TConversionSource): TStringB; forward;
 {$endif}
 
 begin

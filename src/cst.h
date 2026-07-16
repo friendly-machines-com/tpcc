@@ -652,6 +652,10 @@ public:
 	         std::string pas_name,
 	         RoutineType* ty,
 	         bool has_overload_directive);
+	/** True for Delphi `operator implicit` and its accepted FPC spelling
+	 * `operator :=`. Both spellings are normalized to the same Pascal
+	 * callable family before this node is constructed. */
+	bool is_implicit_conversion() const;
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
