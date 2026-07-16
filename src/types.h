@@ -80,6 +80,12 @@ public:
 	virtual std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const;
 	virtual bool is_subtype_of(const Type* target) const;
+	/** Whether this type and OTHER erase to the same C++ type spelling.
+	 * This backend equivalence never participates in Pascal lookup,
+	 * conversion, var/out matching, or signature identity; it exists to
+	 * diagnose source overloads the current C++ lowering cannot represent. */
+	bool same_cxx_carrier_as(
+	    const Type* other) const;
 	// True iff a variable of this type is represented in C++ emission as a
 	// pointer (i.e. emission in storage position is `t_foo*`, member access
 	// uses `->`, `nil` is a legal value). Pascal `class` and `interface` are
@@ -490,6 +496,11 @@ public:
 	 * category is silently reclassified. */
 	bool accepts_routine_value_from(
 	    const RoutineType* source) const;
+	/** C++ overload identity ignores a function result and does include the
+	 * adjusted parameter carriers. Pascal has already selected by its own
+	 * signatures before this backend-only collision check runs. */
+	bool same_cxx_parameter_list_as(
+	    const RoutineType* other) const;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

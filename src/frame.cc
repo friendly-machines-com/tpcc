@@ -118,28 +118,83 @@ bool Frame::register_variable(std::string name, Node* v, Type* ty) {
 	}
 }
 
-bool Frame::register_callable(std::string name, Callable* c) {
+static bool same_emitted_callable_name(
+    Callable* a, Callable* b) {
+	auto a_method = dynamic_cast<Method*>(a);
+	auto b_method = dynamic_cast<Method*>(b);
+	if (a_method && b_method &&
+	    a->ty->kind == DESTRUCTOR &&
+	    b->ty->kind == DESTRUCTOR &&
+	    dynamic_cast<ClassType*>(
+	        a_method->owner_class) &&
+	    a_method->owner_class ==
+	        b_method->owner_class)
+		return true;
+	return a->cxx_name == b->cxx_name;
+}
+
+bool cxx_callable_signatures_collide(
+    Callable* a, Callable* b) {
+	return a && b &&
+	       same_emitted_callable_name(a, b) &&
+	       a->ty->same_cxx_parameter_list_as(
+	           b->ty);
+}
+
+static CallableRegistration callable_pair_result(
+    Callable* existing, Callable* incoming) {
+	if (existing->ty->same_signature_as(
+	        incoming->ty))
+		return CallableRegistration::Rejected;
+	if (cxx_callable_signatures_collide(
+	        existing, incoming)) {
+		// C++ does not use a function result to distinguish overloads, and
+		// several generative Pascal types erase to the same carrier. Renaming
+		// here would disconnect declarations, implementations, and virtual
+		// dispatch, so reject the unsupported lowering at registration.
+		return CallableRegistration::
+		    CxxCarrierCollision;
+	}
+	return CallableRegistration::Added;
+}
+
+CallableRegistration Frame::register_callable(
+    std::string name, Callable* c) {
 	auto iter = value_items.find(name);
 	if (iter == value_items.end()) {
 		value_items[name] = FrameValueEntry(c, static_cast<RoutineType*>(c->ty)->return_type);
-		return true;
+		return CallableRegistration::Added;
 	}
 	Node* existing = iter->second.value;
 	if (auto ec = dynamic_cast<Callable*>(existing)) {
 		if (ec->has_overload_directive && c->has_overload_directive) {
+			auto result =
+			    callable_pair_result(ec, c);
+			if (result !=
+			    CallableRegistration::Added)
+				return result;
 			auto set = new OverloadSet(std::vector<Callable*>{ec, c});
 			iter->second.value = set;
 			iter->second.ty = nullptr;
-			return true;
+			return CallableRegistration::Added;
 		}
-		return false;
+		return CallableRegistration::Rejected;
 	}
 	if (auto os = dynamic_cast<OverloadSet*>(existing)) {
 		if (c->has_overload_directive) {
+			for (Callable* member :
+			     os->members) {
+				auto result =
+				    callable_pair_result(
+				        member, c);
+				if (result !=
+				    CallableRegistration::Added)
+					return result;
+			}
 			os->members.push_back(c);
-			return true;
+			return CallableRegistration::Added;
 		}
-		return false;
+		return CallableRegistration::Rejected;
 	}
-	return false; // name is bound to something non-callable
+	return CallableRegistration::Rejected;
 }

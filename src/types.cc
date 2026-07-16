@@ -20,6 +20,118 @@ bool Type::is_subtype_of(const Type* target) const {
 	return this == target;
 }
 
+bool Type::same_cxx_carrier_as(
+    const Type* other) const {
+	const Type* a = this;
+	const Type* b = other;
+	while (auto range =
+	           dynamic_cast<const SubrangeType*>(a))
+		a = range->base_type;
+	while (auto range =
+	           dynamic_cast<const SubrangeType*>(b))
+		b = range->base_type;
+	if (a == b)
+		return true;
+	if (!a || !b)
+		return false;
+
+	if (auto left =
+	        dynamic_cast<const ShortStringType*>(a)) {
+		auto right =
+		    dynamic_cast<const ShortStringType*>(b);
+		return right &&
+		       left->capacity == right->capacity;
+	}
+	if (auto left =
+	        dynamic_cast<const PointerType*>(a)) {
+		auto right =
+		    dynamic_cast<const PointerType*>(b);
+		if (!right ||
+		    left->is_untyped() !=
+		        right->is_untyped())
+			return false;
+		if (left->is_untyped())
+			return left->cxx_name ==
+			       right->cxx_name;
+		return left->item_type
+		    ->same_cxx_carrier_as(
+		        right->item_type);
+	}
+	if (auto left =
+	        dynamic_cast<const ClassRefType*>(a)) {
+		auto right =
+		    dynamic_cast<const ClassRefType*>(b);
+		// m_classref<T> contains the nominal target as a template argument.
+		return right &&
+		       left->target == right->target;
+	}
+	if (auto left =
+	        dynamic_cast<const TypedFileType*>(a)) {
+		auto right =
+		    dynamic_cast<const TypedFileType*>(b);
+		return right &&
+		       left->item_type
+		           ->same_cxx_carrier_as(
+		               right->item_type);
+	}
+	if (auto left =
+	        dynamic_cast<const FixedSetType*>(a)) {
+		auto right =
+		    dynamic_cast<const FixedSetType*>(b);
+		return right &&
+		       left->item_type
+		           ->same_cxx_carrier_as(
+		               right->item_type);
+	}
+	if (auto left =
+	        dynamic_cast<const FixedArrayType*>(a)) {
+		auto right =
+		    dynamic_cast<const FixedArrayType*>(b);
+		if (!right ||
+		    left->range.length !=
+		        right->range.length ||
+		    left->range.lower_ordinal.negative !=
+		        right->range.lower_ordinal.negative ||
+		    left->range.lower_ordinal.magnitude !=
+		        right->range.lower_ordinal.magnitude ||
+		    !left->item_type
+		         ->same_cxx_carrier_as(
+		             right->item_type))
+			return false;
+		Type* left_low_type =
+		    left->range.lower_bound
+		    ? left->range.lower_bound->ty
+		    : nullptr;
+		Type* right_low_type =
+		    right->range.lower_bound
+		    ? right->range.lower_bound->ty
+		    : nullptr;
+		return left_low_type &&
+		       right_low_type &&
+		       left_low_type
+		           ->same_cxx_carrier_as(
+		               right_low_type);
+	}
+	if (auto left =
+	        dynamic_cast<const RoutineType*>(a)) {
+		auto right =
+		    dynamic_cast<const RoutineType*>(b);
+		return right &&
+		       left->kind == right->kind &&
+		       left->return_type
+		           ->same_cxx_carrier_as(
+		               right->return_type) &&
+		       left->same_cxx_parameter_list_as(
+		           right);
+	}
+
+	// Records, packed records, objects, classes, interfaces, and enums are
+	// nominal C++ declarations. Intrinsics also have one canonical Type
+	// object per emitted spelling. Pointer identity above therefore already
+	// handled every equal carrier in these remaining families.
+	return false;
+}
+
 IncompleteType::IncompleteType(SourceLocation source_location, std::string name)
     : Type(std::move(source_location)), name(std::move(name)), resolved(nullptr) {}
 
@@ -974,6 +1086,48 @@ bool RoutineType::accepts_routine_value_from(
 		return false;
 	return same_parameter_and_result_types_as(
 	    source);
+}
+
+bool RoutineType::same_cxx_parameter_list_as(
+    const RoutineType* other) const {
+	if (!other ||
+	    formals.size() != other->formals.size())
+		return false;
+	auto carrier_mode =
+	    [](ParamMode mode) {
+		    // `var` and `out` both emit T&. Const emits const T&, while a
+		    // value parameter emits T. These are C++ signature categories,
+		    // not Pascal parameter-mode compatibility.
+		    switch (mode) {
+		    case ParamMode::Value:
+			    return 0;
+		    case ParamMode::Const:
+			    return 1;
+		    case ParamMode::Var:
+		    case ParamMode::Out:
+			    return 2;
+		    }
+		    return -1;
+	    };
+	for (size_t i = 0; i < formals.size(); ++i) {
+		const Parameter& a = formals[i];
+		const Parameter& b = other->formals[i];
+		if (carrier_mode(a.mode) !=
+		    carrier_mode(b.mode))
+			return false;
+		if (a.ty == unknown_type() ||
+		    b.ty == unknown_type()) {
+			// Omitted-type const and mutable formals lower to two explicit
+			// storage-view carriers rather than to an arbitrary T or T&.
+			if (a.ty != b.ty)
+				return false;
+			continue;
+		}
+		if (!a.ty->same_cxx_carrier_as(
+		        b.ty))
+			return false;
+	}
+	return true;
 }
 
 int conversion_cost(Type* from, Type* to) {

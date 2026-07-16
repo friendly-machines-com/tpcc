@@ -6453,6 +6453,80 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	m->is_static = is_static;
 	m->is_final = is_final;
 	m->ty = sig; // The node's type IS the prototype.
+	if (sig->kind == METHOD ||
+	    sig->kind == CLASS_METHOD ||
+	    is_static) {
+		bool override_target_found = false;
+		auto inspect_ancestor_binding =
+		    [&](Node* binding) {
+			    auto inspect =
+			        [&](Callable* callable) {
+				        auto ancestor =
+				            dynamic_cast<Method*>(
+				                callable);
+				        if (!ancestor ||
+				            (ancestor->virtual_kind ==
+				                 Method::VirtualKind::None &&
+				             !ancestor->is_final))
+					        return;
+				        bool exact_signature =
+				            m->ty->same_signature_as(
+				                ancestor->ty) &&
+				            m->is_static ==
+				                ancestor->is_static;
+				        if (exact_signature &&
+				            !m->is_static) {
+					        override_target_found = true;
+					        if (ancestor->is_final)
+						        raise_parse_error(
+						            "method '" + pas_name +
+						            "' overrides a final method");
+				        }
+				        if (!cxx_callable_signatures_collide(
+				                m, ancestor))
+					        return;
+				        if (vk ==
+				                Method::VirtualKind::Override &&
+				            exact_signature)
+					        return;
+				        // C++ virtual overriding is based on the emitted name
+				        // and carrier signature even when Pascal selected a
+				        // distinct signature or requested a fresh virtual
+				        // slot. Reject that lowering instead of silently
+				        // changing Pascal dispatch.
+				        raise_parse_error(
+				            "method '" + pas_name +
+				            "' would accidentally override an "
+				            "ancestor after C++ carrier erasure");
+			        };
+			    if (auto callable =
+			            dynamic_cast<Callable*>(
+			                binding))
+				    inspect(callable);
+			    else if (auto overloads =
+			                 dynamic_cast<OverloadSet*>(
+			                     binding))
+				    for (Callable* callable :
+				         overloads->members)
+					    inspect(callable);
+		    };
+		// Override compatibility is independent of Pascal name hiding. A C++
+		// virtual can be overridden through any depth of the base chain, so
+		// inspect each ancestor's own declarations rather than performing one
+		// structural name lookup that could stop at an intermediate class.
+		for (Frame* ancestor = body->parent;
+		     ancestor; ancestor = ancestor->parent)
+			for (const auto& declaration :
+			     ancestor->value_declarations())
+				if (declaration.first == pas_name)
+					inspect_ancestor_binding(
+					    declaration.second.value);
+		if (vk == Method::VirtualKind::Override &&
+		    !override_target_found)
+			raise_parse_error(
+			    "method '" + pas_name +
+			    "' has no exact virtual ancestor to override");
+	}
 	// Install an AbstractError VMT stub.
 	// The emitter supplies that body, so a source implementation would be
 	// a second implementation of the same method.
@@ -6468,7 +6542,16 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		// recognizing a Pascal method name.
 		m->builtin_desc = lookup_builtin_desc(cxx_name);
 	}
-	if (!body->register_callable(pas_name, m)) {
+	auto registration =
+	    body->register_callable(pas_name, m);
+	if (registration ==
+	    CallableRegistration::CxxCarrierCollision)
+		raise_parse_error(
+		    "overloads of '" + pas_name +
+		    "' have distinct Pascal signatures but the "
+		    "same C++ parameter carriers");
+	if (registration !=
+	    CallableRegistration::Added) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 	}
 }
@@ -6550,7 +6633,18 @@ Procedure* Parser::match_or_create_procedure(
 		target->ty = sig;
 		target->owning_unit =
 		    declaration_unit(enclosing);
-		if (!enclosing->register_callable(pas_name, target)) {
+		auto registration =
+		    enclosing->register_callable(
+		        pas_name, target);
+		if (registration ==
+		    CallableRegistration::
+		        CxxCarrierCollision)
+			raise_parse_error(
+			    "overloads of '" + pas_name +
+			    "' have distinct Pascal signatures but "
+			    "the same C++ parameter carriers");
+		if (registration !=
+		    CallableRegistration::Added) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 		}
 	}

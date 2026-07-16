@@ -8,6 +8,12 @@ class Node;
 class StorageSlot;
 class Callable;
 
+enum class CallableRegistration {
+	Added,
+	Rejected,
+	CxxCarrierCollision,
+};
+
 struct FrameValueEntry {
 	Node* value;
 	Type* ty;
@@ -58,10 +64,12 @@ public:
      *  overload rules: a second registration succeeds only if both the
      *  existing and new declarations have has_overload_directive set (in
      *  which case the slot promotes from Callable to OverloadSet, or the new
-     *  entry is appended to an existing OverloadSet). Otherwise it's a
-     *  duplicate identifier. Returns true on success, false on a duplicate /
-     *  overload-mismatch error (caller reports the diagnostic with location). */
-    bool register_callable(std::string name, Callable* c);
+     *  entry is appended to an existing OverloadSet). CxxCarrierCollision
+     *  reports a legal distinct Pascal signature which the current C++
+     *  lowering would emit as the same overload; it is diagnosed instead of
+     *  changing either symbol's name. */
+    CallableRegistration register_callable(
+        std::string name, Callable* c);
     /** Declaration ownership query, not name lookup. This intentionally
      *  returns only a boolean: callers that need a value must use
      *  lookup_value(), which applies the structural parent chain. */
@@ -85,3 +93,10 @@ public:
  *  next enclosing environment. Shared by structural Frame lookup and the
  *  parser's lexical scope walk so this rule has one implementation. */
 bool callable_binding_opens_parent(Node* binding);
+
+/** Backend-only collision test for two already-distinct Pascal callables.
+ * It compares the emitted member/free-function name and C++ parameter
+ * carriers; callers use it to reject an unrepresentable overload or an
+ * accidental C++ virtual override, never to perform Pascal lookup. */
+bool cxx_callable_signatures_collide(
+    Callable* a, Callable* b);
