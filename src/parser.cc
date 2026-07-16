@@ -1267,7 +1267,11 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_loop_control(
 			    is_break, protected_try_depth,
-			    loop_try_depths.back());
+			    is_break
+				? loop_try_targets.back()
+				      .break_depth
+				: loop_try_targets.back()
+				      .continue_depth);
 	} else if (peek_keyword("return")) { // FIXME Exit
 		if (!finally_loop_depths.empty())
 			raise_parse_error("return cannot leave a finally block");
@@ -1580,10 +1584,11 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_while_prologue(condition);
 		++loop_depth;
-		loop_try_depths.push_back(
-		    protected_try_depth);
+		loop_try_targets.push_back(
+		    {protected_try_depth,
+		     protected_try_depth});
 		parse_statement();
-		loop_try_depths.pop_back();
+		loop_try_targets.pop_back();
 		--loop_depth;
 		if (emitter)
 			emitter->emit_while_epilogue();
@@ -1626,10 +1631,11 @@ void Parser::maybe_parse_statement() {
 				    control, initial, final,
 				    descending);
 			++loop_depth;
-			loop_try_depths.push_back(
-			    protected_try_depth);
+			loop_try_targets.push_back(
+			    {protected_try_depth,
+			     protected_try_depth});
 			parse_statement();
-			loop_try_depths.pop_back();
+			loop_try_targets.pop_back();
 			--loop_depth;
 			if (emitter)
 				emitter->emit_for_epilogue();
@@ -1654,116 +1660,196 @@ void Parser::maybe_parse_statement() {
 				    parse_expression();
 			parse_keyword("do");
 
-			OrdinalRange range;
-			std::string range_error;
-			Type* element_type = nullptr;
-
-			if (ordinal_designator) {
-				if (!ordinal_range_for_type(
-					ordinal_designator,
-					&range,
-					&range_error))
-					raise_parse_error(
-					    range_error);
-				if (enum_range_has_gaps(
-					ordinal_designator,
-					range))
-					raise_parse_error(
-					    "for-in ordinal type has non-contiguous enum values");
-				element_type =
-				    ordinal_designator;
-			} else {
-				if (auto bracket =
-					dynamic_cast<
-					    BracketLiteral*>(
-					    collection)) {
-					Type* item_type =
-					    bracket
-						->default_set_item_type;
-					if (item_type ==
-					    unknown_type())
-						item_type =
-						    control->ty;
-					collection = cast(
-					    collection,
-					    new FixedSetType(
-						current_location(),
-						item_type));
+			auto custom =
+			    ordinal_designator
+				? std::optional<
+				      CustomForInResolution>{}
+				: maybe_resolve_custom_for_in(
+				      collection, control);
+			if (custom) {
+				const unsigned enclosing_try_depth =
+				    protected_try_depth;
+				const unsigned this_try_depth =
+				    enclosing_try_depth + 1;
+				const unsigned enclosing_exception_block =
+				    current_exception_block();
+				const bool protected_cleanup =
+				    custom->cleanup != nullptr;
+				if (emitter)
+					emitter
+					    ->emit_for_in_custom_setup(
+						custom
+						    ->get_enumerator,
+						custom->nullable);
+				if (protected_cleanup) {
+					// The implicit cleanup has the same unwind and
+					// goto boundary as a source try/finally, while
+					// leaving bare-raise validity unchanged because
+					// the user did not enter a nested source handler.
+					if (emitter)
+						emitter
+						    ->emit_try_prologue();
+					enter_exception_block();
+					++protected_try_depth;
 				}
-				Type* collection_type =
-				    collection
-					? collection->ty
-					: nullptr;
-				element_type =
-				    collection_type
-					? collection_type
-					      ->sequence_element_type()
-					: nullptr;
-				if (!element_type) {
-					auto set =
-					    dynamic_cast<
-						FixedSetType*>(
-						collection_type);
-					if (!set)
-						raise_parse_error(
-						    "for-in collection has no built-in enumeration");
-					element_type =
-					    set->item_type;
+				if (emitter)
+					emitter
+					    ->emit_for_in_custom_loop_prologue(
+						custom->move_next,
+						custom
+						    ->current_assignment);
+				++loop_depth;
+				loop_try_targets.push_back(
+				    {protected_cleanup
+					 ? enclosing_try_depth
+					 : protected_try_depth,
+				     protected_try_depth});
+				parse_statement();
+				loop_try_targets.pop_back();
+				--loop_depth;
+				if (emitter)
+					emitter
+					    ->emit_for_in_loop_epilogue();
+				if (protected_cleanup) {
+					--protected_try_depth;
+					if (emitter) {
+						emitter
+						    ->emit_try_finally_prologue();
+						emitter
+						    ->emit_statement(
+							custom
+							    ->cleanup);
+						emitter
+						    ->emit_try_finally_epilogue();
+						emitter
+						    ->emit_try_control_epilogue(
+							this_try_depth,
+							current_routine
+							    ? current_routine
+								  ->ty
+							    : nullptr,
+							true);
+					}
+					restore_exception_block(
+					    enclosing_exception_block);
+				}
+				if (emitter)
+					emitter
+					    ->emit_for_in_custom_epilogue(
+						custom->nullable);
+			} else {
+				OrdinalRange range;
+				std::string range_error;
+				Type* element_type = nullptr;
+
+				if (ordinal_designator) {
 					if (!ordinal_range_for_type(
-						element_type,
+						ordinal_designator,
 						&range,
 						&range_error))
 						raise_parse_error(
 						    range_error);
 					if (enum_range_has_gaps(
-						element_type,
+						ordinal_designator,
 						range))
 						raise_parse_error(
-						    "for-in set item type has non-contiguous enum values");
-				}
-			}
-
-			Node* current =
-			    new BuiltinEnumeratorCurrent(
-				element_type);
-			// Assign the enumerator's exact element through the ordinary
-			// assignment matcher. This keeps loop-control conversion rules
-			// identical to an explicit assignment written by the user.
-			Node* assignment =
-			    mk_assign(control, current);
-			if (emitter) {
-				if (ordinal_designator) {
-					emitter
-					    ->emit_for_in_ordinal_prologue(
-						ordinal_designator,
-						range.lower_bound,
-						range.upper_bound,
-						assignment);
-				} else if (dynamic_cast<
-					       FixedSetType*>(
-					       collection->ty)) {
-					emitter
-					    ->emit_for_in_set_prologue(
-						collection,
-						range.lower_bound,
-						range.upper_bound,
-						assignment);
+						    "for-in ordinal type has non-contiguous enum values");
+					element_type =
+					    ordinal_designator;
 				} else {
-					emitter
-					    ->emit_for_in_sequence_prologue(
-						collection,
-						assignment);
+					if (auto bracket =
+						dynamic_cast<
+						    BracketLiteral*>(
+						    collection)) {
+						Type* item_type =
+						    bracket
+							->default_set_item_type;
+						if (item_type ==
+						    unknown_type())
+							item_type =
+							    control->ty;
+						collection = cast(
+						    collection,
+						    new FixedSetType(
+							current_location(),
+							item_type));
+					}
+					Type* collection_type =
+					    collection
+						? collection->ty
+						: nullptr;
+					element_type =
+					    collection_type
+						? collection_type
+						      ->sequence_element_type()
+						: nullptr;
+					if (!element_type) {
+						auto set =
+						    dynamic_cast<
+							FixedSetType*>(
+							collection_type);
+						if (!set)
+							raise_parse_error(
+							    "for-in collection has no built-in enumeration");
+						element_type =
+						    set->item_type;
+						if (!ordinal_range_for_type(
+							element_type,
+							&range,
+							&range_error))
+							raise_parse_error(
+							    range_error);
+						if (enum_range_has_gaps(
+							element_type,
+							range))
+							raise_parse_error(
+							    "for-in set item type has non-contiguous enum values");
+					}
 				}
+
+				Node* current =
+				    new BuiltinEnumeratorCurrent(
+					element_type);
+				// Assign the enumerator's exact element through the ordinary
+				// assignment matcher. This keeps loop-control conversion rules
+				// identical to an explicit assignment written by the user.
+				Node* assignment =
+				    mk_assign(control, current);
+				if (emitter) {
+					if (ordinal_designator) {
+						emitter
+						    ->emit_for_in_ordinal_prologue(
+							ordinal_designator,
+							range.lower_bound,
+							range.upper_bound,
+							assignment);
+					} else if (dynamic_cast<
+						       FixedSetType*>(
+						       collection->ty)) {
+						emitter
+						    ->emit_for_in_set_prologue(
+							collection,
+							range.lower_bound,
+							range.upper_bound,
+							assignment);
+					} else {
+						emitter
+						    ->emit_for_in_sequence_prologue(
+							collection,
+							assignment);
+					}
+				}
+				++loop_depth;
+				loop_try_targets.push_back(
+				    {protected_try_depth,
+				     protected_try_depth});
+				parse_statement();
+				loop_try_targets.pop_back();
+				--loop_depth;
+				if (emitter)
+					emitter
+					    ->emit_for_in_epilogue();
 			}
-			++loop_depth;
-			loop_try_depths.push_back(
-			    protected_try_depth);
-			parse_statement();
-			loop_try_depths.pop_back();
-			--loop_depth;
-			if (emitter)
-				emitter
-				    ->emit_for_in_epilogue();
 		} else {
 			raise_parse_error(
 			    "expected ':=' or 'in' after for control variable");
@@ -1773,10 +1859,11 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_repeat_prologue();
 		++loop_depth;
-		loop_try_depths.push_back(
-		    protected_try_depth);
+		loop_try_targets.push_back(
+		    {protected_try_depth,
+		     protected_try_depth});
 		parse_block_body();
-		loop_try_depths.pop_back();
+		loop_try_targets.pop_back();
 		--loop_depth;
 		parse_keyword("until");
 		auto condition = parse_expression();
@@ -3085,16 +3172,224 @@ Node* Parser::parse_member_selection(Node* base) {
 	// A callable base is invoked before selecting a member from its result.
 	base = maybe_auto_call(base);
 	std::string member_name = parse_identifier();
-	Frame* members = body_frame_of(base);
-	if (!members)
+	if (!body_frame_of(base))
 		raise_parse_error(
 		    "member access on non-composite type");
 	Node* member =
-	    members->lookup_value(member_name);
+	    maybe_bind_member(base, member_name);
 	if (!member)
 		raise_parse_error(
 		    "no member '" + member_name + "'");
-	return bind_lookup_result(base, member);
+	return member;
+}
+
+Node* Parser::maybe_bind_member(
+    Node* receiver, const std::string& name) {
+	if (!receiver)
+		return nullptr;
+	Frame* members = body_frame_of(receiver);
+	if (!members)
+		return nullptr;
+	Node* member = members->lookup_value(name);
+	return member
+		   ? bind_lookup_result(receiver, member)
+		   : nullptr;
+}
+
+static bool custom_enumerator_value_type(Type* ty) {
+	return dynamic_cast<RecordType*>(ty) ||
+	       dynamic_cast<PackedRecordType*>(ty) ||
+	       dynamic_cast<ObjectType*>(ty) ||
+	       dynamic_cast<ClassType*>(ty) ||
+	       dynamic_cast<InterfaceType*>(ty);
+}
+
+static void collect_destructor_methods(
+    Node* binding, std::vector<Method*>* out) {
+	auto collect =
+	    [out](Callable* callable) {
+		    auto method =
+			dynamic_cast<Method*>(callable);
+		    if (method &&
+			method->ty->kind == DESTRUCTOR)
+			    out->push_back(method);
+	    };
+	if (auto callable =
+		dynamic_cast<Callable*>(binding)) {
+		collect(callable);
+		return;
+	}
+	if (auto overloads =
+		dynamic_cast<OverloadSet*>(binding))
+		for (Callable* callable :
+		     overloads->members)
+			collect(callable);
+}
+
+static std::vector<Method*>
+nearest_object_destructors(ObjectType* object) {
+	for (ObjectType* current = object;
+	     current; current = current->super) {
+		std::vector<Method*> found;
+		if (current->children)
+			for (const auto& declaration :
+			     current->children
+				 ->value_declarations())
+				collect_destructor_methods(
+				    declaration.second.value,
+				    &found);
+		// Destruction is a single-dispatch operation. A destructor declared
+		// by the nearest object replaces inherited destructor selection just
+		// as an ordinary visible member does.
+		if (!found.empty())
+			return found;
+	}
+	return {};
+}
+
+std::optional<Parser::CustomForInResolution>
+Parser::maybe_resolve_custom_for_in(
+    Node* collection, Node* control) {
+	if (!collection ||
+	    !custom_enumerator_value_type(
+		collection->ty))
+		return std::nullopt;
+	Node* get_member =
+	    maybe_bind_member(
+		collection, "getenumerator");
+	if (!get_member)
+		return std::nullopt;
+
+	auto parameterless_call =
+	    [this](Node* target,
+		   const std::string& name) {
+		    std::vector<Node*> arguments;
+		    FinalizedCall finalized =
+			finalize_call(
+			    target, arguments, name,
+			    current_location());
+		    auto method =
+			dynamic_cast<Method*>(
+			    finalized.callee);
+		    if (!method ||
+			method->ty->kind ==
+			    CONSTRUCTOR ||
+			method->ty->kind ==
+			    DESTRUCTOR ||
+			method->ty->kind ==
+			    CLASS_CONSTRUCTOR ||
+			method->ty->kind ==
+			    CLASS_DESTRUCTOR)
+			    raise_parse_error(
+				"for-in protocol member '" +
+				name +
+				"' must be a function or procedure");
+		    return make_call(
+			finalized,
+			std::move(arguments));
+	    };
+
+	Node* get_call =
+	    parameterless_call(
+		get_member, "GetEnumerator");
+	Type* enumerator_type =
+	    get_call ? get_call->ty : nullptr;
+	if (!custom_enumerator_value_type(
+		enumerator_type))
+		raise_type_kind_mismatch(
+		    "GetEnumerator result must be a record, object, class, or interface",
+		    "record, object, class, or interface",
+		    enumerator_type);
+
+	// This is a semantic reference to the one emitted local, not a source
+	// declaration installed in any Frame. Binding protocol members to it lets
+	// the ordinary member/call/property machinery retain the exact returned
+	// enumerator Type without exposing a compiler name to Pascal lookup.
+	auto enumerator =
+	    new StorageSlot(
+		"tpcc_for_enumerator",
+		enumerator_type);
+
+	Node* move_member =
+	    maybe_bind_member(
+		enumerator, "movenext");
+	if (!move_member)
+		raise_parse_error(
+		    "for-in enumerator has no MoveNext member");
+	Node* move_call =
+	    parameterless_call(
+		move_member, "MoveNext");
+	if (move_call->ty != boolean_type())
+		raise_type_mismatch(
+		    "for-in MoveNext result",
+		    boolean_type(), move_call->ty);
+
+	Node* current =
+	    maybe_bind_member(
+		enumerator, "current");
+	auto current_property =
+	    dynamic_cast<PropertyAccess*>(
+		current);
+	if (!current_property)
+		raise_parse_error(
+		    "for-in enumerator Current must be a readable property");
+	// maybe_auto_call performs the existing indexed/write-only property
+	// validation; PropertyAccess emission later selects its already-resolved
+	// field or getter without repeating member lookup.
+	current = maybe_auto_call(current);
+	Node* current_assignment =
+	    mk_assign(control, current);
+
+	Node* cleanup = nullptr;
+	bool nullable =
+	    dynamic_cast<ClassType*>(
+		enumerator_type) != nullptr;
+	if (nullable) {
+		Node* free_member =
+		    maybe_bind_member(
+			enumerator, "free");
+		if (!free_member)
+			raise_parse_error(
+			    "class enumerator has no Free member");
+		cleanup =
+		    parameterless_call(
+			free_member, "Free");
+		if (cleanup->ty != &unit_type())
+			raise_type_mismatch(
+			    "class enumerator Free result",
+			    &unit_type(), cleanup->ty);
+	} else if (auto object =
+		       dynamic_cast<ObjectType*>(
+			   enumerator_type)) {
+		std::vector<Method*> destructors =
+		    nearest_object_destructors(object);
+		if (destructors.size() > 1)
+			raise_parse_error(
+			    "old-object enumerator has multiple destructors in "
+			    "its nearest declaring type; cleanup is ambiguous");
+		if (!destructors.empty()) {
+			Node* destructor =
+			    bind_lookup_result(
+				enumerator,
+				destructors.front());
+			cleanup =
+			    parameterless_call(
+				destructor,
+				destructors.front()
+				    ->pas_name);
+			if (cleanup->ty !=
+			    &unit_type())
+				raise_type_mismatch(
+				    "old-object enumerator destructor result",
+				    &unit_type(),
+				    cleanup->ty);
+		}
+	}
+
+	return CustomForInResolution{
+	    get_call, move_call,
+	    current_assignment, cleanup,
+	    nullable};
 }
 
 Node* Parser::parse_designator_tail(Node* result) {

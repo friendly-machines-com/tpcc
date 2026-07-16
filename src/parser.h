@@ -259,10 +259,17 @@ private:
 	// crossed try can perform its except/finally semantics before the actual
 	// control transfer occurs.
 	unsigned protected_try_depth = 0;
-	// protected_try_depth at entry to each enclosing loop. A break/continue
-	// is native C++ control flow when both depths agree; otherwise it must
-	// unwind the intervening protected try bodies first.
-	std::vector<unsigned> loop_try_depths;
+	// A source loop normally gives break and continue the same protected-try
+	// target. A compiler-generated cleanup can instead wrap the loop: break
+	// leaves that cleanup region, while continue remains inside it. Keeping
+	// both targets is what lets the shared control-transfer emitter implement
+	// both shapes without treating the generated loop body as source text.
+	struct LoopTryTargets {
+		unsigned break_depth;
+		unsigned continue_depth;
+	};
+	std::vector<LoopTryTargets>
+	    loop_try_targets;
 	// FPC permits bare `raise;` only in the statement sequence belonging
 	// directly to an except clause. Entering a nested try clears this even
 	// when that try occurs lexically inside an outer handler.
@@ -432,6 +439,26 @@ protected:
 	Node* parse_designator();
 	Node* parse_designator_tail(Node* result);
 	Node* parse_member_selection(Node* base);
+	/** Resolve NAME in RECEIVER's ordinary structural member environment and
+	 * bind the result to RECEIVER. This is the non-token-consuming half of
+	 * parse_member_selection, used by compiler-defined protocols which must
+	 * obey the same inheritance, overload, property, and receiver rules as a
+	 * source `Receiver.Name` expression. */
+	Node* maybe_bind_member(
+	    Node* receiver, const std::string& name);
+	struct CustomForInResolution {
+		Node* get_enumerator;
+		Node* move_next;
+		Node* current_assignment;
+		Node* cleanup;
+		bool nullable;
+	};
+	/** Try the ordinary member-based for-in protocol. Null means the
+	 * collection has no GetEnumerator member and builtin iteration may be
+	 * considered; a malformed member protocol is diagnosed here. */
+	std::optional<CustomForInResolution>
+	maybe_resolve_custom_for_in(
+	    Node* collection, Node* control);
 	/** If NODE is a bare callable (Callable, OverloadSet, or MemberAccess
 	 *  whose member is either) AND at least one candidate can be invoked
 	 *  parameterlessly (no formals or all formals defaulted), wrap it in a

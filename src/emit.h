@@ -168,6 +168,14 @@ public:
 	void emit_for_in_ordinal_prologue(
 	    Type* ordinal_type, Node* lower,
 	    Node* upper, Node* current_assignment);
+	void emit_for_in_custom_setup(
+	    Node* get_enumerator, bool nullable);
+	void emit_for_in_custom_loop_prologue(
+	    Node* move_next,
+	    Node* current_assignment);
+	void emit_for_in_loop_epilogue();
+	void emit_for_in_custom_epilogue(
+	    bool nullable);
 	void emit_for_in_epilogue();
 	void emit_loop_control(
 	    bool is_break, unsigned try_depth = 0,

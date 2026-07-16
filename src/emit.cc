@@ -1326,10 +1326,55 @@ void Emitter::emit_for_in_ordinal_prologue(
 	    this, active, current_assignment);
 }
 
+void Emitter::emit_for_in_custom_setup(
+    Node* get_enumerator, bool nullable) {
+	if (!active)
+		return;
+	fprintf(active, "\t{\n");
+	// GetEnumerator is an ordinary Pascal call, but its exact result needs a
+	// stable C++ local so MoveNext, Current, and cleanup all share one value.
+	fprintf(active,
+		"\tauto tpcc_for_enumerator = ");
+	emit_expression(get_enumerator);
+	fprintf(active, ";\n");
+	if (nullable)
+		// A class enumerator may be nil. Keep both the loop and its cleanup
+		// inside the test so nil means an empty iteration without a member
+		// invocation on the null reference.
+		fprintf(active,
+			"\tif (tpcc_for_enumerator != nullptr) {\n");
+}
+
+void Emitter::emit_for_in_custom_loop_prologue(
+    Node* move_next, Node* current_assignment) {
+	if (!active)
+		return;
+	fprintf(active, "\twhile (");
+	// MoveNext was already selected by the ordinary Pascal call resolver.
+	// Emission applies that exact node instead of rediscovering a C++ member.
+	emit_expression(move_next);
+	fprintf(active, ") {\n");
+	emit_statement(current_assignment);
+}
+
+void Emitter::emit_for_in_loop_epilogue() {
+	if (active)
+		fprintf(active, "\t}\n");
+}
+
+void Emitter::emit_for_in_custom_epilogue(
+    bool nullable) {
+	if (!active)
+		return;
+	if (nullable)
+		fprintf(active, "\t}\n");
+	fprintf(active, "\t}\n");
+}
+
 void Emitter::emit_for_in_epilogue() {
 	if (!active)
 		return;
-	fprintf(active, "\t}\n");
+	emit_for_in_loop_epilogue();
 	fprintf(active, "\t}\n");
 }
 
