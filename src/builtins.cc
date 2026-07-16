@@ -559,77 +559,35 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_insert", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
-    {.cxx_name = "::u_system::p_bitwiseand",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::BitwiseAnd},
-    {.cxx_name = "::u_system::p_bitwiseor",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::BitwiseOr},
-    {.cxx_name = "::u_system::p_bitwisexor",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::BitwiseXor},
+    {"::u_system::p_bitwiseand", nullptr},
+    {"::u_system::p_bitwiseor", nullptr},
+    {"::u_system::p_bitwisexor", nullptr},
 
     // Delphi {"::u_system::p_logicalor", nullptr},
     // Delphi {"::u_system::p_logicaland", nullptr},
     {"::u_system::p_logicalnot", fold_logical_not},
     {"::u_system::p_logicalxor", nullptr},
 
-    {.cxx_name = "::u_system::p_add",
-     .const_fold = fold_add,
-     .numeric_operation =
-	 BuiltinNumericOperation::Add},
-    {.cxx_name = "::u_system::p_subtract",
-     .const_fold = fold_subtract,
-     .numeric_operation =
-	 BuiltinNumericOperation::Subtract},
+    {"::u_system::p_add", fold_add},
+    {"::u_system::p_subtract", fold_subtract},
     {"::u_system::p_positive", fold_unary_plus},
     {"::u_system::p_negative", fold_unary_minus},
-    {.cxx_name = "::u_system::p_multiply",
-     .const_fold = fold_multiply,
-     .numeric_operation =
-	 BuiltinNumericOperation::Multiply},
-    {.cxx_name = "::u_system::p_divide",
-     .const_fold = fold_divide,
-     .numeric_operation =
-	 BuiltinNumericOperation::Divide},
-    {.cxx_name = "::u_system::p_intdivide",
-     .const_fold = fold_intdivide,
-     .numeric_operation =
-	 BuiltinNumericOperation::IntegerDivide},
+    {"::u_system::p_multiply", fold_multiply},
+    {"::u_system::p_divide", fold_divide},
+    {"::u_system::p_intdivide", fold_intdivide},
     {"::u_system::p_implicit", nullptr},
     // Old-style file Assign is an ordinary procedure, not an implicit
     // conversion despite sharing the Pascal spelling "assign".
     {"::u_system::p_assign", nullptr},
-    {.cxx_name = "::u_system::p_modulus",
-     .const_fold = fold_modulus,
-     .numeric_operation =
-	 BuiltinNumericOperation::Modulus},
+    {"::u_system::p_modulus", fold_modulus},
     {"::u_system::p_leftshift", nullptr},
     {"::u_system::p_rightshift", nullptr},
 
-    {.cxx_name = "::u_system::p_lessthan",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::LessThan},
-    {.cxx_name = "::u_system::p_lessthanorequal",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::LessThanOrEqual},
-    {.cxx_name = "::u_system::p_equal",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::Equal},
-    {.cxx_name = "::u_system::p_greaterthan",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::GreaterThan},
-    {.cxx_name = "::u_system::p_greaterthanorequal",
-     .const_fold = nullptr,
-     .numeric_operation =
-	 BuiltinNumericOperation::GreaterThanOrEqual},
+    {"::u_system::p_lessthan", nullptr},
+    {"::u_system::p_lessthanorequal", nullptr},
+    {"::u_system::p_equal", nullptr},
+    {"::u_system::p_greaterthan", nullptr},
+    {"::u_system::p_greaterthanorequal", nullptr},
     {"::u_system::p_in", nullptr},
     {"::u_system::p_supports", nullptr},
 

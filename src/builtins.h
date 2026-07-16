@@ -67,24 +67,6 @@ enum class BuiltinCallConvention {
 	ReceiverFirst,
 };
 
-enum class BuiltinNumericOperation {
-	None,
-	Add,
-	Subtract,
-	Multiply,
-	Divide,
-	IntegerDivide,
-	Modulus,
-	BitwiseAnd,
-	BitwiseOr,
-	BitwiseXor,
-	LessThan,
-	LessThanOrEqual,
-	Equal,
-	GreaterThan,
-	GreaterThanOrEqual,
-};
-
 struct BuiltinDesc {
 	std::string_view cxx_name;    // e.g. "::u_system::p_ord"
 	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
@@ -93,11 +75,6 @@ struct BuiltinDesc {
 	BuiltinSyntaxKind syntax_kind = BuiltinSyntaxKind::None;
 	BuiltinCallConvention call_convention =
 	    BuiltinCallConvention::Function;
-	// Non-None marks one concrete declaration in Pascal's predefined numeric
-	// operator family. Parser overload resolution consults this semantic
-	// metadata; it must not infer language behavior from a C++ symbol spelling.
-	BuiltinNumericOperation numeric_operation =
-	    BuiltinNumericOperation::None;
 };
 
 struct IntrinsicTypeDesc {

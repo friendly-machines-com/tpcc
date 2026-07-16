@@ -7803,176 +7803,6 @@ static bool dominates(
 	return strict;
 }
 
-static Type* numeric_operand_type(Node* operand) {
-	if (!operand)
-		return nullptr;
-	if (auto literal =
-		untyped_integer_constant(
-		    operand))
-		return integer_literal_natural_type(
-		    literal);
-	Type* type = operand->ty;
-	while (auto range =
-		   dynamic_cast<SubrangeType*>(type))
-		type = range->base_type;
-	OrdinalBounds bounds;
-	if (integer_bounds(type, &bounds))
-		return type;
-	if (type == single_type() ||
-	    type == double_type() ||
-	    type == extended_type())
-		return type;
-	return nullptr;
-}
-
-static bool integer_type_range(
-    Type* type, OrdinalBounds* bounds) {
-	return type && bounds &&
-	       integer_bounds(type, bounds);
-}
-
-static bool integer_range_contains(
-    const OrdinalBounds& outer,
-    const OrdinalBounds& inner) {
-	if (inner.signed_type &&
-	    (!outer.signed_type ||
-	     outer.min_magnitude <
-		 inner.min_magnitude))
-		return false;
-	return outer.max_positive >=
-	       inner.max_positive;
-}
-
-static Type* predefined_numeric_promotion(
-    BuiltinNumericOperation operation,
-    const std::vector<Node*>& args) {
-	if (args.size() != 2 ||
-	    operation ==
-		BuiltinNumericOperation::None)
-		return nullptr;
-	Type* left = numeric_operand_type(
-	    args[0]);
-	Type* right = numeric_operand_type(
-	    args[1]);
-	if (!left || !right)
-		return nullptr;
-	if (operation ==
-		BuiltinNumericOperation::Divide ||
-	    left == single_type() ||
-	    left == double_type() ||
-	    left == extended_type() ||
-	    right == single_type() ||
-	    right == double_type() ||
-	    right == extended_type())
-		return extended_type();
-
-	OrdinalBounds left_bounds;
-	OrdinalBounds right_bounds;
-	if (!integer_type_range(
-		left, &left_bounds) ||
-	    !integer_type_range(
-		right, &right_bounds))
-		return nullptr;
-	for (Type* candidate :
-	     {integer_type(), cardinal_type(),
-	      int64_type(), qword_type()}) {
-		OrdinalBounds candidate_bounds;
-		if (integer_type_range(
-			candidate,
-			&candidate_bounds) &&
-		    integer_range_contains(
-			candidate_bounds,
-			left_bounds) &&
-		    integer_range_contains(
-			candidate_bounds,
-			right_bounds))
-			return candidate;
-	}
-	// No signed 64-bit carrier contains QWord and a negative signed operand.
-	// Delphi defines that mixed operation in the unsigned 64-bit domain.
-	return qword_type();
-}
-
-static BuiltinNumericOperation
-callable_numeric_operation(Callable* callable) {
-	if (!callable)
-		return BuiltinNumericOperation::None;
-	const BuiltinDesc* builtin =
-	    callable->builtin_desc
-		? callable->builtin_desc
-		: lookup_builtin_desc(
-		      callable->cxx_name);
-	if (!builtin ||
-	    builtin->numeric_operation ==
-		BuiltinNumericOperation::None ||
-	    callable->ty->formals.size() != 2)
-		return BuiltinNumericOperation::None;
-	for (const Parameter& formal :
-	     callable->ty->formals) {
-		OrdinalBounds bounds;
-		if (!integer_bounds(
-			formal.ty, &bounds) &&
-		    formal.ty != single_type() &&
-		    formal.ty != double_type() &&
-		    formal.ty != extended_type())
-			// Several RTL helpers intentionally share a C++ spelling:
-			// p_equal serves pointers and strings as well as numbers, and
-			// p_add serves ShortString. Descriptor metadata identifies the
-			// operation; the concrete Pascal formal types identify whether
-			// this declaration is a numeric row of that operation.
-			return BuiltinNumericOperation::None;
-	}
-	return builtin->numeric_operation;
-}
-
-static Callable* predefined_numeric_choice(
-    const std::vector<
-	std::pair<Callable*,
-		  CallableMatch>>& viable,
-    const std::vector<Node*>& args) {
-	BuiltinNumericOperation operation =
-	    BuiltinNumericOperation::None;
-	for (const auto& entry : viable) {
-		Callable* callable = entry.first;
-		BuiltinNumericOperation candidate_operation =
-		    callable_numeric_operation(callable);
-		if (candidate_operation ==
-		    BuiltinNumericOperation::None)
-			continue;
-		if (operation ==
-		    BuiltinNumericOperation::None)
-			operation = candidate_operation;
-		else if (operation !=
-			 candidate_operation)
-			return nullptr;
-	}
-	if (operation ==
-	    BuiltinNumericOperation::None)
-		return nullptr;
-	Type* promoted =
-	    predefined_numeric_promotion(
-		operation, args);
-	if (!promoted)
-		return nullptr;
-	Callable* result = nullptr;
-	for (const auto& entry : viable) {
-		Callable* callable = entry.first;
-		if (!callable ||
-		    callable_numeric_operation(
-			callable) != operation ||
-		    callable->ty->formals.size() != 2 ||
-		    callable->ty->formals[0].ty !=
-			promoted ||
-		    callable->ty->formals[1].ty !=
-			promoted)
-			continue;
-		if (result)
-			return nullptr;
-		result = callable;
-	}
-	return result;
-}
-
 Node* Parser::cast(Node* a, Type* target_ty) {
 	if (auto reference = dynamic_cast<RoutineRef*>(a)) {
 		if (target_ty == pointer_type())
@@ -8404,53 +8234,16 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 							expected_return_type, candidates, viable, none, false);
 		}
 		std::vector<Callable*> non_dominated;
-		Callable* promoted_numeric =
-		    predefined_numeric_choice(
-			viable, args);
-		std::vector<std::pair<
-		    Callable*, CallableMatch>>
-		    ranked_viable;
-		for (const auto& entry : viable) {
-			// The concrete System rows are one parametric predefined
-			// operation. Replace only those rows with the promoted row; every
-			// user-defined or nonnumeric candidate remains in the same
-			// ordinary dominance comparison.
-			if (promoted_numeric &&
-			    callable_numeric_operation(
-				entry.first) !=
-				BuiltinNumericOperation::None &&
-			    entry.first != promoted_numeric)
-				continue;
-			ranked_viable.push_back(entry);
-			if (entry.first ==
-			    promoted_numeric)
-				// The predefined numeric family is one parametric
-				// language candidate. Promotion-selected carrier casts are
-				// its lowering, not source-level argument conversions. Rank
-				// an operand exact when it already has the promoted type and
-				// direct otherwise; retain the original candidate-local
-				// converted expressions for application.
-				for (MatchRank& rank :
-				     ranked_viable.back()
-					 .second.ranks)
-					if (rank.tier !=
-					    MatchRank::Tier::
-						Exact)
-						rank = MatchRank{
-						    MatchRank::Tier::
-							Direct,
-						    0};
-		}
 		for (size_t i = 0;
-		     i < ranked_viable.size(); i++) {
+		     i < viable.size(); i++) {
 			bool dom = false;
 			for (size_t j = 0;
-			     j < ranked_viable.size(); j++) {
+			     j < viable.size(); j++) {
 				if (i != j &&
 				    dominates(
-					ranked_viable[j]
+					viable[j]
 					    .second.ranks,
-					ranked_viable[i]
+					viable[i]
 					    .second.ranks)) {
 					dom = true;
 					break;
@@ -8458,7 +8251,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			}
 			if (!dom)
 				non_dominated.push_back(
-				    ranked_viable[i].first);
+				    viable[i].first);
 		}
 		if (non_dominated.size() != 1) {
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,

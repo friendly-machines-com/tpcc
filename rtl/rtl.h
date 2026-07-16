@@ -2142,13 +2142,13 @@ inline t_sizeint p_sizeof(tpcc_typed_const_storage_ref<T>) {
 	return static_cast<t_sizeint>(sizeof(T));
 }
 
-#define TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, DIV_RESULT) \
-	inline T p_add(T a, T b) { return a + b; } \
-	inline T p_subtract(T a, T b) { return a - b; } \
+#define TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, ARITH_RESULT, DIV_RESULT) \
+	inline ARITH_RESULT p_add(T a, T b) { return static_cast<ARITH_RESULT>(a) + static_cast<ARITH_RESULT>(b); } \
+	inline ARITH_RESULT p_subtract(T a, T b) { return static_cast<ARITH_RESULT>(a) - static_cast<ARITH_RESULT>(b); } \
 	inline T p_positive(T b) { return +b; } \
 	/* For unsigned T, unary minus wraps modulo T's range; this is intentional RTL behavior, not a widening or signed conversion. */ \
 	inline T p_negative(T b) { return -b; } \
-	inline T p_multiply(T a, T b) { return a * b; } \
+	inline ARITH_RESULT p_multiply(T a, T b) { return static_cast<ARITH_RESULT>(a) * static_cast<ARITH_RESULT>(b); } \
 	inline DIV_RESULT p_divide(T a, T b) { return static_cast<DIV_RESULT>(a) / static_cast<DIV_RESULT>(b); } \
 	inline T p_implicit(T source, m_implicit_target<T>) { T target = source; return target; } \
 	inline t_boolean p_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
@@ -2157,32 +2157,32 @@ inline t_sizeint p_sizeof(tpcc_typed_const_storage_ref<T>) {
 	inline t_boolean p_greaterthan(T a, T b) { return tpcc_bool_to_boolean(a > b); } \
 	inline t_boolean p_greaterthanorequal(T a, T b) { return tpcc_bool_to_boolean(a >= b); }
 
-#define TPCC_DEFINE_INTEGER_OPERATIONS(T) \
+#define TPCC_DEFINE_INTEGER_OPERATIONS(T, INTEGER_RESULT) \
 	/* Delphi calls unary `not` LogicalNot even for integer bitwise complement; there is no separate BitwiseNot overload name. */ \
 	inline T p_logicalnot(T a) { return static_cast<T>(~a); } \
-	inline T p_bitwiseand(T a, T b) { return a & b; } \
-	inline T p_bitwiseor(T a, T b) { return a | b; } \
-	inline T p_bitwisexor(T a, T b) { return a ^ b; } \
-	inline T p_intdivide(T a, T b) { return a / b; } \
-	inline T p_modulus(T a, T b) { return a % b; } \
+	inline INTEGER_RESULT p_bitwiseand(T a, T b) { return static_cast<INTEGER_RESULT>(a) & static_cast<INTEGER_RESULT>(b); } \
+	inline INTEGER_RESULT p_bitwiseor(T a, T b) { return static_cast<INTEGER_RESULT>(a) | static_cast<INTEGER_RESULT>(b); } \
+	inline INTEGER_RESULT p_bitwisexor(T a, T b) { return static_cast<INTEGER_RESULT>(a) ^ static_cast<INTEGER_RESULT>(b); } \
+	inline INTEGER_RESULT p_intdivide(T a, T b) { return static_cast<INTEGER_RESULT>(a) / static_cast<INTEGER_RESULT>(b); } \
+	inline INTEGER_RESULT p_modulus(T a, T b) { return static_cast<INTEGER_RESULT>(a) % static_cast<INTEGER_RESULT>(b); } \
 	inline T p_leftshift(T a, T b) { return a << b; } /* FIXME: b smaller */ \
 	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */
 
-#define TPCC_DEFINE_INTEGRAL_OPERATIONS(T) \
-	TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, t_double) \
-	TPCC_DEFINE_INTEGER_OPERATIONS(T)
+#define TPCC_DEFINE_INTEGRAL_OPERATIONS(T, INTEGER_RESULT) \
+	TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, INTEGER_RESULT, t_double) \
+	TPCC_DEFINE_INTEGER_OPERATIONS(T, INTEGER_RESULT)
 
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_byte)
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_shortint)
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_word)
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_smallint)
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_longword)
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_integer)
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_int64)
-TPCC_DEFINE_INTEGRAL_OPERATIONS(t_qword)
-TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_single, t_single)
-TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_double, t_double)
-TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_byte, t_integer)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_shortint, t_integer)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_word, t_integer)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_smallint, t_integer)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_longword, t_longword)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_integer, t_integer)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_int64, t_int64)
+TPCC_DEFINE_INTEGRAL_OPERATIONS(t_qword, t_qword)
+TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_single, t_single, t_single)
+TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_double, t_double, t_double)
+TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended, t_extended)
 
 // Floating-to-integer conversion is undefined in C++ when the finite value is
 // outside the destination range (and for NaN/infinity). Check before casting
