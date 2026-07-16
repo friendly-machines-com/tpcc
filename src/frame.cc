@@ -126,9 +126,9 @@ static bool same_emitted_callable_name(
 	    a->ty->kind == DESTRUCTOR &&
 	    b->ty->kind == DESTRUCTOR &&
 	    dynamic_cast<ClassType*>(
-	        a_method->owner_class) &&
+		a_method->owner_class) &&
 	    a_method->owner_class ==
-	        b_method->owner_class)
+		b_method->owner_class)
 		return true;
 	return a->cxx_name == b->cxx_name;
 }
@@ -151,8 +151,8 @@ bool cxx_callable_signatures_collide(
 		return false;
 	if (a_conversion &&
 	    !a->ty->return_type
-	         ->same_cxx_carrier_as(
-	             b->ty->return_type))
+		 ->same_cxx_carrier_as(
+		     b->ty->return_type))
 		return false;
 	return a->ty->same_cxx_parameter_list_as(
 	    b->ty);
@@ -168,16 +168,16 @@ static bool same_emitted_declaration_scope(
 	if (a_method || b_method) {
 		if (!a_method || !b_method ||
 		    a_method->owner_class !=
-		        b_method->owner_class)
+			b_method->owner_class)
 			return false;
 		auto in_metaclass =
 		    [](const Method* method) {
 			    return method->ty->kind ==
-			               CLASS_METHOD ||
-			           method->ty->kind ==
-			               CLASS_CONSTRUCTOR ||
-			           method->ty->kind ==
-			               CLASS_DESTRUCTOR;
+				       CLASS_METHOD ||
+				   method->ty->kind ==
+				       CLASS_CONSTRUCTOR ||
+				   method->ty->kind ==
+				       CLASS_DESTRUCTOR;
 		    };
 		return in_metaclass(a_method) ==
 		       in_metaclass(b_method);
@@ -191,8 +191,8 @@ static bool same_emitted_declaration_scope(
 static CallableRegistration::Kind callable_pair_result(
     Callable* existing, Callable* incoming) {
 	if (existing->ty
-	        ->same_overload_signature_as(
-	            incoming->ty)) {
+		->same_overload_signature_as(
+		    incoming->ty)) {
 		// Delphi `operator implicit` and FPC `operator :=` are one conversion
 		// family. Its destination is supplied by value context rather than by
 		// an ordinary source argument, so exact result Type* identity is part
@@ -200,18 +200,18 @@ static CallableRegistration::Kind callable_pair_result(
 		// other operator cannot overload by result.
 		const bool distinct_conversion_results =
 		    existing
-		        ->is_implicit_conversion() &&
+			->is_implicit_conversion() &&
 		    incoming
-		        ->is_implicit_conversion() &&
+			->is_implicit_conversion() &&
 		    existing->ty->return_type !=
-		        incoming->ty->return_type;
+			incoming->ty->return_type;
 		if (!distinct_conversion_results)
 			return CallableRegistration::Kind::Rejected;
 	}
 	if (same_emitted_declaration_scope(
-	        existing, incoming) &&
+		existing, incoming) &&
 	    cxx_callable_signatures_collide(
-	        existing, incoming)) {
+		existing, incoming)) {
 		// C++ does not use a function result to distinguish overloads, and
 		// several generative Pascal types erase to the same carrier. The
 		// emitted owner is part of this test: one Pascal class Frame lowers
@@ -256,7 +256,7 @@ CallableRegistration Frame::register_callable(
 			     os->members) {
 				auto result =
 				    callable_pair_result(
-				        member, c);
+					member, c);
 				if (result !=
 				    CallableRegistration::Kind::Added)
 					return {

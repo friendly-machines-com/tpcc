@@ -125,7 +125,7 @@ SizeOf::SizeOf(Type* operand_type)
 // parameter in a prototype, compiler temporary, routine-type declaration
 // `procedure of object`, etc.), cxx_name stays empty and emission skips it.
 StorageSlot::StorageSlot(std::string cxx_name, Type* ty,
-                         Kind kind, Type* owner_type)
+			 Kind kind, Type* owner_type)
     : kind(kind), owner_type(owner_type) {
 	this->cxx_name = cxx_name;
 	this->ty = ty;
@@ -465,8 +465,7 @@ void WriteCall::print_diagnostic_definition(
 		if (item.width)
 			out << " width " << ctx->known_value_ref(item.width);
 		if (item.precision)
-			out << " precision " <<
-			    ctx->known_value_ref(item.precision);
+			out << " precision " << ctx->known_value_ref(item.precision);
 	}
 }
 
@@ -501,7 +500,7 @@ ConstEvalResult MemberAccess::const_eval(
 	// it, just as it does not evaluate an instance qualifier for class/static
 	// storage.
 	if (auto constant =
-	        dynamic_cast<ConstantDecl*>(b))
+		dynamic_cast<ConstantDecl*>(b))
 		return constant->const_eval(ctx);
 	return ConstEvalResult::not_constant();
 }
@@ -552,40 +551,40 @@ const char* ExplicitCast::diagnostic_kind() const {
 ConstEvalResult ExplicitCast::const_eval(
     ConstEvalContext& ctx) const {
 	ConstEvalResult value = a
-	    ? a->const_eval(ctx)
-	    : ConstEvalResult::not_constant();
+				    ? a->const_eval(ctx)
+				    : ConstEvalResult::not_constant();
 	if (value.kind !=
 	    ConstEvalResult::Kind::Success)
 		return value;
 	if (auto integer =
-	        dynamic_cast<Integer*>(
-	            value.node))
+		dynamic_cast<Integer*>(
+		    value.node))
 		return const_explicit_ordinal_cast(
 		    integer->value,
 		    integer->negative, ty);
 	if (auto member =
-	        dynamic_cast<EnumMemberRef*>(
-	            value.node)) {
+		dynamic_cast<EnumMemberRef*>(
+		    value.node)) {
 		const bool negative =
 		    member->value < 0;
 		const uint64_t magnitude =
 		    negative
-		        ? static_cast<uint64_t>(
-		              -(member->value + 1)) +
-		              1
-		        : static_cast<uint64_t>(
-		              member->value);
+			? static_cast<uint64_t>(
+			      -(member->value + 1)) +
+			      1
+			: static_cast<uint64_t>(
+			      member->value);
 		return const_explicit_ordinal_cast(
 		    magnitude, negative, ty);
 	}
 	if (auto character =
-	        dynamic_cast<String*>(value.node);
+		dynamic_cast<String*>(value.node);
 	    character &&
 	    character->ty == char_type() &&
 	    character->value.size() == 1)
 		return const_explicit_ordinal_cast(
 		    static_cast<unsigned char>(
-		        character->value.front()),
+			character->value.front()),
 		    false, ty);
 	return Cast::const_eval(ctx);
 }
@@ -604,8 +603,8 @@ const char* ConstantDecl::diagnostic_kind() const {
 ConstEvalResult ConstantDecl::const_eval(
     ConstEvalContext& ctx) const {
 	return initializer
-	    ? initializer->const_eval(ctx)
-	    : ConstEvalResult::not_constant();
+		   ? initializer->const_eval(ctx)
+		   : ConstEvalResult::not_constant();
 }
 void ConstantDecl::collect_diagnostic_edges(
     ErrorLetContext* ctx) const {
@@ -714,8 +713,8 @@ ConstEvalResult RecordLiteral::const_eval(
 	folded.reserve(fields.size());
 	for (const Field& field : fields) {
 		ConstEvalResult value = field.value
-		    ? field.value->const_eval(ctx)
-		    : ConstEvalResult::not_constant();
+					    ? field.value->const_eval(ctx)
+					    : ConstEvalResult::not_constant();
 		if (value.kind != ConstEvalResult::Kind::Success)
 			return value;
 		folded.push_back(Field{field.slot, value.node});
@@ -749,8 +748,8 @@ ConstEvalResult SetLiteral::const_eval(ConstEvalContext& ctx) const {
 	folded.reserve(items.size());
 	for (const Item& item : items) {
 		ConstEvalResult lower = item.lower
-		    ? item.lower->const_eval(ctx)
-		    : ConstEvalResult::not_constant();
+					    ? item.lower->const_eval(ctx)
+					    : ConstEvalResult::not_constant();
 		if (lower.kind != ConstEvalResult::Kind::Success)
 			return lower;
 		Node* upper_node = nullptr;

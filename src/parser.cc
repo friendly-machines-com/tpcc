@@ -210,7 +210,7 @@ void Parser::pop_scope() {
 void Parser::push_declaration_frame(Frame* frame) {
 	if (!frame) {
 		fprintf(stderr,
-		    "internal compiler error: null declaration frame\n");
+			"internal compiler error: null declaration frame\n");
 		abort();
 	}
 	declaration_frames.push_back(frame);
@@ -219,7 +219,7 @@ void Parser::push_declaration_frame(Frame* frame) {
 void Parser::pop_declaration_frame() {
 	if (declaration_frames.empty()) {
 		fprintf(stderr,
-		    "internal compiler error: pop on empty declaration-frame stack\n");
+			"internal compiler error: pop on empty declaration-frame stack\n");
 		abort();
 	}
 	declaration_frames.pop_back();
@@ -228,7 +228,7 @@ void Parser::pop_declaration_frame() {
 Frame* Parser::current_declaration_frame() const {
 	if (declaration_frames.empty()) {
 		fprintf(stderr,
-		    "internal compiler error: no current declaration frame\n");
+			"internal compiler error: no current declaration frame\n");
 		abort();
 	}
 	return declaration_frames.back();
@@ -339,11 +339,11 @@ static void append_cost_vector(
 		    MatchRank::Tier::UserConvert) {
 			sst << " via "
 			    << match_tier_name(
-			           costs[i].source_tier);
+				   costs[i].source_tier);
 			if (costs[i].source_distance)
 				sst << "+"
 				    << costs[i]
-				           .source_distance;
+					   .source_distance;
 		}
 	}
 	sst << "]";
@@ -391,8 +391,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	if (failure_description.empty())
 		failure_description =
 		    ambiguous
-		        ? "ambiguous overload"
-		        : "no matching overload";
+			? "ambiguous overload"
+			: "no matching overload";
 	sst << failure_description << " for '" << name
 	    << "'";
 
@@ -464,7 +464,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	// other referenced definition transitively.
 	ErrorLetContext ctx =
 	    make_error_let_context_from_scopes(
-	        scopes, 4);
+		scopes, 4);
 	std::string incoming_ref =
 	    ctx.value_ref(incoming);
 	std::string incoming_type_ref =
@@ -475,7 +475,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	    ctx.type_ref(conflicting->ty);
 	std::string family_ref =
 	    ctx.value_ref(
-	        registration.existing_binding);
+		registration.existing_binding);
 
 	std::stringstream sst;
 	sst << "overload '" << name
@@ -499,18 +499,18 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	RoutineType* conflicting_type =
 	    conflicting->ty;
 	if (incoming_type->same_overload_signature_as(
-	        conflicting_type) &&
+		conflicting_type) &&
 	    incoming_type->return_type !=
-	        conflicting_type->return_type) {
+		conflicting_type->return_type) {
 		sst << "\n  Pascal distinguishes these implicit "
 		       "conversions by destination type: "
 		    << conflicting_type_ref << " returns "
 		    << ctx.type_ref(
-		           conflicting_type->return_type)
+			   conflicting_type->return_type)
 		    << ", while " << incoming_type_ref
 		    << " returns "
 		    << ctx.type_ref(
-		           incoming_type->return_type)
+			   incoming_type->return_type)
 		    << ". Their hidden destination tags still "
 		       "have the same C++ carrier, so this "
 		       "backend cannot distinguish them.";
@@ -526,15 +526,15 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 			Type* conflicting_formal =
 			    conflicting_type->formals[i].ty;
 			if (incoming_formal ==
-			        conflicting_formal ||
+				conflicting_formal ||
 			    !incoming_formal
-			         ->same_cxx_carrier_as(
-			             conflicting_formal))
+				 ->same_cxx_carrier_as(
+				     conflicting_formal))
 				continue;
 			sst << "\n    parameter " << (i + 1)
 			    << ": "
 			    << ctx.type_ref(
-			           conflicting_formal)
+				   conflicting_formal)
 			    << " and "
 			    << ctx.type_ref(incoming_formal);
 		}
@@ -591,33 +591,33 @@ static std::string compact_directive_argument(
 
 static constexpr std::array<
     DirectiveSwitchCategory, 26>
-directive_switch_categories = {
-    DirectiveSwitchCategory::RecordPacking, // A
-    DirectiveSwitchCategory::Local,         // B
-    DirectiveSwitchCategory::Local,         // C
-    DirectiveSwitchCategory::Module,        // D
-    DirectiveSwitchCategory::Module,        // E
-    DirectiveSwitchCategory::Unsupported,   // F
-    DirectiveSwitchCategory::Local,         // G
-    DirectiveSwitchCategory::Local,         // H
-    DirectiveSwitchCategory::Local,         // I
-    DirectiveSwitchCategory::Local,         // J
-    DirectiveSwitchCategory::Unsupported,   // K
-    DirectiveSwitchCategory::Unsupported,   // L
-    DirectiveSwitchCategory::Local,         // M
-    DirectiveSwitchCategory::Unsupported,   // N
-    DirectiveSwitchCategory::Optimizer,     // O
-    DirectiveSwitchCategory::Module,        // P
-    DirectiveSwitchCategory::Local,         // Q
-    DirectiveSwitchCategory::Local,         // R
-    DirectiveSwitchCategory::Local,         // S
-    DirectiveSwitchCategory::Local,         // T
-    DirectiveSwitchCategory::Unsupported,   // U
-    DirectiveSwitchCategory::Local,         // V
-    DirectiveSwitchCategory::Local,         // W
-    DirectiveSwitchCategory::Module,        // X
-    DirectiveSwitchCategory::Unsupported,   // Y
-    DirectiveSwitchCategory::EnumPacking,   // Z
+    directive_switch_categories = {
+	DirectiveSwitchCategory::RecordPacking, // A
+	DirectiveSwitchCategory::Local,		// B
+	DirectiveSwitchCategory::Local,		// C
+	DirectiveSwitchCategory::Module,	// D
+	DirectiveSwitchCategory::Module,	// E
+	DirectiveSwitchCategory::Unsupported,	// F
+	DirectiveSwitchCategory::Local,		// G
+	DirectiveSwitchCategory::Local,		// H
+	DirectiveSwitchCategory::Local,		// I
+	DirectiveSwitchCategory::Local,		// J
+	DirectiveSwitchCategory::Unsupported,	// K
+	DirectiveSwitchCategory::Unsupported,	// L
+	DirectiveSwitchCategory::Local,		// M
+	DirectiveSwitchCategory::Unsupported,	// N
+	DirectiveSwitchCategory::Optimizer,	// O
+	DirectiveSwitchCategory::Module,	// P
+	DirectiveSwitchCategory::Local,		// Q
+	DirectiveSwitchCategory::Local,		// R
+	DirectiveSwitchCategory::Local,		// S
+	DirectiveSwitchCategory::Local,		// T
+	DirectiveSwitchCategory::Unsupported,	// U
+	DirectiveSwitchCategory::Local,		// V
+	DirectiveSwitchCategory::Local,		// W
+	DirectiveSwitchCategory::Module,	// X
+	DirectiveSwitchCategory::Unsupported,	// Y
+	DirectiveSwitchCategory::EnumPacking,	// Z
 };
 
 static std::optional<size_t>
@@ -771,7 +771,7 @@ void Parser::handle_directive(
 		const bool requested = option[1] == '+';
 		const bool cond =
 		    directive_state.switch_enabled(
-		        option[0]) == requested;
+			option[0]) == requested;
 		const bool outer = current_active();
 		ifdef_stack.push_back({outer, cond, outer && cond});
 		return;
@@ -831,7 +831,7 @@ void Parser::handle_directive(
 			directive_state.set_interface_model(
 			    InterfaceModel::CORBA);
 		} else if (model == "com" ||
-		           model == "default") {
+			   model == "default") {
 			// Native Pascal's initial interface model is COM. TPCC has no
 			// command-line override for that initial setting, so DEFAULT
 			// returns to COM rather than to the most recent directive.
@@ -882,7 +882,7 @@ void Parser::handle_directive(
 			size_t position = 0;
 			while (position < switches.size()) {
 				if (position + 1 >=
-				        switches.size() ||
+					switches.size() ||
 				    switches[position] < 'a' ||
 				    switches[position] > 'z' ||
 				    (switches[position + 1] != '+' &&
@@ -1243,10 +1243,10 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_statement(
 			    new Raise(
-			        object, address, frame));
+				object, address, frame));
 	} else if (peek_directive("fail") &&
-	    current_routine &&
-	    current_routine->ty->kind == CONSTRUCTOR) {
+		   current_routine &&
+		   current_routine->ty->kind == CONSTRUCTOR) {
 		parse_directive("fail");
 		if (emitter)
 			emitter->emit_statement(
@@ -1260,8 +1260,8 @@ void Parser::maybe_parse_statement() {
 		    loop_depth <= finally_loop_depths.back())
 			raise_parse_error(
 			    is_break
-			        ? "break cannot leave a finally block"
-			        : "continue cannot leave a finally block");
+				? "break cannot leave a finally block"
+				: "continue cannot leave a finally block");
 		if (emitter)
 			emitter->emit_loop_control(
 			    is_break, protected_try_depth,
@@ -1295,7 +1295,7 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_statement(
 			    new Return(
-			        value, protected_try_depth));
+				value, protected_try_depth));
 	} else if (peek_keyword("goto")) {
 		SourceLocation goto_location =
 		    current_location();
@@ -1342,18 +1342,18 @@ void Parser::maybe_parse_statement() {
 						variable_name = first;
 						exception_type =
 						    parse_type_expression(
-						        false);
+							false);
 					} else if (
 					    maybe_parse_period()) {
 						UnitRef* unit =
 						    resolve_unit_type_qualifier(
-						        first);
+							first);
 						std::string member =
 						    parse_identifier();
 						exception_type =
 						    unit->unit->frame
-						        ->lookup_type(
-						            member);
+							->lookup_type(
+							    member);
 						if (!exception_type)
 							raise_parse_error(
 							    "unit '" +
@@ -1363,10 +1363,10 @@ void Parser::maybe_parse_statement() {
 					} else {
 						exception_type =
 						    resolve_type(
-						        first, false);
+							first, false);
 					}
 					if (!dynamic_cast<ClassType*>(
-					        exception_type))
+						exception_type))
 						raise_type_kind_mismatch(
 						    "exception handler type must be a class",
 						    "class",
@@ -1380,24 +1380,24 @@ void Parser::maybe_parse_statement() {
 					if (variable_name) {
 						variable =
 						    new StorageSlot(
-						        cxx_value_name(
-						            *variable_name),
-						        exception_type);
+							cxx_value_name(
+							    *variable_name),
+							exception_type);
 						handler_frame
 						    ->register_variable(
-						        *variable_name,
-						        variable,
-						        exception_type);
+							*variable_name,
+							variable,
+							exception_type);
 					}
 					if (emitter)
 						emitter
 						    ->emit_exception_handler_prologue(
-						        exception_type,
-						        variable
-						            ? variable
-						                  ->cxx_name
-						            : "",
-						        first_handler);
+							exception_type,
+							variable
+							    ? variable
+								  ->cxx_name
+							    : "",
+							first_handler);
 					push_scope(handler_frame);
 					bare_raise_allowed = true;
 					const bool empty_handler =
@@ -1469,8 +1469,8 @@ void Parser::maybe_parse_statement() {
 			emitter->emit_try_control_epilogue(
 			    this_try_depth,
 			    current_routine
-			        ? current_routine->ty
-			        : nullptr,
+				? current_routine->ty
+				: nullptr,
 			    try_is_inside_loop);
 	} else if (peek_keyword("if")) {
 		parse_keyword("if");
@@ -1767,7 +1767,7 @@ Node* Parser::maybe_parse_numeral() {
 		const bool is_decimal_real =
 		    base == 10 &&
 		    input_token.find_first_of(".eE") !=
-		        std::string::npos;
+			std::string::npos;
 		if (!is_decimal_real) {
 			uint64_t value;
 			auto [ptr, ec] = std::from_chars(input, input + input_size, value, base);
@@ -1822,8 +1822,8 @@ ScopeValueLookup ScopeEntry::lookup_value(
 	return ScopeValueLookup{
 	    binding,
 	    binding &&
-	        !is_receiver_environment() &&
-	        callable_binding_opens_parent(binding)};
+		!is_receiver_environment() &&
+		callable_binding_opens_parent(binding)};
 }
 
 Node* Parser::bind_lookup_result(
@@ -1837,29 +1837,29 @@ Node* Parser::bind_lookup_result(
 	// arguments select one declaration in finalize_call.
 	const bool class_reference =
 	    dynamic_cast<ClassRefType*>(
-	        qualifier->ty) != nullptr;
+		qualifier->ty) != nullptr;
 	const bool type_qualifier =
 	    dynamic_cast<TypeMemberQualifier*>(
-	        qualifier) != nullptr;
+		qualifier) != nullptr;
 	if (class_reference || type_qualifier) {
 		if (auto slot =
-		        dynamic_cast<StorageSlot*>(binding);
+			dynamic_cast<StorageSlot*>(binding);
 		    slot &&
 		    slot->kind !=
-		        StorageSlot::Kind::StaticMember)
+			StorageSlot::Kind::StaticMember)
 			raise_parse_error(
 			    "instance field cannot be accessed through a " +
 			    std::string(type_qualifier
-			            ? "type"
-			            : "class reference"));
+					    ? "type"
+					    : "class reference"));
 		if (dynamic_cast<Property*>(binding))
 			raise_parse_error(
 			    "instance property cannot be accessed through a " +
 			    std::string(type_qualifier
-			            ? "type"
-			            : "class reference"));
+					    ? "type"
+					    : "class reference"));
 		if (auto method =
-		        dynamic_cast<Method*>(binding)) {
+			dynamic_cast<Method*>(binding)) {
 			const bool allowed =
 			    method->is_static ||
 			    (!type_qualifier &&
@@ -1869,8 +1869,8 @@ Node* Parser::bind_lookup_result(
 				raise_parse_error(
 				    "instance method cannot be accessed through a " +
 				    std::string(type_qualifier
-				            ? "type"
-				            : "class reference"));
+						    ? "type"
+						    : "class reference"));
 		}
 	}
 	if (auto property = dynamic_cast<Property*>(binding))
@@ -1894,7 +1894,7 @@ Node* Parser::maybe_resolve_value(std::string name) {
 	// scopes (cross-unit overloading).
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (auto unit =
-		        dynamic_cast<UnitRef*>(it->qualifier);
+			dynamic_cast<UnitRef*>(it->qualifier);
 		    unit && unit->unit &&
 		    unit->unit->name == name) {
 			if (collected.empty())
@@ -1988,7 +1988,7 @@ Node* Parser::active_function_result_lvalue(Callable* c) const {
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (Node* hit =
-		        it->lookup_value(name).binding) {
+			it->lookup_value(name).binding) {
 			if (auto c = dynamic_cast<Callable*>(hit)) {
 				if (Node* result = active_function_result_lvalue(c))
 					return result;
@@ -2013,7 +2013,7 @@ Type* Parser::maybe_resolve_type(std::string name) {
 			continue;
 		std::unordered_set<IncompleteType*> seen;
 		while (auto incomplete =
-		           dynamic_cast<IncompleteType*>(hit)) {
+			   dynamic_cast<IncompleteType*>(hit)) {
 			if (!incomplete->resolved)
 				return incomplete;
 			if (!seen.insert(incomplete).second)
@@ -2130,14 +2130,14 @@ static Type* infer_set_item_type(
 	if (next_to_current &&
 	    (!current_to_next ||
 	     conversion_is_better(
-	         *next_to_current,
-	         *current_to_next)))
+		 *next_to_current,
+		 *current_to_next)))
 		return current;
 	if (current_to_next &&
 	    (!next_to_current ||
 	     conversion_is_better(
-	         *current_to_next,
-	         *next_to_current)))
+		 *current_to_next,
+		 *next_to_current)))
 		return next;
 	// Set constructors need one ordinal storage domain for all their items.
 	// This is contextual constructor inference, not binary-operator
@@ -2171,11 +2171,11 @@ Node* Parser::parse_set_literal() {
 				continue;
 			Type* bound_type = bound->ty;
 			if (auto integer =
-			        untyped_integer_constant(
-			            bound))
+				untyped_integer_constant(
+				    bound))
 				bound_type =
 				    integer_literal_natural_type(
-				        integer);
+					integer);
 			if (!is_set_item_type(bound_type))
 				raise_parse_error("set literal item is not ordinal");
 			if (item_type == unknown_type()) {
@@ -2183,10 +2183,10 @@ Node* Parser::parse_set_literal() {
 			} else {
 				Type* common =
 				    infer_set_item_type(
-				        item_type, bound_type);
+					item_type, bound_type);
 				if (!common)
 					raise_type_mismatch("set literal items with a common ordinal type",
-						item_type, bound_type);
+							    item_type, bound_type);
 				item_type = common;
 			}
 		}
@@ -2199,7 +2199,7 @@ Node* Parser::parse_set_literal() {
 		}
 	}
 	return new SetLiteral(std::move(items),
-	    new FixedSetType(current_location(), item_type));
+			      new FixedSetType(current_location(), item_type));
 }
 
 Node* Parser::parse_new_or_dispose(bool is_new) {
@@ -2223,9 +2223,9 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 		    parse_designator();
 		pointer_type =
 		    dynamic_cast<PointerType*>(
-		        destination_or_pointer
-		            ? destination_or_pointer->ty
-		            : nullptr);
+			destination_or_pointer
+			    ? destination_or_pointer->ty
+			    : nullptr);
 	} else if (maybe_resolve_type(input_token)) {
 		Type* parsed_type =
 		    parse_type_expression(false);
@@ -2242,7 +2242,7 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 		emit_parse_error_at(
 		    operation_location,
 		    std::string(is_new ? "New" : "Dispose") +
-		        " requires a typed pointer");
+			" requires a typed pointer");
 	if (is_new && !functional_form &&
 	    !is_assignable(destination_or_pointer))
 		emit_parse_error_at(
@@ -2261,8 +2261,8 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 			emit_parse_error_at(
 			    operation_location,
 			    std::string(is_new ? "New" : "Dispose") +
-			        " lifecycle form requires a pointer "
-			        "to an old-style object");
+				" lifecycle form requires a pointer "
+				"to an old-style object");
 
 		std::string lifecycle_name =
 		    parse_identifier();
@@ -2284,14 +2284,14 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 
 		Node* candidates =
 		    object->children
-		        ? object->children->lookup_value(
-		              lifecycle_name)
-		        : nullptr;
+			? object->children->lookup_value(
+			      lifecycle_name)
+			: nullptr;
 		if (!candidates)
 			emit_parse_error_at(
 			    operation_location,
 			    "no old-style object member '" +
-			        lifecycle_name + "'");
+				lifecycle_name + "'");
 
 		// Reuse ordinary member overload finalization. The receiver exists
 		// only to establish the already-known pointed-to object context;
@@ -2300,36 +2300,36 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 		    new StorageSlot("", pointer_type);
 		auto target =
 		    new MemberAccess(
-		        semantic_receiver, candidates);
+			semantic_receiver, candidates);
 		target->ty = candidates->ty;
 		auto finalized =
 		    finalize_call(
-		        target, lifecycle_args,
-		        lifecycle_name,
-		        operation_location);
+			target, lifecycle_args,
+			lifecycle_name,
+			operation_location);
 		lifecycle_method =
 		    dynamic_cast<Method*>(
-		        finalized.callee);
+			finalized.callee);
 		if (!lifecycle_method ||
 		    lifecycle_method->ty->kind !=
-		        (is_new ? CONSTRUCTOR : DESTRUCTOR))
+			(is_new ? CONSTRUCTOR : DESTRUCTOR))
 			emit_parse_error_at(
 			    operation_location,
 			    std::string(is_new ? "New" : "Dispose") +
-			        (is_new
-			             ? " second operand must select "
-			               "a constructor"
-			             : " second operand must select "
-			               "a destructor"));
+				(is_new
+				     ? " second operand must select "
+				       "a constructor"
+				     : " second operand must select "
+				       "a destructor"));
 	}
 	parse_closing_paren();
 
 	if (is_new) {
 		auto value =
 		    new NewValue(
-		        pointer_type, allocated_type,
-		        lifecycle_method,
-		        std::move(lifecycle_args));
+			pointer_type, allocated_type,
+			lifecycle_method,
+			std::move(lifecycle_args));
 		if (functional_form)
 			return value;
 		return mk_assign(
@@ -2385,7 +2385,7 @@ Node* Parser::parse_value() {
 			}
 			consume();
 		} while (!input_token.empty() &&
-		         (input_token.front() == '\'' || input_token.front() == '#'));
+			 (input_token.front() == '\'' || input_token.front() == '#'));
 		Type* literal_type = s.size() == 1 ? char_type() : shortstring_type();
 		return new String(std::move(s), literal_type);
 	}
@@ -2400,17 +2400,17 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			Type* qualifier_type =
 			    maybe_resolve_type(id);
 			if (auto class_type =
-			        dynamic_cast<ClassType*>(
-			            qualifier_type))
+				dynamic_cast<ClassType*>(
+				    qualifier_type))
 				base =
 				    new ClassRefValue(class_type);
 			else if (dynamic_cast<RecordType*>(
-			             qualifier_type) ||
-			         dynamic_cast<PackedRecordType*>(
-			             qualifier_type))
+				     qualifier_type) ||
+				 dynamic_cast<PackedRecordType*>(
+				     qualifier_type))
 				base =
 				    new TypeMemberQualifier(
-				        qualifier_type);
+					qualifier_type);
 		}
 		if (!base)
 			raise_parse_error(
@@ -2452,9 +2452,9 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			if (input_token != "(")
 				raise_parse_error(
 				    syntax_kind ==
-				            BuiltinSyntaxKind::NewValue
-				        ? "New requires an argument list"
-				        : "Dispose requires an argument list");
+					    BuiltinSyntaxKind::NewValue
+					? "New requires an argument list"
+					: "Dispose requires an argument list");
 			return parse_new_or_dispose(
 			    syntax_kind ==
 			    BuiltinSyntaxKind::NewValue);
@@ -2490,7 +2490,7 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 						}
 						items.push_back(
 						    WriteCall::Item{
-						        item, width, precision});
+							item, width, precision});
 					} while (maybe_parse_comma());
 				}
 				parse_closing_paren();
@@ -2545,14 +2545,14 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			// it must be parsed from the type namespace and represented directly.
 			if (target_ty == pointer_type()) {
 				if (auto reference =
-				        dynamic_cast<RoutineRef*>(value))
+					dynamic_cast<RoutineRef*>(value))
 					return resolve_routine_code_reference(
 					    reference);
 			}
 			if (auto target_routine =
-			        dynamic_cast<RoutineType*>(target_ty)) {
+				dynamic_cast<RoutineType*>(target_ty)) {
 				if (auto reference =
-				        dynamic_cast<RoutineRef*>(value))
+					dynamic_cast<RoutineRef*>(value))
 					return resolve_routine_reference(
 					    reference, target_routine);
 				if (dynamic_cast<NilLiteral*>(value))
@@ -2566,11 +2566,11 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 					    value, target_routine);
 				}
 				if (auto source_routine =
-				        dynamic_cast<RoutineType*>(
-				            value->ty)) {
+					dynamic_cast<RoutineType*>(
+					    value->ty)) {
 					if (!target_routine
-					         ->accepts_routine_value_from(
-					             source_routine))
+						 ->accepts_routine_value_from(
+						     source_routine))
 						raise_parse_error(
 						    "explicit cast between "
 						    "incompatible routine types");
@@ -2596,7 +2596,7 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 		}
 	}
 	if (auto class_type =
-	        dynamic_cast<ClassType*>(maybe_resolve_type(id))) {
+		dynamic_cast<ClassType*>(maybe_resolve_type(id))) {
 		// Pascal keeps type and value lookup distinct. In value context the
 		// class name denotes the exact class-reference value; it is not the
 		// ClassType object reused as a fake expression. The parenthesized
@@ -2698,9 +2698,9 @@ Node* Parser::parse_inherited() {
 		n->dropped =
 		    current_method && resolved_method &&
 		    dynamic_cast<ClassType*>(
-		        current_method->owner_class) &&
+			current_method->owner_class) &&
 		    dynamic_cast<ClassType*>(
-		        resolved_method->owner_class);
+			resolved_method->owner_class);
 	}
 	return n;
 }
@@ -2847,10 +2847,10 @@ Node* Parser::maybe_auto_call(Node* n) {
 	if (auto property = dynamic_cast<PropertyAccess*>(n)) {
 		if (!property->property->index_types.empty() && property->indexes.empty())
 			raise_parse_error("indexed property '" + property->property->pas_name +
-				"' requires an index argument list");
+					  "' requires an index argument list");
 		if (!property->property->read_accessor)
 			raise_parse_error("write-only property '" + property->property->pas_name +
-				"' cannot be read");
+					  "' cannot be read");
 		return n;
 	}
 	if (!node_is_bare_callable(n))
@@ -2975,8 +2975,8 @@ Node* Parser::parse_designator_tail(Node* result) {
 			// place-aware consumers such as an omitted-type var formal use
 			// it; emission must never attempt C++ unary `*` on void*.
 			d->ty = p->is_untyped()
-			    ? unknown_type()
-			    : p->item_type;
+				    ? unknown_type()
+				    : p->item_type;
 			result = d;
 		} else {
 			break;
@@ -3038,8 +3038,8 @@ bool Parser::is_assignable(Node* n) {
 				ty = subrange->base_type;
 			auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
 			return intrinsic && intrinsic->ordinal_bounds
-			    ? intrinsic
-			    : nullptr;
+				   ? intrinsic
+				   : nullptr;
 		};
 		if (!intrinsic_ordinal_carrier(cast->a ? cast->a->ty : nullptr) ||
 		    !intrinsic_ordinal_carrier(cast->ty))
@@ -3060,8 +3060,8 @@ bool Parser::property_read_is_place(PropertyAccess* access) {
 	Node* accessor = access->property->read_accessor;
 	if (dynamic_cast<StorageSlot*>(accessor))
 		return access->receiver->ty && access->receiver->ty->is_reference_type()
-		    ? true
-		    : is_referenceable(access->receiver);
+			   ? true
+			   : is_referenceable(access->receiver);
 	if (auto builtin = dynamic_cast<Builtin*>(accessor))
 		return builtin->desc && builtin->desc->cxx_name == "::u_system::p_index" &&
 		       is_referenceable(access->receiver);
@@ -3167,7 +3167,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	if (a_routine || b_routine) {
 		if (id != "=" || !a_routine || !b_routine ||
 		    !a_routine->accepts_routine_value_from(
-		        b_routine))
+			b_routine))
 			raise_parse_error(
 			    "routine values can only be compared for equality "
 			    "with a compatible routine type");
@@ -3212,7 +3212,7 @@ Node* Parser::mk_membership(Node* item, Node* set) {
 
 Node* Parser::mk_unary_same(std::string id, Node* x) {
 	if (auto integer =
-	        untyped_integer_constant(x)) {
+		untyped_integer_constant(x)) {
 		if (id == "-")
 			return new Integer(
 			    integer->value,
@@ -3269,14 +3269,14 @@ Node* Parser::parse_power() {
 				bool has_instance_method =
 				    dynamic_cast<Method*>(candidates);
 				if (auto overloads =
-				        dynamic_cast<OverloadSet*>(
-				            candidates))
+					dynamic_cast<OverloadSet*>(
+					    candidates))
 					for (Callable* candidate :
 					     overloads->members)
 						has_instance_method =
 						    has_instance_method ||
 						    dynamic_cast<Method*>(
-						        candidate);
+							candidate);
 				if (has_instance_method)
 					receiver = member->a;
 			}
@@ -3337,7 +3337,7 @@ Node* Parser::parse_product_tail(Node* result) {
 			     dynamic_cast<InterfaceType*>(target));
 			if ((!numeric ||
 			     !target->value_conversion_from(
-			         result->ty)) &&
+				 result->ty)) &&
 			    !checked_reference)
 				raise_parse_error(
 				    "'as' requires compatible real-number "
@@ -3467,12 +3467,12 @@ Property* Parser::default_property_for_type(Type* ty) {
 		    accessor, accessor, true);
 		return array->default_property;
 	}
-		if (dynamic_cast<ShortStringType*>(ty) ||
-		    ty == ansistring_type()) {
+	if (dynamic_cast<ShortStringType*>(ty) ||
+	    ty == ansistring_type()) {
 		Node* read_accessor = create_builtin_value("::u_system::p_index");
 		Node* write_accessor = ty == ansistring_type()
-		    ? create_builtin_value("::u_system::tpcc_index_write")
-		    : read_accessor;
+					   ? create_builtin_value("::u_system::tpcc_index_write")
+					   : read_accessor;
 		ty->default_property = new Property(
 		    "items", char_type(), {integer_type()},
 		    read_accessor, write_accessor, true);
@@ -3508,8 +3508,8 @@ PropertyAccess* Parser::apply_property(Node* receiver, Property* property, std::
 	if (indexes.size() != property->index_types.size()) {
 		std::ostringstream message;
 		message << "property '" << property->pas_name << "' expects "
-		        << property->index_types.size() << " index argument(s), got "
-		        << indexes.size();
+			<< property->index_types.size() << " index argument(s), got "
+			<< indexes.size();
 		raise_parse_error(message.str());
 	}
 	for (size_t i = 0; i < indexes.size(); ++i) {
@@ -3567,11 +3567,11 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	auto validate_index_formals = [&](RoutineType* routine, size_t count, const char* which) {
 		if (routine->formals.size() != count)
 			raise_parse_error(std::string(which) + " accessor for property '" + property_name +
-				"' has the wrong number of parameters");
+					  "' has the wrong number of parameters");
 		for (size_t i = 0; i < index_types.size(); ++i)
 			if (routine->formals[i].ty != index_types[i])
 				raise_type_mismatch(std::string(which) + " property index parameter",
-					index_types[i], routine->formals[i].ty);
+						    index_types[i], routine->formals[i].ty);
 	};
 	if (read_accessor) {
 		if (auto field = dynamic_cast<StorageSlot*>(read_accessor)) {
@@ -3601,7 +3601,7 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 				raise_parse_error("property setter must be a procedure");
 			if (routine->formals.back().ty != property_type)
 				raise_type_mismatch("property setter value parameter",
-					property_type, routine->formals.back().ty);
+						    property_type, routine->formals.back().ty);
 			auto mode = routine->formals.back().mode;
 			if (mode != ParamMode::Value && mode != ParamMode::Const)
 				raise_parse_error("property setter value parameter must be a value or const parameter");
@@ -3713,8 +3713,8 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 					// every metaclass instance: that would give Base.X and
 					// Child.X different storage, unlike Pascal.
 					auto kind = class_variables
-					    ? StorageSlot::Kind::StaticMember
-					    : StorageSlot::Kind::AggregateMember;
+							? StorageSlot::Kind::StaticMember
+							: StorageSlot::Kind::AggregateMember;
 					auto slot = new StorageSlot(
 					    cxx_value_name(member_name), ty, kind,
 					    owner_class);
@@ -3735,11 +3735,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			is_class = true;
 			consume();
 			if (dynamic_cast<ClassType*>(
-			        owner_class) != nullptr ||
+				owner_class) != nullptr ||
 			    dynamic_cast<RecordType*>(
-			        owner_class) != nullptr ||
+				owner_class) != nullptr ||
 			    dynamic_cast<PackedRecordType*>(
-			        owner_class) != nullptr) {
+				owner_class) != nullptr) {
 				continue;
 			} else {
 				raise_parse_error(
@@ -3747,7 +3747,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			}
 		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
 			if (dynamic_cast<PackedRecordType*>(
-			        owner_class) &&
+				owner_class) &&
 			    !is_class)
 				raise_parse_error(
 				    "instance methods inside packed records are not implemented");
@@ -3762,13 +3762,13 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				parse_class_lifecycle_prototype(
 				    class_type,
 				    peek_keyword("constructor")
-				        ? CLASS_CONSTRUCTOR
-				        : CLASS_DESTRUCTOR);
+					? CLASS_CONSTRUCTOR
+					: CLASS_DESTRUCTOR);
 			} else {
 				parse_method_prototype(body, owner_class,
-				    peek_keyword("function"),
-				    peek_keyword("destructor"),
-				    peek_keyword("constructor"), is_class);
+						       peek_keyword("function"),
+						       peek_keyword("destructor"),
+						       peek_keyword("constructor"), is_class);
 			}
 			is_class = false;
 			continue; // parse_method_prototype consumes its terminating ';'
@@ -3781,7 +3781,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			auto rt = dynamic_cast<RecordType*>(owner_class);
 			auto packed =
 			    dynamic_cast<PackedRecordType*>(
-			        owner_class);
+				owner_class);
 			if (is_class) {
 				raise_parse_error("variant part only valid in a record, not in a metaclass");
 			}
@@ -3789,7 +3789,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				raise_parse_error("variant part only valid in a record");
 			auto variant =
 			    parse_record_variant(
-			        owner_class, body);
+				owner_class, body);
 			if (rt)
 				rt->variant = variant;
 			else
@@ -3887,7 +3887,7 @@ VariantPart* Parser::parse_record_variant(
 				if (peek_keyword("case")) {
 					arm.variant =
 					    parse_record_variant(
-					        owner, body);
+						owner, body);
 					break;
 				}
 				std::vector<std::string> names{
@@ -3898,10 +3898,10 @@ VariantPart* Parser::parse_record_variant(
 				parse_colon();
 				auto fty = parse_type_expression(false);
 				if (auto intrinsic =
-				        dynamic_cast<IntrinsicType*>(fty);
+					dynamic_cast<IntrinsicType*>(fty);
 				    packed && intrinsic &&
 				    intrinsic->cxx_name ==
-				        "::u_system::t_ansistring")
+					"::u_system::t_ansistring")
 					raise_parse_error(
 					    "managed fields inside packed records are not implemented");
 				for (const auto& fname : names) {
@@ -3982,7 +3982,7 @@ Type* Parser::parse_class_type(
 		}
 		if (super_ty == nullptr) {
 			if (auto incomplete =
-			        dynamic_cast<IncompleteType*>(s_ty);
+				dynamic_cast<IncompleteType*>(s_ty);
 			    incomplete && !incomplete->resolved)
 				raise_parse_error(
 				    "superclass forward declaration '" +
@@ -4010,10 +4010,10 @@ Type* Parser::parse_class_type(
 			super_ty = lookup_implicit_tobject_superclass();
 	}
 	auto ct = completing_forward
-	    ? completing_forward
-	    : new ClassType(
-	          current_location(), nullptr, {},
-	          nullptr);
+		      ? completing_forward
+		      : new ClassType(
+			    current_location(), nullptr, {},
+			    nullptr);
 	ct->implemented_interfaces =
 	    std::move(implemented_interfaces);
 	ct->super = super_ty;
@@ -4058,7 +4058,7 @@ ClassType* Parser::lookup_implicit_tobject_superclass() {
 
 	std::unordered_set<IncompleteType*> seen;
 	while (auto incomplete =
-	           dynamic_cast<IncompleteType*>(tobject_type)) {
+		   dynamic_cast<IncompleteType*>(tobject_type)) {
 		if (!seen.insert(incomplete).second) {
 			raise_type_parse_error(
 			    "System.TObject has a cyclic type definition");
@@ -4210,40 +4210,38 @@ Type* Parser::parse_enum_type() {
 				raise_parse_error(folded.message);
 
 			if (auto integer =
-			        dynamic_cast<Integer*>(folded.node)) {
+				dynamic_cast<Integer*>(folded.node)) {
 				const uint64_t maximum =
 				    integer->negative
-				    ? uint64_t{
-				          static_cast<uint64_t>(
-				              std::numeric_limits<
-				                  int32_t>::max()) +
-				          1}
-				    : static_cast<uint64_t>(
-				          std::numeric_limits<
-				              int32_t>::max());
+					? uint64_t{
+					      static_cast<uint64_t>(
+						  std::numeric_limits<
+						      int32_t>::max()) +
+					      1}
+					: static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
 				if (integer->value > maximum)
 					raise_parse_error(
 					    "explicit enum value is outside "
 					    "signed 32-bit range");
 				value = integer->negative
-				    ? -static_cast<int64_t>(
-				          integer->value)
-				    : static_cast<int64_t>(
-				          integer->value);
+					    ? -static_cast<int64_t>(
+						  integer->value)
+					    : static_cast<int64_t>(
+						  integer->value);
 			} else if (auto member =
-			               dynamic_cast<EnumMemberRef*>(
-			                   folded.node)) {
+				       dynamic_cast<EnumMemberRef*>(
+					   folded.node)) {
 				if (member->ty != et)
 					raise_parse_error(
 					    "explicit enum value uses a member "
 					    "of another enum type");
 				value = member->value;
 			} else if (auto character =
-			               dynamic_cast<String*>(
-			                   folded.node);
-			           character &&
-			           character->ty == char_type() &&
-			           character->value.size() == 1) {
+				       dynamic_cast<String*>(
+					   folded.node);
+				   character &&
+				   character->ty == char_type() &&
+				   character->value.size() == 1) {
 				value = static_cast<unsigned char>(
 				    character->value[0]);
 			} else {
@@ -4269,7 +4267,7 @@ Type* Parser::parse_enum_type() {
 		auto ref = new EnumMemberRef(cxx, value, et);
 		ref->owning_unit = et->owning_unit;
 		if (!current_declaration_frame()->register_variable(
-		        pas, ref, et))
+			pas, ref, et))
 			raise_parse_error("duplicate identifier: " + pas);
 		next_value = value + 1;
 		if (!maybe_parse_comma())
@@ -4344,7 +4342,9 @@ static bool checked_add_one(uint64_t value, uint64_t* out) {
 }
 
 struct FoldedSubrangeBound {
-	enum class Kind { Integer, Char, Enum } kind;
+	enum class Kind { Integer,
+			  Char,
+			  Enum } kind;
 	Node* node = nullptr;
 	Type* ty = nullptr;
 	bool negative = false;
@@ -4652,32 +4652,32 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return raise_type_parse_error("bitpacked record is not implemented");
 	} else if (maybe_parse_circumflex()) {
 		return new PointerType(current_location(), parse_type_expression(true));
-		} else if (peek_keyword("string")) {
-			parse_keyword("string");
-			if (!maybe_parse_opening_bracket())
-				return shortstring_type();
-			Node* capacity_expression = parse_expression();
-			parse_closing_bracket();
-			ConstEvalContext ctx;
-			ConstEvalResult folded =
-			    capacity_expression->const_eval(ctx);
-			if (folded.kind == ConstEvalResult::Kind::NotConstant)
-				return raise_type_parse_error(
-				    "shortstring capacity must be a constant integer");
-			if (folded.kind == ConstEvalResult::Kind::Error)
-				return raise_type_parse_error(folded.message);
-			auto capacity = dynamic_cast<Integer*>(folded.node);
-			if (!capacity || capacity->negative ||
-			    capacity->value == 0 || capacity->value > 255)
-				return raise_type_parse_error(
-				    "shortstring capacity must be in 1..255");
-			// Bracketed string syntax is a type constructor. Do not reuse the
-			// builtin capacity cache: identical constructor operands still
-			// create distinct Pascal definitions, with compatibility handled
-			// separately from identity.
-			return new ShortStringType(
-			    current_location(),
-			    static_cast<uint8_t>(capacity->value));
+	} else if (peek_keyword("string")) {
+		parse_keyword("string");
+		if (!maybe_parse_opening_bracket())
+			return shortstring_type();
+		Node* capacity_expression = parse_expression();
+		parse_closing_bracket();
+		ConstEvalContext ctx;
+		ConstEvalResult folded =
+		    capacity_expression->const_eval(ctx);
+		if (folded.kind == ConstEvalResult::Kind::NotConstant)
+			return raise_type_parse_error(
+			    "shortstring capacity must be a constant integer");
+		if (folded.kind == ConstEvalResult::Kind::Error)
+			return raise_type_parse_error(folded.message);
+		auto capacity = dynamic_cast<Integer*>(folded.node);
+		if (!capacity || capacity->negative ||
+		    capacity->value == 0 || capacity->value > 255)
+			return raise_type_parse_error(
+			    "shortstring capacity must be in 1..255");
+		// Bracketed string syntax is a type constructor. Do not reuse the
+		// builtin capacity cache: identical constructor operands still
+		// create distinct Pascal definitions, with compatibility handled
+		// separately from identity.
+		return new ShortStringType(
+		    current_location(),
+		    static_cast<uint8_t>(capacity->value));
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
@@ -4742,7 +4742,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 				    parse_identifier();
 				Type* result =
 				    unit->unit->frame->lookup_type(
-				        member);
+					member);
 				if (!result)
 					raise_type_parse_error(
 					    "unit '" + id +
@@ -4780,7 +4780,7 @@ void Parser::parse_unit_statement_sequence(bool stop_at_finalization) {
 	while (!input_token.empty() &&
 	       !peek_keyword("end") &&
 	       !(stop_at_finalization &&
-	         peek_keyword("finalization"))) {
+		 peek_keyword("finalization"))) {
 		maybe_parse_statement();
 		if (peek_keyword("end") ||
 		    (stop_at_finalization &&
@@ -4804,9 +4804,9 @@ void Parser::pop_statement_control_context() {
 
 unsigned Parser::current_exception_block() const {
 	return statement_control_contexts.empty()
-	    ? 0
-	    : statement_control_contexts.back()
-	          .current_exception_block;
+		   ? 0
+		   : statement_control_contexts.back()
+			 .current_exception_block;
 }
 
 unsigned Parser::enter_exception_block() {
@@ -4929,7 +4929,7 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 				    name + "'");
 			const std::size_t field_index =
 			    static_cast<std::size_t>(
-			        found - declared_fields.begin());
+				found - declared_fields.begin());
 			if (field_index < next_field)
 				raise_parse_error(
 				    "record initializer field '" + name +
@@ -5110,9 +5110,9 @@ struct TypeBlockResolver {
 				// does not recursively embed its C++ object. Keep rejecting
 				// the corresponding by-value record cycle.
 				if (dynamic_cast<ClassType*>(
-				        inc->resolved) ||
+					inc->resolved) ||
 				    dynamic_cast<InterfaceType*>(
-				        inc->resolved)) {
+					inc->resolved)) {
 					ty = inc->resolved;
 					return true;
 				}
@@ -5275,14 +5275,14 @@ struct TypeBlockResolver {
 				    "class-reference value target resolved to non-class type");
 		}
 		if (auto n =
-		        dynamic_cast<TypeMemberQualifier*>(
-		            node)) {
+			dynamic_cast<TypeMemberQualifier*>(
+			    node)) {
 			if (!normalize_type(n->target))
 				return false;
 			if (!dynamic_cast<RecordType*>(
-			        n->target) &&
+				n->target) &&
 			    !dynamic_cast<PackedRecordType*>(
-			        n->target))
+				n->target))
 				return fail(
 				    "type member qualifier target resolved to "
 				    "non-record type");
@@ -5513,10 +5513,10 @@ struct TypeBlockResolver {
 		     frame->value_declarations()) {
 			auto slot =
 			    dynamic_cast<StorageSlot*>(
-			        item.second.value);
+				item.second.value);
 			if (!slot ||
 			    slot->kind !=
-			        StorageSlot::Kind::AggregateMember)
+				StorageSlot::Kind::AggregateMember)
 				continue;
 			if (!validate_complete_type(slot->ty))
 				return false;
@@ -5528,7 +5528,7 @@ struct TypeBlockResolver {
 		if (!ty || completed_types.count(ty))
 			return true;
 		if (auto found =
-		        completing_types.find(ty);
+			completing_types.find(ty);
 		    found != completing_types.end()) {
 			// A legal recursive definition must be anchored by a nominal
 			// aggregate. `P = ^R; R = record Next: P end` has the Record
@@ -5538,7 +5538,7 @@ struct TypeBlockResolver {
 			for (std::size_t i = found->second;
 			     i < completion_path.size(); ++i)
 				if (nominal_type_anchor(
-				        completion_path[i]))
+					completion_path[i]))
 					return true;
 			return fail(
 			    "type '" + validating_type_name +
@@ -5550,48 +5550,48 @@ struct TypeBlockResolver {
 		completion_path.push_back(ty);
 		bool ok = true;
 		if (auto array =
-		        dynamic_cast<FixedArrayType*>(ty))
+			dynamic_cast<FixedArrayType*>(ty))
 			ok = validate_complete_type(array->bounds) &&
 			     validate_complete_type(array->item_type);
 		else if (auto set =
-		             dynamic_cast<FixedSetType*>(ty))
+			     dynamic_cast<FixedSetType*>(ty))
 			ok = validate_complete_type(set->item_type);
 		else if (auto file =
-		             dynamic_cast<TypedFileType*>(ty))
+			     dynamic_cast<TypedFileType*>(ty))
 			ok = validate_complete_type(file->item_type);
 		else if (auto pointer =
-		             dynamic_cast<PointerType*>(ty))
+			     dynamic_cast<PointerType*>(ty))
 			ok = pointer->is_untyped() ||
 			     validate_complete_type(
-			         pointer->item_type);
+				 pointer->item_type);
 		else if (auto class_ref =
-		             dynamic_cast<ClassRefType*>(ty))
+			     dynamic_cast<ClassRefType*>(ty))
 			ok = validate_complete_type(
 			    class_ref->target);
 		else if (auto routine =
-		             dynamic_cast<RoutineType*>(ty)) {
+			     dynamic_cast<RoutineType*>(ty)) {
 			ok = validate_complete_type(
 			    routine->return_type);
 			for (const auto& formal :
 			     routine->formals)
 				if (ok &&
 				    !validate_complete_type(
-				        formal.ty))
+					formal.ty))
 					ok = false;
 		} else if (auto subrange =
-		            dynamic_cast<SubrangeType*>(ty))
+			       dynamic_cast<SubrangeType*>(ty))
 			ok = validate_complete_type(
 			    subrange->base_type);
 		else if (auto record =
-		             dynamic_cast<RecordType*>(ty))
+			     dynamic_cast<RecordType*>(ty))
 			ok = validate_complete_frame(
 			    record->children);
 		else if (auto record =
-		             dynamic_cast<PackedRecordType*>(ty))
+			     dynamic_cast<PackedRecordType*>(ty))
 			ok = validate_complete_frame(
 			    record->children);
 		else if (auto class_type =
-		             dynamic_cast<ClassType*>(ty)) {
+			     dynamic_cast<ClassType*>(ty)) {
 			ok = validate_complete_type(
 			    class_type->super);
 			for (InterfaceType* iface :
@@ -5603,7 +5603,7 @@ struct TypeBlockResolver {
 				ok = validate_complete_frame(
 				    class_type->children);
 		} else if (auto interface_type =
-		            dynamic_cast<InterfaceType*>(ty)) {
+			       dynamic_cast<InterfaceType*>(ty)) {
 			for (InterfaceType* iface :
 			     interface_type->super_interfaces)
 				if (ok &&
@@ -5613,13 +5613,13 @@ struct TypeBlockResolver {
 				ok = validate_complete_frame(
 				    interface_type->children);
 		} else if (auto object =
-		            dynamic_cast<ObjectType*>(ty))
+			       dynamic_cast<ObjectType*>(ty))
 			ok = validate_complete_type(
-			         object->super) &&
+				 object->super) &&
 			     validate_complete_frame(
-			         object->children);
+				 object->children);
 		else if (auto module =
-		            dynamic_cast<ModuleType*>(ty))
+			     dynamic_cast<ModuleType*>(ty))
 			ok = validate_complete_frame(
 			    module->children);
 
@@ -5637,10 +5637,10 @@ struct TypeBlockResolver {
 		     frame->value_declarations()) {
 			auto slot =
 			    dynamic_cast<StorageSlot*>(
-			        item.second.value);
+				item.second.value);
 			if (!slot ||
 			    slot->kind !=
-			        StorageSlot::Kind::AggregateMember)
+				StorageSlot::Kind::AggregateMember)
 				continue;
 			if (!validate_storage_type(slot->ty))
 				return false;
@@ -5674,19 +5674,19 @@ struct TypeBlockResolver {
 
 		bool ok = true;
 		if (auto array =
-		        dynamic_cast<FixedArrayType*>(ty))
+			dynamic_cast<FixedArrayType*>(ty))
 			ok = validate_storage_type(
 			    array->item_type);
 		else if (auto record =
-		             dynamic_cast<RecordType*>(ty))
+			     dynamic_cast<RecordType*>(ty))
 			ok = validate_aggregate_storage(
 			    record->children);
 		else if (auto record =
-		             dynamic_cast<PackedRecordType*>(ty))
+			     dynamic_cast<PackedRecordType*>(ty))
 			ok = validate_aggregate_storage(
 			    record->children);
 		else if (auto object =
-		             dynamic_cast<ObjectType*>(ty))
+			     dynamic_cast<ObjectType*>(ty))
 			ok = validate_aggregate_storage(
 			    object->children);
 
@@ -5710,11 +5710,11 @@ struct TypeBlockResolver {
 		// definition once; when the same class type is encountered as a field,
 		// validate_storage_type correctly stops at the reference carrier.
 		if (auto class_type =
-		        dynamic_cast<ClassType*>(ty))
+			dynamic_cast<ClassType*>(ty))
 			return validate_aggregate_storage(
 			    class_type->children);
 		if (auto interface_type =
-		        dynamic_cast<InterfaceType*>(ty))
+			dynamic_cast<InterfaceType*>(ty))
 			return validate_aggregate_storage(
 			    interface_type->children);
 		return validate_storage_type(ty);
@@ -5774,7 +5774,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			    dynamic_cast<ClassType*>(existing);
 			if (completing_forward &&
 			    !completing_forward
-			         ->is_forward_declaration)
+				 ->is_forward_declaration)
 				completing_forward = nullptr;
 			if ((!lhs_placeholder &&
 			     !completing_forward) ||
@@ -5860,7 +5860,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		    PendingTypeDecl::Kind::ClassForward)
 			continue;
 		if (!resolver.validate_definition(
-		        decl.rhs, decl.name))
+			decl.rhs, decl.name))
 			raise_type_parse_error(
 			    resolver.error);
 	}
@@ -5945,7 +5945,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		    !decl.needs_cxx_forward)
 			continue;
 		if (decl.kind ==
-		        PendingTypeDecl::Kind::ClassForward ||
+			PendingTypeDecl::Kind::ClassForward ||
 		    dynamic_cast<RecordType*>(decl.rhs) ||
 		    dynamic_cast<PackedRecordType*>(decl.rhs) ||
 		    dynamic_cast<ClassType*>(decl.rhs) ||
@@ -5959,7 +5959,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		    PendingTypeDecl::Kind::ClassForward)
 			emitter
 			    ->emit_class_forward_declaration(
-			        decl.cxx);
+				decl.cxx);
 		else if (decl.alias)
 			emitter->emit_type_alias(
 			    decl.cxx, decl.rhs);
@@ -6020,8 +6020,8 @@ void Parser::parse_var_block() {
 			// declaration registers that name but emits no definition.
 			auto slot = new StorageSlot(
 			    external_cxx_name
-			        ? *external_cxx_name
-			        : cxx_value_name(name),
+				? *external_cxx_name
+				: cxx_value_name(name),
 			    ty);
 			if (!external_cxx_name)
 				slot->owning_unit =
@@ -6212,15 +6212,15 @@ void Parser::validate_class_forwards(Frame* frame) {
 	     frame->type_declarations()) {
 		auto class_type =
 		    dynamic_cast<ClassType*>(
-		        declaration.second);
+			declaration.second);
 		if (!class_type ||
 		    !class_type->is_forward_declaration)
 			continue;
 		emit_parse_error_at(
 		    class_type->source_location,
 		    "forward class declaration '" +
-		        class_type->forward_name +
-		        "' was not resolved");
+			class_type->forward_name +
+			"' was not resolved");
 	}
 }
 
@@ -6345,7 +6345,7 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 			    "class or object", owner);
 		}
 	} else if (kind == CLASS_CONSTRUCTOR ||
-	           kind == CLASS_DESTRUCTOR) {
+		   kind == CLASS_DESTRUCTOR) {
 		// Lifecycle hooks neither construct nor destroy an object instance and
 		// have no result. Their internal receiver is a metaclass only so their
 		// bodies can reuse class-method lowering; they never enter ordinary
@@ -6443,8 +6443,8 @@ void Parser::parse_class_lifecycle_prototype(
 		    std::string(lifecycle_name) +
 		    " cannot have routine directives");
 	Method*& slot = constructing
-	    ? owner_class->class_constructor
-	    : owner_class->class_destructor;
+			    ? owner_class->class_constructor
+			    : owner_class->class_destructor;
 	if (slot)
 		raise_parse_error(
 		    std::string("only one ") +
@@ -6462,8 +6462,8 @@ void Parser::parse_class_lifecycle_prototype(
 		    std::string(lifecycle_name) +
 		    " declared outside a unit or program");
 	auto& scheduled = constructing
-	    ? current_unit->class_constructors
-	    : current_unit->class_destructors;
+			      ? current_unit->class_constructors
+			      : current_unit->class_destructors;
 	scheduled.push_back(method);
 }
 
@@ -6501,7 +6501,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			// Interface methods are the separate implicitly-pure case.
 			if (vk == Method::VirtualKind::None &&
 			    !dynamic_cast<InterfaceType*>(
-			        owner_class))
+				owner_class))
 				raise_parse_error(
 				    "only virtual methods can be abstract");
 			vk = Method::VirtualKind::Abstract;
@@ -6541,10 +6541,10 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		// value and call ABI is exactly the ordinary receiverless routine ABI.
 		sig->kind = ROUTINE;
 	} else if (is_class &&
-	           (dynamic_cast<RecordType*>(
-	                owner_class) ||
-	            dynamic_cast<PackedRecordType*>(
-	                owner_class))) {
+		   (dynamic_cast<RecordType*>(
+			owner_class) ||
+		    dynamic_cast<PackedRecordType*>(
+			owner_class))) {
 		raise_parse_error(
 		    "record class methods must be static");
 	}
@@ -6559,7 +6559,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	// slots.
 	if (is_final) {
 		if (dynamic_cast<InterfaceType*>(
-		        owner_class))
+			owner_class))
 			raise_parse_error(
 			    "final interface methods are not supported");
 		if (vk == Method::VirtualKind::None)
@@ -6567,7 +6567,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			    "only virtual methods can be final");
 	}
 	if (auto object =
-	        dynamic_cast<ObjectType*>(owner_class)) {
+		dynamic_cast<ObjectType*>(owner_class)) {
 		if (is_constructor &&
 		    vk != Method::VirtualKind::None)
 			raise_parse_error(
@@ -6594,67 +6594,67 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	    is_static) {
 		const bool old_object_method =
 		    dynamic_cast<ObjectType*>(
-		        owner_class) != nullptr;
+			owner_class) != nullptr;
 		bool override_target_found = false;
 		auto inspect_ancestor_binding =
 		    [&](Node* binding) {
 			    auto inspect =
-			        [&](Callable* callable) {
-				        auto ancestor =
-				            dynamic_cast<Method*>(
-				                callable);
-				        if (!ancestor ||
-				            (ancestor->virtual_kind ==
-				                 Method::VirtualKind::None &&
-				             !ancestor->is_final))
-					        return;
-				        bool exact_signature =
-				            m->ty->same_signature_as(
-				                ancestor->ty) &&
-				            m->is_static ==
-				                ancestor->is_static;
-				        if (exact_signature &&
-				            !m->is_static) {
-					        override_target_found = true;
-					        if (ancestor->is_final)
-						        raise_parse_error(
-						            "method '" + pas_name +
-						            "' overrides a final method");
-				        }
-				        if (!cxx_callable_signatures_collide(
-				                m, ancestor))
-					        return;
-				        bool intended_override =
-				            exact_signature &&
-				            ((old_object_method &&
-				              vk != Method::
-				                        VirtualKind::None) ||
-				             (!old_object_method &&
-				              vk == Method::
-				                        VirtualKind::Override));
-				        if (intended_override)
-					        return;
-				        // C++ virtual overriding is based on the emitted name
-				        // and carrier signature even when Pascal selected a
-				        // distinct signature or requested a fresh virtual
-				        // slot. Old-style objects are the exception: repeating
-				        // `virtual` on the exact derived declaration is their
-				        // normal override spelling. Reject every other
-				        // lowering instead of silently changing Pascal dispatch.
-				        raise_parse_error(
-				            "method '" + pas_name +
-				            "' would accidentally override an "
-				            "ancestor after C++ carrier erasure");
-			        };
+				[&](Callable* callable) {
+					auto ancestor =
+					    dynamic_cast<Method*>(
+						callable);
+					if (!ancestor ||
+					    (ancestor->virtual_kind ==
+						 Method::VirtualKind::None &&
+					     !ancestor->is_final))
+						return;
+					bool exact_signature =
+					    m->ty->same_signature_as(
+						ancestor->ty) &&
+					    m->is_static ==
+						ancestor->is_static;
+					if (exact_signature &&
+					    !m->is_static) {
+						override_target_found = true;
+						if (ancestor->is_final)
+							raise_parse_error(
+							    "method '" + pas_name +
+							    "' overrides a final method");
+					}
+					if (!cxx_callable_signatures_collide(
+						m, ancestor))
+						return;
+					bool intended_override =
+					    exact_signature &&
+					    ((old_object_method &&
+					      vk != Method::
+							VirtualKind::None) ||
+					     (!old_object_method &&
+					      vk == Method::
+							VirtualKind::Override));
+					if (intended_override)
+						return;
+					// C++ virtual overriding is based on the emitted name
+					// and carrier signature even when Pascal selected a
+					// distinct signature or requested a fresh virtual
+					// slot. Old-style objects are the exception: repeating
+					// `virtual` on the exact derived declaration is their
+					// normal override spelling. Reject every other
+					// lowering instead of silently changing Pascal dispatch.
+					raise_parse_error(
+					    "method '" + pas_name +
+					    "' would accidentally override an "
+					    "ancestor after C++ carrier erasure");
+				};
 			    if (auto callable =
-			            dynamic_cast<Callable*>(
-			                binding))
+				    dynamic_cast<Callable*>(
+					binding))
 				    inspect(callable);
 			    else if (auto overloads =
-			                 dynamic_cast<OverloadSet*>(
-			                     binding))
+					 dynamic_cast<OverloadSet*>(
+					     binding))
 				    for (Callable* callable :
-				         overloads->members)
+					 overloads->members)
 					    inspect(callable);
 		    };
 		// Override compatibility is independent of Pascal name hiding. A C++
@@ -6693,7 +6693,7 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	    body->register_callable(pas_name, m);
 	if (registration.kind ==
 	    CallableRegistration::Kind::
-	        CxxCarrierCollision)
+		CxxCarrierCollision)
 		raise_cxx_carrier_collision(
 		    pas_name, m, registration);
 	if (registration.kind !=
@@ -6781,10 +6781,10 @@ Procedure* Parser::match_or_create_procedure(
 		    declaration_unit(enclosing);
 		auto registration =
 		    enclosing->register_callable(
-		        pas_name, target);
+			pas_name, target);
 		if (registration.kind ==
 		    CallableRegistration::Kind::
-		        CxxCarrierCollision)
+			CxxCarrierCollision)
 			raise_cxx_carrier_collision(
 			    pas_name, target,
 			    registration);
@@ -6819,14 +6819,14 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 			// only static members. Neither designator is passed to this method.
 			Node* owner_qualifier = nullptr;
 			if (auto owner =
-			        dynamic_cast<ClassType*>(
-			            m->owner_class))
+				dynamic_cast<ClassType*>(
+				    m->owner_class))
 				owner_qualifier =
 				    new ClassRefValue(owner);
 			else
 				owner_qualifier =
 				    new TypeMemberQualifier(
-				        m->owner_class);
+					m->owner_class);
 			push_scope(
 			    owner_frame, owner_qualifier);
 			pushed_owner_scope = true;
@@ -6934,8 +6934,8 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// either spelling declares and implements the same conversions.
 		first_name =
 		    input_token == "implicit"
-		    ? ":="
-		    : input_token; // TODO: well, parse_operator();
+			? ":="
+			: input_token; // TODO: well, parse_operator();
 		consume();
 		has_overload = true; // I think those should be implicitly "overload;"
 	} else if (maybe_parse_keyword("destructor")) {
@@ -6965,14 +6965,14 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			const bool constructing = is_constructor;
 			const char* lifecycle_name =
 			    constructing
-			        ? "class constructor"
-			        : "class destructor";
+				? "class constructor"
+				: "class destructor";
 			RoutineKind kind = constructing
-			    ? CLASS_CONSTRUCTOR
-			    : CLASS_DESTRUCTOR;
+					       ? CLASS_CONSTRUCTOR
+					       : CLASS_DESTRUCTOR;
 			Method* method = constructing
-			    ? class_type->class_constructor
-			    : class_type->class_destructor;
+					     ? class_type->class_constructor
+					     : class_type->class_destructor;
 			if (!method || method->pas_name != method_name)
 				raise_parse_error(
 				    "no " +
@@ -7014,39 +7014,39 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		auto consider_method =
 		    [&](Callable* callable) {
 			    auto candidate =
-			        dynamic_cast<Method*>(
-			            callable);
+				dynamic_cast<Method*>(
+				    callable);
 			    if (!candidate ||
-			        candidate->owner_class !=
-			            owner_ty)
+				candidate->owner_class !=
+				    owner_ty)
 				    return;
 			    bool declaration_is_class_method =
-			        candidate->is_static ||
-			        candidate->ty->kind ==
-			            CLASS_METHOD;
+				candidate->is_static ||
+				candidate->ty->kind ==
+				    CLASS_METHOD;
 			    if (is_class !=
-			        declaration_is_class_method)
+				declaration_is_class_method)
 				    return;
 			    // `class ... static` is class-owned in Pascal but has
 			    // receiverless ROUTINE ABI. Its out-of-line spelling does not
 			    // repeat `static`, so Method metadata selects that category;
 			    // the visible parameter modes/types and result remain exact.
 			    if (!candidate->ty
-			             ->same_parameter_and_result_types_as(
-			                 sig))
+				     ->same_parameter_and_result_types_as(
+					 sig))
 				    return;
 			    if (m)
 				    raise_parse_error(
-				        "ambiguous method implementation '" +
-				        method_name + "'");
+					"ambiguous method implementation '" +
+					method_name + "'");
 			    m = candidate;
 		    };
 		if (auto callable =
-		        dynamic_cast<Callable*>(hit))
+			dynamic_cast<Callable*>(hit))
 			consider_method(callable);
 		else if (auto overloads =
-		             dynamic_cast<OverloadSet*>(
-		                 hit))
+			     dynamic_cast<OverloadSet*>(
+				 hit))
 			for (Callable* callable :
 			     overloads->members)
 				consider_method(callable);
@@ -7176,25 +7176,25 @@ static bool is_ordinal_intrinsic_argument(Type* ty) {
 static bool integer_type_contains_literal(
     Type* target, const Integer* literal) {
 	if (auto range =
-	        dynamic_cast<SubrangeType*>(
-	            target)) {
+		dynamic_cast<SubrangeType*>(
+		    target)) {
 		ConstEvalContext ctx;
 		ConstEvalResult lower =
 		    range->lower_bound->const_eval(ctx);
 		ConstEvalResult upper =
 		    range->upper_bound->const_eval(ctx);
 		if (lower.kind !=
-		        ConstEvalResult::Kind::Success ||
+			ConstEvalResult::Kind::Success ||
 		    upper.kind !=
-		        ConstEvalResult::Kind::Success)
+			ConstEvalResult::Kind::Success)
 			return false;
 		std::string error;
 		auto classified_lower =
 		    classify_subrange_bound(
-		        lower.node, &error);
+			lower.node, &error);
 		auto classified_upper =
 		    classify_subrange_bound(
-		        upper.node, &error);
+			upper.node, &error);
 		if (!classified_lower ||
 		    !classified_upper)
 			return false;
@@ -7202,20 +7202,20 @@ static bool integer_type_contains_literal(
 		    literal->negative,
 		    literal->value);
 		return compare_ordinal_value(
-		           value,
-		           classified_lower
-		               ->ordinal_value) >= 0 &&
+			   value,
+			   classified_lower
+			       ->ordinal_value) >= 0 &&
 		       compare_ordinal_value(
-		           value,
-		           classified_upper
-		               ->ordinal_value) <= 0;
+			   value,
+			   classified_upper
+			       ->ordinal_value) <= 0;
 	}
 	OrdinalBounds bounds;
 	return intrinsic_ordinal_bounds(
-	           target, &bounds) &&
+		   target, &bounds) &&
 	       ordinal_bounds_contains(
-	           bounds, literal->negative,
-	           literal->value);
+		   bounds, literal->negative,
+		   literal->value);
 }
 
 static Type* integer_literal_natural_type(
@@ -7245,10 +7245,10 @@ static Integer* untyped_integer_constant(
     Node* expression) {
 	if (!expression ||
 	    expression->ty !=
-	        &untyped_integer_type())
+		&untyped_integer_type())
 		return nullptr;
 	if (auto integer =
-	        dynamic_cast<Integer*>(expression))
+		dynamic_cast<Integer*>(expression))
 		return integer;
 
 	// Named constants remain untyped until context selects a carrier. Fold the
@@ -7263,10 +7263,10 @@ static Integer* untyped_integer_constant(
 	auto integer =
 	    dynamic_cast<Integer*>(folded.node);
 	return integer &&
-	               integer->ty ==
-	                   &untyped_integer_type()
-	    ? integer
-	    : nullptr;
+		       integer->ty ==
+			   &untyped_integer_type()
+		   ? integer
+		   : nullptr;
 }
 
 static std::optional<uint64_t>
@@ -7279,7 +7279,7 @@ integer_literal_target_distance(
 	OrdinalRange::Value lower;
 	OrdinalRange::Value upper;
 	if (auto range =
-	        dynamic_cast<SubrangeType*>(target)) {
+		dynamic_cast<SubrangeType*>(target)) {
 		ConstEvalContext ctx;
 		auto lower_folded =
 		    range->lower_bound->const_eval(ctx);
@@ -7288,16 +7288,16 @@ integer_literal_target_distance(
 		std::string error;
 		auto classified_lower =
 		    lower_folded.kind ==
-		            ConstEvalResult::Kind::Success
-		        ? classify_subrange_bound(
-		              lower_folded.node, &error)
-		        : std::nullopt;
+			    ConstEvalResult::Kind::Success
+			? classify_subrange_bound(
+			      lower_folded.node, &error)
+			: std::nullopt;
 		auto classified_upper =
 		    upper_folded.kind ==
-		            ConstEvalResult::Kind::Success
-		        ? classify_subrange_bound(
-		              upper_folded.node, &error)
-		        : std::nullopt;
+			    ConstEvalResult::Kind::Success
+			? classify_subrange_bound(
+			      upper_folded.node, &error)
+			: std::nullopt;
 		if (!classified_lower ||
 		    !classified_upper)
 			return std::nullopt;
@@ -7312,8 +7312,8 @@ integer_literal_target_distance(
 		lower = ordinal_value(
 		    bounds.signed_type,
 		    bounds.signed_type
-		        ? bounds.min_magnitude
-		        : 0);
+			? bounds.min_magnitude
+			: 0);
 		upper = ordinal_value(
 		    false, bounds.max_positive);
 	}
@@ -7321,24 +7321,24 @@ integer_literal_target_distance(
 	uint64_t width = 0;
 	if (lower.negative && !upper.negative) {
 		width = lower.magnitude >
-		                UINT64_MAX -
-		                    upper.magnitude
-		            ? UINT64_MAX
-		            : lower.magnitude +
-		                  upper.magnitude;
+				UINT64_MAX -
+				    upper.magnitude
+			    ? UINT64_MAX
+			    : lower.magnitude +
+				  upper.magnitude;
 	} else if (lower.negative) {
 		width = lower.magnitude -
-		        upper.magnitude;
+			upper.magnitude;
 	} else {
 		width = upper.magnitude -
-		        lower.magnitude;
+			lower.magnitude;
 	}
 	// Exact natural type is zero. Every other fitting type is ordered by its
 	// complete interval width, not the width's bit count: collapsing 20 and 31
 	// to five bits would make different formal ranges spuriously tie.
 	return width == UINT64_MAX
-	    ? UINT64_MAX
-	    : width + 1;
+		   ? UINT64_MAX
+		   : width + 1;
 }
 
 static bool rank_less(
@@ -7350,9 +7350,9 @@ static bool rank_less(
 		return a.distance < b.distance;
 	if (a.source_tier != b.source_tier)
 		return static_cast<unsigned>(
-		           a.source_tier) <
+			   a.source_tier) <
 		       static_cast<unsigned>(
-		           b.source_tier);
+			   b.source_tier);
 	return a.source_distance <
 	       b.source_distance;
 }
@@ -7364,7 +7364,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
     bool allow_user_conversion,
     MatchFailure* failure,
     UserConversionFailure*
-        conversion_failure) {
+	conversion_failure) {
 	if (failure)
 		*failure =
 		    MatchFailure::Incompatible;
@@ -7375,7 +7375,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 
 	if (builtin &&
 	    builtin->generic_kind ==
-	        BuiltinGenericKind::Assigned &&
+		BuiltinGenericKind::Assigned &&
 	    parameter_index == 0 &&
 	    (dynamic_cast<RoutineType*>(source) ||
 	     (source && source->is_reference_type())))
@@ -7386,14 +7386,14 @@ std::optional<ArgumentMatch> Parser::match_argument(
 	if (target == unknown_type()) {
 		if (builtin &&
 		    (builtin->generic_kind ==
-		         BuiltinGenericKind::OrdinalValue ||
+			 BuiltinGenericKind::OrdinalValue ||
 		     builtin->generic_kind ==
-		         BuiltinGenericKind::OrdinalMutation) &&
+			 BuiltinGenericKind::OrdinalMutation) &&
 		    !is_ordinal_intrinsic_argument(source)) {
 			if (failure)
 				*failure =
 				    MatchFailure::
-				        OrdinalRequired;
+					OrdinalRequired;
 			return std::nullopt;
 		}
 		if ((formal.mode == ParamMode::Var ||
@@ -7402,15 +7402,15 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				if (failure)
 					*failure =
 					    MatchFailure::
-					        NotStorageBacked;
+						NotStorageBacked;
 				return std::nullopt;
 			}
 			if (contains_packed_projection(
-			        actual)) {
+				actual)) {
 				if (failure)
 					*failure =
 					    MatchFailure::
-					        PackedProjection;
+						PackedProjection;
 				return std::nullopt;
 			}
 		}
@@ -7427,14 +7427,14 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			if (failure)
 				*failure =
 				    MatchFailure::
-				        NotStorageBacked;
+					NotStorageBacked;
 			return std::nullopt;
 		}
 		if (contains_packed_projection(actual)) {
 			if (failure)
 				*failure =
 				    MatchFailure::
-				        PackedProjection;
+					PackedProjection;
 			return std::nullopt;
 		}
 		if (source == target)
@@ -7443,7 +7443,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    actual};
 		if (builtin &&
 		    builtin->generic_kind ==
-		        BuiltinGenericKind::PointerStorageOut &&
+			BuiltinGenericKind::PointerStorageOut &&
 		    formal.mode == ParamMode::Out &&
 		    target == pointer_type() &&
 		    dynamic_cast<PointerType*>(source)) {
@@ -7456,12 +7456,12 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		}
 		if (builtin &&
 		    builtin->generic_kind ==
-		        BuiltinGenericKind::ValOutput &&
+			BuiltinGenericKind::ValOutput &&
 		    parameter_index == 1 &&
 		    formal.mode == ParamMode::Out) {
 			auto range =
 			    dynamic_cast<SubrangeType*>(
-			        source);
+				source);
 			if (range &&
 			    range->base_type == target)
 				return ArgumentMatch{
@@ -7483,7 +7483,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 	}
 
 	if (auto reference =
-	        dynamic_cast<RoutineRef*>(actual)) {
+		dynamic_cast<RoutineRef*>(actual)) {
 		auto routine =
 		    dynamic_cast<RoutineType*>(target);
 		if (!routine)
@@ -7491,12 +7491,12 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		bool ambiguous = false;
 		Node* resolved =
 		    try_resolve_routine_reference(
-		        reference, routine, &ambiguous);
+			reference, routine, &ambiguous);
 		if (!resolved) {
 			if (ambiguous && failure)
 				*failure =
 				    MatchFailure::
-				        AmbiguousConversion;
+					AmbiguousConversion;
 			return std::nullopt;
 		}
 		return ArgumentMatch{
@@ -7516,7 +7516,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    new String(literal->value, target)};
 
 	if (auto literal =
-	        dynamic_cast<SetLiteral*>(actual)) {
+		dynamic_cast<SetLiteral*>(actual)) {
 		auto target_set =
 		    dynamic_cast<FixedSetType*>(target);
 		if (!target_set)
@@ -7547,33 +7547,33 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			auto combine =
 			    [&](const MatchRank& rank) {
 				    if (static_cast<unsigned>(
-				            rank.tier) >
-				        static_cast<unsigned>(
-				            combined.tier))
+					    rank.tier) >
+					static_cast<unsigned>(
+					    combined.tier))
 					    combined.tier =
-					        rank.tier;
+						rank.tier;
 				    combined.distance =
-				        rank.distance >
-				                UINT64_MAX -
-				                    combined.distance
-				            ? UINT64_MAX
-				            : combined.distance +
-				                  rank.distance;
+					rank.distance >
+						UINT64_MAX -
+						    combined.distance
+					    ? UINT64_MAX
+					    : combined.distance +
+						  rank.distance;
 			    };
 			combine(lower->rank);
 			if (upper)
 				combine(upper->rank);
 			items.push_back(
 			    SetLiteral::Item{
-			        lower->value,
-			        upper
-			            ? upper->value
-			            : nullptr});
+				lower->value,
+				upper
+				    ? upper->value
+				    : nullptr});
 		}
 		return ArgumentMatch{
 		    combined,
 		    new SetLiteral(
-		        std::move(items), target)};
+			std::move(items), target)};
 	}
 
 	if (source == target)
@@ -7588,21 +7588,21 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			// domain because its element count is 2^64 and cannot fit in the
 			// array length field.
 			if (!integer_type_contains_literal(
-			        target, untyped_integer))
+				target, untyped_integer))
 				return std::nullopt;
 
 			auto distance =
 			    integer_literal_target_distance(
-			        target, untyped_integer);
+				target, untyped_integer);
 			if (!distance)
 				return std::nullopt;
 			return ArgumentMatch{
 			    {MatchRank::Tier::Direct,
 			     *distance},
 			    new Integer(
-			        untyped_integer->value,
-			        target,
-			        untyped_integer->negative)};
+				untyped_integer->value,
+				target,
+				untyped_integer->negative)};
 		}
 	}
 	if (source == &untyped_integer_type() &&
@@ -7618,9 +7618,9 @@ std::optional<ArgumentMatch> Parser::match_argument(
 	if (conversion)
 		return ArgumentMatch{
 		    {conversion->kind ==
-		             ValueConversionClass::Direct
-		         ? MatchRank::Tier::Direct
-		         : MatchRank::Tier::Convert,
+			     ValueConversionClass::Direct
+			 ? MatchRank::Tier::Direct
+			 : MatchRank::Tier::Convert,
 		     conversion->distance},
 		    new Cast(actual, target)};
 	if (allow_user_conversion)
@@ -7646,9 +7646,9 @@ Parser::match_callable_arguments(
 
 	const BuiltinDesc* builtin =
 	    callable->builtin_desc
-	        ? callable->builtin_desc
-	        : lookup_builtin_desc(
-	              callable->cxx_name);
+		? callable->builtin_desc
+		: lookup_builtin_desc(
+		      callable->cxx_name);
 	CallableMatch result;
 	result.ranks.reserve(args.size());
 	result.arguments.reserve(args.size());
@@ -7672,26 +7672,26 @@ Parser::match_user_conversion(
     Node* actual, Type* target,
     MatchFailure* failure,
     UserConversionFailure*
-        conversion_failure) {
+	conversion_failure) {
 	Node* family = maybe_resolve_value(":=");
 	if (auto member =
-	        dynamic_cast<MemberAccess*>(family)) {
+		dynamic_cast<MemberAccess*>(family)) {
 		// Unit qualification opens a standalone operator environment; an
 		// object member environment would be a different, unsupported
 		// operator model.
 		if (!dynamic_cast<UnitRef*>(
-		        member->a))
+			member->a))
 			return std::nullopt;
 		family = member->b;
 	}
 
 	std::vector<Callable*> candidates;
 	if (auto callable =
-	        dynamic_cast<Callable*>(family))
+		dynamic_cast<Callable*>(family))
 		candidates.push_back(callable);
 	else if (auto overloads =
-	             dynamic_cast<OverloadSet*>(
-	                 family))
+		     dynamic_cast<OverloadSet*>(
+			 family))
 		candidates = overloads->members;
 	if (conversion_failure) {
 		conversion_failure->candidates =
@@ -7707,17 +7707,17 @@ Parser::match_user_conversion(
 	std::vector<Callable*> best_candidates;
 	for (Callable* candidate : candidates) {
 		if (!dynamic_cast<Procedure*>(
-		        candidate) ||
+			candidate) ||
 		    candidate->ty->kind != ROUTINE ||
 		    candidate->ty->return_type !=
-		        target ||
+			target ||
 		    candidate->ty->formals.size() != 1)
 			continue;
 		const BuiltinDesc* builtin =
 		    candidate->builtin_desc
-		        ? candidate->builtin_desc
-		        : lookup_builtin_desc(
-		              candidate->cxx_name);
+			? candidate->builtin_desc
+			: lookup_builtin_desc(
+			      candidate->cxx_name);
 		auto source_match = match_argument(
 		    candidate->ty->formals[0],
 		    actual, builtin, 0, false);
@@ -7727,18 +7727,18 @@ Parser::match_user_conversion(
 			conversion_failure->viable.push_back(
 			    {candidate,
 			     CallableMatch{
-			         {source_match->rank},
-			         {source_match->value}}});
+				 {source_match->rank},
+				 {source_match->value}}});
 		if (!best_source ||
 		    rank_less(
-		        source_match->rank,
-		        best_source->rank)) {
+			source_match->rank,
+			best_source->rank)) {
 			best_candidate = candidate;
 			best_source = *source_match;
 			best_candidates = {candidate};
 		} else if (!rank_less(
-		               best_source->rank,
-		               source_match->rank)) {
+			       best_source->rank,
+			       source_match->rank)) {
 			best_candidates.push_back(
 			    candidate);
 		}
@@ -7752,7 +7752,7 @@ Parser::match_user_conversion(
 		if (failure)
 			*failure =
 			    MatchFailure::
-			        AmbiguousConversion;
+				AmbiguousConversion;
 		if (conversion_failure)
 			conversion_failure->ambiguous =
 			    true;
@@ -7769,7 +7769,7 @@ Parser::match_user_conversion(
 	auto call = new ProcCall(
 	    nullptr, best_candidate,
 	    std::vector<Node*>{
-	        best_source->value});
+		best_source->value});
 	call->ty = target;
 	return ArgumentMatch{
 	    {MatchRank::Tier::UserConvert,
@@ -7797,13 +7797,13 @@ static Type* numeric_operand_type(Node* operand) {
 	if (!operand)
 		return nullptr;
 	if (auto literal =
-	        untyped_integer_constant(
-	            operand))
+		untyped_integer_constant(
+		    operand))
 		return integer_literal_natural_type(
 		    literal);
 	Type* type = operand->ty;
 	while (auto range =
-	           dynamic_cast<SubrangeType*>(type))
+		   dynamic_cast<SubrangeType*>(type))
 		type = range->base_type;
 	OrdinalBounds bounds;
 	if (integer_bounds(type, &bounds))
@@ -7827,7 +7827,7 @@ static bool integer_range_contains(
 	if (inner.signed_type &&
 	    (!outer.signed_type ||
 	     outer.min_magnitude <
-	         inner.min_magnitude))
+		 inner.min_magnitude))
 		return false;
 	return outer.max_positive >=
 	       inner.max_positive;
@@ -7838,7 +7838,7 @@ static Type* predefined_numeric_promotion(
     const std::vector<Node*>& args) {
 	if (args.size() != 2 ||
 	    operation ==
-	        BuiltinNumericOperation::None)
+		BuiltinNumericOperation::None)
 		return nullptr;
 	Type* left = numeric_operand_type(
 	    args[0]);
@@ -7847,7 +7847,7 @@ static Type* predefined_numeric_promotion(
 	if (!left || !right)
 		return nullptr;
 	if (operation ==
-	        BuiltinNumericOperation::Divide ||
+		BuiltinNumericOperation::Divide ||
 	    left == single_type() ||
 	    left == double_type() ||
 	    left == extended_type() ||
@@ -7859,23 +7859,23 @@ static Type* predefined_numeric_promotion(
 	OrdinalBounds left_bounds;
 	OrdinalBounds right_bounds;
 	if (!integer_type_range(
-	        left, &left_bounds) ||
+		left, &left_bounds) ||
 	    !integer_type_range(
-	        right, &right_bounds))
+		right, &right_bounds))
 		return nullptr;
 	for (Type* candidate :
 	     {integer_type(), cardinal_type(),
 	      int64_type(), qword_type()}) {
 		OrdinalBounds candidate_bounds;
 		if (integer_type_range(
-		        candidate,
-		        &candidate_bounds) &&
+			candidate,
+			&candidate_bounds) &&
 		    integer_range_contains(
-		        candidate_bounds,
-		        left_bounds) &&
+			candidate_bounds,
+			left_bounds) &&
 		    integer_range_contains(
-		        candidate_bounds,
-		        right_bounds))
+			candidate_bounds,
+			right_bounds))
 			return candidate;
 	}
 	// No signed 64-bit carrier contains QWord and a negative signed operand.
@@ -7889,19 +7889,19 @@ callable_numeric_operation(Callable* callable) {
 		return BuiltinNumericOperation::None;
 	const BuiltinDesc* builtin =
 	    callable->builtin_desc
-	        ? callable->builtin_desc
-	        : lookup_builtin_desc(
-	              callable->cxx_name);
+		? callable->builtin_desc
+		: lookup_builtin_desc(
+		      callable->cxx_name);
 	if (!builtin ||
 	    builtin->numeric_operation ==
-	        BuiltinNumericOperation::None ||
+		BuiltinNumericOperation::None ||
 	    callable->ty->formals.size() != 2)
 		return BuiltinNumericOperation::None;
 	for (const Parameter& formal :
 	     callable->ty->formals) {
 		OrdinalBounds bounds;
 		if (!integer_bounds(
-		        formal.ty, &bounds) &&
+			formal.ty, &bounds) &&
 		    formal.ty != single_type() &&
 		    formal.ty != double_type() &&
 		    formal.ty != extended_type())
@@ -7917,8 +7917,8 @@ callable_numeric_operation(Callable* callable) {
 
 static Callable* predefined_numeric_choice(
     const std::vector<
-        std::pair<Callable*,
-                  CallableMatch>>& viable,
+	std::pair<Callable*,
+		  CallableMatch>>& viable,
     const std::vector<Node*>& args) {
 	BuiltinNumericOperation operation =
 	    BuiltinNumericOperation::None;
@@ -7933,7 +7933,7 @@ static Callable* predefined_numeric_choice(
 		    BuiltinNumericOperation::None)
 			operation = candidate_operation;
 		else if (operation !=
-		         candidate_operation)
+			 candidate_operation)
 			return nullptr;
 	}
 	if (operation ==
@@ -7941,7 +7941,7 @@ static Callable* predefined_numeric_choice(
 		return nullptr;
 	Type* promoted =
 	    predefined_numeric_promotion(
-	        operation, args);
+		operation, args);
 	if (!promoted)
 		return nullptr;
 	Callable* result = nullptr;
@@ -7949,12 +7949,12 @@ static Callable* predefined_numeric_choice(
 		Callable* callable = entry.first;
 		if (!callable ||
 		    callable_numeric_operation(
-		        callable) != operation ||
+			callable) != operation ||
 		    callable->ty->formals.size() != 2 ||
 		    callable->ty->formals[0].ty !=
-		        promoted ||
+			promoted ||
 		    callable->ty->formals[1].ty !=
-		        promoted)
+			promoted)
 			continue;
 		if (result)
 			return nullptr;
@@ -7968,8 +7968,8 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		if (target_ty == pointer_type())
 			return resolve_routine_code_reference(reference);
 		if (auto routine =
-		        dynamic_cast<RoutineType*>(
-		            target_ty))
+			dynamic_cast<RoutineType*>(
+			    target_ty))
 			// Overload-candidate matching must reject an incompatible routine
 			// designator silently, but cast() is the final contextual
 			// application. Resolve here so failure retains the designator's
@@ -8010,23 +8010,23 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		    conversion_failure.non_dominated,
 		    conversion_failure.ambiguous,
 		    conversion_failure.ambiguous
-		        ? "ambiguous implicit conversion"
-		        : "no implicit conversion to the required type");
+			? "ambiguous implicit conversion"
+			: "no implicit conversion to the required type");
 	}
 	Type* recovered_target =
 	    raise_type_mismatch(
-	        "no implicit conversion",
-	        target_ty, a ? a->ty : nullptr);
+		"no implicit conversion",
+		target_ty, a ? a->ty : nullptr);
 	return new Cast(a, recovered_target);
 }
 
 static std::vector<Callable*> routine_reference_candidates(
     Node* candidates_node) {
 	if (auto callable =
-	        dynamic_cast<Callable*>(candidates_node))
+		dynamic_cast<Callable*>(candidates_node))
 		return {callable};
 	if (auto overloads =
-	        dynamic_cast<OverloadSet*>(candidates_node))
+		dynamic_cast<OverloadSet*>(candidates_node))
 		return overloads->members;
 	return {};
 }
@@ -8042,33 +8042,35 @@ Node* Parser::try_resolve_routine_reference(
 		return nullptr;
 	std::vector<Callable*> candidates =
 	    routine_reference_candidates(
-	        reference->candidates);
+		reference->candidates);
 	std::vector<Callable*> compatible;
 	for (Callable* candidate : candidates) {
 		bool category_matches = false;
 		if (target_ty->kind == ROUTINE) {
 			category_matches =
 			    (dynamic_cast<Procedure*>(
-			         candidate) &&
+				 candidate) &&
 			     candidate->ty->kind == ROUTINE &&
 			     reference->receiver == nullptr) ||
 			    (dynamic_cast<Method*>(
-			         candidate) &&
+				 candidate) &&
 			     static_cast<Method*>(
-			         candidate)->is_static &&
+				 candidate)
+				 ->is_static &&
 			     candidate->ty->kind == ROUTINE);
 		} else {
 			category_matches =
 			    dynamic_cast<Method*>(candidate) &&
 			    !static_cast<Method*>(
-			         candidate)->is_static &&
+				 candidate)
+				 ->is_static &&
 			    (candidate->ty->kind == METHOD ||
 			     candidate->ty->kind == CLASS_METHOD) &&
 			    reference->receiver != nullptr;
 		}
 		if (category_matches &&
 		    target_ty->accepts_routine_value_from(
-		        candidate->ty))
+			candidate->ty))
 			compatible.push_back(candidate);
 	}
 
@@ -8091,16 +8093,16 @@ Node* Parser::try_resolve_routine_reference(
 	result->resolved = compatible.front();
 	result->ty = target_ty;
 	if (auto method =
-	        dynamic_cast<Method*>(
-	            result->resolved);
+		dynamic_cast<Method*>(
+		    result->resolved);
 	    method && method->is_static) {
 		Node* qualifier = result->receiver;
 		result->receiver = nullptr;
 		if (qualifier &&
 		    !dynamic_cast<ClassRefValue*>(
-		        qualifier) &&
+			qualifier) &&
 		    !dynamic_cast<TypeMemberQualifier*>(
-		        qualifier))
+			qualifier))
 			return new EvaluateThen(
 			    qualifier, result);
 	}
@@ -8116,17 +8118,17 @@ Node* Parser::resolve_routine_reference(
 		    "routine reference target is not a routine-value type");
 	bool ambiguous = false;
 	if (Node* result =
-	        try_resolve_routine_reference(
-	            reference, target_ty,
-	            &ambiguous))
+		try_resolve_routine_reference(
+		    reference, target_ty,
+		    &ambiguous))
 		return result;
 	if (ambiguous)
 		raise_parse_error(
 		    "routine reference is ambiguous for the destination "
 		    "routine type");
 	std::string category = target_ty->kind == METHOD
-	    ? "procedure/function of object"
-	    : "plain procedure/function";
+				   ? "procedure/function of object"
+				   : "plain procedure/function";
 	raise_parse_error(
 	    "no overload of the routine reference is compatible with " +
 	    category + " target");
@@ -8138,7 +8140,7 @@ Node* Parser::resolve_routine_code_reference(
 		raise_parse_error("invalid routine code reference");
 	std::vector<Callable*> candidates =
 	    routine_reference_candidates(
-	        reference->candidates);
+		reference->candidates);
 	if (candidates.size() != 1)
 		raise_parse_error(
 		    "a Pointer routine reference requires one "
@@ -8176,15 +8178,15 @@ Node* Parser::resolve_routine_code_reference(
 	result->code_only = true;
 	result->ty = pointer_type();
 	if (auto method =
-	        dynamic_cast<Method*>(candidate);
+		dynamic_cast<Method*>(candidate);
 	    method && method->is_static) {
 		Node* qualifier = result->receiver;
 		result->receiver = nullptr;
 		if (qualifier &&
 		    !dynamic_cast<ClassRefValue*>(
-		        qualifier) &&
+			qualifier) &&
 		    !dynamic_cast<TypeMemberQualifier*>(
-		        qualifier))
+			qualifier))
 			return new EvaluateThen(
 			    qualifier, result);
 	}
@@ -8204,20 +8206,20 @@ static bool callable_accepts_receiver(
 
 	Type* actual_type = receiver->ty;
 	if (auto class_reference =
-	        dynamic_cast<ClassRefType*>(
-	            actual_type))
+		dynamic_cast<ClassRefType*>(
+		    actual_type))
 		actual_type =
 		    class_reference->target;
 	else if (auto pointer =
-	             dynamic_cast<PointerType*>(
-	                 actual_type);
-	         pointer &&
-	         (dynamic_cast<RecordType*>(
-	              pointer->item_type) ||
-	          dynamic_cast<PackedRecordType*>(
-	              pointer->item_type) ||
-	          dynamic_cast<ObjectType*>(
-	              pointer->item_type)))
+		     dynamic_cast<PointerType*>(
+			 actual_type);
+		 pointer &&
+		 (dynamic_cast<RecordType*>(
+		      pointer->item_type) ||
+		  dynamic_cast<PackedRecordType*>(
+		      pointer->item_type) ||
+		  dynamic_cast<ObjectType*>(
+		      pointer->item_type)))
 		// Records and old-style objects are value types, so their method Self
 		// is ^Owner. Receiver viability is a relation between the referenced
 		// aggregate type and the declared owner, not between the pointer
@@ -8226,26 +8228,26 @@ static bool callable_accepts_receiver(
 		actual_type = pointer->item_type;
 	const bool type_qualifier =
 	    dynamic_cast<TypeMemberQualifier*>(
-	        receiver) != nullptr;
+		receiver) != nullptr;
 	switch (method->ty->kind) {
 	case CLASS_METHOD:
 		return dynamic_cast<ClassType*>(
-		           actual_type) &&
+			   actual_type) &&
 		       actual_type->is_subtype_of(
-		           method->owner_class);
+			   method->owner_class);
 	case CONSTRUCTOR:
 		return !type_qualifier &&
 		       actual_type &&
 		       actual_type->is_subtype_of(
-		           method->owner_class);
+			   method->owner_class);
 	case METHOD:
 	case DESTRUCTOR:
 		return !type_qualifier &&
 		       !dynamic_cast<ClassRefType*>(
-		           receiver->ty) &&
+			   receiver->ty) &&
 		       actual_type &&
 		       actual_type->is_subtype_of(
-		           method->owner_class);
+			   method->owner_class);
 	case CLASS_CONSTRUCTOR:
 	case CLASS_DESTRUCTOR:
 		return false;
@@ -8256,10 +8258,10 @@ static bool callable_accepts_receiver(
 }
 
 Parser::FinalizedCall Parser::finalize_call(Node* target,
-					   std::vector<Node*>& args,
-					   std::string name_for_error,
-					   SourceLocation error_location,
-					   Type* expected_return_type) {
+					    std::vector<Node*>& args,
+					    std::string name_for_error,
+					    SourceLocation error_location,
+					    Type* expected_return_type) {
 	// Peel MemberAccess: if the member is callable, its container is the
 	// receiver and the member is the effective callee.
 	Node* receiver = nullptr;
@@ -8283,83 +8285,85 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			emit_parse_error_at(
 			    error_location,
 			    "too many arguments to '" +
-			        name_for_error + "'");
+				name_for_error + "'");
 		for (size_t i = args.size();
 		     i < c->ty->formals.size(); ++i)
 			if (!c->ty->formals[i]
-			         .default_value)
+				 .default_value)
 				// A singleton has no competing arity to rank. Report the
 				// missing source parameter directly while still using the
 				// shared matcher for every supplied argument.
 				emit_parse_error_at(
 				    error_location,
 				    "missing argument for parameter '" +
-				        c->ty->formals[i].pas_name +
-				        "' in call to '" +
-				        name_for_error + "'");
+					c->ty->formals[i].pas_name +
+					"' in call to '" +
+					name_for_error + "'");
 		auto match =
 		    callable_accepts_receiver(
-		        c, receiver)
-		        ? match_callable_arguments(
-		              c, args)
-		        : std::nullopt;
+			c, receiver)
+			? match_callable_arguments(
+			      c, args)
+			: std::nullopt;
 		if (!match) {
 			const BuiltinDesc* builtin =
 			    c->builtin_desc
-			        ? c->builtin_desc
-			        : lookup_builtin_desc(
-			              c->cxx_name);
+				? c->builtin_desc
+				: lookup_builtin_desc(
+				      c->cxx_name);
 			for (size_t i = 0;
 			     i < args.size() &&
 			     i < c->ty->formals.size();
 			     ++i) {
 				MatchFailure failure;
 				if (match_argument(
-				        c->ty->formals[i],
-				        args[i], builtin, i,
-				        true, &failure))
+					c->ty->formals[i],
+					args[i], builtin, i,
+					true, &failure))
 					continue;
 				if (failure ==
 				    MatchFailure::
-				        PackedProjection)
+					PackedProjection)
 					emit_parse_error_at(
 					    error_location,
 					    "packed-record field cannot yet be passed "
 					    "as var/out parameter '" +
-					        c->ty->formals[i].pas_name +
-					        "'");
+						c->ty->formals[i].pas_name +
+						"'");
 				if (failure ==
 				    MatchFailure::
-				        NotStorageBacked)
+					NotStorageBacked)
 					emit_parse_error_at(
 					    error_location,
 					    "argument for var/out parameter '" +
-					        c->ty->formals[i].pas_name +
-					        "' is not a storage-backed expression");
+						c->ty->formals[i].pas_name +
+						"' is not a storage-backed expression");
 				if (failure ==
 				    MatchFailure::
-				        OrdinalRequired)
+					OrdinalRequired)
 					emit_parse_error_at(
 					    error_location,
 					    name_for_error +
-					        " requires an ordinal argument");
+						" requires an ordinal argument");
 			}
 		}
 		if (!match ||
 		    (expected_return_type &&
 		     static_cast<RoutineType*>(
-		         c->ty)->return_type !=
-		         expected_return_type)) {
+			 c->ty)
+			     ->return_type !=
+			 expected_return_type)) {
 			std::vector<Callable*> candidates{c};
 			std::vector<std::pair<
 			    Callable*,
-			    CallableMatch>> viable;
+			    CallableMatch>>
+			    viable;
 			if (match)
 				viable.push_back(
 				    {c, *match});
 			std::vector<Callable*> none;
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
-				expected_return_type, candidates, viable, none, false);
+							expected_return_type, candidates, viable, none, false);
 		}
 		chosen = c;
 		chosen_match = std::move(match);
@@ -8367,13 +8371,14 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		std::vector<Callable*> candidates = os->members;
 		std::vector<std::pair<
 		    Callable*,
-		    CallableMatch>> viable;
+		    CallableMatch>>
+		    viable;
 		for (auto* c : candidates) {
 			if (name_for_error.empty() && !c->pas_name.empty()) {
 				name_for_error = c->pas_name;
 			}
 			if (!callable_accepts_receiver(
-			        c, receiver))
+				c, receiver))
 				continue;
 			auto match =
 			    match_callable_arguments(c, args);
@@ -8386,12 +8391,12 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		if (viable.empty()) {
 			std::vector<Callable*> none;
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
-				expected_return_type, candidates, viable, none, false);
+							expected_return_type, candidates, viable, none, false);
 		}
 		std::vector<Callable*> non_dominated;
 		Callable* promoted_numeric =
 		    predefined_numeric_choice(
-		        viable, args);
+			viable, args);
 		std::vector<std::pair<
 		    Callable*, CallableMatch>>
 		    ranked_viable;
@@ -8402,8 +8407,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			// ordinary dominance comparison.
 			if (promoted_numeric &&
 			    callable_numeric_operation(
-			        entry.first) !=
-			        BuiltinNumericOperation::None &&
+				entry.first) !=
+				BuiltinNumericOperation::None &&
 			    entry.first != promoted_numeric)
 				continue;
 			ranked_viable.push_back(entry);
@@ -8417,13 +8422,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				// converted expressions for application.
 				for (MatchRank& rank :
 				     ranked_viable.back()
-				         .second.ranks)
+					 .second.ranks)
 					if (rank.tier !=
 					    MatchRank::Tier::
-					        Exact)
+						Exact)
 						rank = MatchRank{
 						    MatchRank::Tier::
-						        Direct,
+							Direct,
 						    0};
 		}
 		for (size_t i = 0;
@@ -8433,10 +8438,10 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			     j < ranked_viable.size(); j++) {
 				if (i != j &&
 				    dominates(
-				        ranked_viable[j]
-				            .second.ranks,
-				        ranked_viable[i]
-				            .second.ranks)) {
+					ranked_viable[j]
+					    .second.ranks,
+					ranked_viable[i]
+					    .second.ranks)) {
 					dom = true;
 					break;
 				}
@@ -8447,7 +8452,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 		if (non_dominated.size() != 1) {
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
-				expected_return_type, candidates, viable, non_dominated, true);
+							expected_return_type, candidates, viable, non_dominated, true);
 		}
 		chosen = non_dominated[0];
 		for (auto& entry : viable)
@@ -8458,8 +8463,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			}
 	} else {
 		value_rty = target
-		    ? dynamic_cast<RoutineType*>(target->ty)
-		    : nullptr;
+				? dynamic_cast<RoutineType*>(target->ty)
+				: nullptr;
 		if (!value_rty) {
 			// Builtin or other opaque callable -- no ranking/default checks.
 			return FinalizedCall{receiver, target};
@@ -8474,7 +8479,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		args = chosen_match->arguments;
 	if (auto method = dynamic_cast<Method*>(chosen)) {
 		if (!callable_accepts_receiver(
-		        method, receiver))
+			method, receiver))
 			emit_parse_error_at(
 			    error_location,
 			    "internal error: selected method has an "
@@ -8486,23 +8491,23 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			// member selectors and have no runtime evaluation.
 			if (receiver &&
 			    !dynamic_cast<ClassRefValue*>(
-			        receiver) &&
+				receiver) &&
 			    !dynamic_cast<TypeMemberQualifier*>(
-			        receiver))
+				receiver))
 				qualifier_effect = receiver;
 			receiver = nullptr;
 		}
 	}
 	// Materialize missing args from defaults.
 	auto rty = chosen
-	    ? static_cast<RoutineType*>(chosen->ty)
-	    : value_rty;
+		       ? static_cast<RoutineType*>(chosen->ty)
+		       : value_rty;
 	const BuiltinDesc* builtin = chosen
-	    ? (chosen->builtin_desc
-	           ? chosen->builtin_desc
-	           : lookup_builtin_desc(
-	                 chosen->cxx_name))
-	    : nullptr;
+					 ? (chosen->builtin_desc
+						? chosen->builtin_desc
+						: lookup_builtin_desc(
+						      chosen->cxx_name))
+					 : nullptr;
 	while (args.size() < rty->formals.size()) {
 		auto& p = rty->formals[args.size()];
 		if (!p.default_value) {
@@ -8516,8 +8521,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			emit_parse_error_at(
 			    error_location,
 			    "default value for parameter '" +
-			        p.pas_name +
-			        "' is not applicable");
+				p.pas_name +
+				"' is not applicable");
 		args.push_back(match->value);
 	}
 	if (args.size() > rty->formals.size()) {
@@ -8547,7 +8552,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	     builtin->generic_kind == BuiltinGenericKind::OrdinalMutation)) {
 		if (args.empty() || !is_ordinal_intrinsic_argument(args[0] ? args[0]->ty : nullptr)) {
 			emit_parse_error_at(error_location,
-				name_for_error + " requires an ordinal argument");
+					    name_for_error + " requires an ordinal argument");
 		}
 	}
 	if (builtin &&
@@ -8557,15 +8562,15 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		// unexpressed `set of T`/`T` relationship from the first argument's
 		// actual FixedSetType.
 		auto set_type = args.empty()
-		    ? nullptr
-		    : dynamic_cast<FixedSetType*>(args[0] ? args[0]->ty : nullptr);
+				    ? nullptr
+				    : dynamic_cast<FixedSetType*>(args[0] ? args[0]->ty : nullptr);
 		if (!set_type) {
 			emit_parse_error_at(error_location,
-			    name_for_error + " requires a set variable as its first argument");
+					    name_for_error + " requires a set variable as its first argument");
 		}
 		if (args.size() < 2 || !args[1]) {
 			emit_parse_error_at(error_location,
-			    name_for_error + " requires a set element as its second argument");
+					    name_for_error + " requires a set element as its second argument");
 		}
 		// FPC converts the element expression to the concrete set element
 		// type before generating the bit mutation. Do that here while the
@@ -8581,16 +8586,16 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 Node* Parser::make_call(
     FinalizedCall finalized, std::vector<Node*> args) {
 	if (auto initializer =
-	        dynamic_cast<Method*>(finalized.callee);
+		dynamic_cast<Method*>(finalized.callee);
 	    initializer &&
 	    initializer->ty->kind == CONSTRUCTOR &&
 	    finalized.receiver) {
 		if (auto class_reference =
-		        dynamic_cast<ClassRefType*>(
-		            finalized.receiver->ty)) {
+			dynamic_cast<ClassRefType*>(
+			    finalized.receiver->ty)) {
 			auto result_type =
 			    dynamic_cast<ClassType*>(
-			        class_reference->target);
+				class_reference->target);
 			if (!result_type)
 				raise_parse_error(
 				    "constructor class reference does not target a class");
@@ -8807,7 +8812,7 @@ void Parser::parse_program_or_unit() {
 		Frame* program_frame = new Frame(nullptr);
 		Unit* unit =
 		    unit_registry->register_new(
-		        name, program_frame, true);
+			name, program_frame, true);
 		current_unit = unit;
 		unit->phase = UnitPhase::InterfaceInProgress;
 		// Load dependencies, then install the lookup path in increasing
@@ -8847,9 +8852,9 @@ void Parser::parse_program_or_unit() {
 					continue;
 				lifecycle_hooks.push_back(
 				    UnitLifecycleNames{
-				        used->cxx_namespace,
-				        used->initialization_cxx_name,
-				        used->finalization_cxx_name});
+					used->cxx_namespace,
+					used->initialization_cxx_name,
+					used->finalization_cxx_name});
 			}
 			emitter->emit_main_prologue(
 			    lifecycle_hooks,

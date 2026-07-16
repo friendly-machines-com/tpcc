@@ -97,7 +97,7 @@ void Emitter::emit_enum_decl(EnumType* e) {
 	fprintf(active, "enum ");
 	if (!e->cxx_name.empty())
 		fprintf(active, "%s ",
-		    e->cxx_name.c_str());
+			e->cxx_name.c_str());
 	// Fix the C++ underlying type to the EnumType carrier. An unfixed C++ enum
 	// infers its value range from the listed enumerators, which would make a
 	// Pascal explicit ordinal cast undefined to C++'s sanitizer even when the
@@ -105,17 +105,33 @@ void Emitter::emit_enum_decl(EnumType* e) {
 	const char* underlying = nullptr;
 	if (e->carrier_signed) {
 		switch (e->carrier_bits) {
-		case 8: underlying = "int8_t"; break;
-		case 16: underlying = "int16_t"; break;
-		case 32: underlying = "int32_t"; break;
-		case 64: underlying = "int64_t"; break;
+		case 8:
+			underlying = "int8_t";
+			break;
+		case 16:
+			underlying = "int16_t";
+			break;
+		case 32:
+			underlying = "int32_t";
+			break;
+		case 64:
+			underlying = "int64_t";
+			break;
 		}
 	} else {
 		switch (e->carrier_bits) {
-		case 8: underlying = "uint8_t"; break;
-		case 16: underlying = "uint16_t"; break;
-		case 32: underlying = "uint32_t"; break;
-		case 64: underlying = "uint64_t"; break;
+		case 8:
+			underlying = "uint8_t";
+			break;
+		case 16:
+			underlying = "uint16_t";
+			break;
+		case 32:
+			underlying = "uint32_t";
+			break;
+		case 64:
+			underlying = "uint64_t";
+			break;
 		}
 	}
 	if (!underlying)
@@ -129,7 +145,7 @@ void Emitter::emit_enum_decl(EnumType* e) {
 		fprintf(active, "%s", member.cxx_name.c_str());
 		if (member.explicit_value)
 			fprintf(active, " = %lld",
-			    static_cast<long long>(member.value));
+				static_cast<long long>(member.value));
 	}
 	fprintf(active, " }");
 }
@@ -138,7 +154,7 @@ void Emitter::emit_static_member_declaration(
     StorageSlot* slot) {
 	if (!slot ||
 	    slot->kind !=
-	        StorageSlot::Kind::StaticMember)
+		StorageSlot::Kind::StaticMember)
 		unhandled_node(
 		    "non-static slot passed to static-member emitter",
 		    slot);
@@ -147,7 +163,7 @@ void Emitter::emit_static_member_declaration(
 		fprintf(active, "inline static ");
 		emit_type_ref(slot->ty);
 		fprintf(active, "& %s() {\n",
-		    slot->cxx_name.c_str());
+			slot->cxx_name.c_str());
 		fprintf(active, "\t\tstatic ");
 		emit_type_ref(slot->ty);
 		fprintf(active, " m_value = ");
@@ -160,27 +176,28 @@ void Emitter::emit_static_member_declaration(
 	fprintf(active, "inline static ");
 	emit_type_ref(slot->ty);
 	fprintf(active, " %s{};\n",
-	    slot->cxx_name.c_str());
+		slot->cxx_name.c_str());
 }
 
 // Apply the `p_` prefix to a Pascal value identifier.
 std::string cxx_value_name(std::string pas_name) {
 	static constexpr std::pair<
 	    std::string_view,
-	    std::string_view> operator_names[] = {
-	    {":=", "p_implicit"},
-	    {"+", "p_operator_plus"},
-	    {"-", "p_operator_minus"},
-	    {"*", "p_operator_multiply"},
-	    {"/", "p_operator_divide"},
-	    {"**", "p_operator_power"},
-	    {"=", "p_operator_equal"},
-	    {"<", "p_operator_less"},
-	    {"<=", "p_operator_less_equal"},
-	    {">", "p_operator_greater"},
-	    {">=", "p_operator_greater_equal"},
-	    {"><", "p_operator_symmetric_difference"},
-	};
+	    std::string_view>
+	    operator_names[] = {
+		{":=", "p_implicit"},
+		{"+", "p_operator_plus"},
+		{"-", "p_operator_minus"},
+		{"*", "p_operator_multiply"},
+		{"/", "p_operator_divide"},
+		{"**", "p_operator_power"},
+		{"=", "p_operator_equal"},
+		{"<", "p_operator_less"},
+		{"<=", "p_operator_less_equal"},
+		{">", "p_operator_greater"},
+		{">=", "p_operator_greater_equal"},
+		{"><", "p_operator_symmetric_difference"},
+	    };
 	for (const auto& [spelling, name] :
 	     operator_names)
 		if (pas_name == spelling)
@@ -195,9 +212,9 @@ std::string cxx_value_name(std::string pas_name) {
 static Type* implicit_conversion_target(
     const Callable* callable) {
 	return callable &&
-	               callable->is_implicit_conversion()
-	    ? callable->ty->return_type
-	    : nullptr;
+		       callable->is_implicit_conversion()
+		   ? callable->ty->return_type
+		   : nullptr;
 }
 
 // Apply the `t_` prefix to a Pascal type identifier.
@@ -264,7 +281,7 @@ void Emitter::emit_unit_interface_prologue(
 	for (auto& h : used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
 	fprintf(active, "\nnamespace %s {\n",
-	    unit_namespace.c_str());
+		unit_namespace.c_str());
 }
 
 void Emitter::emit_unit_interface_epilogue() {
@@ -285,7 +302,7 @@ void Emitter::emit_unit_implementation_prologue(
 	for (auto& h : impl_used_unit_h_files)
 		fprintf(active, "#include \"%s\"\n", h.c_str());
 	fprintf(active, "\nnamespace %s {\n",
-	    unit_namespace.c_str());
+		unit_namespace.c_str());
 }
 
 void Emitter::emit_unit_implementation_epilogue() {
@@ -320,10 +337,10 @@ void Emitter::emit_class_lifecycle_call(Method* method) {
 	// so C++ metaclass inheritance cannot accidentally run a parent hook for
 	// a descendant that has no hook of its own.
 	fprintf(active, "\t%s::p_classtype()->%s();\n",
-	    owner_cxx_reference_name(
-	        method->owner_class)
-	        .c_str(),
-	    method->cxx_name.c_str());
+		owner_cxx_reference_name(
+		    method->owner_class)
+		    .c_str(),
+		method->cxx_name.c_str());
 }
 
 void Emitter::emit_var_decl(
@@ -371,19 +388,19 @@ void Emitter::emit_initialized_storage_decl(
 
 void Emitter::emit_main_prologue(
     const std::vector<UnitLifecycleNames>&
-        unit_lifecycle_hooks,
+	unit_lifecycle_hooks,
     const std::vector<Method*>&
-        program_class_destructors) {
+	program_class_destructors) {
 	if (!active)
 		return;
 	fprintf(active, "\n");
 	for (const auto& unit : unit_lifecycle_hooks) {
 		fprintf(active, "namespace %s {\n",
-		    unit.cxx_namespace.c_str());
+			unit.cxx_namespace.c_str());
 		fprintf(active, "void %s();\n",
-		    unit.initialize.c_str());
+			unit.initialize.c_str());
 		fprintf(active, "void %s();\n",
-		    unit.finalize.c_str());
+			unit.finalize.c_str());
 		fprintf(active, "}\n");
 	}
 	fprintf(active, "\nnamespace {\n");
@@ -392,27 +409,27 @@ void Emitter::emit_main_prologue(
 	fprintf(active, "\tvoid (*finalize)();\n");
 	fprintf(active, "};\n\n");
 	fprintf(active,
-	        "constexpr std::array<tpcc_unit_entry, %zu> tpcc_units{{\n",
-	        unit_lifecycle_hooks.size());
+		"constexpr std::array<tpcc_unit_entry, %zu> tpcc_units{{\n",
+		unit_lifecycle_hooks.size());
 	for (const auto& unit : unit_lifecycle_hooks)
 		fprintf(active, "\t{::%s::%s, ::%s::%s},\n",
-		    unit.cxx_namespace.c_str(),
-		    unit.initialize.c_str(),
-		    unit.cxx_namespace.c_str(),
-		    unit.finalize.c_str());
+			unit.cxx_namespace.c_str(),
+			unit.initialize.c_str(),
+			unit.cxx_namespace.c_str(),
+			unit.finalize.c_str());
 	fprintf(active, "}};\n");
 	fprintf(active, "std::size_t tpcc_initialized_unit_count = 0;\n");
 	fprintf(active, "bool tpcc_finalization_started = false;\n\n");
 	fprintf(active,
-	        "void tpcc_finalize_initialized_units() noexcept {\n");
+		"void tpcc_finalize_initialized_units() noexcept {\n");
 	fprintf(active, "\tif (tpcc_finalization_started)\n");
 	fprintf(active, "\t\treturn;\n");
 	fprintf(active, "\ttpcc_finalization_started = true;\n");
 	fprintf(active, "\twhile (tpcc_initialized_unit_count != 0) {\n");
 	fprintf(active, "\t\t--tpcc_initialized_unit_count;\n");
 	fprintf(active,
-	        "\t\tauto finalize = "
-	        "tpcc_units[tpcc_initialized_unit_count].finalize;\n");
+		"\t\tauto finalize = "
+		"tpcc_units[tpcc_initialized_unit_count].finalize;\n");
 	fprintf(active, "\t\tif (finalize)\n");
 	fprintf(active, "\t\t\tfinalize();\n");
 	fprintf(active, "\t}\n");
@@ -425,17 +442,17 @@ void Emitter::emit_main_prologue(
 		// unit callback registration, C++'s reverse atexit order finalizes
 		// the program before its units.
 		fprintf(active,
-		    "bool tpcc_program_finalization_armed = false;\n");
+			"bool tpcc_program_finalization_armed = false;\n");
 		fprintf(active,
-		    "bool tpcc_program_finalization_started = false;\n\n");
+			"bool tpcc_program_finalization_started = false;\n\n");
 		fprintf(active,
-		    "void tpcc_finalize_program() noexcept {\n");
+			"void tpcc_finalize_program() noexcept {\n");
 		fprintf(active,
-		    "\tif (!tpcc_program_finalization_armed || "
-		    "tpcc_program_finalization_started)\n");
+			"\tif (!tpcc_program_finalization_armed || "
+			"tpcc_program_finalization_started)\n");
 		fprintf(active, "\t\treturn;\n");
 		fprintf(active,
-		    "\ttpcc_program_finalization_started = true;\n");
+			"\ttpcc_program_finalization_started = true;\n");
 		for (Method* method : program_class_destructors)
 			emit_class_lifecycle_call(method);
 		fprintf(active, "}\n");
@@ -443,7 +460,7 @@ void Emitter::emit_main_prologue(
 	fprintf(active, "}\n\n");
 	fprintf(active, "int main() {\n");
 	fprintf(active,
-	        "\tif (std::atexit(tpcc_finalize_initialized_units) != 0)\n");
+		"\tif (std::atexit(tpcc_finalize_initialized_units) != 0)\n");
 	fprintf(active, "\t\tstd::terminate();\n");
 	fprintf(active, "\ttry {\n");
 	fprintf(active, "\t\tfor (const auto& unit : tpcc_units) {\n");
@@ -457,9 +474,9 @@ void Emitter::emit_program_finalizer_registration() {
 	if (!active)
 		return;
 	fprintf(active,
-	    "\t\ttpcc_program_finalization_armed = true;\n");
+		"\t\ttpcc_program_finalization_armed = true;\n");
 	fprintf(active,
-	    "\t\tif (std::atexit(tpcc_finalize_program) != 0) {\n");
+		"\t\tif (std::atexit(tpcc_finalize_program) != 0) {\n");
 	fprintf(active, "\t\t\ttpcc_finalize_program();\n");
 	fprintf(active, "\t\t\tstd::terminate();\n");
 	fprintf(active, "\t\t}\n");
@@ -471,23 +488,23 @@ void Emitter::emit_main_epilogue(
 		return;
 	fprintf(active, "\t\treturn 0;\n");
 	fprintf(active,
-	    "\t} catch (::u_system::tpcc_pascal_exception<"
-	    "::u_system::t_tobject>& tpcc_exception) {\n"
-	    "\t\t::u_system::tpcc_pascal_exception_scope<"
-	    "::u_system::t_tobject> tpcc_exception_scope("
-	    "tpcc_exception);\n"
-	    "\t\tauto tpcc_exceptproc = "
-	    "::u_system::p_exceptproc;\n");
+		"\t} catch (::u_system::tpcc_pascal_exception<"
+		"::u_system::t_tobject>& tpcc_exception) {\n"
+		"\t\t::u_system::tpcc_pascal_exception_scope<"
+		"::u_system::t_tobject> tpcc_exception_scope("
+		"tpcc_exception);\n"
+		"\t\tauto tpcc_exceptproc = "
+		"::u_system::p_exceptproc;\n");
 	if (has_program_class_destructors)
 		fprintf(active, "\t\ttpcc_finalize_program();\n");
 	fprintf(active, "\t\ttpcc_finalize_initialized_units();\n");
 	fprintf(active,
-	    "\t\tif (tpcc_exceptproc)\n"
-	    "\t\t\ttpcc_exceptproc("
-	    "tpcc_exception.object(), "
-	    "tpcc_exception.address(), "
-	    "tpcc_exception.frame());\n"
-	    "\t\treturn 217;\n");
+		"\t\tif (tpcc_exceptproc)\n"
+		"\t\t\ttpcc_exceptproc("
+		"tpcc_exception.object(), "
+		"tpcc_exception.address(), "
+		"tpcc_exception.frame());\n"
+		"\t\treturn 217;\n");
 	fprintf(active, "\t} catch (...) {\n");
 	if (has_program_class_destructors)
 		fprintf(active, "\t\ttpcc_finalize_program();\n");
@@ -526,7 +543,7 @@ static bool callable_is_cxx_destructor(Callable* c) {
 	auto method = dynamic_cast<Method*>(c);
 	return method &&
 	       dynamic_cast<ClassType*>(
-	           method->owner_class);
+		   method->owner_class);
 }
 
 // Spelling of a Callable's C++ name token at any emit site. For class
@@ -559,7 +576,7 @@ static std::optional<std::string> variant_member_path(
 			if (field.slot == slot)
 				return prefix;
 		if (auto nested =
-		        variant_member_path(arm.variant, slot))
+			variant_member_path(arm.variant, slot))
 			return prefix + *nested;
 	}
 	return std::nullopt;
@@ -581,9 +598,9 @@ static std::string variant_arm_type_name(
 	// constructors. The depth component makes every nested helper distinct;
 	// depth zero retains the original, readable spelling.
 	return depth == 0
-	    ? "m_variant_arm_" + std::to_string(arm_index) + "_type"
-	    : "m_variant_" + std::to_string(depth) + "_arm_" +
-	          std::to_string(arm_index) + "_type";
+		   ? "m_variant_arm_" + std::to_string(arm_index) + "_type"
+		   : "m_variant_" + std::to_string(depth) + "_arm_" +
+			 std::to_string(arm_index) + "_type";
 }
 
 void Emitter::emit_label(std::string cxx_label_name) {
@@ -602,10 +619,10 @@ void Emitter::emit_try_prologue() {
 	if (!active)
 		return;
 	fprintf(active,
-	    "\ttry {\n"
-	    "\t\t[[maybe_unused]] std::exception_ptr "
-	    "tpcc_pending_exception;\n"
-	    "\t\ttry {\n");
+		"\ttry {\n"
+		"\t\t[[maybe_unused]] std::exception_ptr "
+		"tpcc_pending_exception;\n"
+		"\t\ttry {\n");
 }
 
 void Emitter::emit_try_except_prologue() {
@@ -615,12 +632,12 @@ void Emitter::emit_try_except_prologue() {
 	// native implementation failures, and compiler-private control transfer
 	// therefore pass through without name-specific rethrow branches.
 	fprintf(active,
-	    "\t\t} catch "
-	    "(::u_system::tpcc_pascal_exception<"
-	    "::u_system::t_tobject>& tpcc_exception) {\n"
-	    "\t\t\t::u_system::tpcc_pascal_exception_scope<"
-	    "::u_system::t_tobject> tpcc_exception_scope("
-	    "tpcc_exception);\n");
+		"\t\t} catch "
+		"(::u_system::tpcc_pascal_exception<"
+		"::u_system::t_tobject>& tpcc_exception) {\n"
+		"\t\t\t::u_system::tpcc_pascal_exception_scope<"
+		"::u_system::t_tobject> tpcc_exception_scope("
+		"tpcc_exception);\n");
 }
 
 void Emitter::emit_exception_handler_prologue(
@@ -635,18 +652,20 @@ void Emitter::emit_exception_handler_prologue(
 		    "exception handler type is not a class",
 		    exception_type);
 	fprintf(active, "\t\t\t%sif (",
-	    first ? "" : "else ");
+		first ? "" : "else ");
 	if (variable_cxx_name.empty()) {
 		fprintf(active,
-		    "tpcc_exception.get_if<%s>() != nullptr",
-		    owner_cxx_reference_name(
-		        exception_class).c_str());
+			"tpcc_exception.get_if<%s>() != nullptr",
+			owner_cxx_reference_name(
+			    exception_class)
+			    .c_str());
 	} else {
 		fprintf(active,
-		    "auto* %s = tpcc_exception.get_if<%s>()",
-		    variable_cxx_name.c_str(),
-		    owner_cxx_reference_name(
-		        exception_class).c_str());
+			"auto* %s = tpcc_exception.get_if<%s>()",
+			variable_cxx_name.c_str(),
+			owner_cxx_reference_name(
+			    exception_class)
+			    .c_str());
 	}
 	fprintf(active, ") {\n");
 }
@@ -672,9 +691,9 @@ void Emitter::emit_try_except_epilogue(
 		return;
 	if (typed_handlers && !has_default)
 		fprintf(active,
-		    "\t\t\telse {\n"
-		    "\t\t\t\tthrow;\n"
-		    "\t\t\t}\n");
+			"\t\t\telse {\n"
+			"\t\t\t\tthrow;\n"
+			"\t\t\t}\n");
 	fprintf(active, "\t\t}\n");
 }
 
@@ -685,19 +704,19 @@ void Emitter::emit_try_finally_prologue() {
 	// stream once after the catch on both normal and exceptional completion.
 	// No Pascal handler examines or converts this exception_ptr.
 	fprintf(active,
-	    "\t\t} catch (...) {\n"
-	    "\t\t\ttpcc_pending_exception = "
-	    "std::current_exception();\n"
-	    "\t\t}\n");
+		"\t\t} catch (...) {\n"
+		"\t\t\ttpcc_pending_exception = "
+		"std::current_exception();\n"
+		"\t\t}\n");
 }
 
 void Emitter::emit_try_finally_epilogue() {
 	if (!active)
 		return;
 	fprintf(active,
-	    "\t\tif (tpcc_pending_exception)\n"
-	    "\t\t\tstd::rethrow_exception("
-	    "tpcc_pending_exception);\n");
+		"\t\tif (tpcc_pending_exception)\n"
+		"\t\t\tstd::rethrow_exception("
+		"tpcc_pending_exception);\n");
 }
 
 void Emitter::emit_try_control_epilogue(
@@ -708,45 +727,45 @@ void Emitter::emit_try_control_epilogue(
 	fprintf(active, "\t}");
 	if (routine) {
 		fprintf(active,
-		    " catch (::u_system::tpcc_return_transfer<");
+			" catch (::u_system::tpcc_return_transfer<");
 		emit_type_ref(routine->return_type);
 		fprintf(active,
-		    ">& tpcc_return) {\n"
-		    "\t\tif (tpcc_return.next_try_depth != %u)\n"
-		    "\t\t\tthrow;\n"
-		    "\t\t--tpcc_return.next_try_depth;\n"
-		    "\t\tif (tpcc_return.next_try_depth != 0)\n"
-		    "\t\t\tthrow;\n",
-		    try_depth);
+			">& tpcc_return) {\n"
+			"\t\tif (tpcc_return.next_try_depth != %u)\n"
+			"\t\t\tthrow;\n"
+			"\t\t--tpcc_return.next_try_depth;\n"
+			"\t\tif (tpcc_return.next_try_depth != 0)\n"
+			"\t\t\tthrow;\n",
+			try_depth);
 		if (routine->return_type == &unit_type())
 			fprintf(active, "\t\treturn;\n");
 		else
 			fprintf(active,
-			    "\t\treturn std::move("
-			    "tpcc_return.value);\n");
+				"\t\treturn std::move("
+				"tpcc_return.value);\n");
 		fprintf(active, "\t}");
 	}
 	if (inside_loop) {
 		fprintf(active,
-		    " catch (::u_system::tpcc_loop_transfer& "
-		    "tpcc_loop) {\n"
-		    "\t\tif (tpcc_loop.next_try_depth != %u)\n"
-		    "\t\t\tthrow;\n"
-		    "\t\t--tpcc_loop.next_try_depth;\n"
-		    "\t\tif (tpcc_loop.next_try_depth != "
-		    "tpcc_loop.target_try_depth)\n"
-		    "\t\t\tthrow;\n"
-		    "\t\tif (tpcc_loop.is_break)\n"
-		    "\t\t\tbreak;\n"
-		    "\t\tcontinue;\n"
-		    "\t}",
-		    try_depth);
+			" catch (::u_system::tpcc_loop_transfer& "
+			"tpcc_loop) {\n"
+			"\t\tif (tpcc_loop.next_try_depth != %u)\n"
+			"\t\t\tthrow;\n"
+			"\t\t--tpcc_loop.next_try_depth;\n"
+			"\t\tif (tpcc_loop.next_try_depth != "
+			"tpcc_loop.target_try_depth)\n"
+			"\t\t\tthrow;\n"
+			"\t\tif (tpcc_loop.is_break)\n"
+			"\t\t\tbreak;\n"
+			"\t\tcontinue;\n"
+			"\t}",
+			try_depth);
 	}
 	if (!routine && !inside_loop)
 		fprintf(active,
-		    " catch (...) {\n"
-		    "\t\tthrow;\n"
-		    "\t}");
+			" catch (...) {\n"
+			"\t\tthrow;\n"
+			"\t}");
 	fprintf(active, "\n");
 }
 
@@ -755,7 +774,7 @@ void Emitter::emit_statement(Node* stmt) {
 		return;
 	if (dynamic_cast<ConstructorFail*>(stmt)) {
 		fprintf(active,
-		    "\tthrow ::u_system::tpcc_constructor_fail{};\n");
+			"\tthrow ::u_system::tpcc_constructor_fail{};\n");
 		return;
 	}
 	if (auto raise = dynamic_cast<Raise*>(stmt)) {
@@ -764,7 +783,7 @@ void Emitter::emit_statement(Node* stmt) {
 			return;
 		}
 		fprintf(active,
-		    "\t::u_system::m_raise_pascal(");
+			"\t::u_system::m_raise_pascal(");
 		emit_expression(raise->object);
 		if (raise->address) {
 			fprintf(active, ", ");
@@ -780,14 +799,14 @@ void Emitter::emit_statement(Node* stmt) {
 	}
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
 		if (auto member =
-		        dynamic_cast<MemberAccess*>(a->a)) {
+			dynamic_cast<MemberAccess*>(a->a)) {
 			if (auto view =
-			        dynamic_cast<Cast*>(member->a)) {
+				dynamic_cast<Cast*>(member->a)) {
 				auto field =
 				    dynamic_cast<StorageSlot*>(member->b);
 				auto routine =
 				    dynamic_cast<RoutineType*>(
-				        view->a ? view->a->ty : nullptr);
+					view->a ? view->a->ty : nullptr);
 				bool is_code =
 				    field == tmethod_code_field();
 				bool is_data =
@@ -797,9 +816,9 @@ void Emitter::emit_statement(Node* stmt) {
 				    routine->kind == METHOD &&
 				    (is_code || is_data)) {
 					fprintf(active,
-					    is_code
-					        ? "\t::u_system::m_store_tmethod_code("
-					        : "\t::u_system::m_store_tmethod_data(");
+						is_code
+						    ? "\t::u_system::m_store_tmethod_code("
+						    : "\t::u_system::m_store_tmethod_data(");
 					emit_writable_expression(view->a);
 					fprintf(active, ", ");
 					emit_expression(a->b);
@@ -839,8 +858,8 @@ void Emitter::emit_statement(Node* stmt) {
 		Node* indexed_receiver = indexed_property ? indexed_property->receiver : nullptr;
 		Node* indexed_argument =
 		    indexed_property && indexed_property->indexes.size() == 1
-		        ? indexed_property->indexes.front()
-		        : nullptr;
+			? indexed_property->indexes.front()
+			: nullptr;
 		if (auto ix = dynamic_cast<Index*>(a->a)) {
 			indexed_receiver = ix->a;
 			indexed_argument = ix->b;
@@ -982,7 +1001,7 @@ void Emitter::emit_statement(Node* stmt) {
 	}
 	if (auto write = dynamic_cast<WriteCall*>(stmt)) {
 		fprintf(active, "\t::u_system::%s(",
-		    write->newline ? "p_writeln" : "p_write");
+			write->newline ? "p_writeln" : "p_write");
 		bool need_comma = false;
 		if (write->file) {
 			emit_writable_expression(write->file);
@@ -1022,7 +1041,7 @@ void Emitter::emit_statement(Node* stmt) {
 	if (auto r = dynamic_cast<Return*>(stmt)) {
 		if (r->try_depth != 0) {
 			fprintf(active,
-			    "\tthrow ::u_system::tpcc_return_transfer<");
+				"\tthrow ::u_system::tpcc_return_transfer<");
 			emit_type_ref(
 			    r->a ? r->a->ty : &unit_type());
 			fprintf(active, ">{%u", r->try_depth);
@@ -1221,13 +1240,13 @@ void Emitter::emit_loop_control(
 		return;
 	if (try_depth == target_try_depth) {
 		fprintf(active,
-		    is_break ? "\tbreak;\n" : "\tcontinue;\n");
+			is_break ? "\tbreak;\n" : "\tcontinue;\n");
 		return;
 	}
 	fprintf(active,
-	    "\tthrow ::u_system::tpcc_loop_transfer{%u, %u, %s};\n",
-	    try_depth, target_try_depth,
-	    is_break ? "true" : "false");
+		"\tthrow ::u_system::tpcc_loop_transfer{%u, %u, %s};\n",
+		try_depth, target_try_depth,
+		is_break ? "true" : "false");
 }
 
 void Emitter::emit_formal_parameter(
@@ -1237,8 +1256,8 @@ void Emitter::emit_formal_parameter(
 	     formal.mode == ParamMode::Out ||
 	     formal.mode == ParamMode::Const)) {
 		fprintf(active, formal.mode == ParamMode::Const
-		    ? "::u_system::tpcc_const_storage_ref"
-		    : "::u_system::tpcc_storage_ref");
+				    ? "::u_system::tpcc_const_storage_ref"
+				    : "::u_system::tpcc_storage_ref");
 	} else {
 		if (formal.mode == ParamMode::Const)
 			fprintf(active, "const ");
@@ -1265,7 +1284,7 @@ void Emitter::emit_formal_parameters(
 		if (!ty->formals.empty())
 			fprintf(active, ", ");
 		fprintf(active,
-		    "::u_system::m_implicit_target<");
+			"::u_system::m_implicit_target<");
 		emit_type_ref(conversion_target);
 		fprintf(active, ">");
 	}
@@ -1407,8 +1426,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		if (c->super) {
 			auto super_cxx_name =
 			    type_cxx_name(
-			        c->super,
-			        c->super->cxx_name);
+				c->super,
+				c->super->cxx_name);
 			if (in_meta) {
 				super_cxx_name = super_cxx_name + "::m_meta";
 			}
@@ -1421,11 +1440,12 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				    "metaclass marker target has no emitted type binding",
 				    c);
 			fprintf(active,
-			    first
-			        ? " : public ::u_system::m_classref<%s>"
-			        : ", public ::u_system::m_classref<%s>",
-			    type_cxx_name(
-			        c, c->cxx_name).c_str());
+				first
+				    ? " : public ::u_system::m_classref<%s>"
+				    : ", public ::u_system::m_classref<%s>",
+				type_cxx_name(
+				    c, c->cxx_name)
+				    .c_str());
 			first = false;
 		}
 		if (!in_meta) {
@@ -1453,15 +1473,15 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	} else if (auto c = dynamic_cast<ObjectType*>(ty)) {
 		if (c->super)
 			fprintf(active, " : public %s",
-			    type_cxx_name(
-			        c->super,
-			        c->super->cxx_name)
-			        .c_str());
+				type_cxx_name(
+				    c->super,
+				    c->super->cxx_name)
+				    .c_str());
 	}
 
 	fprintf(active, " {\n");
 	if (auto object =
-	        dynamic_cast<ObjectType*>(ty)) {
+		dynamic_cast<ObjectType*>(ty)) {
 		if (object->needs_vmt &&
 		    (!object->super ||
 		     !object->super->needs_vmt)) {
@@ -1475,8 +1495,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			// needed and lets Dispose delete the exact derived carrier
 			// after the Pascal Done method has returned.
 			fprintf(active,
-			    "\tpublic: virtual ~%s() = default;\n",
-			    cxx_name.c_str());
+				"\tpublic: virtual ~%s() = default;\n",
+				cxx_name.c_str());
 		}
 	}
 	auto classref_api_cxx_for = [&](ClassType* c) -> std::string {
@@ -1486,19 +1506,19 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		if (target->cxx_name.empty())
 			unhandled_type("metaclass API target name unknown", target);
 		return "::u_system::m_classref<" +
-		    type_cxx_name(
-		        target, target->cxx_name) +
-		    ">*";
+		       type_cxx_name(
+			   target, target->cxx_name) +
+		       ">*";
 	};
 	if (is_class && in_meta) {
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
-			std::string class_name = c->cxx_name;					// FIXME: terrible name.
+			std::string class_name = c->cxx_name; // FIXME: terrible name.
 			std::string parent_class_cxx_name =
 			    c->super
-			    ? type_cxx_name(
-			          c->super,
-			          c->super->cxx_name)
-			    : ""; // FIXME: terrible name
+				? type_cxx_name(
+				      c->super,
+				      c->super->cxx_name)
+				: ""; // FIXME: terrible name
 			if (c->super && parent_class_cxx_name.empty()) {
 				unhandled_type("parent class name unknown", c);
 			}
@@ -1511,8 +1531,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				// making it a C++ static function would lose the dynamic
 				// class-reference receiver.
 				fprintf(active,
-				    "\tpublic: virtual inline %s p_classtype() {\n",
-				    classref_api_cxx.c_str());
+					"\tpublic: virtual inline %s p_classtype() {\n",
+					classref_api_cxx.c_str());
 				fprintf(active, "\t\treturn this;\n");
 				fprintf(active, "\t}\n");
 			}
@@ -1547,10 +1567,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			// emitted only after the outer object type is complete.
 			std::string object_cxx_name =
 			    type_cxx_name(c, c->cxx_name);
-			fprintf(active, c->super
-			    ? "\tpublic: %s* m_allocate() override;\n"
-			    : "\tpublic: virtual %s* m_allocate();\n",
-			    object_cxx_name.c_str());
+			fprintf(active, c->super ? "\tpublic: %s* m_allocate() override;\n" : "\tpublic: virtual %s* m_allocate();\n",
+				object_cxx_name.c_str());
 			if (c->class_constructor) {
 				fprintf(active, "\t");
 				emit_callable_signature(
@@ -1578,7 +1596,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		// as outer C++ static proxies: such proxies have no metaclass `this`
 		// and therefore cannot preserve derived class-method dispatch.
 		fprintf(active,
-		    "\tpublic: inline static m_meta* p_classtype() {\n");
+			"\tpublic: inline static m_meta* p_classtype() {\n");
 		fprintf(active, "\t\tstatic m_meta meta{};\n");
 		fprintf(active, "\t\treturn &meta;\n");
 		fprintf(active, "\t}\n");
@@ -1589,8 +1607,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		// in every object. The return override is covariant because generated
 		// metaclasses inherit in the same order as their object classes.
 		fprintf(active, c->super
-		    ? "\tpublic: inline m_meta* m_classref() override {\n"
-		    : "\tpublic: virtual inline m_meta* m_classref() {\n");
+				    ? "\tpublic: inline m_meta* m_classref() override {\n"
+				    : "\tpublic: virtual inline m_meta* m_classref() {\n");
 		fprintf(active, "\t\treturn p_classtype();\n");
 		fprintf(active, "\t}\n");
 		// fallthrough
@@ -1644,7 +1662,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 			if (auto call = dynamic_cast<Callable*>(v))
 				callables.push_back(call);
 			else if (auto overloads =
-			             dynamic_cast<OverloadSet*>(v))
+				     dynamic_cast<OverloadSet*>(v))
 				callables = overloads->members;
 			for (Callable* call : callables) {
 				// One Pascal class frame feeds two C++ carriers. Flatten
@@ -1669,13 +1687,13 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				if (method && method->is_static)
 					fprintf(active, "static ");
 				else if (method &&
-				    (is_interface ||
-				     method->virtual_kind ==
-				         Method::VirtualKind::Virtual ||
-				     method->virtual_kind ==
-				         Method::VirtualKind::Abstract ||
-				     method->virtual_kind ==
-				         Method::VirtualKind::Dynamic))
+					 (is_interface ||
+					  method->virtual_kind ==
+					      Method::VirtualKind::Virtual ||
+					  method->virtual_kind ==
+					      Method::VirtualKind::Abstract ||
+					  method->virtual_kind ==
+					      Method::VirtualKind::Dynamic))
 					fprintf(active, "virtual ");
 				emit_callable_signature(
 				    call, Position::Declaration, "");
@@ -1692,7 +1710,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 					if (is_interface)
 						fprintf(active, " = 0");
 					else if (method->virtual_kind ==
-					         Method::VirtualKind::Abstract) {
+						 Method::VirtualKind::Abstract) {
 						// Native FPC permits constructing a class which still
 						// has abstract methods. Its VMT entry calls
 						// AbstractError only if dispatch reaches that slot.
@@ -1700,9 +1718,9 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 						// into EAbstractError without making generated class
 						// declarations depend on SysUtils.
 						fprintf(active,
-						    " {\n"
-						    "\t\t::u_system::m_runtime_error(211);\n"
-						    "\t}\n");
+							" {\n"
+							"\t\t::u_system::m_runtime_error(211);\n"
+							"\t}\n");
 						continue;
 					}
 				}
@@ -1728,7 +1746,7 @@ void Emitter::emit_record_variant_decl(
 		emit_indent();
 		emit_type_ref(variant->selector_type);
 		fprintf(active, " %s;\n",
-		    variant->selector_cxx_name.c_str());
+			variant->selector_cxx_name.c_str());
 	}
 	if (variant->arms.empty())
 		return;
@@ -1736,16 +1754,17 @@ void Emitter::emit_record_variant_decl(
 	     arm_index < variant->arms.size(); ++arm_index) {
 		emit_indent();
 		fprintf(active,
-		    "struct %s {\n",
-		    variant_arm_type_name(
-		        depth, arm_index).c_str());
+			"struct %s {\n",
+			variant_arm_type_name(
+			    depth, arm_index)
+			    .c_str());
 		for (const auto& field :
 		     variant->arms[arm_index].fields) {
 			for (unsigned i = 0; i < indent + 1; ++i)
 				fputc('\t', active);
 			emit_type_ref(field.ty);
 			fprintf(active, " %s;\n",
-			    field.slot->cxx_name.c_str());
+				field.slot->cxx_name.c_str());
 		}
 		emit_record_variant_decl(
 		    variant->arms[arm_index].variant,
@@ -1760,10 +1779,11 @@ void Emitter::emit_record_variant_decl(
 		for (unsigned i = 0; i < indent + 1; ++i)
 			fputc('\t', active);
 		fprintf(active,
-		    "%s m_arm_%zu;\n",
-		    variant_arm_type_name(
-		        depth, arm_index).c_str(),
-		    arm_index);
+			"%s m_arm_%zu;\n",
+			variant_arm_type_name(
+			    depth, arm_index)
+			    .c_str(),
+			arm_index);
 	}
 	emit_indent();
 	fprintf(active, "} m_variant;\n");
@@ -1797,13 +1817,13 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 		// present: the next arm restarts at the same union offset, and a
 		// nested variant restarts again inside its containing arm.
 		fprintf(active,
-		    "\tenum : std::size_t { m_field_%zu_offset = %llu };\n",
-		    i, (unsigned long long)field.offset);
+			"\tenum : std::size_t { m_field_%zu_offset = %llu };\n",
+			i, (unsigned long long)field.offset);
 	}
 	// Same local-class restriction as the field offsets above.
 	fprintf(active,
-	    "\tenum : std::size_t { m_storage_size = %llu };\n",
-	    (unsigned long long)layout->type.size);
+		"\tenum : std::size_t { m_storage_size = %llu };\n",
+		(unsigned long long)layout->type.size);
 	fprintf(active, "\nprivate:\n");
 	fprintf(active, "\tstd::array<std::byte, m_storage_size> m_storage{};\n");
 	fprintf(active, "\npublic:\n");
@@ -1828,21 +1848,21 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 	     p->children->value_declarations()) {
 		Node* value = item.second.value;
 		if (auto slot =
-		        dynamic_cast<StorageSlot*>(
-		            value);
+			dynamic_cast<StorageSlot*>(
+			    value);
 		    slot &&
 		    slot->kind ==
-		        StorageSlot::Kind::StaticMember) {
+			StorageSlot::Kind::StaticMember) {
 			emit_static_member_declaration(slot);
 			continue;
 		}
 		std::vector<Callable*> callables;
 		if (auto callable =
-		        dynamic_cast<Callable*>(value))
+			dynamic_cast<Callable*>(value))
 			callables.push_back(callable);
 		else if (auto overloads =
-		             dynamic_cast<OverloadSet*>(
-		                 value))
+			     dynamic_cast<OverloadSet*>(
+				 value))
 			callables = overloads->members;
 		for (Callable* callable : callables) {
 			auto method =
@@ -1868,7 +1888,7 @@ void Emitter::emit_class_forward_declaration(
 	if (!active)
 		return;
 	fprintf(active, "struct %s;\n",
-	    cxx_name.c_str());
+		cxx_name.c_str());
 }
 
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
@@ -1911,11 +1931,11 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(active, ";\n");
 		if (dynamic_cast<ClassType*>(ty)) {
 			fprintf(active,
-			    "inline %s* %s::m_meta::m_allocate() {\n",
-			    cxx_name.c_str(), cxx_name.c_str());
+				"inline %s* %s::m_meta::m_allocate() {\n",
+				cxx_name.c_str(), cxx_name.c_str());
 			fprintf(active,
-			    "\treturn ::u_system::m_allocate_object<%s>();\n",
-			    cxx_name.c_str());
+				"\treturn ::u_system::m_allocate_object<%s>();\n",
+				cxx_name.c_str());
 			fprintf(active, "}\n");
 		}
 		if (auto record = dynamic_cast<RecordType*>(ty)) {
@@ -1924,8 +1944,8 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 				unhandled_type(
 				    "ordinary record layout is not known", record);
 			fprintf(active,
-			    "static_assert(std::is_standard_layout_v<%s>, \"ordinary record must have standard layout\");\n",
-			    cxx_name.c_str());
+				"static_assert(std::is_standard_layout_v<%s>, \"ordinary record must have standard layout\");\n",
+				cxx_name.c_str());
 			auto find_layout =
 			    [&](StorageSlot* slot) -> const AggregateFieldLayout* {
 				for (const auto& field : layout->fields)
@@ -1935,20 +1955,20 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 			};
 			auto emit_field_assertions =
 			    [&](StorageSlot* slot, const char* member_expression,
-			        const char* type_expression) {
-				const auto* field = find_layout(slot);
-				if (!field)
-					unhandled_node(
-					    "ordinary record field has no layout", slot);
-				fprintf(active,
-				    "static_assert(%s == %llu, \"ordinary-record field offset mismatch\");\n",
-				    member_expression,
-				    (unsigned long long)field->offset);
-				fprintf(active,
-				    "static_assert(sizeof(%s) == %llu, \"ordinary-record field size mismatch\");\n",
-				    type_expression,
-				    (unsigned long long)field->size);
-			};
+				const char* type_expression) {
+				    const auto* field = find_layout(slot);
+				    if (!field)
+					    unhandled_node(
+						"ordinary record field has no layout", slot);
+				    fprintf(active,
+					    "static_assert(%s == %llu, \"ordinary-record field offset mismatch\");\n",
+					    member_expression,
+					    (unsigned long long)field->offset);
+				    fprintf(active,
+					    "static_assert(sizeof(%s) == %llu, \"ordinary-record field size mismatch\");\n",
+					    type_expression,
+					    (unsigned long long)field->size);
+			    };
 			for (const auto& field : record->fields) {
 				std::string offset =
 				    "offsetof(" + cxx_name + ", " +
@@ -1960,9 +1980,10 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 				    field.slot, offset.c_str(), type.c_str());
 			}
 			auto add_offset = [](const std::string& a,
-			                      const std::string& b) {
+					     const std::string& b) {
 				return a == "0"
-				    ? b : a + " + " + b;
+					   ? b
+					   : a + " + " + b;
 			};
 			std::function<void(
 			    VariantPart*, const std::string&,
@@ -1970,78 +1991,78 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 			    emit_variant_assertions;
 			emit_variant_assertions =
 			    [&](VariantPart* variant,
-			        const std::string& context_type,
-			        const std::string& context_offset,
-			        unsigned depth) {
-				if (!variant)
-					return;
-				if (variant->has_selector) {
-					const std::string offset =
-					    add_offset(
-					        context_offset,
-					        "offsetof(" + context_type +
-					        ", " +
-					        variant->selector_cxx_name +
-					        ")");
-					const std::string type =
-					    "decltype(" + context_type +
-					    "::" +
-					    variant->selector_cxx_name +
-					    ")";
-					emit_field_assertions(
-					    variant->selector_slot,
-					    offset.c_str(), type.c_str());
-				}
-				if (variant->arms.empty())
-					return;
-				const std::string union_offset =
-				    add_offset(
-				        context_offset,
-				        "offsetof(" + context_type +
-				        ", m_variant)");
-				for (size_t arm_index = 0;
-				     arm_index < variant->arms.size();
-				     ++arm_index) {
-					const auto& arm =
-					    variant->arms[arm_index];
-					const std::string arm_type =
-					    context_type + "::" +
-					    variant_arm_type_name(
-					        depth, arm_index);
-					for (const auto& field :
-					     arm.fields) {
-						const std::string offset =
-						    add_offset(
-						        union_offset,
-						        "offsetof(" +
-						        arm_type + ", " +
-						        field.slot->cxx_name +
-						        ")");
-						const std::string type =
-						    "decltype(" +
-						    arm_type + "::" +
-						    field.slot->cxx_name +
-						    ")";
-						emit_field_assertions(
-						    field.slot,
-						    offset.c_str(),
-						    type.c_str());
-					}
-					emit_variant_assertions(
-					    arm.variant, arm_type,
-					    union_offset, depth + 1);
-				}
-			};
+				const std::string& context_type,
+				const std::string& context_offset,
+				unsigned depth) {
+				    if (!variant)
+					    return;
+				    if (variant->has_selector) {
+					    const std::string offset =
+						add_offset(
+						    context_offset,
+						    "offsetof(" + context_type +
+							", " +
+							variant->selector_cxx_name +
+							")");
+					    const std::string type =
+						"decltype(" + context_type +
+						"::" +
+						variant->selector_cxx_name +
+						")";
+					    emit_field_assertions(
+						variant->selector_slot,
+						offset.c_str(), type.c_str());
+				    }
+				    if (variant->arms.empty())
+					    return;
+				    const std::string union_offset =
+					add_offset(
+					    context_offset,
+					    "offsetof(" + context_type +
+						", m_variant)");
+				    for (size_t arm_index = 0;
+					 arm_index < variant->arms.size();
+					 ++arm_index) {
+					    const auto& arm =
+						variant->arms[arm_index];
+					    const std::string arm_type =
+						context_type + "::" +
+						variant_arm_type_name(
+						    depth, arm_index);
+					    for (const auto& field :
+						 arm.fields) {
+						    const std::string offset =
+							add_offset(
+							    union_offset,
+							    "offsetof(" +
+								arm_type + ", " +
+								field.slot->cxx_name +
+								")");
+						    const std::string type =
+							"decltype(" +
+							arm_type + "::" +
+							field.slot->cxx_name +
+							")";
+						    emit_field_assertions(
+							field.slot,
+							offset.c_str(),
+							type.c_str());
+					    }
+					    emit_variant_assertions(
+						arm.variant, arm_type,
+						union_offset, depth + 1);
+				    }
+			    };
 			emit_variant_assertions(
 			    record->variant, cxx_name, "0", 0);
 			fprintf(active,
-			    "static_assert(sizeof(%s) == %llu, \"ordinary-record total size mismatch\");\n",
-			    cxx_name.c_str(),
-			    (unsigned long long)layout->type.size);
+				"static_assert(sizeof(%s) == %llu, \"ordinary-record total size mismatch\");\n",
+				cxx_name.c_str(),
+				(unsigned long long)layout->type.size);
 			fprintf(active,
-			    "static_assert(alignof(%s) == %llu, \"ordinary-record alignment mismatch\");\n",
-			    cxx_name.c_str(),
-			    (unsigned long long)layout->type.alignment);
+				"static_assert(alignof(%s) == %llu, \"ordinary-record alignment mismatch\");\n",
+				cxx_name.c_str(),
+				(unsigned long long)layout->type.alignment);
 		}
 		return;
 	}
@@ -2058,8 +2079,8 @@ void Emitter::emit_type_alias(
 		    "named type alias target has no C++ name",
 		    aliased_type);
 	fprintf(active, "using %s = %s;\n",
-	    cxx_name.c_str(),
-	    type_cxx_name(aliased_type, target).c_str());
+		cxx_name.c_str(),
+		type_cxx_name(aliased_type, target).c_str());
 }
 
 void Emitter::emit_routine_reference(
@@ -2069,30 +2090,30 @@ void Emitter::emit_routine_reference(
 		    "unresolved routine reference reached emission",
 		    reference);
 	if (auto procedure =
-	        dynamic_cast<Procedure*>(reference->resolved)) {
+		dynamic_cast<Procedure*>(reference->resolved)) {
 		if (reference->receiver)
 			unhandled_node(
 			    "standalone routine reference has a receiver",
 			    reference);
 		if (reference->code_only) {
 			fprintf(active,
-			    "::u_system::m_function_to_code_pointer(static_cast<");
+				"::u_system::m_function_to_code_pointer(static_cast<");
 			emit_type_ref(procedure->ty->return_type);
 			fprintf(active, " (*)");
 			emit_formal_parameters(
 			    procedure->ty, false,
 			    nullptr);
 			fprintf(active, ">(&%s))",
-			    node_cxx_name(
-			        procedure,
-			        callable_cxx_name(procedure))
-			        .c_str());
+				node_cxx_name(
+				    procedure,
+				    callable_cxx_name(procedure))
+				    .c_str());
 		} else {
 			fprintf(active, "&%s",
-			    node_cxx_name(
-			        procedure,
-			        callable_cxx_name(procedure))
-			        .c_str());
+				node_cxx_name(
+				    procedure,
+				    callable_cxx_name(procedure))
+				    .c_str());
 		}
 		return;
 	}
@@ -2111,28 +2132,30 @@ void Emitter::emit_routine_reference(
 			    reference);
 		std::string owner =
 		    owner_cxx_reference_name(
-		        method->owner_class);
+			method->owner_class);
 		if (owner.empty())
 			unhandled_type(
 			    "static method routine reference owner has no C++ name",
 			    method->owner_class);
 		if (reference->code_only) {
 			fprintf(active,
-			    "::u_system::m_function_to_code_pointer(static_cast<");
+				"::u_system::m_function_to_code_pointer(static_cast<");
 			emit_type_ref(method->ty->return_type);
 			fprintf(active, " (*)");
 			emit_formal_parameters(
 			    method->ty, false,
 			    nullptr);
 			fprintf(active, ">(&%s::%s))",
-			    owner.c_str(),
-			    callable_cxx_name(
-			        method).c_str());
+				owner.c_str(),
+				callable_cxx_name(
+				    method)
+				    .c_str());
 		} else {
 			fprintf(active, "&%s::%s",
-			    owner.c_str(),
-			    callable_cxx_name(
-			        method).c_str());
+				owner.c_str(),
+				callable_cxx_name(
+				    method)
+				    .c_str());
 		}
 		return;
 	}
@@ -2144,7 +2167,7 @@ void Emitter::emit_routine_reference(
 		    reference);
 	std::string owner =
 	    owner_cxx_reference_name(
-	        method->owner_class);
+		method->owner_class);
 	if (owner.empty())
 		unhandled_type(
 		    "method routine reference owner has no C++ name",
@@ -2154,13 +2177,13 @@ void Emitter::emit_routine_reference(
 
 	if (method->builtin_desc &&
 	    method->builtin_desc->call_convention ==
-	        BuiltinCallConvention::ReceiverFirst) {
+		BuiltinCallConvention::ReceiverFirst) {
 		// A receiver-first RTL method has no C++ pointer-to-member. Bind the
 		// same external function and receiver into the ordinary two-word
 		// Pascal method value; its adapter preserves the method ABI seen by
 		// callers of `procedure of object`.
 		fprintf(active,
-		    "::u_system::m_bind_receiver_function<static_cast<");
+			"::u_system::m_bind_receiver_function<static_cast<");
 		emit_type_ref(method->ty->return_type);
 		fprintf(active, " (*)(%s*", owner.c_str());
 		for (const Parameter& formal :
@@ -2169,8 +2192,8 @@ void Emitter::emit_routine_reference(
 			emit_formal_parameter(formal, false);
 		}
 		fprintf(active, ")>(&%.*s)>(",
-		    (int)method->builtin_desc->cxx_name.size(),
-		    method->builtin_desc->cxx_name.data());
+			(int)method->builtin_desc->cxx_name.size(),
+			method->builtin_desc->cxx_name.data());
 		if (reference->receiver->ty &&
 		    reference->receiver->ty->is_reference_type()) {
 			emit_expression(reference->receiver);
@@ -2191,31 +2214,31 @@ void Emitter::emit_routine_reference(
 	emit_formal_parameters(
 	    method->ty, false, nullptr);
 	fprintf(active, ">(&%s::%s)>(",
-	    owner.c_str(), callable_cxx_name(method).c_str());
+		owner.c_str(), callable_cxx_name(method).c_str());
 	if (method->ty->kind ==
 	    CLASS_METHOD) {
 		if (auto classref =
-		        dynamic_cast<ClassRefType*>(
-		            reference->receiver->ty)) {
+			dynamic_cast<ClassRefType*>(
+			    reference->receiver->ty)) {
 			auto target =
 			    dynamic_cast<ClassType*>(
-			        classref->target);
+				classref->target);
 			if (!target ||
 			    target->cxx_name.empty())
 				unhandled_type(
 				    "class-method routine-reference target",
 				    classref->target);
 			fprintf(active,
-			    "static_cast<%s::m_meta*>(",
-			    type_cxx_name(
-			        target,
-			        target->cxx_name)
-			        .c_str());
+				"static_cast<%s::m_meta*>(",
+				type_cxx_name(
+				    target,
+				    target->cxx_name)
+				    .c_str());
 			emit_expression(
 			    reference->receiver);
 			fprintf(active, ")");
 		} else if (dynamic_cast<ClassType*>(
-		               reference->receiver->ty)) {
+			       reference->receiver->ty)) {
 			emit_expression(
 			    reference->receiver);
 			fprintf(active, "->m_classref()");
@@ -2225,7 +2248,7 @@ void Emitter::emit_routine_reference(
 			    reference->receiver->ty);
 		}
 	} else if (reference->receiver->ty &&
-	    reference->receiver->ty->is_reference_type()) {
+		   reference->receiver->ty->is_reference_type()) {
 		emit_expression(reference->receiver);
 	} else {
 		fprintf(active, "std::addressof(");
@@ -2263,12 +2286,12 @@ void Emitter::emit_writable_expression(Node* expr) {
 
 void Emitter::emit_storage_ref(Node* expr) {
 	if (auto dereference =
-	        dynamic_cast<Dereference*>(expr);
+		dynamic_cast<Dereference*>(expr);
 	    dereference &&
 	    dereference->ty == unknown_type()) {
 		if (auto address =
-		        dynamic_cast<AddrOf*>(
-		            dereference->a)) {
+			dynamic_cast<AddrOf*>(
+			    dereference->a)) {
 			// Pascal `(@place)^` is the original place. This matters for
 			// omitted-type formals: their C++ carrier is already a storage
 			// view, so taking the address of that carrier would point at
@@ -2277,7 +2300,7 @@ void Emitter::emit_storage_ref(Node* expr) {
 			return;
 		}
 		fprintf(active,
-		    "::u_system::tpcc_dereference_storage(");
+			"::u_system::tpcc_dereference_storage(");
 		emit_expression(dereference->a);
 		fprintf(active, ")");
 		return;
@@ -2301,18 +2324,18 @@ void Emitter::emit_storage_ref(Node* expr) {
 
 void Emitter::emit_const_storage_ref(Node* expr) {
 	if (auto dereference =
-	        dynamic_cast<Dereference*>(expr);
+		dynamic_cast<Dereference*>(expr);
 	    dereference &&
 	    dereference->ty == unknown_type()) {
 		if (auto address =
-		        dynamic_cast<AddrOf*>(
-		            dereference->a)) {
+			dynamic_cast<AddrOf*>(
+			    dereference->a)) {
 			emit_const_storage_ref(address->a);
 			return;
 		}
 		fprintf(active,
-		    "::u_system::tpcc_make_const_storage_ref("
-		    "::u_system::tpcc_dereference_storage(");
+			"::u_system::tpcc_make_const_storage_ref("
+			"::u_system::tpcc_dereference_storage(");
 		emit_expression(dereference->a);
 		fprintf(active, "))");
 		return;
@@ -2388,7 +2411,7 @@ void Emitter::emit_expression(Node* expr) {
 	if (!active)
 		return;
 	if (auto sequence =
-	        dynamic_cast<EvaluateThen*>(expr)) {
+		dynamic_cast<EvaluateThen*>(expr)) {
 		fprintf(active, "(static_cast<void>(");
 		emit_expression(sequence->a);
 		fprintf(active, "), ");
@@ -2397,17 +2420,17 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto class_reference =
-	        dynamic_cast<ClassRefValue*>(expr)) {
+		dynamic_cast<ClassRefValue*>(expr)) {
 		if (!class_reference->target ||
 		    class_reference->target->cxx_name.empty())
 			unhandled_node(
 			    "class-reference value has unnamed target",
 			    class_reference);
 		fprintf(active, "%s::p_classtype()",
-		    type_cxx_name(
-		        class_reference->target,
-		        class_reference->target->cxx_name)
-		        .c_str());
+			type_cxx_name(
+			    class_reference->target,
+			    class_reference->target->cxx_name)
+			    .c_str());
 		return;
 	}
 	if (dynamic_cast<TypeMemberQualifier*>(expr))
@@ -2432,14 +2455,14 @@ void Emitter::emit_expression(Node* expr) {
 	if (auto c = dynamic_cast<Integer*>(expr)) {
 		Type* ordinal_type = c->ty;
 		while (auto range =
-		           dynamic_cast<SubrangeType*>(
-		               ordinal_type))
+			   dynamic_cast<SubrangeType*>(
+			       ordinal_type))
 			ordinal_type =
 			    range->base_type;
 		const bool wrapped_ordinal =
 		    ordinal_type == char_type() ||
 		    dynamic_cast<EnumType*>(
-		        ordinal_type);
+			ordinal_type);
 		if (wrapped_ordinal) {
 			fprintf(active, "static_cast<");
 			emit_type_ref(c->ty);
@@ -2469,7 +2492,7 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		return;
 	}
-		if (auto s = dynamic_cast<String*>(expr)) {
+	if (auto s = dynamic_cast<String*>(expr)) {
 		if (s->ty == char_type()) {
 			if (s->value.size() != 1)
 				unhandled_node("Char literal does not contain exactly one byte", s);
@@ -2477,14 +2500,14 @@ void Emitter::emit_expression(Node* expr) {
 				static_cast<unsigned>(static_cast<unsigned char>(s->value[0])));
 			return;
 		}
-			auto shortstring =
-			    dynamic_cast<ShortStringType*>(s->ty);
-			if (!shortstring)
-				unhandled_node(
-				    "non-Char string literal has non-ShortString type",
-				    s);
-			fprintf(active, "::u_system::tpcc_shortstring_from_c<%u>(",
-			    static_cast<unsigned>(shortstring->capacity));
+		auto shortstring =
+		    dynamic_cast<ShortStringType*>(s->ty);
+		if (!shortstring)
+			unhandled_node(
+			    "non-Char string literal has non-ShortString type",
+			    s);
+		fprintf(active, "::u_system::tpcc_shortstring_from_c<%u>(",
+			static_cast<unsigned>(shortstring->capacity));
 		fputc('"', active);
 		for (unsigned char ch : s->value)
 			fprintf(active, "\\%03o", static_cast<unsigned>(ch));
@@ -2535,17 +2558,17 @@ void Emitter::emit_expression(Node* expr) {
 			StorageSlot* slot = record->fields[i].slot;
 			if (packed) {
 				fprintf(active,
-				    "tpcc_record.m_set_%s(tpcc_field_%zu); ",
-				    slot->cxx_name.c_str(), i);
+					"tpcc_record.m_set_%s(tpcc_field_%zu); ",
+					slot->cxx_name.c_str(), i);
 			} else {
 				fprintf(active, "tpcc_record.");
 				if (auto path =
-				        record_variant_path(
-				            record_type, slot))
+					record_variant_path(
+					    record_type, slot))
 					fprintf(active, "%s",
-					    path->c_str());
+						path->c_str());
 				fprintf(active, "%s = tpcc_field_%zu; ",
-				    slot->cxx_name.c_str(), i);
+					slot->cxx_name.c_str(), i);
 			}
 		}
 		fprintf(active, "return tpcc_record; }(");
@@ -2584,7 +2607,7 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto constant =
-	        dynamic_cast<ConstantDecl*>(expr)) {
+		dynamic_cast<ConstantDecl*>(expr)) {
 		emit_expression(constant->initializer);
 		return;
 	}
@@ -2592,20 +2615,21 @@ void Emitter::emit_expression(Node* expr) {
 		if (s->kind ==
 		    StorageSlot::Kind::StaticMember) {
 			fprintf(active, "%s::%s",
-			    owner_cxx_reference_name(
-			        s->owner_type).c_str(),
-			    s->cxx_name.c_str());
+				owner_cxx_reference_name(
+				    s->owner_type)
+				    .c_str(),
+				s->cxx_name.c_str());
 			if (s->initializer)
 				fprintf(active, "()");
 			return;
 		}
 		fprintf(active, "%s",
-		    node_cxx_name(s, s->cxx_name).c_str());
+			node_cxx_name(s, s->cxx_name).c_str());
 		return;
 	}
 	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
 		fprintf(active, "%s",
-		    node_cxx_name(e, e->cxx_name).c_str());
+			node_cxx_name(e, e->cxx_name).c_str());
 		return;
 	}
 	if (auto b = dynamic_cast<Builtin*>(expr)) {
@@ -2613,13 +2637,13 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto reference =
-	        dynamic_cast<RoutineRef*>(expr)) {
+		dynamic_cast<RoutineRef*>(expr)) {
 		emit_routine_reference(reference);
 		return;
 	}
 	if (auto c = dynamic_cast<Callable*>(expr)) {
 		fprintf(active, "%s",
-		    node_cxx_name(c, c->cxx_name).c_str());
+			node_cxx_name(c, c->cxx_name).c_str());
 		return;
 	}
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
@@ -2676,7 +2700,7 @@ void Emitter::emit_expression(Node* expr) {
 			return;
 		}
 		if (auto constant =
-		        dynamic_cast<ConstantDecl*>(m->b)) {
+			dynamic_cast<ConstantDecl*>(m->b)) {
 			emit_expression(constant);
 			return;
 		}
@@ -2716,7 +2740,7 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		if (auto slot = dynamic_cast<StorageSlot*>(m->b)) {
 			if (auto path =
-			        record_variant_path(m->a->ty, slot)) {
+				record_variant_path(m->a->ty, slot)) {
 				fprintf(active, "%s", path->c_str());
 			}
 		}
@@ -2758,14 +2782,14 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto allocation =
-	        dynamic_cast<NewValue*>(expr)) {
+		dynamic_cast<NewValue*>(expr)) {
 		if (!allocation->allocated_type)
 			unhandled_node(
 			    "typed New without allocated type",
 			    allocation);
 		if (!allocation->initializer) {
 			fprintf(active,
-			    "::u_system::m_new_value<");
+				"::u_system::m_new_value<");
 			emit_type_ref(
 			    allocation->allocated_type);
 			fprintf(active, ">()");
@@ -2780,22 +2804,22 @@ void Emitter::emit_expression(Node* expr) {
 			    allocation);
 		std::string owner =
 		    owner_cxx_reference_name(
-		        initializer->owner_class);
+			initializer->owner_class);
 		fprintf(active,
-		    "::u_system::m_new_object<");
+			"::u_system::m_new_object<");
 		emit_type_ref(
 		    allocation->allocated_type);
 		fprintf(active, ", static_cast<");
 		emit_type_ref(
 		    initializer->ty->return_type);
 		fprintf(active, " (%s::*)",
-		    owner.c_str());
+			owner.c_str());
 		emit_formal_parameters(
 		    initializer->ty, false,
 		    nullptr);
 		fprintf(active, ">(&%s::%s)>(",
-		    owner.c_str(),
-		    callable_cxx_name(initializer).c_str());
+			owner.c_str(),
+			callable_cxx_name(initializer).c_str());
 		emit_call_arguments(
 		    initializer->ty,
 		    allocation->args);
@@ -2803,14 +2827,14 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto disposal =
-	        dynamic_cast<DisposeValue*>(expr)) {
+		dynamic_cast<DisposeValue*>(expr)) {
 		if (!disposal->pointer)
 			unhandled_node(
 			    "Dispose without pointer",
 			    disposal);
 		if (!disposal->finalizer) {
 			fprintf(active,
-			    "::u_system::m_dispose_value(");
+				"::u_system::m_dispose_value(");
 			emit_expression(
 			    disposal->pointer);
 			fprintf(active, ")");
@@ -2825,27 +2849,27 @@ void Emitter::emit_expression(Node* expr) {
 			    disposal);
 		std::string owner =
 		    owner_cxx_reference_name(
-		        finalizer->owner_class);
+			finalizer->owner_class);
 		fprintf(active,
-		    "::u_system::m_dispose_object<"
-		    "static_cast<");
+			"::u_system::m_dispose_object<"
+			"static_cast<");
 		emit_type_ref(
 		    finalizer->ty->return_type);
 		fprintf(active, " (%s::*)",
-		    owner.c_str());
+			owner.c_str());
 		emit_formal_parameters(
 		    finalizer->ty, false,
 		    nullptr);
 		fprintf(active, ">(&%s::%s)>(",
-		    owner.c_str(),
-		    callable_cxx_name(finalizer).c_str());
+			owner.c_str(),
+			callable_cxx_name(finalizer).c_str());
 		emit_expression(
 		    disposal->pointer);
 		fprintf(active, ")");
 		return;
 	}
 	if (auto construct =
-	        dynamic_cast<Construct*>(expr)) {
+		dynamic_cast<Construct*>(expr)) {
 		auto result_type =
 		    dynamic_cast<ClassType*>(construct->ty);
 		Method* initializer = construct->initializer;
@@ -2856,14 +2880,14 @@ void Emitter::emit_expression(Node* expr) {
 			    construct);
 		std::string result_cxx_name =
 		    type_cxx_name(
-		        result_type,
-		        result_type->cxx_name);
+			result_type,
+			result_type->cxx_name);
 		std::string owner =
 		    owner_cxx_reference_name(
-		        initializer->owner_class);
+			initializer->owner_class);
 		fprintf(active,
-		    "::u_system::m_construct<%s, static_cast<",
-		    result_cxx_name.c_str());
+			"::u_system::m_construct<%s, static_cast<",
+			result_cxx_name.c_str());
 		emit_type_ref(
 		    initializer->ty->return_type);
 		fprintf(active, " (%s::*)", owner.c_str());
@@ -2871,10 +2895,10 @@ void Emitter::emit_expression(Node* expr) {
 		    initializer->ty, false,
 		    nullptr);
 		fprintf(active, ">(&%s::%s)>(",
-		    owner.c_str(),
-		    callable_cxx_name(initializer).c_str());
+			owner.c_str(),
+			callable_cxx_name(initializer).c_str());
 		fprintf(active, "static_cast<%s::m_meta*>(",
-		    result_cxx_name.c_str());
+			result_cxx_name.c_str());
 		emit_expression(
 		    construct->class_reference);
 		fprintf(active, ")");
@@ -2890,7 +2914,7 @@ void Emitter::emit_expression(Node* expr) {
 		auto callable =
 		    dynamic_cast<Callable*>(pc->callee);
 		if (auto method =
-		        dynamic_cast<Method*>(pc->callee);
+			dynamic_cast<Method*>(pc->callee);
 		    method && method->is_static) {
 			if (pc->receiver ||
 			    method->ty->kind != ROUTINE)
@@ -2899,14 +2923,14 @@ void Emitter::emit_expression(Node* expr) {
 				    pc);
 			std::string owner =
 			    owner_cxx_reference_name(
-			        method->owner_class);
+				method->owner_class);
 			if (owner.empty())
 				unhandled_type(
 				    "static method owner has no C++ name",
 				    method->owner_class);
 			fprintf(active, "%s::%s(",
-			    owner.c_str(),
-			    callable_cxx_name(method).c_str());
+				owner.c_str(),
+				callable_cxx_name(method).c_str());
 			emit_call_arguments(
 			    method->ty, pc->args);
 			fprintf(active, ")");
@@ -2915,14 +2939,14 @@ void Emitter::emit_expression(Node* expr) {
 		if (pc->receiver && callable &&
 		    callable->builtin_desc &&
 		    callable->builtin_desc->call_convention ==
-		        BuiltinCallConvention::ReceiverFirst) {
+			BuiltinCallConvention::ReceiverFirst) {
 			// Do not enter a C++ member function to implement this Pascal
 			// method. In particular, `nil.Free` must reach the nil-safe RTL
 			// operation without first forming `nil->p_free()`. Passing the
 			// receiver as a function argument also evaluates it exactly once.
 			fprintf(active, "%.*s(",
-			    (int)callable->builtin_desc->cxx_name.size(),
-			    callable->builtin_desc->cxx_name.data());
+				(int)callable->builtin_desc->cxx_name.size(),
+				callable->builtin_desc->cxx_name.data());
 			emit_expression(pc->receiver);
 			if (!pc->args.empty())
 				fprintf(active, ", ");
@@ -2936,38 +2960,38 @@ void Emitter::emit_expression(Node* expr) {
 		    callable->ty->kind == CONSTRUCTOR;
 		if (initializer_application)
 			fprintf(active,
-			    "::u_system::m_invoke_initializer"
-			    "([&]() { ");
+				"::u_system::m_invoke_initializer"
+				"([&]() { ");
 		if (pc->receiver) {
 			auto receiver = pc->receiver;
 			bool done = false;
 			if (auto method =
-			        dynamic_cast<Method*>(pc->callee)) {
+				dynamic_cast<Method*>(pc->callee)) {
 				if (method->ty->kind == CLASS_METHOD) {
 					if (auto classref =
-					        dynamic_cast<ClassRefType*>(
-					            receiver->ty)) {
+						dynamic_cast<ClassRefType*>(
+						    receiver->ty)) {
 						auto target =
 						    dynamic_cast<ClassType*>(
-						        classref->target);
+							classref->target);
 						if (!target ||
 						    target->cxx_name.empty())
 							unhandled_type(
 							    "class-method class-reference target",
 							    classref->target);
 						fprintf(active,
-						    "static_cast<%s::m_meta*>(",
-						    type_cxx_name(
-						        target,
-						        target->cxx_name)
-						        .c_str());
+							"static_cast<%s::m_meta*>(",
+							type_cxx_name(
+							    target,
+							    target->cxx_name)
+							    .c_str());
 						emit_expression(receiver);
 						fprintf(active, ")->");
 					} else if (dynamic_cast<ClassType*>(
-					               receiver->ty)) {
+						       receiver->ty)) {
 						emit_expression(receiver);
 						fprintf(active,
-						    "->m_classref()->");
+							"->m_classref()->");
 					} else {
 						unhandled_type(
 						    "class-method receiver",
@@ -2994,9 +3018,9 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		if (auto c = dynamic_cast<Callable*>(pc->callee)) {
 			fprintf(active, "%s(",
-			    node_cxx_name(
-			        c, callable_cxx_name(c))
-			        .c_str());
+				node_cxx_name(
+				    c, callable_cxx_name(c))
+				    .c_str());
 		} else {
 			emit_expression(pc->callee);
 			fprintf(active, "(");
@@ -3007,14 +3031,14 @@ void Emitter::emit_expression(Node* expr) {
 		else
 			call_ty =
 			    dynamic_cast<RoutineType*>(
-			        pc->callee->ty);
+				pc->callee->ty);
 		emit_call_arguments(call_ty, pc->args);
 		if (callable &&
 		    callable->is_implicit_conversion()) {
 			if (!pc->args.empty())
 				fprintf(active, ", ");
 			fprintf(active,
-			    "::u_system::m_implicit_target<");
+				"::u_system::m_implicit_target<");
 			emit_type_ref(
 			    callable->ty->return_type);
 			fprintf(active, ">{}");
@@ -3026,20 +3050,20 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto tb = dynamic_cast<TypeBound*>(expr)) {
 		if (auto enum_type =
-		        dynamic_cast<EnumType*>(
-		            tb->operand_type)) {
+			dynamic_cast<EnumType*>(
+			    tb->operand_type)) {
 			const auto* member =
 			    tb->kind == TypeBoundKind::Low
-			    ? enum_type->min_member()
-			    : enum_type->max_member();
+				? enum_type->min_member()
+				: enum_type->max_member();
 			if (!member)
 				unhandled_node(
 				    "low/high of empty enum type", tb);
 			fprintf(active, "%s",
-			    type_cxx_name(
-			        enum_type,
-			        member->cxx_name)
-			        .c_str());
+				type_cxx_name(
+				    enum_type,
+				    member->cxx_name)
+				    .c_str());
 			return;
 		}
 		fprintf(active, tb->kind == TypeBoundKind::Low ? "::u_system::p_low<" : "::u_system::p_high<");
@@ -3057,23 +3081,23 @@ void Emitter::emit_expression(Node* expr) {
 		auto ordinal_type =
 		    [](Type* type) {
 			    while (auto range =
-			               dynamic_cast<SubrangeType*>(
-			                   type))
+				       dynamic_cast<SubrangeType*>(
+					   type))
 				    type =
-				        range->base_type;
+					range->base_type;
 			    OrdinalBounds bounds;
 			    return type == char_type() ||
-			           dynamic_cast<EnumType*>(
-			               type) ||
-			           integer_bounds(
-			               type, &bounds);
+				   dynamic_cast<EnumType*>(
+				       type) ||
+				   integer_bounds(
+				       type, &bounds);
 		    };
 		if (dynamic_cast<ExplicitCast*>(ca) &&
 		    ca->a &&
 		    ordinal_type(ca->a->ty) &&
 		    ordinal_type(ca->ty)) {
 			fprintf(active,
-			    "::u_system::m_ordinal_cast<");
+				"::u_system::m_ordinal_cast<");
 			emit_type_ref(ca->ty);
 			fprintf(active, ">(");
 			emit_expression(ca->a);
@@ -3082,13 +3106,13 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		auto source_set =
 		    dynamic_cast<FixedSetType*>(
-		        ca->a ? ca->a->ty : nullptr);
+			ca->a ? ca->a->ty : nullptr);
 		auto target_set =
 		    dynamic_cast<FixedSetType*>(
-		        ca->ty);
+			ca->ty);
 		if (source_set && target_set) {
 			fprintf(active,
-			    "::u_system::m_set_cast<");
+				"::u_system::m_set_cast<");
 			emit_type_ref(
 			    target_set->item_type);
 			fprintf(active, ">(");
@@ -3098,14 +3122,14 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		auto source_shortstring =
 		    dynamic_cast<ShortStringType*>(
-		        ca->a ? ca->a->ty : nullptr);
+			ca->a ? ca->a->ty : nullptr);
 		auto target_shortstring =
 		    dynamic_cast<ShortStringType*>(ca->ty);
 		if (source_shortstring && target_shortstring) {
 			fprintf(active,
-			    "::u_system::tpcc_shortstring_cast<%u>(",
-			    static_cast<unsigned>(
-			        target_shortstring->capacity));
+				"::u_system::tpcc_shortstring_cast<%u>(",
+				static_cast<unsigned>(
+				    target_shortstring->capacity));
 			emit_expression(ca->a);
 			fprintf(active, ")");
 			return;
@@ -3127,9 +3151,9 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, ").m_pointer()");
 			} else {
 				fprintf(active,
-				    target_pointer_integer
-				        ? "reinterpret_cast<"
-				        : "static_cast<");
+					target_pointer_integer
+					    ? "reinterpret_cast<"
+					    : "static_cast<");
 				emit_type_ref(ca->ty);
 				fprintf(active, ">((");
 				emit_expression(ca->a);
@@ -3139,13 +3163,13 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		auto source_pointer =
 		    dynamic_cast<PointerType*>(
-		        ca->a ? ca->a->ty : nullptr);
+			ca->a ? ca->a->ty : nullptr);
 		OrdinalBounds source_integer_bounds;
 		const bool source_integer =
 		    ca->a &&
 		    integer_bounds(
-		        ca->a->ty,
-		        &source_integer_bounds);
+			ca->a->ty,
+			&source_integer_bounds);
 		if ((source_pointer &&
 		     (target_pointer ||
 		      target_pointer_integer)) ||
@@ -3185,16 +3209,16 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		auto source_classref =
 		    dynamic_cast<ClassRefType*>(
-		        ca->a ? ca->a->ty : nullptr);
+			ca->a ? ca->a->ty : nullptr);
 		auto target_classref =
 		    dynamic_cast<ClassRefType*>(ca->ty);
 		if (source_classref && target_classref) {
 			auto source_class =
 			    dynamic_cast<ClassType*>(
-			        source_classref->target);
+				source_classref->target);
 			auto target_class =
 			    dynamic_cast<ClassType*>(
-			        target_classref->target);
+				target_classref->target);
 			if (!source_class || !target_class ||
 			    source_class->cxx_name.empty() ||
 			    target_class->cxx_name.empty())
@@ -3202,19 +3226,19 @@ void Emitter::emit_expression(Node* expr) {
 				    "class-reference conversion target",
 				    ca->ty);
 			fprintf(active,
-			    "static_cast<::u_system::m_classref<%s>*>(static_cast<%s::m_meta*>(static_cast<%s::m_meta*>(",
-			    type_cxx_name(
-			        target_class,
-			        target_class->cxx_name)
-			        .c_str(),
-			    type_cxx_name(
-			        target_class,
-			        target_class->cxx_name)
-			        .c_str(),
-			    type_cxx_name(
-			        source_class,
-			        source_class->cxx_name)
-			        .c_str());
+				"static_cast<::u_system::m_classref<%s>*>(static_cast<%s::m_meta*>(static_cast<%s::m_meta*>(",
+				type_cxx_name(
+				    target_class,
+				    target_class->cxx_name)
+				    .c_str(),
+				type_cxx_name(
+				    target_class,
+				    target_class->cxx_name)
+				    .c_str(),
+				type_cxx_name(
+				    source_class,
+				    source_class->cxx_name)
+				    .c_str());
 			emit_expression(ca->a);
 			fprintf(active, ")))");
 			return;
@@ -3262,8 +3286,8 @@ void Emitter::emit_expression(Node* expr) {
 		    co->target_type == double_type() ||
 		    co->target_type == extended_type();
 		fprintf(active, numeric
-		    ? "static_cast<"
-		    : "dynamic_cast<");
+				    ? "static_cast<"
+				    : "dynamic_cast<");
 		emit_type_ref(co->target_type);
 		fprintf(active, ">(");
 		emit_expression(co->a);
@@ -3281,7 +3305,7 @@ void Emitter::emit_expression(Node* expr) {
 	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
 		if (const char* op = cxx_unary_operator(u)) {
 			if (auto dereference =
-			        dynamic_cast<Dereference*>(u);
+				dynamic_cast<Dereference*>(u);
 			    dereference &&
 			    dereference->ty == unknown_type())
 				unhandled_node(
@@ -3330,7 +3354,7 @@ void Emitter::emit_template_value_arg(Node* expr) {
 	}
 	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
 		fprintf(active, "%s",
-		    node_cxx_name(e, e->cxx_name).c_str());
+			node_cxx_name(e, e->cxx_name).c_str());
 		return;
 	}
 	unhandled_node("emit_template_value_arg", expr);
@@ -3349,7 +3373,7 @@ void Emitter::emit_type_ref(Type* ty) {
 	}
 	if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
 		fprintf(active, "::u_system::t_shortstring<%u>",
-		    static_cast<unsigned>(shortstring->capacity));
+			static_cast<unsigned>(shortstring->capacity));
 		return;
 	}
 	if (dynamic_cast<UnitType*>(ty)) {
@@ -3361,14 +3385,14 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_aggregate_decl("", ty);
 		else
 			fprintf(active, "%s",
-			    type_cxx_name(r, r->cxx_name).c_str());
+				type_cxx_name(r, r->cxx_name).c_str());
 		return;
 	}
 	if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
 		if (r->cxx_name.empty())
 			unhandled_type("anonymous packed record type reference", ty);
 		fprintf(active, "%s",
-		    type_cxx_name(r, r->cxx_name).c_str());
+			type_cxx_name(r, r->cxx_name).c_str());
 		return;
 	}
 	if (auto c = dynamic_cast<ClassType*>(ty)) {
@@ -3376,7 +3400,7 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_aggregate_decl("", ty);
 		else
 			fprintf(active, "%s",
-			    type_cxx_name(c, c->cxx_name).c_str());
+				type_cxx_name(c, c->cxx_name).c_str());
 		fprintf(active, "*");
 		return;
 	}
@@ -3388,9 +3412,10 @@ void Emitter::emit_type_ref(Type* ty) {
 				    "class-reference target has no emitted type binding",
 				    c);
 			fprintf(active,
-			    "::u_system::m_classref<%s>",
-			    type_cxx_name(
-			        c, c->cxx_name).c_str());
+				"::u_system::m_classref<%s>",
+				type_cxx_name(
+				    c, c->cxx_name)
+				    .c_str());
 		} else {
 			unhandled_type("emit_type_ref", ty);
 		}
@@ -3402,7 +3427,7 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_aggregate_decl("", ty);
 		else
 			fprintf(active, "%s",
-			    type_cxx_name(c, c->cxx_name).c_str());
+				type_cxx_name(c, c->cxx_name).c_str());
 		fprintf(active, "*");
 		return;
 	}
@@ -3411,7 +3436,7 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_aggregate_decl("", ty);
 		else
 			fprintf(active, "%s",
-			    type_cxx_name(o, o->cxx_name).c_str());
+				type_cxx_name(o, o->cxx_name).c_str());
 		return;
 	}
 	if (auto e = dynamic_cast<EnumType*>(ty)) {
@@ -3424,7 +3449,7 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_enum_decl(e);
 		else
 			fprintf(active, "%s",
-			    type_cxx_name(e, e->cxx_name).c_str());
+				type_cxx_name(e, e->cxx_name).c_str());
 		return;
 	}
 	if (auto p = dynamic_cast<PointerType*>(ty)) {
@@ -3434,7 +3459,7 @@ void Emitter::emit_type_ref(Type* ty) {
 				    "untyped pointer has no C++ carrier",
 				    p);
 			fprintf(active, "%s",
-			    p->cxx_name.c_str());
+				p->cxx_name.c_str());
 		} else {
 			emit_type_ref(p->item_type);
 			fprintf(active, "*");

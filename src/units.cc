@@ -44,7 +44,7 @@ void UnitRegistry::record_completed(Unit* unit) {
 	for (Unit* existing : completed) {
 		if (existing == unit) {
 			fprintf(stderr, "internal compiler error: unit '%s' completed twice\n",
-			        unit->name.c_str());
+				unit->name.c_str());
 			abort();
 		}
 	}

@@ -83,7 +83,7 @@ struct TMethodDefinition {
 	TMethodDefinition()
 	    : children(nullptr),
 	      type(SourceLocation::builtin(),
-	           &children),
+		   &children),
 	      code("p_code", &k_pointer),
 	      data("p_data", &k_pointer) {
 		type.cxx_name =
@@ -94,10 +94,10 @@ struct TMethodDefinition {
 		    "data", &data, &k_pointer);
 		type.fields.push_back(
 		    AggregateField{
-		        "code", &code, &k_pointer});
+			"code", &code, &k_pointer});
 		type.fields.push_back(
 		    AggregateField{
-		        "data", &data, &k_pointer});
+			"data", &data, &k_pointer});
 	}
 };
 
@@ -257,20 +257,20 @@ static ConstEvalResult fold_logical_not(
 	// result carrier's width and convert the two's-complement bits back to
 	// Integer's magnitude/sign constant representation.
 	uint64_t width_value = bounds.signed_type
-	                           ? bounds.min_magnitude
-	                           : bounds.max_positive;
+				   ? bounds.min_magnitude
+				   : bounds.max_positive;
 	unsigned bits = 0;
 	do {
 		++bits;
 		width_value >>= 1;
 	} while (width_value != 0);
 	uint64_t mask = bits == 64
-	                    ? UINT64_MAX
-	                    : (uint64_t{1} << bits) - 1;
+			    ? UINT64_MAX
+			    : (uint64_t{1} << bits) - 1;
 	const Integer* value = const_integer_arg(args[0]);
 	uint64_t raw = value->negative
-	                   ? (uint64_t{0} - value->value) & mask
-	                   : value->value & mask;
+			   ? (uint64_t{0} - value->value) & mask
+			   : value->value & mask;
 	uint64_t complemented = (~raw) & mask;
 	if (bounds.signed_type) {
 		uint64_t sign_bit =
@@ -386,8 +386,8 @@ static ConstEvalResult fold_real_to_int64(const std::vector<Node*>& args, bool r
 	constexpr long double limit = 0x1p63L;
 	if (!__builtin_isfinite(integral) || integral < -limit || integral >= limit)
 		return ConstEvalResult::error(round
-			? "Round constant is outside the Int64 range"
-			: "Trunc constant is outside the Int64 range");
+						  ? "Round constant is outside the Int64 range"
+						  : "Trunc constant is outside the Int64 range");
 	bool negative = integral < 0.0L;
 	long double magnitude = negative ? -integral : integral;
 	return fold_integer_result(static_cast<uint64_t>(magnitude), negative, int64_type());
@@ -473,28 +473,28 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_exclude", nullptr, {}, BuiltinGenericKind::SetMutation},
     {"::u_system::p_str", nullptr},
     {
-        .cxx_name = "::u_system::p_val",
-        .const_fold = nullptr,
-        .generic_kind =
-            BuiltinGenericKind::ValOutput,
+	.cxx_name = "::u_system::p_val",
+	.const_fold = nullptr,
+	.generic_kind =
+	    BuiltinGenericKind::ValOutput,
     },
     {"::u_system::p_octstr", nullptr},
     {"::u_system::p_strlen", nullptr},
     {
-        .cxx_name = "::u_system::p_new",
-        .const_fold = nullptr,
-        .syntax_kind = BuiltinSyntaxKind::NewValue,
+	.cxx_name = "::u_system::p_new",
+	.const_fold = nullptr,
+	.syntax_kind = BuiltinSyntaxKind::NewValue,
     },
     {
-        .cxx_name = "::u_system::p_dispose",
-        .const_fold = nullptr,
-        .syntax_kind = BuiltinSyntaxKind::DisposeValue,
+	.cxx_name = "::u_system::p_dispose",
+	.const_fold = nullptr,
+	.syntax_kind = BuiltinSyntaxKind::DisposeValue,
     },
     {
-        .cxx_name = "::u_system::p_getmem",
-        .const_fold = nullptr,
-        .generic_kind =
-            BuiltinGenericKind::PointerStorageOut,
+	.cxx_name = "::u_system::p_getmem",
+	.const_fold = nullptr,
+	.generic_kind =
+	    BuiltinGenericKind::PointerStorageOut,
     },
     {"::u_system::p_freemem", nullptr},
     {"::u_system::p_rewrite", nullptr},
@@ -513,31 +513,31 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_low", nullptr, TypeBoundKind::Low},
     {"::u_system::p_high", nullptr, TypeBoundKind::High},
     {
-        .cxx_name = "::u_system::p_sizeof",
-        .const_fold = nullptr,
-        .syntax_kind = BuiltinSyntaxKind::SizeOf,
+	.cxx_name = "::u_system::p_sizeof",
+	.const_fold = nullptr,
+	.syntax_kind = BuiltinSyntaxKind::SizeOf,
     },
     {
-        .cxx_name = "::u_system::p_write",
-        .const_fold = nullptr,
-        .syntax_kind = BuiltinSyntaxKind::Write,
+	.cxx_name = "::u_system::p_write",
+	.const_fold = nullptr,
+	.syntax_kind = BuiltinSyntaxKind::Write,
     },
     {
-        .cxx_name = "::u_system::p_writeln",
-        .const_fold = nullptr,
-        .syntax_kind = BuiltinSyntaxKind::WriteLn,
+	.cxx_name = "::u_system::p_writeln",
+	.const_fold = nullptr,
+	.syntax_kind = BuiltinSyntaxKind::WriteLn,
     },
     {"::u_system::p_setlength", nullptr},
     {"::u_system::p_uniquestring", nullptr},
     {"::u_system::m_new_instance", nullptr},
     {
-        .cxx_name = "::u_system::m_free_object",
-        .const_fold = nullptr,
-        .call_convention = BuiltinCallConvention::ReceiverFirst,
+	.cxx_name = "::u_system::m_free_object",
+	.const_fold = nullptr,
+	.call_convention = BuiltinCallConvention::ReceiverFirst,
     },
     {
-        .cxx_name = "::u_system::p_length",
-        .const_fold = fold_length,
+	.cxx_name = "::u_system::p_length",
+	.const_fold = fold_length,
     },
     {"::u_system::p_index", nullptr},
     {"::u_system::tpcc_index_write", nullptr},
@@ -562,15 +562,15 @@ static const BuiltinDesc k_builtins[] = {
     {.cxx_name = "::u_system::p_bitwiseand",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::BitwiseAnd},
+	 BuiltinNumericOperation::BitwiseAnd},
     {.cxx_name = "::u_system::p_bitwiseor",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::BitwiseOr},
+	 BuiltinNumericOperation::BitwiseOr},
     {.cxx_name = "::u_system::p_bitwisexor",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::BitwiseXor},
+	 BuiltinNumericOperation::BitwiseXor},
 
     // Delphi {"::u_system::p_logicalor", nullptr},
     // Delphi {"::u_system::p_logicaland", nullptr},
@@ -580,25 +580,25 @@ static const BuiltinDesc k_builtins[] = {
     {.cxx_name = "::u_system::p_add",
      .const_fold = fold_add,
      .numeric_operation =
-         BuiltinNumericOperation::Add},
+	 BuiltinNumericOperation::Add},
     {.cxx_name = "::u_system::p_subtract",
      .const_fold = fold_subtract,
      .numeric_operation =
-         BuiltinNumericOperation::Subtract},
+	 BuiltinNumericOperation::Subtract},
     {"::u_system::p_positive", fold_unary_plus},
     {"::u_system::p_negative", fold_unary_minus},
     {.cxx_name = "::u_system::p_multiply",
      .const_fold = fold_multiply,
      .numeric_operation =
-         BuiltinNumericOperation::Multiply},
+	 BuiltinNumericOperation::Multiply},
     {.cxx_name = "::u_system::p_divide",
      .const_fold = fold_divide,
      .numeric_operation =
-         BuiltinNumericOperation::Divide},
+	 BuiltinNumericOperation::Divide},
     {.cxx_name = "::u_system::p_intdivide",
      .const_fold = fold_intdivide,
      .numeric_operation =
-         BuiltinNumericOperation::IntegerDivide},
+	 BuiltinNumericOperation::IntegerDivide},
     {"::u_system::p_implicit", nullptr},
     // Old-style file Assign is an ordinary procedure, not an implicit
     // conversion despite sharing the Pascal spelling "assign".
@@ -606,30 +606,30 @@ static const BuiltinDesc k_builtins[] = {
     {.cxx_name = "::u_system::p_modulus",
      .const_fold = fold_modulus,
      .numeric_operation =
-         BuiltinNumericOperation::Modulus},
+	 BuiltinNumericOperation::Modulus},
     {"::u_system::p_leftshift", nullptr},
     {"::u_system::p_rightshift", nullptr},
 
     {.cxx_name = "::u_system::p_lessthan",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::LessThan},
+	 BuiltinNumericOperation::LessThan},
     {.cxx_name = "::u_system::p_lessthanorequal",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::LessThanOrEqual},
+	 BuiltinNumericOperation::LessThanOrEqual},
     {.cxx_name = "::u_system::p_equal",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::Equal},
+	 BuiltinNumericOperation::Equal},
     {.cxx_name = "::u_system::p_greaterthan",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::GreaterThan},
+	 BuiltinNumericOperation::GreaterThan},
     {.cxx_name = "::u_system::p_greaterthanorequal",
      .const_fold = nullptr,
      .numeric_operation =
-         BuiltinNumericOperation::GreaterThanOrEqual},
+	 BuiltinNumericOperation::GreaterThanOrEqual},
     {"::u_system::p_in", nullptr},
     {"::u_system::p_supports", nullptr},
 
@@ -645,7 +645,7 @@ Type* lookup_builtin_type(std::string cxx_name) {
 		if (auto q = dynamic_cast<IntrinsicType*>(t)) {
 			if (q->cxx_name == cxx_name) {
 				return t;
-				}
+			}
 		} else if (auto q = dynamic_cast<ShortStringType*>(t)) {
 			if (q->capacity == 255 &&
 			    cxx_name == "::u_system::t_shortstring<255>") {

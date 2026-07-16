@@ -25,14 +25,14 @@ bool Type::same_cxx_carrier_as(
 	const Type* a = this;
 	const Type* b = other;
 	while (auto range =
-	           dynamic_cast<const SubrangeType*>(a))
+		   dynamic_cast<const SubrangeType*>(a))
 		a = range->base_type;
 	while (auto range =
-	           dynamic_cast<const SubrangeType*>(b))
+		   dynamic_cast<const SubrangeType*>(b))
 		b = range->base_type;
 	return a && b &&
 	       (a == b ||
-	        a->same_cxx_carrier_definition_as(b));
+		a->same_cxx_carrier_definition_as(b));
 }
 
 bool Type::same_cxx_carrier_definition_as(
@@ -174,8 +174,8 @@ RoutineType::RoutineType(SourceLocation source_location, std::vector<Parameter> 
 }
 
 bool ShortStringType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto string =
 	    dynamic_cast<const ShortStringType*>(other);
 	return string &&
@@ -183,55 +183,55 @@ same_cxx_carrier_definition_as(
 }
 
 bool FixedArrayType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto array =
 	    dynamic_cast<const FixedArrayType*>(other);
 	if (!array ||
 	    range.length != array->range.length ||
 	    range.lower_ordinal.negative !=
-	        array->range.lower_ordinal.negative ||
+		array->range.lower_ordinal.negative ||
 	    range.lower_ordinal.magnitude !=
-	        array->range.lower_ordinal.magnitude ||
+		array->range.lower_ordinal.magnitude ||
 	    !item_type->same_cxx_carrier_as(
-	        array->item_type))
+		array->item_type))
 		return false;
 	Type* lower_type =
 	    range.lower_bound
-	        ? range.lower_bound->ty
-	        : nullptr;
+		? range.lower_bound->ty
+		: nullptr;
 	Type* other_lower_type =
 	    array->range.lower_bound
-	        ? array->range.lower_bound->ty
-	        : nullptr;
+		? array->range.lower_bound->ty
+		: nullptr;
 	return lower_type && other_lower_type &&
 	       lower_type->same_cxx_carrier_as(
-	           other_lower_type);
+		   other_lower_type);
 }
 
 bool FixedSetType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto set =
 	    dynamic_cast<const FixedSetType*>(other);
 	return set &&
 	       item_type->same_cxx_carrier_as(
-	           set->item_type);
+		   set->item_type);
 }
 
 bool TypedFileType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto file =
 	    dynamic_cast<const TypedFileType*>(other);
 	return file &&
 	       item_type->same_cxx_carrier_as(
-	           file->item_type);
+		   file->item_type);
 }
 
 bool ClassRefType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto reference =
 	    dynamic_cast<const ClassRefType*>(other);
 	// m_classref<T> contains the nominal target as a template argument.
@@ -240,8 +240,8 @@ same_cxx_carrier_definition_as(
 }
 
 bool PointerType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto pointer =
 	    dynamic_cast<const PointerType*>(other);
 	if (!pointer ||
@@ -254,13 +254,13 @@ same_cxx_carrier_definition_as(
 }
 
 bool RoutineType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto routine =
 	    dynamic_cast<const RoutineType*>(other);
 	return routine && kind == routine->kind &&
 	       return_type->same_cxx_carrier_as(
-	           routine->return_type) &&
+		   routine->return_type) &&
 	       same_cxx_parameter_list_as(routine);
 }
 
@@ -285,8 +285,8 @@ bool align_up_u64(uint64_t value, uint64_t alignment, uint64_t* result) {
 		return false;
 	const uint64_t remainder = value % alignment;
 	return remainder == 0
-	    ? (*result = value, true)
-	    : checked_add_u64(value, alignment - remainder, result);
+		   ? (*result = value, true)
+		   : checked_add_u64(value, alignment - remainder, result);
 }
 
 std::optional<TypeLayout> type_layout_impl(
@@ -299,7 +299,7 @@ struct SequentialLayout {
 };
 
 bool append_aligned_field(SequentialLayout& layout,
-    StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
+			  StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
 	auto field_layout = type_layout_impl(ty, visiting);
 	if (!field_layout)
 		return false;
@@ -317,13 +317,13 @@ bool append_aligned_field(SequentialLayout& layout,
 }
 
 bool append_aligned_variant(SequentialLayout& layout,
-    VariantPart* variant, std::set<Type*>& visiting) {
+			    VariantPart* variant, std::set<Type*>& visiting) {
 	if (!variant)
 		return true;
 	if (variant->has_selector &&
 	    !append_aligned_field(
-	        layout, variant->selector_slot,
-	        variant->selector_type, visiting))
+		layout, variant->selector_slot,
+		variant->selector_type, visiting))
 		return false;
 	if (variant->arms.empty())
 		return true;
@@ -335,17 +335,17 @@ bool append_aligned_variant(SequentialLayout& layout,
 		SequentialLayout arm_layout;
 		for (const auto& field : arm.fields)
 			if (!append_aligned_field(
-			        arm_layout, field.slot,
-			        field.ty, visiting))
+				arm_layout, field.slot,
+				field.ty, visiting))
 				return false;
 		if (!append_aligned_variant(
-		        arm_layout, arm.variant, visiting))
+			arm_layout, arm.variant, visiting))
 			return false;
 
 		uint64_t arm_size;
 		if (!align_up_u64(
-		        arm_layout.offset == 0 ? 1 : arm_layout.offset,
-		        arm_layout.alignment, &arm_size))
+			arm_layout.offset == 0 ? 1 : arm_layout.offset,
+			arm_layout.alignment, &arm_size))
 			return false;
 		union_size = std::max(union_size, arm_size);
 		union_alignment =
@@ -355,17 +355,17 @@ bool append_aligned_variant(SequentialLayout& layout,
 
 	uint64_t union_offset;
 	if (!align_up_u64(
-	        layout.offset, union_alignment, &union_offset) ||
+		layout.offset, union_alignment, &union_offset) ||
 	    !checked_add_u64(
-	        union_offset, union_size, &layout.offset))
+		union_offset, union_size, &layout.offset))
 		return false;
 	layout.alignment =
 	    std::max(layout.alignment, union_alignment);
 	for (auto& fields : arm_fields)
 		for (auto& field : fields) {
 			if (!checked_add_u64(
-			        field.offset, union_offset,
-			        &field.offset))
+				field.offset, union_offset,
+				&field.offset))
 				return false;
 			layout.fields.push_back(field);
 		}
@@ -380,21 +380,21 @@ std::optional<RecordLayout> record_layout_impl(
 	SequentialLayout fixed;
 	for (const auto& field : record->fields) {
 		if (!append_aligned_field(
-		        fixed, field.slot, field.ty, visiting)) {
+			fixed, field.slot, field.ty, visiting)) {
 			visiting.erase(record);
 			return std::nullopt;
 		}
 	}
 	if (!append_aligned_variant(
-	        fixed, record->variant, visiting)) {
+		fixed, record->variant, visiting)) {
 		visiting.erase(record);
 		return std::nullopt;
 	}
 
 	uint64_t size;
 	if (!align_up_u64(
-	        fixed.offset == 0 ? 1 : fixed.offset,
-	        fixed.alignment, &size)) {
+		fixed.offset == 0 ? 1 : fixed.offset,
+		fixed.alignment, &size)) {
 		visiting.erase(record);
 		return std::nullopt;
 	}
@@ -411,29 +411,29 @@ struct PackedSequentialLayout {
 };
 
 bool append_packed_field(PackedSequentialLayout& layout,
-    StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
+			 StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
 	auto field_layout = type_layout_impl(ty, visiting);
 	if (!field_layout)
 		return false;
 	uint64_t end;
 	if (!checked_add_u64(
-	        layout.offset, field_layout->size, &end))
+		layout.offset, field_layout->size, &end))
 		return false;
 	layout.fields.push_back(
 	    AggregateFieldLayout{
-	        slot, ty, layout.offset, field_layout->size});
+		slot, ty, layout.offset, field_layout->size});
 	layout.offset = end;
 	return true;
 }
 
 bool append_packed_variant(PackedSequentialLayout& layout,
-    VariantPart* variant, std::set<Type*>& visiting) {
+			   VariantPart* variant, std::set<Type*>& visiting) {
 	if (!variant)
 		return true;
 	if (variant->has_selector &&
 	    !append_packed_field(
-	        layout, variant->selector_slot,
-	        variant->selector_type, visiting))
+		layout, variant->selector_slot,
+		variant->selector_type, visiting))
 		return false;
 	if (variant->arms.empty())
 		return true;
@@ -445,23 +445,23 @@ bool append_packed_variant(PackedSequentialLayout& layout,
 		PackedSequentialLayout arm_layout;
 		for (const auto& field : arm.fields)
 			if (!append_packed_field(
-			        arm_layout, field.slot,
-			        field.ty, visiting))
+				arm_layout, field.slot,
+				field.ty, visiting))
 				return false;
 		if (!append_packed_variant(
-		        arm_layout, arm.variant, visiting))
+			arm_layout, arm.variant, visiting))
 			return false;
 		union_size = std::max(union_size, arm_layout.offset);
 		arm_fields.push_back(std::move(arm_layout.fields));
 	}
 	if (!checked_add_u64(
-	        union_offset, union_size, &layout.offset))
+		union_offset, union_size, &layout.offset))
 		return false;
 	for (auto& fields : arm_fields)
 		for (auto& field : fields) {
 			if (!checked_add_u64(
-			        field.offset, union_offset,
-			        &field.offset))
+				field.offset, union_offset,
+				&field.offset))
 				return false;
 			layout.fields.push_back(field);
 		}
@@ -475,12 +475,12 @@ std::optional<RecordLayout> packed_record_layout_impl(
 	PackedSequentialLayout layout;
 	for (const auto& field : record->fields)
 		if (!append_packed_field(
-		        layout, field.slot, field.ty, visiting)) {
+			layout, field.slot, field.ty, visiting)) {
 			visiting.erase(record);
 			return std::nullopt;
 		}
 	if (!append_packed_variant(
-	        layout, record->variant, visiting)) {
+		layout, record->variant, visiting)) {
 		visiting.erase(record);
 		return std::nullopt;
 	}
@@ -504,14 +504,14 @@ std::optional<TypeLayout> type_layout_impl(
 		return TypeLayout{
 		    static_cast<uint64_t>(shortstring->capacity) + 1, 1};
 	if (auto enumeration =
-	        dynamic_cast<EnumType*>(ty)) {
+		dynamic_cast<EnumType*>(ty)) {
 		uint64_t bytes =
 		    enumeration->carrier_bits / 8;
 		return enumeration->carrier_bits != 0 &&
-		               enumeration->carrier_bits % 8 == 0
-		    ? std::optional<TypeLayout>{
-		          TypeLayout{bytes, bytes}}
-		    : std::nullopt;
+			       enumeration->carrier_bits % 8 == 0
+			   ? std::optional<TypeLayout>{
+				 TypeLayout{bytes, bytes}}
+			   : std::nullopt;
 	}
 	if (auto subrange = dynamic_cast<SubrangeType*>(ty))
 		return type_layout_impl(subrange->base_type, visiting);
@@ -521,7 +521,7 @@ std::optional<TypeLayout> type_layout_impl(
 			return std::nullopt;
 		uint64_t size;
 		if (!checked_multiply_u64(
-		        item->size, array->range.length, &size))
+			item->size, array->range.length, &size))
 			return std::nullopt;
 		return TypeLayout{size, item->alignment};
 	}
@@ -537,15 +537,15 @@ std::optional<TypeLayout> type_layout_impl(
 	if (auto record = dynamic_cast<RecordType*>(ty)) {
 		auto layout = record_layout_impl(record, visiting);
 		return layout
-		    ? std::optional<TypeLayout>{layout->type}
-		    : std::nullopt;
+			   ? std::optional<TypeLayout>{layout->type}
+			   : std::nullopt;
 	}
 	if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
 		auto layout =
 		    packed_record_layout_impl(packed, visiting);
 		return layout
-		    ? std::optional<TypeLayout>{layout->type}
-		    : std::nullopt;
+			   ? std::optional<TypeLayout>{layout->type}
+			   : std::nullopt;
 	}
 	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
 		if (routine->kind == METHOD)
@@ -577,7 +577,7 @@ std::optional<RecordLayout> packed_record_layout(
 static int integer_widening_rank(
     const Type* ty) {
 	while (auto s =
-	           dynamic_cast<const SubrangeType*>(ty))
+		   dynamic_cast<const SubrangeType*>(ty))
 		ty = s->base_type;
 	auto it =
 	    dynamic_cast<const IntrinsicType*>(ty);
@@ -615,7 +615,7 @@ static bool integer_like_bounds(
 	if (integer_bounds(ty, out))
 		return true;
 	if (auto s =
-	        dynamic_cast<const SubrangeType*>(ty)) {
+		dynamic_cast<const SubrangeType*>(ty)) {
 		ConstEvalContext ctx;
 		ConstEvalResult lower = s->lower_bound->const_eval(ctx);
 		ConstEvalResult upper = s->upper_bound->const_eval(ctx);
@@ -745,7 +745,7 @@ ShortStringType::value_conversion_from(
 		return std::nullopt;
 	unsigned distance = static_cast<unsigned>(
 	    std::abs(static_cast<int>(capacity) -
-	             static_cast<int>(string->capacity)));
+		     static_cast<int>(string->capacity)));
 	if (capacity == string->capacity)
 		return direct_conversion();
 	if (string->capacity > capacity)
@@ -783,7 +783,7 @@ bool InterfaceType::is_subtype_of(
 	    dynamic_cast<const InterfaceType*>(target);
 	return target_interface &&
 	       interface_is_or_extends(
-	           this, target_interface);
+		   this, target_interface);
 }
 
 static bool class_implements_interface(
@@ -794,7 +794,7 @@ static bool class_implements_interface(
 		for (InterfaceType* implemented :
 		     current->implemented_interfaces)
 			if (interface_is_or_extends(
-			        implemented, target))
+				implemented, target))
 				return true;
 	return false;
 }
@@ -802,7 +802,7 @@ static bool class_implements_interface(
 bool ClassType::is_subtype_of(
     const Type* target) const {
 	if (auto target_class =
-	        dynamic_cast<const ClassType*>(target)) {
+		dynamic_cast<const ClassType*>(target)) {
 		for (const ClassType* current = this;
 		     current; current = current->super)
 			if (current == target_class)
@@ -810,7 +810,7 @@ bool ClassType::is_subtype_of(
 		return false;
 	}
 	if (auto target_interface =
-	        dynamic_cast<const InterfaceType*>(target))
+		dynamic_cast<const InterfaceType*>(target))
 		return class_implements_interface(
 		    this, target_interface);
 	return false;
@@ -881,7 +881,7 @@ ObjectType::value_conversion_from(
 		return std::nullopt;
 	return implicit_conversion(
 	    object_inheritance_distance(
-	        source_object, this));
+		source_object, this));
 }
 
 std::optional<ValueConversion>
@@ -897,14 +897,14 @@ ClassRefType::value_conversion_from(
 	    source_ref->target->is_subtype_of(target)) {
 		auto source_class =
 		    dynamic_cast<const ClassType*>(
-		        source_ref->target);
+			source_ref->target);
 		auto target_class =
 		    dynamic_cast<const ClassType*>(target);
 		unsigned distance =
 		    source_class && target_class
-		        ? class_inheritance_distance(
-		              source_class, target_class)
-		        : 1;
+			? class_inheritance_distance(
+			      source_class, target_class)
+			: 1;
 		return implicit_conversion(distance);
 	}
 	return std::nullopt;
@@ -923,14 +923,14 @@ PointerType::value_conversion_from(
 		return implicit_conversion(20);
 	auto source_object =
 	    dynamic_cast<const ObjectType*>(
-	        source_pointer->item_type);
+		source_pointer->item_type);
 	auto target_object =
 	    dynamic_cast<const ObjectType*>(item_type);
 	if (source_object && target_object &&
 	    source_object->is_subtype_of(target_object))
 		return implicit_conversion(
 		    object_inheritance_distance(
-		        source_object, target_object));
+			source_object, target_object));
 	return std::nullopt;
 }
 
@@ -949,16 +949,17 @@ fold_ordinal_value(Node* node) {
 	    ConstEvalResult::Kind::Success)
 		return std::nullopt;
 	if (auto integer =
-	        dynamic_cast<Integer*>(folded.node))
+		dynamic_cast<Integer*>(folded.node))
 		return FoldedOrdinalValue{
 		    integer->negative, integer->value};
 	if (auto member =
-	        dynamic_cast<EnumMemberRef*>(folded.node)) {
+		dynamic_cast<EnumMemberRef*>(folded.node)) {
 		if (member->value < 0)
 			return FoldedOrdinalValue{
 			    true,
 			    static_cast<uint64_t>(
-			        -(member->value + 1)) + 1};
+				-(member->value + 1)) +
+				1};
 		return FoldedOrdinalValue{
 		    false,
 		    static_cast<uint64_t>(member->value)};
@@ -975,11 +976,11 @@ static int compare_folded_ordinals(
 		return 0;
 	if (a.negative)
 		return a.magnitude > b.magnitude
-		    ? -1
-		    : 1;
+			   ? -1
+			   : 1;
 	return a.magnitude < b.magnitude
-	    ? -1
-	    : 1;
+		   ? -1
+		   : 1;
 }
 
 namespace {
@@ -1001,7 +1002,7 @@ ordinal_domain(const Type* type) {
 	if (!type)
 		return std::nullopt;
 	if (auto range =
-	        dynamic_cast<const SubrangeType*>(type)) {
+		dynamic_cast<const SubrangeType*>(type)) {
 		auto lower =
 		    fold_ordinal_value(range->lower_bound);
 		auto upper =
@@ -1009,7 +1010,7 @@ ordinal_domain(const Type* type) {
 		if (!lower || !upper)
 			return std::nullopt;
 		if (dynamic_cast<const EnumType*>(
-		        range->base_type))
+			range->base_type))
 			return OrdinalDomain{
 			    OrdinalDomainFamily::Enumeration,
 			    range->base_type, *lower, *upper};
@@ -1019,15 +1020,15 @@ ordinal_domain(const Type* type) {
 			    char_type(), *lower, *upper};
 		OrdinalBounds bounds;
 		if (integer_bounds(
-		        range->base_type, &bounds))
+			range->base_type, &bounds))
 			return OrdinalDomain{
 			    OrdinalDomainFamily::Integer,
 			    nullptr, *lower, *upper};
 		return std::nullopt;
 	}
 	if (auto intrinsic =
-	        dynamic_cast<const IntrinsicType*>(
-	            type);
+		dynamic_cast<const IntrinsicType*>(
+		    type);
 	    intrinsic && intrinsic->rank &&
 	    intrinsic->ordinal_bounds) {
 		const OrdinalBounds& bounds =
@@ -1036,27 +1037,27 @@ ordinal_domain(const Type* type) {
 		    OrdinalDomainFamily::Integer,
 		    nullptr,
 		    FoldedOrdinalValue{
-		        bounds.signed_type,
-		        bounds.signed_type
-		            ? bounds.min_magnitude
-		            : 0},
+			bounds.signed_type,
+			bounds.signed_type
+			    ? bounds.min_magnitude
+			    : 0},
 		    FoldedOrdinalValue{
-		        false, bounds.max_positive}};
+			false, bounds.max_positive}};
 	}
 	if (type == char_type()) {
 		OrdinalBounds bounds;
 		if (!intrinsic_ordinal_bounds(
-		        char_type(), &bounds))
+			char_type(), &bounds))
 			return std::nullopt;
 		return OrdinalDomain{
 		    OrdinalDomainFamily::Character,
 		    char_type(),
 		    FoldedOrdinalValue{false, 0},
 		    FoldedOrdinalValue{
-		        false, bounds.max_positive}};
+			false, bounds.max_positive}};
 	}
 	if (auto enumeration =
-	        dynamic_cast<const EnumType*>(type)) {
+		dynamic_cast<const EnumType*>(type)) {
 		const auto* lower =
 		    enumeration->min_member();
 		const auto* upper =
@@ -1067,12 +1068,13 @@ ordinal_domain(const Type* type) {
 		    [](int64_t value) {
 			    if (value < 0)
 				    return FoldedOrdinalValue{
-				        true,
-				        static_cast<uint64_t>(
-				            -(value + 1)) + 1};
+					true,
+					static_cast<uint64_t>(
+					    -(value + 1)) +
+					    1};
 			    return FoldedOrdinalValue{
-			        false,
-			        static_cast<uint64_t>(value)};
+				false,
+				static_cast<uint64_t>(value)};
 		    };
 		return OrdinalDomain{
 		    OrdinalDomainFamily::Enumeration,
@@ -1088,19 +1090,19 @@ static bool ordinal_domain_is_subset(
 	auto target_domain = ordinal_domain(target);
 	if (!source_domain || !target_domain ||
 	    source_domain->family !=
-	        target_domain->family)
+		target_domain->family)
 		return false;
 	if (source_domain->family !=
-	        OrdinalDomainFamily::Integer &&
+		OrdinalDomainFamily::Integer &&
 	    source_domain->nominal_root !=
-	        target_domain->nominal_root)
+		target_domain->nominal_root)
 		return false;
 	return compare_folded_ordinals(
-	           target_domain->lower,
-	           source_domain->lower) <= 0 &&
+		   target_domain->lower,
+		   source_domain->lower) <= 0 &&
 	       compare_folded_ordinals(
-	           target_domain->upper,
-	           source_domain->upper) >= 0;
+		   target_domain->upper,
+		   source_domain->upper) >= 0;
 }
 
 static bool ordinal_domains_are_compatible(
@@ -1111,9 +1113,9 @@ static bool ordinal_domains_are_compatible(
 	    a_domain->family != b_domain->family)
 		return false;
 	return a_domain->family ==
-	               OrdinalDomainFamily::Integer ||
+		   OrdinalDomainFamily::Integer ||
 	       a_domain->nominal_root ==
-	           b_domain->nominal_root;
+		   b_domain->nominal_root;
 }
 } // namespace
 
@@ -1128,11 +1130,11 @@ bool IntrinsicType::is_subtype_of(
 }
 
 bool IntrinsicType::
-same_cxx_carrier_definition_as(
-    const Type* other) const {
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
 	auto intrinsic =
 	    dynamic_cast<const IntrinsicType*>(
-	        other);
+		other);
 	return intrinsic && carrier &&
 	       intrinsic->carrier &&
 	       carrier == intrinsic->carrier;
@@ -1152,30 +1154,28 @@ bool FixedSetType::is_subtype_of(
 	    dynamic_cast<const FixedSetType*>(target);
 	return set &&
 	       item_type->is_subtype_of(
-	           set->item_type);
+		   set->item_type);
 }
 
 std::optional<ValueConversion>
 SubrangeType::value_conversion_from(
     const Type* source) const {
 	if (auto source_range =
-	        dynamic_cast<const SubrangeType*>(source)) {
+		dynamic_cast<const SubrangeType*>(source)) {
 		if (!ordinal_domains_are_compatible(
-		        source_range, this))
+			source_range, this))
 			return std::nullopt;
 		return source_range->is_subtype_of(this)
-		    ? std::optional<ValueConversion>{
-		          direct_conversion()}
-		    : std::optional<ValueConversion>{
-		          implicit_conversion(200)};
+			   ? std::optional<ValueConversion>{
+				 direct_conversion()}
+			   : std::optional<ValueConversion>{implicit_conversion(200)};
 	}
 	if (ordinal_domains_are_compatible(
-	        source, this))
+		source, this))
 		return source->is_subtype_of(this)
-		    ? std::optional<ValueConversion>{
-		          direct_conversion()}
-		    : std::optional<ValueConversion>{
-		          implicit_conversion(200)};
+			   ? std::optional<ValueConversion>{
+				 direct_conversion()}
+			   : std::optional<ValueConversion>{implicit_conversion(200)};
 	if (source == base_type)
 		return implicit_conversion(200);
 	auto base_conversion =
@@ -1205,9 +1205,9 @@ bool RoutineType::same_parameter_and_result_types_as(
 		return false;
 	for (size_t i = 0; i < formals.size(); ++i) {
 		if (formals[i].mode !=
-		        other->formals[i].mode ||
+			other->formals[i].mode ||
 		    formals[i].ty !=
-		        other->formals[i].ty)
+			other->formals[i].ty)
 			return false;
 	}
 	return true;
@@ -1240,8 +1240,8 @@ bool RoutineType::accepts_routine_value_from(
 		// that metaclass receiver in the same two-word representation as every
 		// other `procedure of object`.
 		return kind == CLASS_METHOD
-		    ? METHOD
-		    : kind;
+			   ? METHOD
+			   : kind;
 	};
 	RoutineKind source_kind =
 	    value_kind(source->kind);
@@ -1291,7 +1291,7 @@ bool RoutineType::same_cxx_parameter_list_as(
 			continue;
 		}
 		if (!a.ty->same_cxx_carrier_as(
-		        b.ty))
+			b.ty))
 			return false;
 	}
 	return true;
@@ -1459,7 +1459,8 @@ static void print_variant_diagnostic_definition(
 		for (const auto& field : variant->arms[i].fields) {
 			ctx->indent(out, indent + 2);
 			out << (field.pas_name.empty()
-			        ? "<field>" : field.pas_name)
+				    ? "<field>"
+				    : field.pas_name)
 			    << ": " << ctx->known_type_ref(field.ty)
 			    << ";\n";
 		}
