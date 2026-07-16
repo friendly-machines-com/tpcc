@@ -18,20 +18,34 @@ int main() {
 	auto integer_to_int64 =
 	    int64_type()->value_conversion_from(
 	        integer_type());
+	auto byte_to_shortint =
+	    shortint_type()->value_conversion_from(
+	        byte_type());
+	auto cardinal_to_int64 =
+	    int64_type()->value_conversion_from(
+	        cardinal_type());
+	auto double_to_single =
+	    single_type()->value_conversion_from(
+	        double_type());
+	auto single_to_double =
+	    double_type()->value_conversion_from(
+	        single_type());
 
 	assert(shortint_to_int64);
 	assert(shortint_to_single);
 	assert(byte_to_int64);
-	assert(integer_to_cardinal);
+	assert(!integer_to_cardinal);
 	assert(integer_to_int64);
+	assert(!byte_to_shortint);
+	assert(cardinal_to_int64);
+	assert(!double_to_single);
+	assert(single_to_double);
 	assert(shortint_to_int64->kind ==
 	       ValueConversionClass::Convert);
 	assert(shortint_to_single->kind ==
 	       ValueConversionClass::Convert);
 	assert(shortint_to_int64->distance <
 	       shortint_to_single->distance);
-	assert(integer_to_int64->distance <
-	       integer_to_cardinal->distance);
 
 	PointerType pointer_a(
 	    SourceLocation::internal(),
@@ -81,11 +95,13 @@ int main() {
 	auto wide_to_narrow =
 	    narrow.value_conversion_from(&wide);
 	assert(narrow_to_wide);
-	assert(wide_to_narrow);
+	assert(!wide_to_narrow);
 	assert(narrow_to_wide->kind ==
 	       ValueConversionClass::Direct);
-	assert(wide_to_narrow->kind ==
-	       ValueConversionClass::Convert);
+	assert(integer_type()->value_conversion_from(
+	    &narrow));
+	assert(!narrow.value_conversion_from(
+	    integer_type()));
 
 	FixedSetType narrow_set(
 	    SourceLocation::internal(), &narrow);

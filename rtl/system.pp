@@ -232,7 +232,11 @@ procedure runerror(value: Word); overload; noreturn; external name '::u_system::
 procedure runerror; overload; noreturn; external name '::u_system::p_runerror';
 function low(const x): Integer; external name '::u_system::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external name '::u_system::p_high'; // generic intrinsic: parser supplies the type operand/result
-function length(const x): SizeInt; external name '::u_system::p_length'; // generic intrinsic
+// ShortString stores its length in one byte, so Pascal gives this overload a
+// Byte result. The generic fallback covers AnsiString and array families,
+// whose length result is the signed native-size type.
+function length(const x: ShortString): Byte; overload; external name '::u_system::p_length';
+function length(const x): SizeInt; overload; external name '::u_system::p_length'; // generic intrinsic
 procedure inc(var x; n: Integer = 1); external name '::u_system::p_inc'; // generic intrinsic
 procedure dec(var x; n: Integer = 1); external name '::u_system::p_dec'; // generic intrinsic
 // Omitted types express the part Pascal can declare; SetMutation metadata
@@ -317,9 +321,9 @@ function pos(const needle: ShortString; const haystack: ShortString): LongInt; o
 function pos(const needle: ShortString; const haystack: AnsiString): LongInt; overload; external name '::u_system::p_pos';
 function pos(const needle: AnsiString; const haystack: AnsiString): LongInt; overload; external name '::u_system::p_pos';
 function pos(needle: Char; const haystack: ShortString): LongInt; overload; external name '::u_system::p_pos';
-function copy(const value: ShortString; index, count: LongInt): ShortString; overload; external name '::u_system::p_copy';
-function copy(const value: AnsiString; index, count: LongInt): AnsiString; overload; external name '::u_system::p_copy';
-function copy(value: Char; index, count: LongInt): ShortString; overload; external name '::u_system::p_copy';
+function copy(const value: ShortString; index, count: SizeInt): ShortString; overload; external name '::u_system::p_copy';
+function copy(const value: AnsiString; index, count: SizeInt): AnsiString; overload; external name '::u_system::p_copy';
+function copy(value: Char; index, count: SizeInt): ShortString; overload; external name '::u_system::p_copy';
 procedure delete(var value: ShortString; index, count: LongInt); overload; external name '::u_system::p_delete';
 procedure delete(var value: AnsiString; index, count: LongInt); overload; external name '::u_system::p_delete';
 procedure insert(const source: ShortString; var destination: ShortString; index: LongInt); overload; external name '::u_system::p_insert';

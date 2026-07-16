@@ -83,6 +83,32 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/type_identity"
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/explicit_ordinal_casts"
 
+for narrowing in \
+	INTEGER_ASSIGNMENT \
+	SIGNEDNESS_ASSIGNMENT \
+	REAL_ASSIGNMENT \
+	SUBRANGE_ASSIGNMENT \
+	BASE_TO_SUBRANGE \
+	SINGLETON_ARGUMENT
+do
+	if ./mp -Furtl -d"TEST_$narrowing" \
+		-o"$tmp/type_narrowing_rejected.cc" \
+		tests/type_narrowing_rejected.pp \
+		>"$tmp/stdout" 2>"$tmp/stderr"
+	then
+		echo "accepted implicit narrowing: $narrowing" >&2
+		exit 1
+	fi
+	if ! rg -q \
+		'no implicit conversion|no matching overload' \
+		"$tmp/stderr"
+	then
+		echo "wrong implicit-narrowing diagnostic: $narrowing" >&2
+		sed -n '1,80p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
+
 ./mp -Furtl -o"$tmp/contextual_values.cc" \
 	tests/contextual_value_immutability.pp
 "${CXX:-g++}" \

@@ -74,11 +74,15 @@ public:
 	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
 	/** Pascal type identity is exactly Type* identity. Value conversion is a
 	 * separate, directional operation owned by the destination constructor.
-	 * Subtyping is a reflexive/transitive preorder: distinct definitions such
-	 * as two occurrences of 1..10 can be mutual subtypes without becoming
-	 * identical. Typed var/out matching, routine identity, overload ranking,
-	 * and C++ carrier identity must not substitute either relation for their
-	 * own rules. */
+	 * An implicit numeric conversion is viable only when the destination can
+	 * represent every value of the source; a ranking penalty cannot make a
+	 * narrowing conversion safe when it is the only candidate. Truncation is
+	 * therefore an explicit-cast operation, not an overload cost. Subtyping is
+	 * a reflexive/transitive preorder: distinct definitions such as two
+	 * occurrences of 1..10 can be mutual subtypes without becoming identical.
+	 * Typed var/out matching, routine identity, overload ranking, and C++
+	 * carrier identity must not substitute either relation for their own
+	 * rules. */
 	virtual std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const;
 	virtual bool is_subtype_of(const Type* target) const;

@@ -673,14 +673,20 @@ static int integer_conversion_cost(
 	if (!integer_like_bounds(from, &from_bounds) || !integer_like_bounds(to, &to_bounds))
 		return -1;
 
+	// Viability and preference are different questions. A high cost can make
+	// a narrowing conversion lose to another overload, but it still silently
+	// loses data in an assignment or a singleton call. Admit only mathematical
+	// range inclusion here; explicit ordinal casts implement truncation.
+	if (!ordinal_bounds_contain_range(
+		to_bounds, from_bounds))
+		return -1;
+
 	uint64_t distance = ordinal_lower_bound_distance(from_bounds, to_bounds);
 	distance = saturating_add(distance, unsigned_abs_diff(from_bounds.max_positive, to_bounds.max_positive));
 
 	int cost = 10 + bit_width(distance) * 2;
 	if (from_bounds.signed_type != to_bounds.signed_type)
 		++cost;
-	if (!ordinal_bounds_contain_range(to_bounds, from_bounds))
-		cost += 200;
 	return cost;
 }
 
@@ -723,10 +729,13 @@ IntrinsicType::value_conversion_from(
 	int source_real = real_widening_rank(source);
 	int target_real = real_widening_rank(target);
 	if (source_real >= 0 && target_real >= 0) {
-		unsigned distance = static_cast<unsigned>(
-		    std::abs(target_real - source_real));
+		// Single -> Double -> Extended preserves every source value on the
+		// supported target. The reverse direction is lossy and belongs behind
+		// an explicit cast, not a worse overload rank.
 		if (target_real < source_real)
-			distance += 200;
+			return std::nullopt;
+		unsigned distance = static_cast<unsigned>(
+		    target_real - source_real);
 		return implicit_conversion(distance);
 	}
 	if (integer_widening_rank(source) >= 0 &&
@@ -1160,30 +1169,16 @@ bool FixedSetType::is_subtype_of(
 std::optional<ValueConversion>
 SubrangeType::value_conversion_from(
     const Type* source) const {
-	if (auto source_range =
-		dynamic_cast<const SubrangeType*>(source)) {
-		if (!ordinal_domains_are_compatible(
-			source_range, this))
-			return std::nullopt;
-		return source_range->is_subtype_of(this)
-			   ? std::optional<ValueConversion>{
-				 direct_conversion()}
-			   : std::optional<ValueConversion>{implicit_conversion(200)};
-	}
-	if (ordinal_domains_are_compatible(
-		source, this))
-		return source->is_subtype_of(this)
-			   ? std::optional<ValueConversion>{
-				 direct_conversion()}
-			   : std::optional<ValueConversion>{implicit_conversion(200)};
-	if (source == base_type)
-		return implicit_conversion(200);
-	auto base_conversion =
-	    base_type->value_conversion_from(source);
-	if (base_conversion)
-		return implicit_conversion(
-		    200 + base_conversion->distance);
-	return std::nullopt;
+	if (!source ||
+	    !ordinal_domains_are_compatible(
+		source, this) ||
+	    !source->is_subtype_of(this))
+		return std::nullopt;
+	// A source domain already contained by this subrange needs no value
+	// change. Wider domains are not viable implicitly: their current runtime
+	// value cannot make a type-wide conversion safe, and literals are checked
+	// separately from their retained signed magnitude.
+	return direct_conversion();
 }
 
 std::optional<ValueConversion>

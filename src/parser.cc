@@ -2193,8 +2193,18 @@ Node* Parser::parse_set_literal() {
 	}
 	if (item_type != unknown_type()) {
 		for (SetLiteral::Item& item : items) {
-			item.lower = cast(item.lower, item_type);
-			if (item.upper)
+			// Keep contextual integer constants untyped inside the constructor.
+			// The inferred set item type describes a standalone literal, but a
+			// later assignment to `set of 1..10` must still check the actual
+			// values 2 and 7 rather than treating each as the entire Byte
+			// domain. Candidate matching creates its own typed item nodes.
+			if (!untyped_integer_constant(
+				item.lower))
+				item.lower =
+				    cast(item.lower, item_type);
+			if (item.upper &&
+			    !untyped_integer_constant(
+				item.upper))
 				item.upper = cast(item.upper, item_type);
 		}
 	}

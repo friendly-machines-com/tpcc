@@ -1120,7 +1120,7 @@ struct t_ansistring {
 	}
 
 	t_ansistring slice(
-	    t_longint index, t_longint count) const {
+	    t_sizeint index, t_sizeint count) const {
 		t_ansistring result{};
 		if (count <= 0)
 			return result;
@@ -1902,7 +1902,7 @@ inline t_longint p_pos(
 template<std::size_t Capacity>
 inline t_shortstring<255> p_copy(
     const t_shortstring<Capacity>& value,
-    t_longint index, t_longint count) {
+    t_sizeint index, t_sizeint count) {
 	t_shortstring<255> result{};
 	if (count <= 0)
 		return result;
@@ -1924,12 +1924,12 @@ inline t_shortstring<255> p_copy(
 	return result;
 }
 
-inline t_ansistring p_copy(const t_ansistring& value, t_longint index, t_longint count) {
+inline t_ansistring p_copy(const t_ansistring& value, t_sizeint index, t_sizeint count) {
 	return value.slice(index, count);
 }
 
 inline t_shortstring<255> p_copy(
-    t_char value, t_longint index, t_longint count) {
+    t_char value, t_sizeint index, t_sizeint count) {
 	t_shortstring<255> source{};
 	source.length = t_char{1};
 	source.data[0] = value;
@@ -2124,8 +2124,8 @@ template<typename T> inline T p_high() {
 		return std::numeric_limits<T>::max();
 }
 template<std::size_t Capacity>
-inline t_sizeint p_length(const t_shortstring<Capacity>& s) {
-	return s.length;
+inline t_byte p_length(const t_shortstring<Capacity>& s) {
+	return static_cast<t_byte>(s.length);
 }
 inline t_sizeint p_length(const t_ansistring& s) { return s.length; }
 inline void p_setlength(t_ansistring& s, t_integer value) {
