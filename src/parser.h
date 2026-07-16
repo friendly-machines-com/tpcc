@@ -29,6 +29,7 @@ class Builtin;
 struct BuiltinDesc;
 class RoutineRef;
 class UnitRef;
+struct CallableRegistration;
 
 /** Shared compiler-wide options set from the command line and consulted by
  *  the tokenizer's directive handling and by unit/include file lookup. One
@@ -58,10 +59,42 @@ struct MatchRank {
 		Exact,
 		Direct,
 		Convert,
+		UserConvert,
 		Generic,
 	};
 	Tier tier;
 	unsigned distance = 0;
+	/** A user conversion is one outer match operation whose source formal has
+	 * its own ordinary match rank. Keeping that rank structurally avoids
+	 * encoding two ordered quantities into an arbitrary integer offset. */
+	Tier source_tier = Tier::Exact;
+	unsigned source_distance = 0;
+};
+
+/** One candidate's treatment of one source argument. Matching never mutates
+ * the source CST node. `value` is the candidate-local expression to use if
+ * that candidate wins; it retains contextual literal typing or the exact
+ * selected user conversion. */
+struct ArgumentMatch {
+	MatchRank rank;
+	Node* value;
+};
+
+struct CallableMatch {
+	std::vector<MatchRank> ranks;
+	std::vector<Node*> arguments;
+};
+
+/** Candidate information retained when an implicit conversion search fails.
+ * Matching uses this data only for diagnostics after the surrounding
+ * expression has no viable interpretation; individual overload candidates
+ * must be allowed to reject an argument without emitting an error. */
+struct UserConversionFailure {
+	std::vector<Callable*> candidates;
+	std::vector<std::pair<Callable*, CallableMatch>>
+	    viable;
+	std::vector<Callable*> non_dominated;
+	bool ambiguous = false;
 };
 
 enum class MatchFailure {
@@ -69,6 +102,7 @@ enum class MatchFailure {
 	NotStorageBacked,
 	PackedProjection,
 	OrdinalRequired,
+	AmbiguousConversion,
 };
 
 class ParserInputFile {
@@ -301,23 +335,31 @@ private:
 	Node* mk_membership(Node* item, Node* set);
 	Node* mk_unary_same(std::string id, Node* x);
 	Node* mk_assign(Node* a, Node* b);
-	std::optional<MatchRank> match_argument(
+	std::optional<ArgumentMatch> match_argument(
 	    const Parameter& formal, Node* actual,
 	    const BuiltinDesc* builtin,
 	    size_t parameter_index,
 	    bool allow_user_conversion = true,
-	    MatchFailure* failure = nullptr);
-	std::optional<std::vector<MatchRank>>
+	    MatchFailure* failure = nullptr,
+	    UserConversionFailure*
+	        conversion_failure = nullptr);
+	std::optional<CallableMatch>
 	match_callable_arguments(
 	    Callable* callable,
 	    const std::vector<Node*>& args,
 	    bool allow_user_conversion = true);
-	std::optional<MatchRank>
+	std::optional<ArgumentMatch>
 	match_user_conversion(
-	    Node* actual, Type* target);
+	    Node* actual, Type* target,
+	    MatchFailure* failure,
+	    UserConversionFailure*
+	        conversion_failure);
 	Node* cast(Node* a, Type* target_ty);
 	Node* resolve_routine_reference(
 	    RoutineRef* reference, RoutineType* target_ty);
+	Node* try_resolve_routine_reference(
+	    RoutineRef* reference, RoutineType* target_ty,
+	    bool* ambiguous);
 	Node* resolve_routine_code_reference(
 	    RoutineRef* reference);
 	Type* parse_subrange_type(Node* lower_bound, Node* upper_bound);
@@ -571,9 +613,13 @@ protected:
 	                                                  const std::vector<Node*>& args,
 	                                                  Type* expected_return_type,
 	                                                  const std::vector<Callable*>& candidates,
-	                                                  const std::vector<std::pair<Callable*, std::vector<MatchRank>>>& viable,
+	                                                  const std::vector<std::pair<Callable*, CallableMatch>>& viable,
 	                                                  const std::vector<Callable*>& non_dominated,
-	                                                  bool ambiguous);
+	                                                  bool ambiguous,
+	                                                  std::string failure_description = {});
+	[[noreturn]] void raise_cxx_carrier_collision(
+	    const std::string& name, Callable* incoming,
+	    const CallableRegistration& registration);
 
 public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);

@@ -48,6 +48,96 @@ cd "$root"
 
 ASAN_OPTIONS=detect_leaks=1 "$tmp/type_identity"
 
+./mp -Furtl -o"$tmp/explicit_ordinal_casts.cc" \
+	tests/explicit_ordinal_casts.pp
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/explicit_ordinal_casts.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/explicit_ordinal_casts"
+ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/explicit_ordinal_casts"
+
+./mp -Furtl -o"$tmp/contextual_values.cc" \
+	tests/contextual_value_immutability.pp
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/contextual_values.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/contextual_values"
+ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/contextual_values"
+
+./mp -Furtl -o"$tmp/class_metaclass.cc" \
+	tests/class_metaclass_carrier_separation.pp
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/class_metaclass.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/class_metaclass"
+
+for source in fixed_array_assignment_rejected set_narrowing_rejected
+do
+	if ./mp -Furtl -o"$tmp/$source.cc" \
+		"tests/$source.pp" \
+		>"$tmp/stdout" 2>"$tmp/stderr"
+	then
+		echo "accepted invalid value assignment: $source" >&2
+		exit 1
+	fi
+	if ! rg -Fq 'no implicit conversion' "$tmp/stderr"
+	then
+		echo "wrong value-assignment diagnostic: $source" >&2
+		sed -n '1,20p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
+
+for source in ambiguous_user_conversion_rejected integer_literal_range_rejected
+do
+	if ./mp -Furtl -o"$tmp/$source.cc" \
+		"tests/$source.pp" \
+		>"$tmp/stdout" 2>"$tmp/stderr"
+	then
+		echo "accepted invalid contextual conversion: $source" >&2
+		exit 1
+	fi
+	case "$source" in
+	ambiguous_user_conversion_rejected)
+		expected='ambiguous implicit conversion'
+		;;
+	integer_literal_range_rejected)
+		expected='no implicit conversion'
+		;;
+	esac
+	if ! rg -Fq "$expected" "$tmp/stderr"
+	then
+		echo "wrong contextual-conversion diagnostic: $source" >&2
+		sed -n '1,20p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
+
 for kind in POINTER STRING SET RANGE ARRAY FILE ROUTINE CLASSREF
 do
 	if ./mp -Furtl -d"TEST_$kind" \
@@ -62,6 +152,26 @@ do
 	then
 		echo "wrong C++ carrier-collision diagnostic: $kind" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
+		exit 1
+	fi
+	for required in \
+		'incoming declaration:' \
+		'conflicting declaration:' \
+		'existing overload family:' \
+		'where' \
+		'source:'
+	do
+		if ! rg -Fq "$required" "$tmp/stderr"
+		then
+			echo "incomplete C++ carrier-collision diagnostic: $kind" >&2
+			sed -n '1,80p' "$tmp/stderr" >&2
+			exit 1
+		fi
+	done
+	if rg -Fq '<unregistered' "$tmp/stderr"
+	then
+		echo "unresolved reference in C++ carrier-collision diagnostic: $kind" >&2
+		sed -n '1,80p' "$tmp/stderr" >&2
 		exit 1
 	fi
 
@@ -80,6 +190,40 @@ do
 		exit 1
 	fi
 done
+
+if ./mp -Furtl \
+	-o"$tmp/conversion_carrier_collision.cc" \
+	tests/conversion_carrier_collision_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted conversion operators distinguished only by result" >&2
+	exit 1
+fi
+for required in \
+	"tests/conversion_carrier_collision_rejected.pp(14)" \
+	"tests/conversion_carrier_collision_rejected.pp(15)" \
+	'incoming declaration:' \
+	'conflicting declaration:' \
+	'existing overload family:' \
+	'Pascal distinguishes these conversion operators by destination type' \
+	'C++ does not use a function result to distinguish overloads' \
+	'type tsource' \
+	'type tresulta' \
+	'type tresultb'
+do
+	if ! rg -Fq "$required" "$tmp/stderr"
+	then
+		echo "incomplete conversion-carrier diagnostic: $required" >&2
+		sed -n '1,120p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
+if rg -Fq '<unregistered' "$tmp/stderr"
+then
+	echo "unresolved reference in conversion-carrier diagnostic" >&2
+	sed -n '1,120p' "$tmp/stderr" >&2
+	exit 1
+fi
 
 if ./mp -Furtl -o"$tmp/accidental_override.cc" \
 	tests/accidental_virtual_carrier_override_rejected.pp \

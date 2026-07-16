@@ -381,6 +381,17 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** User-written Pascal value cast `T(E)`. It shares carrier-directed emission
+ * with Cast, but ordinal constant evaluation uses explicit truncation and
+ * extension rather than implicit destination-range checking. */
+class ExplicitCast: public Cast {
+public:
+	ExplicitCast(Node* value, Type* target);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(
+	    ConstEvalContext& ctx) const override;
+};
+
 /** A true Pascal constant declared inside an aggregate (`const X = expr`).
  * Its folded value has no mutable storage and may be substituted at each use.
  * The colon form (`const X: T = expr`) instead declares initialized static

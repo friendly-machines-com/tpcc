@@ -446,6 +446,76 @@ struct t_char {
 static_assert(sizeof(t_char) == 1);
 static_assert(alignof(t_char) == 1);
 static_assert(std::is_trivially_copyable_v<t_char>);
+
+template<typename T, bool IsEnum = std::is_enum_v<T>>
+struct tpcc_ordinal_storage {
+	using type = T;
+	static constexpr type get(T value) {
+		return value;
+	}
+	static constexpr T make(type value) {
+		return value;
+	}
+};
+
+template<typename T>
+struct tpcc_ordinal_storage<T, true> {
+	using type = std::underlying_type_t<T>;
+	static constexpr type get(T value) {
+		return static_cast<type>(value);
+	}
+	static constexpr T make(type value) {
+		return static_cast<T>(value);
+	}
+};
+
+template<>
+struct tpcc_ordinal_storage<t_char, false> {
+	using type = uint8_t;
+	static constexpr type get(t_char value) {
+		return value.value;
+	}
+	static constexpr t_char make(type value) {
+		return t_char{value};
+	}
+};
+
+// Pascal's explicit ordinal cast is a bit-width operation. Convert through
+// unsigned storage, where C++20 defines modulo reduction, then bit-cast a
+// signed destination so out-of-range unsigned-to-signed conversion is never
+// implementation-defined.
+template<typename Target, typename Source>
+constexpr Target m_ordinal_cast(Source source) {
+	using source_traits =
+	    tpcc_ordinal_storage<Source>;
+	using source_storage =
+	    typename source_traits::type;
+	using target_traits =
+	    tpcc_ordinal_storage<Target>;
+	using target_storage =
+	    typename target_traits::type;
+	static_assert(
+	    std::is_integral_v<source_storage>);
+	static_assert(
+	    std::is_integral_v<target_storage>);
+	using target_unsigned =
+	    std::make_unsigned_t<target_storage>;
+	const target_unsigned bits =
+	    static_cast<target_unsigned>(
+	        source_traits::get(source));
+	target_storage stored;
+	if constexpr (
+	    std::is_signed_v<target_storage>)
+		stored =
+		    std::bit_cast<target_storage>(
+		        bits);
+	else
+		stored =
+		    static_cast<target_storage>(
+		        bits);
+	return target_traits::make(stored);
+}
+
 using tpcc_unknown_type = void*;
 
 inline t_boolean tpcc_bool_to_boolean(bool value) {
@@ -665,6 +735,12 @@ template<typename T>
 struct t_set {
 	std::vector<tpcc_set_span> spans;
 };
+
+template<typename Target, typename Source>
+inline t_set<Target> m_set_cast(
+    const t_set<Source>& source) {
+	return t_set<Target>{source.spans};
+}
 
 template<typename T>
 inline int64_t tpcc_set_key(T value) {

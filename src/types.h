@@ -73,10 +73,12 @@ public:
 	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const = 0;
 	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
 	/** Pascal type identity is exactly Type* identity. Value conversion is a
-	 * separate, directional operation owned by the destination constructor;
-	 * subtyping is a separate nominal partial order. Typed var/out matching,
-	 * routine-signature identity, overload ranking, and C++ carrier identity
-	 * must not substitute either relation for their own rules. */
+	 * separate, directional operation owned by the destination constructor.
+	 * Subtyping is a reflexive/transitive preorder: distinct definitions such
+	 * as two occurrences of 1..10 can be mutual subtypes without becoming
+	 * identical. Typed var/out matching, routine identity, overload ranking,
+	 * and C++ carrier identity must not substitute either relation for their
+	 * own rules. */
 	virtual std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const;
 	virtual bool is_subtype_of(const Type* target) const;
@@ -85,6 +87,12 @@ public:
 	 * conversion, var/out matching, or signature identity; it exists to
 	 * diagnose source overloads the current C++ lowering cannot represent. */
 	bool same_cxx_carrier_as(
+	    const Type* other) const;
+	/** Constructor-specific half of same_cxx_carrier_as(). The public wrapper
+	 * first removes representation-transparent subranges and handles Type*
+	 * identity; each remaining type constructor describes only its own C++
+	 * carrier. */
+	virtual bool same_cxx_carrier_definition_as(
 	    const Type* other) const;
 	// True iff a variable of this type is represented in C++ emission as a
 	// pointer (i.e. emission in storage position is `t_foo*`, member access
@@ -133,6 +141,8 @@ struct ShortStringType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -143,8 +153,8 @@ struct FixedArrayType: public Type {
 	OrdinalRange range;
 	FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -156,6 +166,9 @@ struct FixedSetType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool is_subtype_of(const Type* target) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -171,6 +184,8 @@ struct TypedFileType: public Type {
 	Type* item_type;
 	TypedFileType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -367,6 +382,8 @@ struct ClassRefType : public Type // metaclass
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -400,6 +417,8 @@ struct PointerType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -429,9 +448,10 @@ struct UnitType: public Type {
 };
 
 /** The type of a numeric literal before context pins it to a specific integer
- *  type. Widens to any concrete integer type at conversion cost 0 when the
- *  literal value fits. Shared singleton in the root frame; not registered
- *  under any Pascal name. */
+ *  type. The expression matcher retains the signed magnitude, rejects
+ *  destinations which cannot contain it, and ranks fitting destinations from
+ *  its Delphi natural constant type. Shared singleton in the root frame; not
+ *  registered under any Pascal name. */
 struct UntypedIntegerType: public Type {
 	UntypedIntegerType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
@@ -491,6 +511,12 @@ public:
 	 * convention; when conventions become source-visible they belong here. */
 	bool same_signature_as(
 	    const RoutineType* other) const;
+	/** Whether two declarations under one already-selected Pascal name have
+	 * the same overload key. Delphi overload identity uses only the exact
+	 * Type* list of source-visible parameters: modes, defaults, result,
+	 * receiver category, and constructor/method kind do not distinguish it. */
+	bool same_overload_signature_as(
+	    const RoutineType* other) const;
 	/** Directional routine-value compatibility. CLASS_METHOD declarations
 	 * become receiver-bearing METHOD values once bound; no other declaration
 	 * category is silently reclassified. */
@@ -501,6 +527,8 @@ public:
 	 * signatures before this backend-only collision check runs. */
 	bool same_cxx_parameter_list_as(
 	    const RoutineType* other) const;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -516,12 +544,8 @@ public:
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
-
-// Legacy integer cost adapter for callers not yet migrated to
-// value_conversion_from(): 0 means identity, positive means a destination
-// conversion, and -1 means incompatible.
-int conversion_cost(Type* from, Type* to);

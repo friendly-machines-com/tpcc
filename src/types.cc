@@ -30,105 +30,16 @@ bool Type::same_cxx_carrier_as(
 	while (auto range =
 	           dynamic_cast<const SubrangeType*>(b))
 		b = range->base_type;
-	if (a == b)
-		return true;
-	if (!a || !b)
-		return false;
+	return a && b &&
+	       (a == b ||
+	        a->same_cxx_carrier_definition_as(b));
+}
 
-	if (auto left =
-	        dynamic_cast<const ShortStringType*>(a)) {
-		auto right =
-		    dynamic_cast<const ShortStringType*>(b);
-		return right &&
-		       left->capacity == right->capacity;
-	}
-	if (auto left =
-	        dynamic_cast<const PointerType*>(a)) {
-		auto right =
-		    dynamic_cast<const PointerType*>(b);
-		if (!right ||
-		    left->is_untyped() !=
-		        right->is_untyped())
-			return false;
-		if (left->is_untyped())
-			return left->cxx_name ==
-			       right->cxx_name;
-		return left->item_type
-		    ->same_cxx_carrier_as(
-		        right->item_type);
-	}
-	if (auto left =
-	        dynamic_cast<const ClassRefType*>(a)) {
-		auto right =
-		    dynamic_cast<const ClassRefType*>(b);
-		// m_classref<T> contains the nominal target as a template argument.
-		return right &&
-		       left->target == right->target;
-	}
-	if (auto left =
-	        dynamic_cast<const TypedFileType*>(a)) {
-		auto right =
-		    dynamic_cast<const TypedFileType*>(b);
-		return right &&
-		       left->item_type
-		           ->same_cxx_carrier_as(
-		               right->item_type);
-	}
-	if (auto left =
-	        dynamic_cast<const FixedSetType*>(a)) {
-		auto right =
-		    dynamic_cast<const FixedSetType*>(b);
-		return right &&
-		       left->item_type
-		           ->same_cxx_carrier_as(
-		               right->item_type);
-	}
-	if (auto left =
-	        dynamic_cast<const FixedArrayType*>(a)) {
-		auto right =
-		    dynamic_cast<const FixedArrayType*>(b);
-		if (!right ||
-		    left->range.length !=
-		        right->range.length ||
-		    left->range.lower_ordinal.negative !=
-		        right->range.lower_ordinal.negative ||
-		    left->range.lower_ordinal.magnitude !=
-		        right->range.lower_ordinal.magnitude ||
-		    !left->item_type
-		         ->same_cxx_carrier_as(
-		             right->item_type))
-			return false;
-		Type* left_low_type =
-		    left->range.lower_bound
-		    ? left->range.lower_bound->ty
-		    : nullptr;
-		Type* right_low_type =
-		    right->range.lower_bound
-		    ? right->range.lower_bound->ty
-		    : nullptr;
-		return left_low_type &&
-		       right_low_type &&
-		       left_low_type
-		           ->same_cxx_carrier_as(
-		               right_low_type);
-	}
-	if (auto left =
-	        dynamic_cast<const RoutineType*>(a)) {
-		auto right =
-		    dynamic_cast<const RoutineType*>(b);
-		return right &&
-		       left->kind == right->kind &&
-		       left->return_type
-		           ->same_cxx_carrier_as(
-		               right->return_type) &&
-		       left->same_cxx_parameter_list_as(
-		           right);
-	}
-
+bool Type::same_cxx_carrier_definition_as(
+    const Type*) const {
 	// Records, packed records, objects, classes, interfaces, and enums are
-	// nominal C++ declarations. Intrinsics also have one canonical Type
-	// object per emitted spelling. Pointer identity above therefore already
-	// handled every equal carrier in these remaining families.
+	// nominal C++ declarations. Type* identity in the public wrapper is their
+	// complete carrier relation.
 	return false;
 }
 
@@ -253,6 +164,97 @@ RoutineType::RoutineType(SourceLocation source_location, std::vector<Parameter> 
 	this->formals = std::move(formals);
 	this->return_type = return_type;
 	this->kind = kind;
+}
+
+bool ShortStringType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto string =
+	    dynamic_cast<const ShortStringType*>(other);
+	return string &&
+	       capacity == string->capacity;
+}
+
+bool FixedArrayType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto array =
+	    dynamic_cast<const FixedArrayType*>(other);
+	if (!array ||
+	    range.length != array->range.length ||
+	    range.lower_ordinal.negative !=
+	        array->range.lower_ordinal.negative ||
+	    range.lower_ordinal.magnitude !=
+	        array->range.lower_ordinal.magnitude ||
+	    !item_type->same_cxx_carrier_as(
+	        array->item_type))
+		return false;
+	Type* lower_type =
+	    range.lower_bound
+	        ? range.lower_bound->ty
+	        : nullptr;
+	Type* other_lower_type =
+	    array->range.lower_bound
+	        ? array->range.lower_bound->ty
+	        : nullptr;
+	return lower_type && other_lower_type &&
+	       lower_type->same_cxx_carrier_as(
+	           other_lower_type);
+}
+
+bool FixedSetType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto set =
+	    dynamic_cast<const FixedSetType*>(other);
+	return set &&
+	       item_type->same_cxx_carrier_as(
+	           set->item_type);
+}
+
+bool TypedFileType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto file =
+	    dynamic_cast<const TypedFileType*>(other);
+	return file &&
+	       item_type->same_cxx_carrier_as(
+	           file->item_type);
+}
+
+bool ClassRefType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto reference =
+	    dynamic_cast<const ClassRefType*>(other);
+	// m_classref<T> contains the nominal target as a template argument.
+	return reference &&
+	       target == reference->target;
+}
+
+bool PointerType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto pointer =
+	    dynamic_cast<const PointerType*>(other);
+	if (!pointer ||
+	    is_untyped() != pointer->is_untyped())
+		return false;
+	if (is_untyped())
+		return cxx_name == pointer->cxx_name;
+	return item_type->same_cxx_carrier_as(
+	    pointer->item_type);
+}
+
+bool RoutineType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto routine =
+	    dynamic_cast<const RoutineType*>(other);
+	return routine && kind == routine->kind &&
+	       return_type->same_cxx_carrier_as(
+	           routine->return_type) &&
+	       same_cxx_parameter_list_as(routine);
 }
 
 namespace {
@@ -742,37 +744,11 @@ std::optional<ValueConversion>
 FixedSetType::value_conversion_from(
     const Type* source) const {
 	auto set = dynamic_cast<const FixedSetType*>(source);
-	if (!set)
+	if (!set || !set->is_subtype_of(this))
 		return std::nullopt;
-	// A set constructor decides which ordinal domain its bits represent.
-	// Value compatibility may therefore cross definition identity only when
-	// both set definitions name the exact same item definition.
-	if (set->item_type == item_type)
-		return direct_conversion();
-	return std::nullopt;
-}
-
-std::optional<ValueConversion>
-FixedArrayType::value_conversion_from(
-    const Type* source) const {
-	auto array =
-	    dynamic_cast<const FixedArrayType*>(source);
-	if (!array)
-		return std::nullopt;
-	// Fixed-array assignment is a constructor-specific whole-value operation.
-	// Equal byte size is insufficient: the index domain, exact element
-	// definition, and both ordinal bounds must agree.
-	if (array->range.base_type != range.base_type ||
-	    array->item_type != item_type ||
-	    array->range.lower_ordinal.negative !=
-	        range.lower_ordinal.negative ||
-	    array->range.lower_ordinal.magnitude !=
-	        range.lower_ordinal.magnitude ||
-	    array->range.upper_ordinal.negative !=
-	        range.upper_ordinal.negative ||
-	    array->range.upper_ordinal.magnitude !=
-	        range.upper_ordinal.magnitude)
-		return std::nullopt;
+	// Set is the powerset constructor. Widening its ordinal domain preserves
+	// every member and therefore needs no element-wise value conversion.
+	// The emitter may still copy between distinct target-specific carriers.
 	return direct_conversion();
 }
 
@@ -993,26 +969,177 @@ static int compare_folded_ordinals(
 	    : 1;
 }
 
-static bool subrange_contains(
-    const SubrangeType* outer,
-    const SubrangeType* inner) {
-	if (!outer || !inner ||
-	    outer->base_type != inner->base_type)
+namespace {
+enum class OrdinalDomainFamily {
+	Integer,
+	Character,
+	Enumeration,
+};
+
+struct OrdinalDomain {
+	OrdinalDomainFamily family;
+	const Type* nominal_root = nullptr;
+	FoldedOrdinalValue lower;
+	FoldedOrdinalValue upper;
+};
+
+static std::optional<OrdinalDomain>
+ordinal_domain(const Type* type) {
+	if (!type)
+		return std::nullopt;
+	if (auto range =
+	        dynamic_cast<const SubrangeType*>(type)) {
+		auto lower =
+		    fold_ordinal_value(range->lower_bound);
+		auto upper =
+		    fold_ordinal_value(range->upper_bound);
+		if (!lower || !upper)
+			return std::nullopt;
+		if (dynamic_cast<const EnumType*>(
+		        range->base_type))
+			return OrdinalDomain{
+			    OrdinalDomainFamily::Enumeration,
+			    range->base_type, *lower, *upper};
+		if (range->base_type == char_type())
+			return OrdinalDomain{
+			    OrdinalDomainFamily::Character,
+			    char_type(), *lower, *upper};
+		OrdinalBounds bounds;
+		if (integer_bounds(
+		        range->base_type, &bounds))
+			return OrdinalDomain{
+			    OrdinalDomainFamily::Integer,
+			    nullptr, *lower, *upper};
+		return std::nullopt;
+	}
+	if (auto intrinsic =
+	        dynamic_cast<const IntrinsicType*>(
+	            type);
+	    intrinsic && intrinsic->rank &&
+	    intrinsic->ordinal_bounds) {
+		const OrdinalBounds& bounds =
+		    *intrinsic->ordinal_bounds;
+		return OrdinalDomain{
+		    OrdinalDomainFamily::Integer,
+		    nullptr,
+		    FoldedOrdinalValue{
+		        bounds.signed_type,
+		        bounds.signed_type
+		            ? bounds.min_magnitude
+		            : 0},
+		    FoldedOrdinalValue{
+		        false, bounds.max_positive}};
+	}
+	if (type == char_type()) {
+		OrdinalBounds bounds;
+		if (!intrinsic_ordinal_bounds(
+		        char_type(), &bounds))
+			return std::nullopt;
+		return OrdinalDomain{
+		    OrdinalDomainFamily::Character,
+		    char_type(),
+		    FoldedOrdinalValue{false, 0},
+		    FoldedOrdinalValue{
+		        false, bounds.max_positive}};
+	}
+	if (auto enumeration =
+	        dynamic_cast<const EnumType*>(type)) {
+		const auto* lower =
+		    enumeration->min_member();
+		const auto* upper =
+		    enumeration->max_member();
+		if (!lower || !upper)
+			return std::nullopt;
+		auto as_folded =
+		    [](int64_t value) {
+			    if (value < 0)
+				    return FoldedOrdinalValue{
+				        true,
+				        static_cast<uint64_t>(
+				            -(value + 1)) + 1};
+			    return FoldedOrdinalValue{
+			        false,
+			        static_cast<uint64_t>(value)};
+		    };
+		return OrdinalDomain{
+		    OrdinalDomainFamily::Enumeration,
+		    type, as_folded(lower->value),
+		    as_folded(upper->value)};
+	}
+	return std::nullopt;
+}
+
+static bool ordinal_domain_is_subset(
+    const Type* source, const Type* target) {
+	auto source_domain = ordinal_domain(source);
+	auto target_domain = ordinal_domain(target);
+	if (!source_domain || !target_domain ||
+	    source_domain->family !=
+	        target_domain->family)
 		return false;
-	auto outer_low =
-	    fold_ordinal_value(outer->lower_bound);
-	auto outer_high =
-	    fold_ordinal_value(outer->upper_bound);
-	auto inner_low =
-	    fold_ordinal_value(inner->lower_bound);
-	auto inner_high =
-	    fold_ordinal_value(inner->upper_bound);
-	return outer_low && outer_high &&
-	       inner_low && inner_high &&
+	if (source_domain->family !=
+	        OrdinalDomainFamily::Integer &&
+	    source_domain->nominal_root !=
+	        target_domain->nominal_root)
+		return false;
+	return compare_folded_ordinals(
+	           target_domain->lower,
+	           source_domain->lower) <= 0 &&
 	       compare_folded_ordinals(
-	           *outer_low, *inner_low) <= 0 &&
-	       compare_folded_ordinals(
-	           *outer_high, *inner_high) >= 0;
+	           target_domain->upper,
+	           source_domain->upper) >= 0;
+}
+
+static bool ordinal_domains_are_compatible(
+    const Type* a, const Type* b) {
+	auto a_domain = ordinal_domain(a);
+	auto b_domain = ordinal_domain(b);
+	if (!a_domain || !b_domain ||
+	    a_domain->family != b_domain->family)
+		return false;
+	return a_domain->family ==
+	               OrdinalDomainFamily::Integer ||
+	       a_domain->nominal_root ==
+	           b_domain->nominal_root;
+}
+} // namespace
+
+bool IntrinsicType::is_subtype_of(
+    const Type* target) const {
+	if (this == target)
+		return true;
+	// Only predefined integer-family types use range subtyping. Char has an
+	// ordinal range too, but it remains a distinct nominal ordinal family.
+	return rank &&
+	       ordinal_domain_is_subset(this, target);
+}
+
+bool IntrinsicType::
+same_cxx_carrier_definition_as(
+    const Type* other) const {
+	auto intrinsic =
+	    dynamic_cast<const IntrinsicType*>(
+	        other);
+	return intrinsic && carrier &&
+	       intrinsic->carrier &&
+	       carrier == intrinsic->carrier;
+}
+
+bool SubrangeType::is_subtype_of(
+    const Type* target) const {
+	return this == target ||
+	       ordinal_domain_is_subset(this, target);
+}
+
+bool FixedSetType::is_subtype_of(
+    const Type* target) const {
+	if (this == target)
+		return true;
+	auto set =
+	    dynamic_cast<const FixedSetType*>(target);
+	return set &&
+	       item_type->is_subtype_of(
+	           set->item_type);
 }
 
 std::optional<ValueConversion>
@@ -1020,14 +1147,22 @@ SubrangeType::value_conversion_from(
     const Type* source) const {
 	if (auto source_range =
 	        dynamic_cast<const SubrangeType*>(source)) {
-		if (source_range->base_type != base_type)
+		if (!ordinal_domains_are_compatible(
+		        source_range, this))
 			return std::nullopt;
-		return subrange_contains(this, source_range)
+		return source_range->is_subtype_of(this)
 		    ? std::optional<ValueConversion>{
 		          direct_conversion()}
 		    : std::optional<ValueConversion>{
 		          implicit_conversion(200)};
 	}
+	if (ordinal_domains_are_compatible(
+	        source, this))
+		return source->is_subtype_of(this)
+		    ? std::optional<ValueConversion>{
+		          direct_conversion()}
+		    : std::optional<ValueConversion>{
+		          implicit_conversion(200)};
 	if (source == base_type)
 		return implicit_conversion(200);
 	auto base_conversion =
@@ -1069,6 +1204,18 @@ bool RoutineType::same_signature_as(
     const RoutineType* other) const {
 	return other && kind == other->kind &&
 	       same_parameter_and_result_types_as(other);
+}
+
+bool RoutineType::same_overload_signature_as(
+    const RoutineType* other) const {
+	if (!other ||
+	    formals.size() != other->formals.size())
+		return false;
+	for (size_t i = 0; i < formals.size(); ++i)
+		if (formals[i].ty !=
+		    other->formals[i].ty)
+			return false;
+	return true;
 }
 
 bool RoutineType::accepts_routine_value_from(
@@ -1135,30 +1282,6 @@ bool RoutineType::same_cxx_parameter_list_as(
 			return false;
 	}
 	return true;
-}
-
-int conversion_cost(Type* from, Type* to) {
-	if (!from || !to)
-		return -1;
-	if (from == to)
-		return 0;
-	auto conversion =
-	    to->value_conversion_from(from);
-	if (!conversion)
-		return -1;
-	// Exact identity is the only zero-cost relation. Direct constructor
-	// matches occupy a lower band than actual value conversions so overload
-	// ranking cannot mistake representational compatibility for identity.
-	unsigned base =
-	    conversion->kind ==
-	            ValueConversionClass::Direct
-	        ? 1
-	        : 1000;
-	unsigned cost = base + conversion->distance;
-	return cost > static_cast<unsigned>(
-	                  std::numeric_limits<int>::max())
-	    ? std::numeric_limits<int>::max()
-	    : static_cast<int>(cost);
 }
 
 #include "cst.h"

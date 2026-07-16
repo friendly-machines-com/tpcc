@@ -12,6 +12,7 @@
 #include <cctype>
 #include <charconv>
 #include <chrono>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -30,6 +31,10 @@ static Frame* body_frame_of(Type* ty);
 static Type* call_result_type(Node* callee);
 static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error);
 static Type* subrange_range_type(Type* ty);
+static Type* integer_literal_natural_type(
+    const Integer* literal);
+static Integer* untyped_integer_constant(
+    Node* expression);
 
 static ErrorLetContext make_error_let_context_from_scopes(const std::vector<ScopeEntry>& scopes, unsigned max_depth) {
 	std::vector<DiagnosticScope> diagnostic_scopes;
@@ -312,6 +317,8 @@ static const char* match_tier_name(
 		return "direct";
 	case MatchRank::Tier::Convert:
 		return "convert";
+	case MatchRank::Tier::UserConvert:
+		return "user-convert";
 	case MatchRank::Tier::Generic:
 		return "generic";
 	}
@@ -328,6 +335,16 @@ static void append_cost_vector(
 		sst << match_tier_name(costs[i].tier);
 		if (costs[i].distance)
 			sst << "+" << costs[i].distance;
+		if (costs[i].tier ==
+		    MatchRank::Tier::UserConvert) {
+			sst << " via "
+			    << match_tier_name(
+			           costs[i].source_tier);
+			if (costs[i].source_distance)
+				sst << "+"
+				    << costs[i]
+				           .source_distance;
+		}
 	}
 	sst << "]";
 }
@@ -365,12 +382,19 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 							  const std::vector<Node*>& args,
 							  Type* expected_return_type,
 							  const std::vector<Callable*>& candidates,
-							  const std::vector<std::pair<Callable*, std::vector<MatchRank>>>& viable,
+							  const std::vector<std::pair<Callable*, CallableMatch>>& viable,
 							  const std::vector<Callable*>& non_dominated,
-							  bool ambiguous) {
+							  bool ambiguous,
+							  std::string failure_description) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
 	std::stringstream sst;
-	sst << (ambiguous ? "ambiguous overload" : "no matching overload") << " for '" << name << "'";
+	if (failure_description.empty())
+		failure_description =
+		    ambiguous
+		        ? "ambiguous overload"
+		        : "no matching overload";
+	sst << failure_description << " for '" << name
+	    << "'";
 
 	if (receiver) {
 		sst << "\n  receiver: " << ctx.value_ref(receiver) << " : " << ctx.type_ref(receiver->ty);
@@ -391,7 +415,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 		const std::vector<MatchRank>* viable_cost = nullptr;
 		for (const auto& v : viable) {
 			if (v.first == c) {
-				viable_cost = &v.second;
+				viable_cost =
+				    &v.second.ranks;
 				break;
 			}
 		}
@@ -423,6 +448,100 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	}
 	sst << ctx.notes();
 	emit_parse_error_at(current_location(), sst.str());
+}
+
+[[noreturn]] void Parser::raise_cxx_carrier_collision(
+    const std::string& name, Callable* incoming,
+    const CallableRegistration& registration) {
+	Callable* conflicting =
+	    registration.conflicting_callable;
+	assert(incoming && incoming->ty && conflicting &&
+	       conflicting->ty);
+
+	// The declarations and their RoutineType nodes are roots in the normal
+	// diagnostic graph. That printer, rather than a second signature formatter
+	// here, expands aliases, formal/result types, aggregate members, and every
+	// other referenced definition transitively.
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+	        scopes, 4);
+	std::string incoming_ref =
+	    ctx.value_ref(incoming);
+	std::string incoming_type_ref =
+	    ctx.type_ref(incoming->ty);
+	std::string conflicting_ref =
+	    ctx.value_ref(conflicting);
+	std::string conflicting_type_ref =
+	    ctx.type_ref(conflicting->ty);
+	std::string family_ref =
+	    ctx.value_ref(
+	        registration.existing_binding);
+
+	std::stringstream sst;
+	sst << "overload '" << name
+	    << "' cannot be represented by the C++ backend";
+	sst << "\n  incoming declaration: ";
+	append_callable_source_prefix(
+	    sst, incoming, false);
+	sst << incoming_ref << " : "
+	    << incoming_type_ref;
+	sst << "\n  conflicting declaration: ";
+	append_callable_source_prefix(
+	    sst, conflicting, false);
+	sst << conflicting_ref << " : "
+	    << conflicting_type_ref;
+	sst << "\n  existing overload family: "
+	    << family_ref;
+	sst << "\n  emitted C++ name: '"
+	    << incoming->cxx_name << "'";
+
+	RoutineType* incoming_type = incoming->ty;
+	RoutineType* conflicting_type =
+	    conflicting->ty;
+	if (incoming_type->same_overload_signature_as(
+	        conflicting_type) &&
+	    incoming_type->return_type !=
+	        conflicting_type->return_type) {
+		sst << "\n  Pascal distinguishes these conversion "
+		       "operators by destination type: "
+		    << conflicting_type_ref << " returns "
+		    << ctx.type_ref(
+		           conflicting_type->return_type)
+		    << ", while " << incoming_type_ref
+		    << " returns "
+		    << ctx.type_ref(
+		           incoming_type->return_type)
+		    << ". C++ does not use a function result "
+		       "to distinguish overloads.";
+	} else {
+		sst << "\n  distinct Pascal parameter types "
+		       "collapse to the same C++ parameter "
+		       "carriers:";
+		for (size_t i = 0;
+		     i < incoming_type->formals.size();
+		     ++i) {
+			Type* incoming_formal =
+			    incoming_type->formals[i].ty;
+			Type* conflicting_formal =
+			    conflicting_type->formals[i].ty;
+			if (incoming_formal ==
+			        conflicting_formal ||
+			    !incoming_formal
+			         ->same_cxx_carrier_as(
+			             conflicting_formal))
+				continue;
+			sst << "\n    parameter " << (i + 1)
+			    << ": "
+			    << ctx.type_ref(
+			           conflicting_formal)
+			    << " and "
+			    << ctx.type_ref(incoming_formal);
+		}
+	}
+	sst << ctx.notes();
+	emit_parse_error_at(
+	    callable_source_location(incoming),
+	    sst.str());
 }
 
 bool Parser::is_defined(const std::string& sym) const {
@@ -1993,10 +2112,13 @@ static bool conversion_is_better(
 
 static Type* infer_set_item_type(
     Type* current, Type* next) {
-	if (current == &untyped_integer_type())
-		current = integer_type();
-	if (next == &untyped_integer_type())
-		next = integer_type();
+	// The caller classifies untyped integer constants by their natural
+	// Delphi type before asking for a common set domain. Silently replacing an
+	// unresolved untyped value with Integer here would make constructor
+	// inference disagree with ordinary argument matching.
+	if (current == &untyped_integer_type() ||
+	    next == &untyped_integer_type())
+		return nullptr;
 	if (current == next)
 		return current;
 
@@ -2046,9 +2168,13 @@ Node* Parser::parse_set_literal() {
 		for (Node* bound : {item.lower, item.upper}) {
 			if (!bound)
 				continue;
-			Type* bound_type = bound->ty == &untyped_integer_type()
-			    ? integer_type()
-			    : bound->ty;
+			Type* bound_type = bound->ty;
+			if (auto integer =
+			        untyped_integer_constant(
+			            bound))
+				bound_type =
+				    integer_literal_natural_type(
+				        integer);
 			if (!is_set_item_type(bound_type))
 				raise_parse_error("set literal item is not ordinal");
 			if (item_type == unknown_type()) {
@@ -2435,7 +2561,8 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 						raise_parse_error(
 						    "TMethod can only be cast to an "
 						    "of-object routine type");
-					return new Cast(value, target_routine);
+					return new ExplicitCast(
+					    value, target_routine);
 				}
 				if (auto source_routine =
 				        dynamic_cast<RoutineType*>(
@@ -2446,7 +2573,8 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 						raise_parse_error(
 						    "explicit cast between "
 						    "incompatible routine types");
-					return value;
+					return new ExplicitCast(
+					    value, target_routine);
 				}
 				raise_parse_error(
 				    "explicit routine-type cast requires a "
@@ -2462,7 +2590,8 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 					    "TMethod can only view an of-object "
 					    "routine value");
 			}
-			return new Cast(value, target_ty);
+			return new ExplicitCast(
+			    value, target_ty);
 		}
 	}
 	if (auto class_type =
@@ -3081,19 +3210,26 @@ Node* Parser::mk_membership(Node* item, Node* set) {
 }
 
 Node* Parser::mk_unary_same(std::string id, Node* x) {
-	if (auto i = dynamic_cast<Integer*>(x)) {
-		if (x->ty == &untyped_integer_type()) {
-			if (id == "-")
-				return new Integer(i->value, i->ty, !i->negative);
-			if (id == "+")
-				return x;
-			if (id == "not") {
-				// An untyped Pascal integer literal has Integer semantics in
-				// unary `not` (`not 1 = -2`). Pin it before overload
-				// resolution; otherwise every width-preserving integer
-				// LogicalNot signature is an equally exact literal match.
-				x->ty = integer_type();
-			}
+	if (auto integer =
+	        untyped_integer_constant(x)) {
+		if (id == "-")
+			return new Integer(
+			    integer->value,
+			    &untyped_integer_type(),
+			    !integer->negative);
+		if (id == "+")
+			return new Integer(
+			    integer->value,
+			    &untyped_integer_type(),
+			    integer->negative);
+		if (id == "not") {
+			// Unary `not` deliberately has Integer semantics (`not 1 = -2`).
+			// Construct a contextual value rather than changing a literal or
+			// constant declaration that another expression may also reference.
+			x = new Integer(
+			    integer->value,
+			    integer_type(),
+			    integer->negative);
 		}
 	}
 	auto fn = resolve_value(id);
@@ -3199,7 +3335,8 @@ Node* Parser::parse_product_tail(Node* result) {
 			    (dynamic_cast<ClassType*>(target) ||
 			     dynamic_cast<InterfaceType*>(target));
 			if ((!numeric ||
-			     conversion_cost(result->ty, target) < 0) &&
+			     !target->value_conversion_from(
+			         result->ty)) &&
 			    !checked_reference)
 				raise_parse_error(
 				    "'as' requires compatible real-number "
@@ -3375,8 +3512,6 @@ PropertyAccess* Parser::apply_property(Node* receiver, Property* property, std::
 		raise_parse_error(message.str());
 	}
 	for (size_t i = 0; i < indexes.size(); ++i) {
-		if (conversion_cost(indexes[i]->ty, property->index_types[i]) < 0)
-			raise_type_mismatch("property index argument", property->index_types[i], indexes[i]->ty);
 		indexes[i] = cast(indexes[i], property->index_types[i]);
 	}
 	return new PropertyAccess(receiver, property, std::move(indexes));
@@ -6555,14 +6690,13 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	}
 	auto registration =
 	    body->register_callable(pas_name, m);
-	if (registration ==
-	    CallableRegistration::CxxCarrierCollision)
-		raise_parse_error(
-		    "overloads of '" + pas_name +
-		    "' have distinct Pascal signatures but the "
-		    "same C++ parameter carriers");
-	if (registration !=
-	    CallableRegistration::Added) {
+	if (registration.kind ==
+	    CallableRegistration::Kind::
+	        CxxCarrierCollision)
+		raise_cxx_carrier_collision(
+		    pas_name, m, registration);
+	if (registration.kind !=
+	    CallableRegistration::Kind::Added) {
 		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 	}
 }
@@ -6647,15 +6781,14 @@ Procedure* Parser::match_or_create_procedure(
 		auto registration =
 		    enclosing->register_callable(
 		        pas_name, target);
-		if (registration ==
-		    CallableRegistration::
+		if (registration.kind ==
+		    CallableRegistration::Kind::
 		        CxxCarrierCollision)
-			raise_parse_error(
-			    "overloads of '" + pas_name +
-			    "' have distinct Pascal signatures but "
-			    "the same C++ parameter carriers");
-		if (registration !=
-		    CallableRegistration::Added) {
+			raise_cxx_carrier_collision(
+			    pas_name, target,
+			    registration);
+		if (registration.kind !=
+		    CallableRegistration::Kind::Added) {
 			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
 		}
 	}
@@ -7078,17 +7211,161 @@ static bool integer_type_contains_literal(
 	           literal->value);
 }
 
-std::optional<MatchRank> Parser::match_argument(
+static Type* integer_literal_natural_type(
+    const Integer* literal) {
+	if (!literal)
+		return nullptr;
+	if (literal->negative) {
+		if (literal->value <= 128)
+			return shortint_type();
+		if (literal->value <= 32768)
+			return smallint_type();
+		if (literal->value <=
+		    uint64_t{2147483648})
+			return integer_type();
+		return int64_type();
+	}
+	if (literal->value <= UINT8_MAX)
+		return byte_type();
+	if (literal->value <= UINT16_MAX)
+		return word_type();
+	if (literal->value <= UINT32_MAX)
+		return cardinal_type();
+	return qword_type();
+}
+
+static Integer* untyped_integer_constant(
+    Node* expression) {
+	if (!expression ||
+	    expression->ty !=
+	        &untyped_integer_type())
+		return nullptr;
+	if (auto integer =
+	        dynamic_cast<Integer*>(expression))
+		return integer;
+
+	// Named constants remain untyped until context selects a carrier. Fold the
+	// constant declaration here so a reference to `const N = 3` has exactly
+	// the same range and overload behavior as the source literal `3`.
+	ConstEvalContext ctx;
+	ConstEvalResult folded =
+	    expression->const_eval(ctx);
+	if (folded.kind !=
+	    ConstEvalResult::Kind::Success)
+		return nullptr;
+	auto integer =
+	    dynamic_cast<Integer*>(folded.node);
+	return integer &&
+	               integer->ty ==
+	                   &untyped_integer_type()
+	    ? integer
+	    : nullptr;
+}
+
+static unsigned integer_literal_target_distance(
+    Type* target, const Integer* literal) {
+	if (target ==
+	    integer_literal_natural_type(literal))
+		return 0;
+
+	OrdinalRange::Value lower;
+	OrdinalRange::Value upper;
+	if (auto range =
+	        dynamic_cast<SubrangeType*>(target)) {
+		ConstEvalContext ctx;
+		auto lower_folded =
+		    range->lower_bound->const_eval(ctx);
+		auto upper_folded =
+		    range->upper_bound->const_eval(ctx);
+		std::string error;
+		auto classified_lower =
+		    lower_folded.kind ==
+		            ConstEvalResult::Kind::Success
+		        ? classify_subrange_bound(
+		              lower_folded.node, &error)
+		        : std::nullopt;
+		auto classified_upper =
+		    upper_folded.kind ==
+		            ConstEvalResult::Kind::Success
+		        ? classify_subrange_bound(
+		              upper_folded.node, &error)
+		        : std::nullopt;
+		if (!classified_lower ||
+		    !classified_upper)
+			return UINT_MAX;
+		lower =
+		    classified_lower->ordinal_value;
+		upper =
+		    classified_upper->ordinal_value;
+	} else {
+		OrdinalBounds bounds;
+		if (!integer_bounds(target, &bounds))
+			return UINT_MAX;
+		lower = ordinal_value(
+		    bounds.signed_type,
+		    bounds.signed_type
+		        ? bounds.min_magnitude
+		        : 0);
+		upper = ordinal_value(
+		    false, bounds.max_positive);
+	}
+
+	uint64_t width = 0;
+	if (lower.negative && !upper.negative) {
+		width = lower.magnitude >
+		                UINT64_MAX -
+		                    upper.magnitude
+		            ? UINT64_MAX
+		            : lower.magnitude +
+		                  upper.magnitude;
+	} else if (lower.negative) {
+		width = lower.magnitude -
+		        upper.magnitude;
+	} else {
+		width = upper.magnitude -
+		        lower.magnitude;
+	}
+	unsigned width_bits = 0;
+	while (width) {
+		++width_bits;
+		width >>= 1;
+	}
+	// Exact natural type is zero. Every other fitting type is ordered by the
+	// size of its ordinal interval. Equal-size incomparable ranges remain tied.
+	return 1 + width_bits;
+}
+
+static bool rank_less(
+    const MatchRank& a, const MatchRank& b) {
+	if (a.tier != b.tier)
+		return static_cast<unsigned>(a.tier) <
+		       static_cast<unsigned>(b.tier);
+	if (a.distance != b.distance)
+		return a.distance < b.distance;
+	if (a.source_tier != b.source_tier)
+		return static_cast<unsigned>(
+		           a.source_tier) <
+		       static_cast<unsigned>(
+		           b.source_tier);
+	return a.source_distance <
+	       b.source_distance;
+}
+
+std::optional<ArgumentMatch> Parser::match_argument(
     const Parameter& formal, Node* actual,
     const BuiltinDesc* builtin,
     size_t parameter_index,
     bool allow_user_conversion,
-    MatchFailure* failure) {
+    MatchFailure* failure,
+    UserConversionFailure*
+        conversion_failure) {
 	if (failure)
 		*failure =
 		    MatchFailure::Incompatible;
 	Type* source = actual ? actual->ty : nullptr;
 	Type* target = formal.ty;
+	Integer* untyped_integer =
+	    untyped_integer_constant(actual);
 
 	if (builtin &&
 	    builtin->generic_kind ==
@@ -7096,8 +7373,9 @@ std::optional<MatchRank> Parser::match_argument(
 	    parameter_index == 0 &&
 	    (dynamic_cast<RoutineType*>(source) ||
 	     (source && source->is_reference_type())))
-		return MatchRank{
-		    MatchRank::Tier::Direct, 0};
+		return ArgumentMatch{
+		    {MatchRank::Tier::Direct, 0},
+		    actual};
 
 	if (target == unknown_type()) {
 		if (builtin &&
@@ -7132,8 +7410,9 @@ std::optional<MatchRank> Parser::match_argument(
 		}
 		// An omitted Pascal formal type is an explicitly generic storage/value
 		// operation. It must lose to every concrete viable overload.
-		return MatchRank{
-		    MatchRank::Tier::Generic, 0};
+		return ArgumentMatch{
+		    {MatchRank::Tier::Generic, 0},
+		    actual};
 	}
 
 	if (formal.mode == ParamMode::Var ||
@@ -7153,8 +7432,9 @@ std::optional<MatchRank> Parser::match_argument(
 			return std::nullopt;
 		}
 		if (source == target)
-			return MatchRank{
-			    MatchRank::Tier::Exact, 0};
+			return ArgumentMatch{
+			    {MatchRank::Tier::Exact, 0},
+			    actual};
 		if (builtin &&
 		    builtin->generic_kind ==
 		        BuiltinGenericKind::PointerStorageOut &&
@@ -7164,87 +7444,187 @@ std::optional<MatchRank> Parser::match_argument(
 			// This is GetMem's explicit raw-storage contract. Keeping it in
 			// builtin metadata prevents an RTL exception from weakening every
 			// typed mutable-reference parameter in the language.
-			return MatchRank{
-			    MatchRank::Tier::Direct, 0};
+			return ArgumentMatch{
+			    {MatchRank::Tier::Direct, 0},
+			    actual};
+		}
+		if (builtin &&
+		    builtin->generic_kind ==
+		        BuiltinGenericKind::ValOutput &&
+		    parameter_index == 1 &&
+		    formal.mode == ParamMode::Out) {
+			auto range =
+			    dynamic_cast<SubrangeType*>(
+			        source);
+			if (range &&
+			    range->base_type == target)
+				return ArgumentMatch{
+				    {MatchRank::Tier::Direct,
+				     0},
+				    actual};
 		}
 		return std::nullopt;
 	}
 
 	if (dynamic_cast<NilLiteral*>(actual) &&
 	    (target->is_reference_type() ||
-	     dynamic_cast<RoutineType*>(target)))
-		return MatchRank{
-		    MatchRank::Tier::Direct, 0};
+	     dynamic_cast<RoutineType*>(target))) {
+		auto value = new NilLiteral();
+		value->ty = target;
+		return ArgumentMatch{
+		    {MatchRank::Tier::Direct, 0},
+		    value};
+	}
 
-	if (dynamic_cast<RoutineRef*>(actual) &&
-	    dynamic_cast<RoutineType*>(target))
-		return MatchRank{
-		    MatchRank::Tier::Direct, 0};
+	if (auto reference =
+	        dynamic_cast<RoutineRef*>(actual)) {
+		auto routine =
+		    dynamic_cast<RoutineType*>(target);
+		if (!routine)
+			return std::nullopt;
+		bool ambiguous = false;
+		Node* resolved =
+		    try_resolve_routine_reference(
+		        reference, routine, &ambiguous);
+		if (!resolved) {
+			if (ambiguous && failure)
+				*failure =
+				    MatchFailure::
+				        AmbiguousConversion;
+			return std::nullopt;
+		}
+		return ArgumentMatch{
+		    {MatchRank::Tier::Direct, 0},
+		    resolved};
+	}
 
 	if (auto literal = dynamic_cast<String*>(actual);
-	    literal && literal->value.size() == 1 &&
+	    literal &&
 	    dynamic_cast<ShortStringType*>(target))
-		return MatchRank{
-		    MatchRank::Tier::Direct, 0};
+		// A quoted literal is constructed directly in its selected
+		// ShortString context, including that context's capacity. Return a
+		// candidate-local node: changing the shared literal would let whichever
+		// overload is examined first alter every later candidate.
+		return ArgumentMatch{
+		    {MatchRank::Tier::Direct, 0},
+		    new String(literal->value, target)};
 
-	if (dynamic_cast<SetLiteral*>(actual) &&
-	    dynamic_cast<FixedSetType*>(target))
-		return MatchRank{
+	if (auto literal =
+	        dynamic_cast<SetLiteral*>(actual)) {
+		auto target_set =
+		    dynamic_cast<FixedSetType*>(target);
+		if (!target_set)
+			return std::nullopt;
+		Parameter item_formal(
+		    "", "", target_set->item_type,
+		    ParamMode::Value, nullptr);
+		std::vector<SetLiteral::Item> items;
+		items.reserve(literal->items.size());
+		MatchRank combined{
 		    MatchRank::Tier::Direct, 0};
+		for (const SetLiteral::Item& item :
+		     literal->items) {
+			auto lower = match_argument(
+			    item_formal, item.lower,
+			    nullptr, 0, false, failure);
+			if (!lower)
+				return std::nullopt;
+			std::optional<ArgumentMatch> upper;
+			if (item.upper) {
+				upper = match_argument(
+				    item_formal, item.upper,
+				    nullptr, 0, false,
+				    failure);
+				if (!upper)
+					return std::nullopt;
+			}
+			auto combine =
+			    [&](const MatchRank& rank) {
+				    if (static_cast<unsigned>(
+				            rank.tier) >
+				        static_cast<unsigned>(
+				            combined.tier))
+					    combined.tier =
+					        rank.tier;
+				    combined.distance =
+				        rank.distance >
+				                UINT_MAX -
+				                    combined.distance
+				            ? UINT_MAX
+				            : combined.distance +
+				                  rank.distance;
+			    };
+			combine(lower->rank);
+			if (upper)
+				combine(upper->rank);
+			items.push_back(
+			    SetLiteral::Item{
+			        lower->value,
+			        upper
+			            ? upper->value
+			            : nullptr});
+		}
+		return ArgumentMatch{
+		    combined,
+		    new SetLiteral(
+		        std::move(items), target)};
+	}
 
 	if (source == target)
-		return MatchRank{
-		    MatchRank::Tier::Exact, 0};
+		return ArgumentMatch{
+		    {MatchRank::Tier::Exact, 0},
+		    actual};
 
-	if (auto integer = dynamic_cast<Integer*>(actual);
-	    integer &&
-	    source == &untyped_integer_type()) {
+	if (untyped_integer) {
 		if (is_integer_semantic_type(target)) {
 			// Literal fit needs only the ordinal endpoints. Reusing fixed-array
 			// range construction here incorrectly rejects the complete Int64
 			// domain because its element count is 2^64 and cannot fit in the
 			// array length field.
 			if (!integer_type_contains_literal(
-			        target, integer))
+			        target, untyped_integer))
 				return std::nullopt;
 
-			unsigned distance = 0;
-			if (target != integer_type()) {
-				auto from_default =
-				    target->value_conversion_from(
-				        integer_type());
-				distance =
-				    1 + (from_default
-				             ? from_default->distance
-				             : 0);
-			}
-			// An untyped integer is a contextual value, not a value of every
-			// integer type simultaneously. Prefer the language's default
-			// Integer when it fits; otherwise use the closest fitting
-			// destination range. This preserves literal information without
-			// pre-casting operator operands before overload selection.
-			return MatchRank{
-			    MatchRank::Tier::Direct,
-			    distance};
+			unsigned distance =
+			    integer_literal_target_distance(
+			        target, untyped_integer);
+			if (distance == UINT_MAX)
+				return std::nullopt;
+			return ArgumentMatch{
+			    {MatchRank::Tier::Direct,
+			     distance},
+			    new Integer(
+			        untyped_integer->value,
+			        target,
+			        untyped_integer->negative)};
 		}
 	}
+	if (source == &untyped_integer_type() &&
+	    !untyped_integer)
+		// Untyped integer is a constant-expression category, never a runtime
+		// storage type. If it cannot be folded here, accepting it through the
+		// type-only conversion table would lose the magnitude required for
+		// range checking and ranking.
+		return std::nullopt;
 
 	auto conversion =
 	    target->value_conversion_from(source);
 	if (conversion)
-		return MatchRank{
-		    conversion->kind ==
-		            ValueConversionClass::Direct
-		        ? MatchRank::Tier::Direct
-		        : MatchRank::Tier::Convert,
-		    conversion->distance};
+		return ArgumentMatch{
+		    {conversion->kind ==
+		             ValueConversionClass::Direct
+		         ? MatchRank::Tier::Direct
+		         : MatchRank::Tier::Convert,
+		     conversion->distance},
+		    new Cast(actual, target)};
 	if (allow_user_conversion)
 		return match_user_conversion(
-		    actual, target);
+		    actual, target, failure,
+		    conversion_failure);
 	return std::nullopt;
 }
 
-std::optional<std::vector<MatchRank>>
+std::optional<CallableMatch>
 Parser::match_callable_arguments(
     Callable* callable,
     const std::vector<Node*>& args,
@@ -7263,32 +7643,30 @@ Parser::match_callable_arguments(
 	        ? callable->builtin_desc
 	        : lookup_builtin_desc(
 	              callable->cxx_name);
-	std::vector<MatchRank> ranks(
-	    signature->formals.size(),
-	    MatchRank{MatchRank::Tier::Exact, 0});
+	CallableMatch result;
+	result.ranks.reserve(args.size());
+	result.arguments.reserve(args.size());
 	for (size_t i = 0; i < args.size(); ++i) {
-		auto rank = match_argument(
+		auto match = match_argument(
 		    signature->formals[i], args[i],
 		    builtin, i,
 		    allow_user_conversion);
-		if (!rank)
+		if (!match)
 			return std::nullopt;
-		ranks[i] = *rank;
+		result.ranks.push_back(
+		    match->rank);
+		result.arguments.push_back(
+		    match->value);
 	}
-	return ranks;
+	return result;
 }
 
-static bool rank_less(
-    const MatchRank& a, const MatchRank& b) {
-	if (a.tier != b.tier)
-		return static_cast<unsigned>(a.tier) <
-		       static_cast<unsigned>(b.tier);
-	return a.distance < b.distance;
-}
-
-std::optional<MatchRank>
+std::optional<ArgumentMatch>
 Parser::match_user_conversion(
-    Node* actual, Type* target) {
+    Node* actual, Type* target,
+    MatchFailure* failure,
+    UserConversionFailure*
+        conversion_failure) {
 	Node* family = maybe_resolve_value(":=");
 	if (auto member =
 	        dynamic_cast<MemberAccess*>(family)) {
@@ -7309,8 +7687,18 @@ Parser::match_user_conversion(
 	             dynamic_cast<OverloadSet*>(
 	                 family))
 		candidates = overloads->members;
+	if (conversion_failure) {
+		conversion_failure->candidates =
+		    candidates;
+		conversion_failure->viable.clear();
+		conversion_failure->non_dominated.clear();
+		conversion_failure->ambiguous =
+		    false;
+	}
 
-	std::optional<MatchRank> best;
+	Callable* best_candidate = nullptr;
+	std::optional<ArgumentMatch> best_source;
+	std::vector<Callable*> best_candidates;
 	for (Callable* candidate : candidates) {
 		if (!dynamic_cast<Procedure*>(
 		        candidate) ||
@@ -7329,25 +7717,59 @@ Parser::match_user_conversion(
 		    actual, builtin, 0, false);
 		if (!source_match)
 			continue;
-		if (!best ||
-		    rank_less(*source_match, *best))
-			best = *source_match;
+		if (conversion_failure)
+			conversion_failure->viable.push_back(
+			    {candidate,
+			     CallableMatch{
+			         {source_match->rank},
+			         {source_match->value}}});
+		if (!best_source ||
+		    rank_less(
+		        source_match->rank,
+		        best_source->rank)) {
+			best_candidate = candidate;
+			best_source = *source_match;
+			best_candidates = {candidate};
+		} else if (!rank_less(
+		               best_source->rank,
+		               source_match->rank)) {
+			best_candidates.push_back(
+			    candidate);
+		}
 	}
-	if (!best)
+	if (conversion_failure)
+		conversion_failure->non_dominated =
+		    best_candidates;
+	if (!best_source)
 		return std::nullopt;
+	if (best_candidates.size() != 1) {
+		if (failure)
+			*failure =
+			    MatchFailure::
+			        AmbiguousConversion;
+		if (conversion_failure)
+			conversion_failure->ambiguous =
+			    true;
+		return std::nullopt;
+	}
 
 	// A source-defined conversion is one explicit language operation. Do not
 	// recursively search for a conversion into its own source parameter:
 	// that would invent arbitrary implicit conversion chains and could
-	// recurse through the same operator family forever. Preserve the source
-	// match quality only as a tie-breaker below every intrinsic conversion.
-	const unsigned tier_distance =
-	    static_cast<unsigned>(best->tier) *
-	        10000u +
-	    std::min(best->distance, 9999u);
-	return MatchRank{
-	    MatchRank::Tier::Convert,
-	    100000u + tier_distance};
+	// recurse through the same operator family forever. UserConvert is below
+	// every intrinsic conversion and above an omitted-type generic formal;
+	// its nested source rank orders conversion operators without a numeric
+	// encoding or another resolution pass.
+	auto call = new ProcCall(
+	    nullptr, best_candidate,
+	    std::vector<Node*>{
+	        best_source->value});
+	call->ty = target;
+	return ArgumentMatch{
+	    {MatchRank::Tier::UserConvert,
+	     0, best_source->rank.tier,
+	     best_source->rank.distance},
+	    call};
 }
 
 static bool dominates(
@@ -7365,155 +7787,212 @@ static bool dominates(
 	return strict;
 }
 
-static Callable* contextual_integer_literal_tie_break(
+static bool is_predefined_numeric_binary(
+    std::string_view cxx_name) {
+	return cxx_name == "::u_system::p_add" ||
+	       cxx_name == "::u_system::p_subtract" ||
+	       cxx_name == "::u_system::p_multiply" ||
+	       cxx_name == "::u_system::p_divide" ||
+	       cxx_name == "::u_system::p_intdivide" ||
+	       cxx_name == "::u_system::p_modulus" ||
+	       cxx_name == "::u_system::p_bitwiseand" ||
+	       cxx_name == "::u_system::p_bitwiseor" ||
+	       cxx_name == "::u_system::p_bitwisexor" ||
+	       cxx_name == "::u_system::p_lessthan" ||
+	       cxx_name == "::u_system::p_lessthanorequal" ||
+	       cxx_name == "::u_system::p_equal" ||
+	       cxx_name == "::u_system::p_greaterthan" ||
+	       cxx_name == "::u_system::p_greaterthanorequal";
+}
+
+static Type* numeric_operand_type(Node* operand) {
+	if (!operand)
+		return nullptr;
+	if (auto literal =
+	        untyped_integer_constant(
+	            operand))
+		return integer_literal_natural_type(
+		    literal);
+	Type* type = operand->ty;
+	while (auto range =
+	           dynamic_cast<SubrangeType*>(type))
+		type = range->base_type;
+	OrdinalBounds bounds;
+	if (integer_bounds(type, &bounds))
+		return type;
+	if (type == single_type() ||
+	    type == double_type() ||
+	    type == extended_type())
+		return type;
+	return nullptr;
+}
+
+static bool integer_type_range(
+    Type* type, OrdinalBounds* bounds) {
+	return type && bounds &&
+	       integer_bounds(type, bounds);
+}
+
+static bool integer_range_contains(
+    const OrdinalBounds& outer,
+    const OrdinalBounds& inner) {
+	if (inner.signed_type &&
+	    (!outer.signed_type ||
+	     outer.min_magnitude <
+	         inner.min_magnitude))
+		return false;
+	return outer.max_positive >=
+	       inner.max_positive;
+}
+
+static Type* predefined_numeric_promotion(
+    std::string_view operation,
+    const std::vector<Node*>& args) {
+	if (args.size() != 2 ||
+	    !is_predefined_numeric_binary(
+	        operation))
+		return nullptr;
+	Type* left = numeric_operand_type(
+	    args[0]);
+	Type* right = numeric_operand_type(
+	    args[1]);
+	if (!left || !right)
+		return nullptr;
+	if (operation ==
+	        "::u_system::p_divide" ||
+	    left == single_type() ||
+	    left == double_type() ||
+	    left == extended_type() ||
+	    right == single_type() ||
+	    right == double_type() ||
+	    right == extended_type())
+		return extended_type();
+
+	OrdinalBounds left_bounds;
+	OrdinalBounds right_bounds;
+	if (!integer_type_range(
+	        left, &left_bounds) ||
+	    !integer_type_range(
+	        right, &right_bounds))
+		return nullptr;
+	for (Type* candidate :
+	     {integer_type(), cardinal_type(),
+	      int64_type(), qword_type()}) {
+		OrdinalBounds candidate_bounds;
+		if (integer_type_range(
+		        candidate,
+		        &candidate_bounds) &&
+		    integer_range_contains(
+		        candidate_bounds,
+		        left_bounds) &&
+		    integer_range_contains(
+		        candidate_bounds,
+		        right_bounds))
+			return candidate;
+	}
+	// No signed 64-bit carrier contains QWord and a negative signed operand.
+	// Delphi defines that mixed operation in the unsigned 64-bit domain.
+	return qword_type();
+}
+
+static Callable* predefined_numeric_choice(
     const std::vector<
         std::pair<Callable*,
-                  std::vector<MatchRank>>>& viable,
-    const std::vector<Callable*>& candidates,
+                  CallableMatch>>& viable,
     const std::vector<Node*>& args) {
-	bool has_contextual_integer = false;
-	for (Node* arg : args)
-		if (auto integer =
-		        dynamic_cast<Integer*>(arg);
-		    integer &&
-		    integer->ty ==
-		        &untyped_integer_type()) {
-			has_contextual_integer = true;
-			break;
-		}
-	if (!has_contextual_integer)
-		return nullptr;
-
-	Callable* best = nullptr;
-	uint64_t best_score = 0;
-	bool tied = false;
-	for (Callable* candidate : candidates) {
-		const std::vector<MatchRank>* ranks =
-		    nullptr;
-		for (const auto& entry : viable)
-			if (entry.first == candidate) {
-				ranks = &entry.second;
-				break;
-			}
-		if (!ranks)
+	std::string_view operation;
+	for (const auto& entry : viable) {
+		Callable* callable = entry.first;
+		if (!callable ||
+		    !is_predefined_numeric_binary(
+		        callable->cxx_name))
 			continue;
-		uint64_t score = 0;
-		for (size_t i = 0;
-		     i < args.size() &&
-		     i < ranks->size(); ++i) {
-			auto integer =
-			    dynamic_cast<Integer*>(
-			        args[i]);
-			if (!integer ||
-			    integer->ty !=
-			        &untyped_integer_type())
-				continue;
-			uint64_t item =
-			    static_cast<uint64_t>(
-			        (*ranks)[i].tier) *
-			        1000000u +
-			    (*ranks)[i].distance;
-			if (item >
-			    std::numeric_limits<
-			        uint64_t>::max() -
-			        score)
-				score =
-				    std::numeric_limits<
-				        uint64_t>::max();
-			else
-				score += item;
-		}
-		if (!best || score < best_score) {
-			best = candidate;
-			best_score = score;
-			tied = false;
-		} else if (score == best_score) {
-			tied = true;
-		}
+		if (operation.empty())
+			operation = callable->cxx_name;
+		else if (operation !=
+		         callable->cxx_name)
+			return nullptr;
 	}
-	// Untyped integer constants retain their magnitude, but Integer is their
-	// default definition. Pareto ranking can leave `ByteValue = 3` tied:
-	// one candidate preserves Byte while another preserves the literal's
-	// default Integer. Use only the contextual integer positions to break
-	// that remaining tie. Nonliteral conversion tradeoffs stay ambiguous.
-	return tied ? nullptr : best;
+	if (operation.empty())
+		return nullptr;
+	Type* promoted =
+	    predefined_numeric_promotion(
+	        operation, args);
+	if (!promoted)
+		return nullptr;
+	Callable* result = nullptr;
+	for (const auto& entry : viable) {
+		Callable* callable = entry.first;
+		if (!callable ||
+		    callable->cxx_name != operation ||
+		    callable->ty->formals.size() != 2 ||
+		    callable->ty->formals[0].ty !=
+		        promoted ||
+		    callable->ty->formals[1].ty !=
+		        promoted)
+			continue;
+		if (result)
+			return nullptr;
+		result = callable;
+	}
+	return result;
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
-	// `nil` literal: legal for reference types and both routine-value
-	// categories. Adopt the surrounding target so emission can choose nullptr
-	// for a plain procedure or a two-null-word method value.
-	if (dynamic_cast<NilLiteral*>(a)) {
-		if (target_ty &&
-		    (target_ty->is_reference_type() ||
-		     dynamic_cast<RoutineType*>(target_ty))) {
-			a->ty = target_ty;
-			return a;
-		}
-		raise_parse_error(
-		    "'nil' is only valid in a reference or routine-value context");
-	}
 	if (auto reference = dynamic_cast<RoutineRef*>(a)) {
 		if (target_ty == pointer_type())
 			return resolve_routine_code_reference(reference);
-		auto routine = dynamic_cast<RoutineType*>(target_ty);
-		if (!routine)
-			raise_parse_error(
-			    "a routine reference requires a routine-type context");
-		return resolve_routine_reference(reference, routine);
+		if (auto routine =
+		        dynamic_cast<RoutineType*>(
+		            target_ty))
+			// Overload-candidate matching must reject an incompatible routine
+			// designator silently, but cast() is the final contextual
+			// application. Resolve here so failure retains the designator's
+			// callable family and reports plain versus of-object category
+			// instead of treating its intentionally absent pre-context type as
+			// an ordinary <unknown type>.
+			return resolve_routine_reference(
+			    reference, routine);
 	}
-	if (auto literal = dynamic_cast<SetLiteral*>(a)) {
-		if (auto target_set = dynamic_cast<FixedSetType*>(target_ty)) {
-			if (!is_set_item_type(target_set->item_type))
-				raise_parse_error("set target item type is not ordinal");
-			for (SetLiteral::Item& item : literal->items) {
-				item.lower = cast(item.lower, target_set->item_type);
-				if (item.upper)
-					item.upper = cast(item.upper, target_set->item_type);
-			}
-			literal->ty = target_ty;
-			return literal;
-		}
-	}
-	if (a->ty == target_ty) {
-		return a;
-	}
-	// A one-character Pascal quoted literal is contextually a Char as well as
-	// a one-character string. Preserve one literal node and pin its type when
-	// the surrounding assignment/case/formal requires Char.
-	if (auto literal = dynamic_cast<String*>(a)) {
-		if (target_ty == char_type() && literal->value.size() == 1) {
-			literal->ty = target_ty;
-			return literal;
-		}
-			if (dynamic_cast<ShortStringType*>(target_ty)) {
-				literal->ty = target_ty;
-			return literal;
-		}
-	}
-	// Built-in implicit conversions are already described by conversion_cost().
-	// Do not route them through user-visible operator := overloads: those overloads
-	// are ordinary Pascal conversion operators with their own result type, while a
-	// contextual cast has already chosen TARGET_TY. Sending e.g. qword -> int64
-	// through the global := overload set lets unrelated qword -> Tconstexprint
-	// operators compete and produces bogus ambiguities.
-	if (target_ty && conversion_cost(a->ty, target_ty) >= 0) {
-		if (a->ty == &untyped_integer_type()) {
-			a->ty = target_ty;
-			return a;
-		}
-		return new Cast(a, target_ty);
-	} else if (target_ty == unknown_type()) { // this target is void* but the formal parameter is more like a reference
+	if (target_ty == unknown_type()) {
+		// An omitted-type value is a raw view of the source expression, not a
+		// value conversion to a fictional semantic type.
 		return new Cast(new AddrOf(a), target_ty);
-	} else {
-		auto fn = resolve_value(":=");
-		std::vector<Node*> args;
-		args.push_back(a);
-		auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), target_ty);
-		return make_call(fc, std::move(args));
-
-		// return new Cast(a, target_ty); // FIXME.
 	}
+	if (!target_ty)
+		raise_parse_error(
+		    "implicit conversion has no target type");
+	Parameter formal(
+	    "", "", target_ty,
+	    ParamMode::Value, nullptr);
+	MatchFailure failure;
+	UserConversionFailure conversion_failure;
+	auto match = match_argument(
+	    formal, a, nullptr, 0, true,
+	    &failure, &conversion_failure);
+	if (match)
+		return match->value;
+	if (dynamic_cast<NilLiteral*>(a))
+		raise_parse_error(
+		    "'nil' is only valid in a reference or routine-value context");
+	if (!conversion_failure.candidates.empty()) {
+		std::vector<Node*> args{a};
+		raise_overload_resolution_error(
+		    current_location(), ":=", nullptr,
+		    args, target_ty,
+		    conversion_failure.candidates,
+		    conversion_failure.viable,
+		    conversion_failure.non_dominated,
+		    conversion_failure.ambiguous,
+		    conversion_failure.ambiguous
+		        ? "ambiguous implicit conversion"
+		        : "no implicit conversion to the required type");
+	}
+	Type* recovered_target =
+	    raise_type_mismatch(
+	        "no implicit conversion",
+	        target_ty, a ? a->ty : nullptr);
+	return new Cast(a, recovered_target);
 }
 
 static std::vector<Callable*> routine_reference_candidates(
@@ -7527,21 +8006,18 @@ static std::vector<Callable*> routine_reference_candidates(
 	return {};
 }
 
-Node* Parser::resolve_routine_reference(
-    RoutineRef* reference, RoutineType* target_ty) {
-	if (!reference || !target_ty)
-		raise_parse_error("invalid contextual routine reference");
-	if (target_ty->kind != ROUTINE && target_ty->kind != METHOD)
-		raise_parse_error(
-		    "routine reference target is not a routine-value type");
-
+Node* Parser::try_resolve_routine_reference(
+    RoutineRef* reference, RoutineType* target_ty,
+    bool* ambiguous) {
+	if (ambiguous)
+		*ambiguous = false;
+	if (!reference || !target_ty ||
+	    (target_ty->kind != ROUTINE &&
+	     target_ty->kind != METHOD))
+		return nullptr;
 	std::vector<Callable*> candidates =
 	    routine_reference_candidates(
 	        reference->candidates);
-	if (candidates.empty())
-		raise_parse_error(
-		    "routine reference does not name a routine or method");
-
 	std::vector<Callable*> compatible;
 	for (Callable* candidate : candidates) {
 		bool category_matches = false;
@@ -7571,44 +8047,64 @@ Node* Parser::resolve_routine_reference(
 			compatible.push_back(candidate);
 	}
 
-	if (compatible.empty()) {
-		std::string category = target_ty->kind == METHOD
-		    ? "procedure/function of object"
-		    : "plain procedure/function";
-		raise_parse_error(
-		    "no overload of the routine reference is compatible with " +
-		    category + " target");
+	if (compatible.size() != 1) {
+		if (ambiguous &&
+		    compatible.size() > 1)
+			*ambiguous = true;
+		return nullptr;
 	}
-	if (compatible.size() != 1)
-		raise_parse_error(
-		    "routine reference is ambiguous for the destination "
-		    "routine type");
 	if (target_ty->kind == METHOD &&
 	    reference->receiver &&
 	    !(reference->receiver->ty &&
 	      reference->receiver->ty->is_reference_type()) &&
 	    !is_referenceable(reference->receiver))
-		raise_parse_error(
-		    "an of-object routine reference requires a stable "
-		    "object receiver");
+		return nullptr;
 
-	reference->resolved = compatible.front();
-	reference->ty = target_ty;
+	auto result = new RoutineRef(
+	    reference->receiver,
+	    reference->candidates);
+	result->resolved = compatible.front();
+	result->ty = target_ty;
 	if (auto method =
 	        dynamic_cast<Method*>(
-	            reference->resolved);
+	            result->resolved);
 	    method && method->is_static) {
-		Node* qualifier = reference->receiver;
-		reference->receiver = nullptr;
+		Node* qualifier = result->receiver;
+		result->receiver = nullptr;
 		if (qualifier &&
 		    !dynamic_cast<ClassRefValue*>(
 		        qualifier) &&
 		    !dynamic_cast<TypeMemberQualifier*>(
 		        qualifier))
 			return new EvaluateThen(
-			    qualifier, reference);
+			    qualifier, result);
 	}
-	return reference;
+	return result;
+}
+
+Node* Parser::resolve_routine_reference(
+    RoutineRef* reference, RoutineType* target_ty) {
+	if (!reference || !target_ty)
+		raise_parse_error("invalid contextual routine reference");
+	if (target_ty->kind != ROUTINE && target_ty->kind != METHOD)
+		raise_parse_error(
+		    "routine reference target is not a routine-value type");
+	bool ambiguous = false;
+	if (Node* result =
+	        try_resolve_routine_reference(
+	            reference, target_ty,
+	            &ambiguous))
+		return result;
+	if (ambiguous)
+		raise_parse_error(
+		    "routine reference is ambiguous for the destination "
+		    "routine type");
+	std::string category = target_ty->kind == METHOD
+	    ? "procedure/function of object"
+	    : "plain procedure/function";
+	raise_parse_error(
+	    "no overload of the routine reference is compatible with " +
+	    category + " target");
 }
 
 Node* Parser::resolve_routine_code_reference(
@@ -7648,23 +8144,90 @@ Node* Parser::resolve_routine_code_reference(
 		    "a bound method code reference requires a stable "
 		    "object receiver");
 
-	reference->resolved = candidate;
-	reference->code_only = true;
-	reference->ty = pointer_type();
+	auto result = new RoutineRef(
+	    reference->receiver,
+	    reference->candidates);
+	result->resolved = candidate;
+	result->code_only = true;
+	result->ty = pointer_type();
 	if (auto method =
 	        dynamic_cast<Method*>(candidate);
 	    method && method->is_static) {
-		Node* qualifier = reference->receiver;
-		reference->receiver = nullptr;
+		Node* qualifier = result->receiver;
+		result->receiver = nullptr;
 		if (qualifier &&
 		    !dynamic_cast<ClassRefValue*>(
 		        qualifier) &&
 		    !dynamic_cast<TypeMemberQualifier*>(
 		        qualifier))
 			return new EvaluateThen(
-			    qualifier, reference);
+			    qualifier, result);
 	}
-	return reference;
+	return result;
+}
+
+static bool callable_accepts_receiver(
+    Callable* callable, Node* receiver) {
+	auto method =
+	    dynamic_cast<Method*>(callable);
+	if (!method)
+		return receiver == nullptr;
+	if (method->is_static)
+		return receiver != nullptr;
+	if (!receiver || !method->owner_class)
+		return false;
+
+	Type* actual_type = receiver->ty;
+	if (auto class_reference =
+	        dynamic_cast<ClassRefType*>(
+	            actual_type))
+		actual_type =
+		    class_reference->target;
+	else if (auto pointer =
+	             dynamic_cast<PointerType*>(
+	                 actual_type);
+	         pointer &&
+	         (dynamic_cast<RecordType*>(
+	              pointer->item_type) ||
+	          dynamic_cast<PackedRecordType*>(
+	              pointer->item_type) ||
+	          dynamic_cast<ObjectType*>(
+	              pointer->item_type)))
+		// Records and old-style objects are value types, so their method Self
+		// is ^Owner. Receiver viability is a relation between the referenced
+		// aggregate type and the declared owner, not between the pointer
+		// carrier and Owner. C++ member application performs the corresponding
+		// `->`; do not give this receiver a separate overload score.
+		actual_type = pointer->item_type;
+	const bool type_qualifier =
+	    dynamic_cast<TypeMemberQualifier*>(
+	        receiver) != nullptr;
+	switch (method->ty->kind) {
+	case CLASS_METHOD:
+		return dynamic_cast<ClassType*>(
+		           actual_type) &&
+		       actual_type->is_subtype_of(
+		           method->owner_class);
+	case CONSTRUCTOR:
+		return !type_qualifier &&
+		       actual_type &&
+		       actual_type->is_subtype_of(
+		           method->owner_class);
+	case METHOD:
+	case DESTRUCTOR:
+		return !type_qualifier &&
+		       !dynamic_cast<ClassRefType*>(
+		           receiver->ty) &&
+		       actual_type &&
+		       actual_type->is_subtype_of(
+		           method->owner_class);
+	case CLASS_CONSTRUCTOR:
+	case CLASS_DESTRUCTOR:
+		return false;
+	case ROUTINE:
+		return false;
+	}
+	return false;
 }
 
 Parser::FinalizedCall Parser::finalize_call(Node* target,
@@ -7683,6 +8246,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 	}
 	Callable* chosen = nullptr;
+	std::optional<CallableMatch> chosen_match;
 	RoutineType* value_rty = nullptr;
 	Node* qualifier_effect = nullptr;
 	if (auto c = dynamic_cast<Callable*>(target)) {
@@ -7709,7 +8273,11 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				        "' in call to '" +
 				        name_for_error + "'");
 		auto match =
-		    match_callable_arguments(c, args);
+		    callable_accepts_receiver(
+		        c, receiver)
+		        ? match_callable_arguments(
+		              c, args)
+		        : std::nullopt;
 		if (!match) {
 			const BuiltinDesc* builtin =
 			    c->builtin_desc
@@ -7760,7 +8328,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			std::vector<Callable*> candidates{c};
 			std::vector<std::pair<
 			    Callable*,
-			    std::vector<MatchRank>>> viable;
+			    CallableMatch>> viable;
 			if (match)
 				viable.push_back(
 				    {c, *match});
@@ -7769,22 +8337,26 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				expected_return_type, candidates, viable, none, false);
 		}
 		chosen = c;
+		chosen_match = std::move(match);
 	} else if (auto os = dynamic_cast<OverloadSet*>(target)) {
 		std::vector<Callable*> candidates = os->members;
 		std::vector<std::pair<
 		    Callable*,
-		    std::vector<MatchRank>>> viable;
+		    CallableMatch>> viable;
 		for (auto* c : candidates) {
 			if (name_for_error.empty() && !c->pas_name.empty()) {
 				name_for_error = c->pas_name;
 			}
-			auto costs =
+			if (!callable_accepts_receiver(
+			        c, receiver))
+				continue;
+			auto match =
 			    match_callable_arguments(c, args);
-			if (costs &&
+			if (match &&
 			    (!expected_return_type ||
 			     static_cast<RoutineType*>(c->ty)->return_type == expected_return_type))
 				viable.push_back(
-				    {c, std::move(*costs)});
+				    {c, std::move(*match)});
 		}
 		if (viable.empty()) {
 			std::vector<Callable*> none;
@@ -7792,31 +8364,45 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				expected_return_type, candidates, viable, none, false);
 		}
 		std::vector<Callable*> non_dominated;
-		for (size_t i = 0; i < viable.size(); i++) {
-			bool dom = false;
-			for (size_t j = 0; j < viable.size(); j++) {
-				if (i != j && dominates(viable[j].second, viable[i].second)) {
-					dom = true;
-					break;
+		if (Callable* numeric =
+		        predefined_numeric_choice(
+		            viable, args)) {
+			// Predefined numeric operators are one parametric language
+			// family. The concrete System declarations expose its possible
+			// carriers; Delphi promotion selects one of them before ordinary
+			// user-overload dominance is considered.
+			non_dominated.push_back(
+			    numeric);
+		} else {
+			for (size_t i = 0;
+			     i < viable.size(); i++) {
+				bool dom = false;
+				for (size_t j = 0;
+				     j < viable.size(); j++) {
+					if (i != j &&
+					    dominates(
+					        viable[j].second.ranks,
+					        viable[i].second.ranks)) {
+						dom = true;
+						break;
+					}
 				}
+				if (!dom)
+					non_dominated.push_back(
+					    viable[i].first);
 			}
-			if (!dom)
-				non_dominated.push_back(viable[i].first);
-		}
-		if (non_dominated.size() != 1) {
-			if (Callable* literal_choice =
-			        contextual_integer_literal_tie_break(
-			            viable,
-			            non_dominated,
-			            args))
-				non_dominated = {
-				    literal_choice};
 		}
 		if (non_dominated.size() != 1) {
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
 				expected_return_type, candidates, viable, non_dominated, true);
 		}
 		chosen = non_dominated[0];
+		for (auto& entry : viable)
+			if (entry.first == chosen) {
+				chosen_match =
+				    std::move(entry.second);
+				break;
+			}
 	} else {
 		value_rty = target
 		    ? dynamic_cast<RoutineType*>(target->ty)
@@ -7831,6 +8417,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			    error_location,
 			    "routine value has the wrong result type");
 	}
+	if (chosen_match)
+		args = chosen_match->arguments;
 	if (auto method = dynamic_cast<Method*>(chosen)) {
 		if (method->is_static) {
 			if (method->ty->kind != ROUTINE)
@@ -7924,22 +8512,51 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	auto rty = chosen
 	    ? static_cast<RoutineType*>(chosen->ty)
 	    : value_rty;
-	while (args.size() < rty->formals.size()) {
-		auto& p = rty->formals[args.size()];
-		if (!p.default_value) {
-			emit_parse_error_at(error_location, "missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
-		}
-		args.push_back(p.default_value);
-	}
-	if (args.size() > rty->formals.size()) {
-		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
-	}
 	const BuiltinDesc* builtin = chosen
 	    ? (chosen->builtin_desc
 	           ? chosen->builtin_desc
 	           : lookup_builtin_desc(
 	                 chosen->cxx_name))
 	    : nullptr;
+	while (args.size() < rty->formals.size()) {
+		auto& p = rty->formals[args.size()];
+		if (!p.default_value) {
+			emit_parse_error_at(error_location, "missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
+		}
+		MatchFailure failure;
+		auto match = match_argument(
+		    p, p.default_value, builtin,
+		    args.size(), true, &failure);
+		if (!match)
+			emit_parse_error_at(
+			    error_location,
+			    "default value for parameter '" +
+			        p.pas_name +
+			        "' is not applicable");
+		args.push_back(match->value);
+	}
+	if (args.size() > rty->formals.size()) {
+		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
+	}
+	if (!chosen && value_rty) {
+		std::vector<Node*> converted;
+		converted.reserve(args.size());
+		for (size_t i = 0; i < args.size();
+		     ++i) {
+			MatchFailure failure;
+			auto match = match_argument(
+			    value_rty->formals[i],
+			    args[i], nullptr, i, true,
+			    &failure);
+			if (!match)
+				emit_parse_error_at(
+				    error_location,
+				    "routine-value argument has an incompatible type");
+			converted.push_back(
+			    match->value);
+		}
+		args = std::move(converted);
+	}
 	if (builtin &&
 	    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
 	     builtin->generic_kind == BuiltinGenericKind::OrdinalMutation)) {
@@ -7970,76 +8587,6 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		// Pascal type is available; both omitted-type RTL formals can then
 		// retain their exact, related types at the C++ call boundary.
 		args[1] = cast(args[1], set_type->item_type);
-	}
-	for (size_t i = 0; i < args.size(); ++i) {
-		MatchFailure failure;
-		if (match_argument(
-		        rty->formals[i], args[i],
-		        builtin, i, true, &failure))
-			continue;
-		// Selection and application deliberately use the same matcher.
-		// Reimplementing compatibility here previously let routine values
-		// and default arguments obey different var/out rules from named calls.
-		if (failure ==
-		    MatchFailure::PackedProjection)
-			emit_parse_error_at(
-			    error_location,
-			    "packed-record field cannot yet be passed as var/out "
-			    "parameter '" +
-			        rty->formals[i].pas_name +
-			        "'");
-		if (failure ==
-		    MatchFailure::NotStorageBacked)
-			emit_parse_error_at(
-			    error_location,
-			    "argument for var/out parameter '" +
-			        rty->formals[i].pas_name +
-			        "' is not a storage-backed expression");
-		if (failure ==
-		    MatchFailure::OrdinalRequired)
-			emit_parse_error_at(
-			    error_location,
-			    name_for_error +
-			        " requires an ordinal argument");
-		emit_parse_error_at(
-		    error_location,
-		    "argument for parameter '" +
-		        rty->formals[i].pas_name +
-		        "' has an incompatible type");
-	}
-	// Insert Cast for any arg whose type differs from the formal.
-	for (size_t i = 0; i < args.size(); i++) {
-		Type* t = rty->formals[i].ty;
-		if (builtin &&
-		    builtin->generic_kind == BuiltinGenericKind::Assigned &&
-		    args[i] &&
-		    (dynamic_cast<RoutineType*>(args[i]->ty) ||
-		     (args[i]->ty &&
-		      args[i]->ty->is_reference_type())))
-			continue;
-		if (t == unknown_type())
-			continue; // untyped formal preserves the argument's exact Pascal type
-		auto mode = rty->formals[i].mode;
-		if (mode == ParamMode::Var || mode == ParamMode::Out) {
-			if (args[i]->ty == t)
-				continue;
-			if (builtin &&
-			    builtin->generic_kind ==
-			        BuiltinGenericKind::PointerStorageOut &&
-			    mode == ParamMode::Out &&
-			    t == pointer_type() &&
-			    dynamic_cast<PointerType*>(
-			        args[i]->ty))
-				continue;
-			// A mutable reference is never materialized through a value
-			// conversion. Reaching this branch means selection and
-			// application have diverged, which is a compiler defect.
-			emit_parse_error_at(
-			    error_location,
-			    "internal error: selected var/out "
-			    "argument requires conversion");
-		}
-		args[i] = cast(args[i], t);
 	}
 	return FinalizedCall{
 	    receiver, chosen ? static_cast<Node*>(chosen) : target,

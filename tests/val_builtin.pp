@@ -1,5 +1,9 @@
 program ValBuiltin;
 
+type
+  TSignedRange = -5..5;
+  TUnsignedRange = 0..255;
+
 var
   Code: Integer;
   LongCode: LongInt;
@@ -12,6 +16,8 @@ var
   UI16: Word;
   UI32: LongWord;
   UI64: QWord;
+  SR: TSignedRange;
+  UR: TUnsignedRange;
   D: Double;
   E: Extended;
 
@@ -26,6 +32,8 @@ begin
   Val('1600', UI16, Code);
   Val('320000', UI32, Code);
   Val('640000', UI64, Code);
+  Val('-4', SR, Code);
+  Val('200', UR, Code);
   Val('1.25', D, Code);
   Val('-2.5e2', E, Code);
 

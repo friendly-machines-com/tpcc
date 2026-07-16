@@ -42,6 +42,10 @@ enum class BuiltinGenericKind {
 	// template may write a typed pointer variable without pretending that
 	// ordinary typed var/out parameters are covariant.
 	PointerStorageOut,
+	// Val parses directly into the carrier of an ordinal subrange. This is an
+	// intrinsic storage contract, not general var/out covariance: the formal
+	// must be the subrange's exact compiler-selected base carrier.
+	ValOutput,
 };
 
 enum class BuiltinSyntaxKind {
@@ -84,20 +88,46 @@ struct OrdinalBounds {
 	uint64_t max_positive;
 };
 
+/** Actual C++ scalar type after `using` aliases are resolved on the supported
+ * SysV x86-64 target. C++ overload identity uses this carrier, not the alias
+ * spelling (`t_integer` and `t_longint`, for example). */
+enum class IntrinsicCarrier {
+	UInt8,
+	Int8,
+	UInt16,
+	Int16,
+	UInt32,
+	Int32,
+	UInt64,
+	Int64,
+	Float,
+	Double,
+	LongDouble,
+	Character,
+	AnsiString,
+	Text,
+	File,
+};
+
 class IntrinsicType: public Type {
 public:
 	std::string cxx_name;
 	std::optional<int> rank;
 	std::optional<OrdinalBounds> ordinal_bounds;
 	std::optional<TypeLayout> layout;
+	std::optional<IntrinsicCarrier> carrier;
 	IntrinsicType(SourceLocation source_location,
 	              std::string cxx_name,
 	              std::optional<int> rank,
 	              std::optional<OrdinalBounds> ordinal_bounds = {},
-	              std::optional<TypeLayout> layout = {});
+	              std::optional<TypeLayout> layout = {},
+	              std::optional<IntrinsicCarrier> carrier = {});
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool is_subtype_of(const Type* target) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

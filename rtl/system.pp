@@ -87,8 +87,6 @@ operator+(a, b: Cardinal): Cardinal; external name '::u_system::p_add';
 operator+(a, b: Integer): Integer; external name '::u_system::p_add';
 operator+(a, b: QWord): QWord; external name '::u_system::p_add';
 operator+(a, b: Int64): Int64; external name '::u_system::p_add';
-operator+(a, b: Single): Single; external name '::u_system::p_add';
-operator+(a, b: Double): Double; external name '::u_system::p_add';
 operator+(a, b: Extended): Extended; external name '::u_system::p_add';
 
 operator-(a: Cardinal): Cardinal; external name '::u_system::p_negative';
@@ -103,24 +101,21 @@ operator-(a, b: Cardinal): Cardinal; external name '::u_system::p_subtract';
 operator-(a, b: Integer): Integer; external name '::u_system::p_subtract';
 operator-(a, b: QWord): QWord; external name '::u_system::p_subtract';
 operator-(a, b: Int64): Int64; external name '::u_system::p_subtract';
-operator-(a, b: Single): Single; external name '::u_system::p_subtract';
-operator-(a, b: Double): Double; external name '::u_system::p_subtract';
 operator-(a, b: Extended): Extended; external name '::u_system::p_subtract';
 
 operator*(a, b: Cardinal): Cardinal; external name '::u_system::p_multiply';
 operator*(a, b: Integer): Integer; external name '::u_system::p_multiply';
 operator*(a, b: QWord): QWord; external name '::u_system::p_multiply';
 operator*(a, b: Int64): Int64; external name '::u_system::p_multiply';
-operator*(a, b: Single): Single; external name '::u_system::p_multiply';
-operator*(a, b: Double): Double; external name '::u_system::p_multiply';
 operator*(a, b: Extended): Extended; external name '::u_system::p_multiply';
 
-operator/(a, b: Cardinal): Double; external name '::u_system::p_divide';
-operator/(a, b: Integer): Double; external name '::u_system::p_divide';
-operator/(a, b: QWord): Double; external name '::u_system::p_divide';
-operator/(a, b: Int64): Double; external name '::u_system::p_divide';
-operator/(a, b: Single): Single; external name '::u_system::p_divide';
-operator/(a, b: Double): Double; external name '::u_system::p_divide';
+operator/(a, b: Cardinal): Extended; external name '::u_system::p_divide';
+operator/(a, b: Integer): Extended; external name '::u_system::p_divide';
+operator/(a, b: QWord): Extended; external name '::u_system::p_divide';
+operator/(a, b: Int64): Extended; external name '::u_system::p_divide';
+// Delphi real division always promotes both operands and the result to
+// Extended. The concrete integer rows above remain only as promotion
+// candidates and therefore return Extended as well.
 operator/(a, b: Extended): Extended; external name '::u_system::p_divide';
 
 operator :=(a: Cardinal): Cardinal; external name '::u_system::p_assign';
@@ -140,54 +135,38 @@ operator >=(a, b: Char): Boolean; external name '::u_system::p_greaterthanorequa
 // No operand is pre-cast merely to choose an operator overload.
 operator =(a, b: Pointer): Boolean; external name '::u_system::p_equal';
 
-// Comparison does not change an ordinal value, so every concrete integer
-// definition has an exact signature. This lets ordinary overload scoring
-// choose from the source operands directly; the parser must not invent a
-// common arithmetic type before looking up the operator.
-operator <(a, b: Byte): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: ShortInt): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: Word): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: SmallInt): Boolean; external name '::u_system::p_lessthan';
+// These are the concrete carriers of Delphi's predefined numeric promotion
+// family. Source operands remain untouched while user operators are scored;
+// only the selected predefined operation converts both operands to one row.
 operator <(a, b: Cardinal): Boolean; external name '::u_system::p_lessthan';
 operator <(a, b: Integer): Boolean; external name '::u_system::p_lessthan';
 operator <(a, b: QWord): Boolean; external name '::u_system::p_lessthan';
 operator <(a, b: Int64): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: Extended): Boolean; external name '::u_system::p_lessthan';
 
-operator <=(a, b: Byte): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: ShortInt): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: Word): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: SmallInt): Boolean; external name '::u_system::p_lessthanorequal';
 operator <=(a, b: Cardinal): Boolean; external name '::u_system::p_lessthanorequal';
 operator <=(a, b: Integer): Boolean; external name '::u_system::p_lessthanorequal';
 operator <=(a, b: QWord): Boolean; external name '::u_system::p_lessthanorequal';
 operator <=(a, b: Int64): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: Extended): Boolean; external name '::u_system::p_lessthanorequal';
 
-operator =(a, b: Byte): Boolean; external name '::u_system::p_equal';
-operator =(a, b: ShortInt): Boolean; external name '::u_system::p_equal';
-operator =(a, b: Word): Boolean; external name '::u_system::p_equal';
-operator =(a, b: SmallInt): Boolean; external name '::u_system::p_equal';
 operator =(a, b: Cardinal): Boolean; external name '::u_system::p_equal';
 operator =(a, b: Integer): Boolean; external name '::u_system::p_equal';
 operator =(a, b: QWord): Boolean; external name '::u_system::p_equal';
 operator =(a, b: Int64): Boolean; external name '::u_system::p_equal';
+operator =(a, b: Extended): Boolean; external name '::u_system::p_equal';
 
-operator >(a, b: Byte): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: ShortInt): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: Word): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: SmallInt): Boolean; external name '::u_system::p_greaterthan';
 operator >(a, b: Cardinal): Boolean; external name '::u_system::p_greaterthan';
 operator >(a, b: Integer): Boolean; external name '::u_system::p_greaterthan';
 operator >(a, b: QWord): Boolean; external name '::u_system::p_greaterthan';
 operator >(a, b: Int64): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: Extended): Boolean; external name '::u_system::p_greaterthan';
 
-operator >=(a, b: Byte): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: ShortInt): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: Word): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: SmallInt): Boolean; external name '::u_system::p_greaterthanorequal';
 operator >=(a, b: Cardinal): Boolean; external name '::u_system::p_greaterthanorequal';
 operator >=(a, b: Integer): Boolean; external name '::u_system::p_greaterthanorequal';
 operator >=(a, b: QWord): Boolean; external name '::u_system::p_greaterthanorequal';
 operator >=(a, b: Int64): Boolean; external name '::u_system::p_greaterthanorequal';
+operator >=(a, b: Extended): Boolean; external name '::u_system::p_greaterthanorequal';
 
 operator div(a, b: Cardinal): Cardinal; external name '::u_system::p_intdivide';
 operator div(a, b: Integer): Integer; external name '::u_system::p_intdivide';
@@ -216,36 +195,23 @@ operator not(a: SizeInt): SizeInt; external name '::u_system::p_logicalnot';
 operator not(a: SizeUInt): SizeUInt; external name '::u_system::p_logicalnot';
 
 operator and(a, b: Cardinal): Cardinal; external name '::u_system::p_bitwiseand';
+operator and(a, b: Integer): Integer; external name '::u_system::p_bitwiseand';
+operator and(a, b: QWord): QWord; external name '::u_system::p_bitwiseand';
+operator and(a, b: Int64): Int64; external name '::u_system::p_bitwiseand';
 operator or(a, b: Cardinal): Cardinal; external name '::u_system::p_bitwiseor';
+operator or(a, b: Integer): Integer; external name '::u_system::p_bitwiseor';
+operator or(a, b: QWord): QWord; external name '::u_system::p_bitwiseor';
+operator or(a, b: Int64): Int64; external name '::u_system::p_bitwiseor';
 operator xor(a, b: Cardinal): Cardinal; external name '::u_system::p_bitwisexor';
+operator xor(a, b: Integer): Integer; external name '::u_system::p_bitwisexor';
+operator xor(a, b: QWord): QWord; external name '::u_system::p_bitwisexor';
+operator xor(a, b: Int64): Int64; external name '::u_system::p_bitwisexor';
 
 operator shl(a, b: Cardinal): Cardinal; external name '::u_system::p_leftshift';
 operator shr(a, b: Cardinal): Cardinal; external name '::u_system::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
 
-operator and(a, b: Int64): Cardinal; external name '::u_system::p_bitwiseand';
-operator or(a, b: Int64): Cardinal; external name '::u_system::p_bitwiseor';
-operator xor(a, b: Int64): Cardinal; external name '::u_system::p_bitwisexor';
-
 operator shl(a, b: Int64): Cardinal; external name '::u_system::p_leftshift';
 operator shr(a, b: Int64): Cardinal; external name '::u_system::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
-
-operator <(a, b: Single): Boolean; external name '::u_system::p_lessthan';
-operator <=(a, b: Single): Boolean; external name '::u_system::p_lessthanorequal';
-operator =(a, b: Single): Boolean; external name '::u_system::p_equal';
-operator >(a, b: Single): Boolean; external name '::u_system::p_greaterthan';
-operator >=(a, b: Single): Boolean; external name '::u_system::p_greaterthanorequal';
-
-operator <(a, b: Double): Boolean; external name '::u_system::p_lessthan';
-operator <=(a, b: Double): Boolean; external name '::u_system::p_lessthanorequal';
-operator =(a, b: Double): Boolean; external name '::u_system::p_equal';
-operator >(a, b: Double): Boolean; external name '::u_system::p_greaterthan';
-operator >=(a, b: Double): Boolean; external name '::u_system::p_greaterthanorequal';
-
-operator <(a, b: Extended): Boolean; external name '::u_system::p_lessthan';
-operator <=(a, b: Extended): Boolean; external name '::u_system::p_lessthanorequal';
-operator =(a, b: Extended): Boolean; external name '::u_system::p_equal';
-operator >(a, b: Extended): Boolean; external name '::u_system::p_greaterthan';
-operator >=(a, b: Extended): Boolean; external name '::u_system::p_greaterthanorequal';
 operator in(const item; const values): Boolean; external name '::u_system::p_in';
 
 function ord(const x): Cardinal; external name '::u_system::p_ord'; // generic intrinsic

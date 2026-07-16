@@ -11,17 +11,20 @@ IntrinsicType::IntrinsicType(SourceLocation source_location,
 			     std::string cxx_name,
 			     std::optional<int> rank,
 			     std::optional<OrdinalBounds> ordinal_bounds,
-			     std::optional<TypeLayout> layout)
+			     std::optional<TypeLayout> layout,
+			     std::optional<IntrinsicCarrier> carrier)
     : Type(std::move(source_location)),
       cxx_name(std::move(cxx_name)),
       rank(std::move(rank)),
       ordinal_bounds(std::move(ordinal_bounds)),
-      layout(std::move(layout)) {}
+      layout(std::move(layout)),
+      carrier(std::move(carrier)) {}
 
 Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
 
-// Integer rows are ordered narrowest -> widest; the ordering is what
-// common_arith_type and conversion_cost use to compute widening.
+// Integer rows are ordered narrowest -> widest. IntrinsicType's destination
+// conversion rule uses the rank and explicit bounds to score widening and
+// narrowing without imposing one common type before overload selection.
 namespace {
 constexpr uint64_t unsigned_max_for_bits(unsigned bits) {
 	return bits == 64 ? UINT64_MAX : ((uint64_t{1} << bits) - 1);
@@ -39,56 +42,66 @@ constexpr OrdinalBounds signed_bounds(unsigned bits) {
 	};
 }
 
-IntrinsicType k_byte(SourceLocation::builtin(), "::u_system::t_byte", 0, unsigned_bounds(8), TypeLayout{1, 1});
-IntrinsicType k_shortint(SourceLocation::builtin(), "::u_system::t_shortint", 1, signed_bounds(8), TypeLayout{1, 1});
-IntrinsicType k_word(SourceLocation::builtin(), "::u_system::t_word", 2, unsigned_bounds(16), TypeLayout{2, 2});
-IntrinsicType k_smallint(SourceLocation::builtin(), "::u_system::t_smallint", 3, signed_bounds(16), TypeLayout{2, 2});
-IntrinsicType k_longword(SourceLocation::builtin(), "::u_system::t_longword", 4, unsigned_bounds(32), TypeLayout{4, 4});
-IntrinsicType k_integer(SourceLocation::builtin(), "::u_system::t_integer", 5, signed_bounds(32), TypeLayout{4, 4});
-IntrinsicType k_longint(SourceLocation::builtin(), "::u_system::t_longint", 6, signed_bounds(32), TypeLayout{4, 4});
-IntrinsicType k_qword(SourceLocation::builtin(), "::u_system::t_qword", 7, unsigned_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_int64(SourceLocation::builtin(), "::u_system::t_int64", 8, signed_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_byte(SourceLocation::builtin(), "::u_system::t_byte", 0, unsigned_bounds(8), TypeLayout{1, 1}, IntrinsicCarrier::UInt8);
+IntrinsicType k_shortint(SourceLocation::builtin(), "::u_system::t_shortint", 1, signed_bounds(8), TypeLayout{1, 1}, IntrinsicCarrier::Int8);
+IntrinsicType k_word(SourceLocation::builtin(), "::u_system::t_word", 2, unsigned_bounds(16), TypeLayout{2, 2}, IntrinsicCarrier::UInt16);
+IntrinsicType k_smallint(SourceLocation::builtin(), "::u_system::t_smallint", 3, signed_bounds(16), TypeLayout{2, 2}, IntrinsicCarrier::Int16);
+IntrinsicType k_longword(SourceLocation::builtin(), "::u_system::t_longword", 4, unsigned_bounds(32), TypeLayout{4, 4}, IntrinsicCarrier::UInt32);
+IntrinsicType k_integer(SourceLocation::builtin(), "::u_system::t_integer", 5, signed_bounds(32), TypeLayout{4, 4}, IntrinsicCarrier::Int32);
+IntrinsicType k_longint(SourceLocation::builtin(), "::u_system::t_longint", 6, signed_bounds(32), TypeLayout{4, 4}, IntrinsicCarrier::Int32);
+IntrinsicType k_qword(SourceLocation::builtin(), "::u_system::t_qword", 7, unsigned_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::UInt64);
+IntrinsicType k_int64(SourceLocation::builtin(), "::u_system::t_int64", 8, signed_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::Int64);
 IntrinsicType k_set(SourceLocation::builtin(), "::u_system::t_set", {});
-IntrinsicType k_single(SourceLocation::builtin(), "::u_system::t_single", {}, {}, TypeLayout{4, 4});
-IntrinsicType k_double(SourceLocation::builtin(), "::u_system::t_double", {}, {}, TypeLayout{8, 8});
-IntrinsicType k_extended(SourceLocation::builtin(), "::u_system::t_extended", {}, {}, TypeLayout{16, 16});
+IntrinsicType k_single(SourceLocation::builtin(), "::u_system::t_single", {}, {}, TypeLayout{4, 4}, IntrinsicCarrier::Float);
+IntrinsicType k_double(SourceLocation::builtin(), "::u_system::t_double", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::Double);
+IntrinsicType k_extended(SourceLocation::builtin(), "::u_system::t_extended", {}, {}, TypeLayout{16, 16}, IntrinsicCarrier::LongDouble);
 EnumType k_boolean(SourceLocation::builtin(), "::u_system::t_boolean", "false", "true");
-IntrinsicType k_char(SourceLocation::builtin(), "::u_system::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1});
+IntrinsicType k_char(SourceLocation::builtin(), "::u_system::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1}, IntrinsicCarrier::Character);
 ShortStringType k_shortstring(SourceLocation::builtin(), 255);
-IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{256, 1});
-IntrinsicType k_text(SourceLocation::builtin(), "::u_system::t_text", {}, {}, TypeLayout{8, 8});
-IntrinsicType k_file(SourceLocation::builtin(), "::u_system::t_file", {}, {}, TypeLayout{8, 8});
+IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{256, 1}, IntrinsicCarrier::AnsiString);
+IntrinsicType k_text(SourceLocation::builtin(), "::u_system::t_text", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::Text);
+IntrinsicType k_file(SourceLocation::builtin(), "::u_system::t_file", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::File);
 PointerType k_pointer(
     SourceLocation::builtin(), nullptr,
     "::u_system::t_pointer");
-IntrinsicType k_ptrint(SourceLocation::builtin(), "::u_system::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_ptruint(SourceLocation::builtin(), "::u_system::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_sizeint(SourceLocation::builtin(), "::u_system::t_sizeint", 8, signed_bounds(64), TypeLayout{8, 8});
-IntrinsicType k_sizeuint(SourceLocation::builtin(), "::u_system::t_sizeuint", 7, unsigned_bounds(64), TypeLayout{8, 8});
+IntrinsicType k_ptrint(SourceLocation::builtin(), "::u_system::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::Int64);
+IntrinsicType k_ptruint(SourceLocation::builtin(), "::u_system::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::UInt64);
+IntrinsicType k_sizeint(SourceLocation::builtin(), "::u_system::t_sizeint", 8, signed_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::Int64);
+IntrinsicType k_sizeuint(SourceLocation::builtin(), "::u_system::t_sizeuint", 7, unsigned_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::UInt64);
 IntrinsicType k_fixedarray(SourceLocation::builtin(), "::u_system::t_fixedarray", {});
 IntrinsicType k_unknown(SourceLocation::builtin(), "::u_system::tpcc_unknown_type", {});
-Frame* k_tmethod_children = new Frame(nullptr);
-RecordType k_tmethod(SourceLocation::builtin(), k_tmethod_children);
-StorageSlot* k_tmethod_code_field = nullptr;
-StorageSlot* k_tmethod_data_field = nullptr;
-const bool k_tmethod_initialized = []() {
-	k_tmethod.cxx_name = "::u_system::t_tmethod";
-	k_tmethod_code_field =
-	    new StorageSlot("p_code", &k_pointer);
-	k_tmethod_data_field =
-	    new StorageSlot("p_data", &k_pointer);
-	k_tmethod.children->register_variable(
-	    "code", k_tmethod_code_field, &k_pointer);
-	k_tmethod.children->register_variable(
-	    "data", k_tmethod_data_field, &k_pointer);
-	k_tmethod.fields.push_back(
-	    AggregateField{
-	        "code", k_tmethod_code_field, &k_pointer});
-	k_tmethod.fields.push_back(
-	    AggregateField{
-	        "data", k_tmethod_data_field, &k_pointer});
-	return true;
-}();
+
+struct TMethodDefinition {
+	Frame children;
+	RecordType type;
+	StorageSlot code;
+	StorageSlot data;
+
+	TMethodDefinition()
+	    : children(nullptr),
+	      type(SourceLocation::builtin(),
+	           &children),
+	      code("p_code", &k_pointer),
+	      data("p_data", &k_pointer) {
+		type.cxx_name =
+		    "::u_system::t_tmethod";
+		children.register_variable(
+		    "code", &code, &k_pointer);
+		children.register_variable(
+		    "data", &data, &k_pointer);
+		type.fields.push_back(
+		    AggregateField{
+		        "code", &code, &k_pointer});
+		type.fields.push_back(
+		    AggregateField{
+		        "data", &data, &k_pointer});
+	}
+};
+
+TMethodDefinition& tmethod_definition() {
+	static TMethodDefinition definition;
+	return definition;
+}
 
 Type* const k_all_intrinsics[] = {
     &k_byte,
@@ -117,7 +130,6 @@ Type* const k_all_intrinsics[] = {
     &k_sizeuint,
     &k_fixedarray,
     &k_unknown,
-    &k_tmethod,
     //    &k_m_iobject,
 };
 } // namespace
@@ -166,16 +178,13 @@ Type* set_type() { return &k_set; }
 Type* fixedarray_type() { return &k_fixedarray; }
 Type* unknown_type() { return &k_unknown; }
 RecordType* tmethod_type() {
-	(void)k_tmethod_initialized;
-	return &k_tmethod;
+	return &tmethod_definition().type;
 }
 StorageSlot* tmethod_code_field() {
-	(void)k_tmethod_initialized;
-	return k_tmethod_code_field;
+	return &tmethod_definition().code;
 }
 StorageSlot* tmethod_data_field() {
-	(void)k_tmethod_initialized;
-	return k_tmethod_data_field;
+	return &tmethod_definition().data;
 }
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
@@ -460,7 +469,12 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_include", nullptr, {}, BuiltinGenericKind::SetMutation},
     {"::u_system::p_exclude", nullptr, {}, BuiltinGenericKind::SetMutation},
     {"::u_system::p_str", nullptr},
-    {"::u_system::p_val", nullptr},
+    {
+        .cxx_name = "::u_system::p_val",
+        .const_fold = nullptr,
+        .generic_kind =
+            BuiltinGenericKind::ValOutput,
+    },
     {"::u_system::p_octstr", nullptr},
     {"::u_system::p_strlen", nullptr},
     {
@@ -577,6 +591,9 @@ static const BuiltinDesc k_builtins[] = {
 };
 
 Type* lookup_builtin_type(std::string cxx_name) {
+	if (cxx_name ==
+	    "::u_system::t_tmethod")
+		return tmethod_type();
 	for (auto t : k_all_intrinsics) {
 		if (auto q = dynamic_cast<IntrinsicType*>(t)) {
 			if (q->cxx_name == cxx_name) {

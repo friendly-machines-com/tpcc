@@ -141,21 +141,68 @@ bool cxx_callable_signatures_collide(
 	           b->ty);
 }
 
-static CallableRegistration callable_pair_result(
+static bool same_emitted_declaration_scope(
+    Callable* a, Callable* b) {
+	if (!a || !b || a->is_external ||
+	    b->is_external)
+		return false;
+	auto a_method = dynamic_cast<Method*>(a);
+	auto b_method = dynamic_cast<Method*>(b);
+	if (a_method || b_method) {
+		if (!a_method || !b_method ||
+		    a_method->owner_class !=
+		        b_method->owner_class)
+			return false;
+		auto in_metaclass =
+		    [](const Method* method) {
+			    return method->ty->kind ==
+			               CLASS_METHOD ||
+			           method->ty->kind ==
+			               CLASS_CONSTRUCTOR ||
+			           method->ty->kind ==
+			               CLASS_DESTRUCTOR;
+		    };
+		return in_metaclass(a_method) ==
+		       in_metaclass(b_method);
+	}
+	// Two standalone declarations registered in one Frame emit into the same
+	// unit namespace (or the same nested C++ block). Unit lookup may later
+	// combine declarations from different Frames, but registration never does.
+	return true;
+}
+
+static CallableRegistration::Kind callable_pair_result(
     Callable* existing, Callable* incoming) {
-	if (existing->ty->same_signature_as(
-	        incoming->ty))
-		return CallableRegistration::Rejected;
-	if (cxx_callable_signatures_collide(
+	if (existing->ty
+	        ->same_overload_signature_as(
+	            incoming->ty)) {
+		// `operator :=` is the one callable family whose destination is
+		// source-visible through assignment context rather than through an
+		// argument. Distinct result Type* values therefore distinguish its
+		// declarations. Ordinary routines and every other operator cannot
+		// overload by result.
+		const bool distinct_conversion_results =
+		    existing->pas_name == ":=" &&
+		    incoming->pas_name == ":=" &&
+		    existing->ty->return_type !=
+		        incoming->ty->return_type;
+		if (!distinct_conversion_results)
+			return CallableRegistration::Kind::Rejected;
+	}
+	if (same_emitted_declaration_scope(
+	        existing, incoming) &&
+	    cxx_callable_signatures_collide(
 	        existing, incoming)) {
 		// C++ does not use a function result to distinguish overloads, and
-		// several generative Pascal types erase to the same carrier. Renaming
-		// here would disconnect declarations, implementations, and virtual
-		// dispatch, so reject the unsupported lowering at registration.
-		return CallableRegistration::
+		// several generative Pascal types erase to the same carrier. The
+		// emitted owner is part of this test: one Pascal class Frame lowers
+		// instance methods and class methods into different C++ classes.
+		// Renaming would disconnect declarations, implementations, and virtual
+		// dispatch, so reject only a collision in one actual C++ scope.
+		return CallableRegistration::Kind::
 		    CxxCarrierCollision;
 	}
-	return CallableRegistration::Added;
+	return CallableRegistration::Kind::Added;
 }
 
 CallableRegistration Frame::register_callable(
@@ -163,7 +210,8 @@ CallableRegistration Frame::register_callable(
 	auto iter = value_items.find(name);
 	if (iter == value_items.end()) {
 		value_items[name] = FrameValueEntry(c, static_cast<RoutineType*>(c->ty)->return_type);
-		return CallableRegistration::Added;
+		return {
+		    CallableRegistration::Kind::Added};
 	}
 	Node* existing = iter->second.value;
 	if (auto ec = dynamic_cast<Callable*>(existing)) {
@@ -171,14 +219,17 @@ CallableRegistration Frame::register_callable(
 			auto result =
 			    callable_pair_result(ec, c);
 			if (result !=
-			    CallableRegistration::Added)
-				return result;
+			    CallableRegistration::Kind::Added)
+				return {result, existing, ec};
 			auto set = new OverloadSet(std::vector<Callable*>{ec, c});
 			iter->second.value = set;
 			iter->second.ty = nullptr;
-			return CallableRegistration::Added;
+			return {
+			    CallableRegistration::Kind::Added};
 		}
-		return CallableRegistration::Rejected;
+		return {
+		    CallableRegistration::Kind::Rejected,
+		    existing, ec};
 	}
 	if (auto os = dynamic_cast<OverloadSet*>(existing)) {
 		if (c->has_overload_directive) {
@@ -188,13 +239,20 @@ CallableRegistration Frame::register_callable(
 				    callable_pair_result(
 				        member, c);
 				if (result !=
-				    CallableRegistration::Added)
-					return result;
+				    CallableRegistration::Kind::Added)
+					return {
+					    result, existing,
+					    member};
 			}
 			os->members.push_back(c);
-			return CallableRegistration::Added;
+			return {
+			    CallableRegistration::Kind::Added};
 		}
-		return CallableRegistration::Rejected;
+		return {
+		    CallableRegistration::Kind::Rejected,
+		    existing};
 	}
-	return CallableRegistration::Rejected;
+	return {
+	    CallableRegistration::Kind::Rejected,
+	    existing};
 }

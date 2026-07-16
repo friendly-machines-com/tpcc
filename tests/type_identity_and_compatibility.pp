@@ -10,6 +10,8 @@ type
 
   TSetA = set of Byte;
   TSetB = set of Byte;
+  TNarrowSet = set of 1..10;
+  TWideSet = set of 1..20;
 
   TRangeA = 1..5;
   TRangeB = 1..5;
@@ -44,6 +46,8 @@ var
   StringB: TStringB;
   SetA: TSetA;
   SetB: TSetB;
+  NarrowSet: TNarrowSet;
+  WideSet: TWideSet;
   RangeA: TRangeA;
   RangeB: TRangeB;
   ArrayA: TArrayA;
@@ -111,7 +115,11 @@ begin
 
   ArrayB[0] := 4;
   ArrayB[1] := 5;
-  ArrayA := ArrayB;
+  ArrayA[0] := ArrayB[0];
+  ArrayA[1] := ArrayB[1];
+
+  NarrowSet := [2, 7];
+  WideSet := NarrowSet;
 
   RoutineB := @Sink;
   RoutineA := RoutineB;
@@ -143,5 +151,7 @@ begin
   if ArrayA[0] + ArrayA[1] <> 9 then
     Halt(9);
   if not Assigned(RoutineA) then
-    Halt(10)
+    Halt(10);
+  if not (7 in WideSet) then
+    Halt(11)
 end.

@@ -2377,7 +2377,24 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
+		Type* ordinal_type = c->ty;
+		while (auto range =
+		           dynamic_cast<SubrangeType*>(
+		               ordinal_type))
+			ordinal_type =
+			    range->base_type;
+		const bool wrapped_ordinal =
+		    ordinal_type == char_type() ||
+		    dynamic_cast<EnumType*>(
+		        ordinal_type);
+		if (wrapped_ordinal) {
+			fprintf(active, "static_cast<");
+			emit_type_ref(c->ty);
+			fprintf(active, ">(");
+		}
 		emit_integer_literal(active, c->value, c->negative);
+		if (wrapped_ordinal)
+			fprintf(active, ")");
 		return;
 	}
 	if (auto r = dynamic_cast<Real*>(expr)) {
@@ -2971,6 +2988,48 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
+		auto ordinal_type =
+		    [](Type* type) {
+			    while (auto range =
+			               dynamic_cast<SubrangeType*>(
+			                   type))
+				    type =
+				        range->base_type;
+			    OrdinalBounds bounds;
+			    return type == char_type() ||
+			           dynamic_cast<EnumType*>(
+			               type) ||
+			           integer_bounds(
+			               type, &bounds);
+		    };
+		if (dynamic_cast<ExplicitCast*>(ca) &&
+		    ca->a &&
+		    ordinal_type(ca->a->ty) &&
+		    ordinal_type(ca->ty)) {
+			fprintf(active,
+			    "::u_system::m_ordinal_cast<");
+			emit_type_ref(ca->ty);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+			return;
+		}
+		auto source_set =
+		    dynamic_cast<FixedSetType*>(
+		        ca->a ? ca->a->ty : nullptr);
+		auto target_set =
+		    dynamic_cast<FixedSetType*>(
+		        ca->ty);
+		if (source_set && target_set) {
+			fprintf(active,
+			    "::u_system::m_set_cast<");
+			emit_type_ref(
+			    target_set->item_type);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+			return;
+		}
 		auto source_shortstring =
 		    dynamic_cast<ShortStringType*>(
 		        ca->a ? ca->a->ty : nullptr);

@@ -8,10 +8,22 @@ class Node;
 class StorageSlot;
 class Callable;
 
-enum class CallableRegistration {
-	Added,
-	Rejected,
-	CxxCarrierCollision,
+struct CallableRegistration {
+	enum class Kind {
+		Added,
+		Rejected,
+		CxxCarrierCollision,
+	};
+
+	Kind kind;
+	/** The declaration already stored under this name. For an overload set,
+	 * this is the complete set, so a diagnostic can show every declaration
+	 * that was available when registration failed. */
+	Node* existing_binding = nullptr;
+	/** The exact member of existing_binding which conflicts with the incoming
+	 * declaration. This is retained separately because an overload-set
+	 * diagnostic must identify the relevant pair as well as show the family. */
+	Callable* conflicting_callable = nullptr;
 };
 
 struct FrameValueEntry {
@@ -64,10 +76,10 @@ public:
      *  overload rules: a second registration succeeds only if both the
      *  existing and new declarations have has_overload_directive set (in
      *  which case the slot promotes from Callable to OverloadSet, or the new
-     *  entry is appended to an existing OverloadSet). CxxCarrierCollision
-     *  reports a legal distinct Pascal signature which the current C++
-     *  lowering would emit as the same overload; it is diagnosed instead of
-     *  changing either symbol's name. */
+     *  entry is appended to an existing OverloadSet). The result retains the
+     *  existing binding and exact conflicting callable: discarding them here
+     *  would prevent declaration diagnostics from printing the prior source
+     *  location and the complete overload family. */
     CallableRegistration register_callable(
         std::string name, Callable* c);
     /** Declaration ownership query, not name lookup. This intentionally

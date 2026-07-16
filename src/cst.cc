@@ -111,6 +111,9 @@ RoutineRef::RoutineRef(Node* receiver, Node* candidates)
 RoutineEqual::RoutineEqual(Node* a, Node* b)
     : BinaryOperation(a, b) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+ExplicitCast::ExplicitCast(
+    Node* value, Type* target)
+    : Cast(value, target) {}
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
     : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
 SizeOf::SizeOf(Type* operand_type)
@@ -539,6 +542,49 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	return ConstEvalResult::not_constant();
 }
 void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }
+const char* ExplicitCast::diagnostic_kind() const {
+	return "explicit_cast";
+}
+ConstEvalResult ExplicitCast::const_eval(
+    ConstEvalContext& ctx) const {
+	ConstEvalResult value = a
+	    ? a->const_eval(ctx)
+	    : ConstEvalResult::not_constant();
+	if (value.kind !=
+	    ConstEvalResult::Kind::Success)
+		return value;
+	if (auto integer =
+	        dynamic_cast<Integer*>(
+	            value.node))
+		return const_explicit_ordinal_cast(
+		    integer->value,
+		    integer->negative, ty);
+	if (auto member =
+	        dynamic_cast<EnumMemberRef*>(
+	            value.node)) {
+		const bool negative =
+		    member->value < 0;
+		const uint64_t magnitude =
+		    negative
+		        ? static_cast<uint64_t>(
+		              -(member->value + 1)) +
+		              1
+		        : static_cast<uint64_t>(
+		              member->value);
+		return const_explicit_ordinal_cast(
+		    magnitude, negative, ty);
+	}
+	if (auto character =
+	        dynamic_cast<String*>(value.node);
+	    character &&
+	    character->ty == char_type() &&
+	    character->value.size() == 1)
+		return const_explicit_ordinal_cast(
+		    static_cast<unsigned char>(
+		        character->value.front()),
+		    false, ty);
+	return Cast::const_eval(ctx);
+}
 
 ConstantDecl::ConstantDecl(
     std::string cxx_name, Type* ty,
