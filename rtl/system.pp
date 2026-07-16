@@ -140,14 +140,63 @@ operator >=(a, b: Char): Boolean; external name '::u_system::p_greaterthanorequa
 // No operand is pre-cast merely to choose an operator overload.
 operator =(a, b: Pointer): Boolean; external name '::u_system::p_equal';
 
+// Comparison does not change an ordinal value, so every concrete integer
+// definition has an exact signature. This lets ordinary overload scoring
+// choose from the source operands directly; the parser must not invent a
+// common arithmetic type before looking up the operator.
+operator <(a, b: Byte): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: ShortInt): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: Word): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: SmallInt): Boolean; external name '::u_system::p_lessthan';
 operator <(a, b: Cardinal): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: Integer): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: QWord): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: Int64): Boolean; external name '::u_system::p_lessthan';
+
+operator <=(a, b: Byte): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: ShortInt): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: Word): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: SmallInt): Boolean; external name '::u_system::p_lessthanorequal';
 operator <=(a, b: Cardinal): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: Integer): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: QWord): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: Int64): Boolean; external name '::u_system::p_lessthanorequal';
+
+operator =(a, b: Byte): Boolean; external name '::u_system::p_equal';
+operator =(a, b: ShortInt): Boolean; external name '::u_system::p_equal';
+operator =(a, b: Word): Boolean; external name '::u_system::p_equal';
+operator =(a, b: SmallInt): Boolean; external name '::u_system::p_equal';
 operator =(a, b: Cardinal): Boolean; external name '::u_system::p_equal';
+operator =(a, b: Integer): Boolean; external name '::u_system::p_equal';
+operator =(a, b: QWord): Boolean; external name '::u_system::p_equal';
+operator =(a, b: Int64): Boolean; external name '::u_system::p_equal';
+
+operator >(a, b: Byte): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: ShortInt): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: Word): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: SmallInt): Boolean; external name '::u_system::p_greaterthan';
 operator >(a, b: Cardinal): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: Integer): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: QWord): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: Int64): Boolean; external name '::u_system::p_greaterthan';
+
+operator >=(a, b: Byte): Boolean; external name '::u_system::p_greaterthanorequal';
+operator >=(a, b: ShortInt): Boolean; external name '::u_system::p_greaterthanorequal';
+operator >=(a, b: Word): Boolean; external name '::u_system::p_greaterthanorequal';
+operator >=(a, b: SmallInt): Boolean; external name '::u_system::p_greaterthanorequal';
 operator >=(a, b: Cardinal): Boolean; external name '::u_system::p_greaterthanorequal';
-//operator <>(a, b: Cardinal): Boolean; external name '::u_system::p_notequal';
+operator >=(a, b: Integer): Boolean; external name '::u_system::p_greaterthanorequal';
+operator >=(a, b: QWord): Boolean; external name '::u_system::p_greaterthanorequal';
+operator >=(a, b: Int64): Boolean; external name '::u_system::p_greaterthanorequal';
+
 operator div(a, b: Cardinal): Cardinal; external name '::u_system::p_intdivide';
+operator div(a, b: Integer): Integer; external name '::u_system::p_intdivide';
+operator div(a, b: QWord): QWord; external name '::u_system::p_intdivide';
+operator div(a, b: Int64): Int64; external name '::u_system::p_intdivide';
 operator mod(a, b: Cardinal): Cardinal; external name '::u_system::p_modulus';
+operator mod(a, b: Integer): Integer; external name '::u_system::p_modulus';
+operator mod(a, b: QWord): QWord; external name '::u_system::p_modulus';
+operator mod(a, b: Int64): Int64; external name '::u_system::p_modulus';
 
 // Delphi exposes only the named unary operator LogicalNot: the same `not`
 // token means Boolean negation for Boolean and width-preserving bitwise
@@ -172,15 +221,6 @@ operator xor(a, b: Cardinal): Cardinal; external name '::u_system::p_bitwisexor'
 
 operator shl(a, b: Cardinal): Cardinal; external name '::u_system::p_leftshift';
 operator shr(a, b: Cardinal): Cardinal; external name '::u_system::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
-
-operator <(a, b: Int64): Boolean; external name '::u_system::p_lessthan';
-operator <=(a, b: Int64): Boolean; external name '::u_system::p_lessthanorequal';
-operator =(a, b: Int64): Boolean; external name '::u_system::p_equal';
-operator >(a, b: Int64): Boolean; external name '::u_system::p_greaterthan';
-operator >=(a, b: Int64): Boolean; external name '::u_system::p_greaterthanorequal';
-//operator <>(a, b: Int64): Boolean; external name '::u_system::p_notequal';
-operator div(a, b: Int64): Cardinal; external name '::u_system::p_intdivide';
-operator mod(a, b: Int64): Cardinal; external name '::u_system::p_modulus';
 
 operator and(a, b: Int64): Cardinal; external name '::u_system::p_bitwiseand';
 operator or(a, b: Int64): Cardinal; external name '::u_system::p_bitwiseor';

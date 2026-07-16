@@ -130,29 +130,29 @@ int main() {
 	p_n = p_readvalue(p_a);
 	p_b = p_makepair();
 	p_outer.p_pair.m_set_p_value(50ull);
-	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_char>(p_a.m_get_p_tag()), static_cast<::u_system::t_char>(3ull)))) {
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_integer>(p_a.m_get_p_tag()), static_cast<::u_system::t_integer>(3ull)))) {
 	p_n = 0ull;
-	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	p_n = ::u_system::p_intdivide(static_cast<::u_system::t_integer>(1ull), p_n);
 	}
-	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_a.m_get_p_value()), static_cast<::u_system::t_int64>(30ull)))) {
+	if (::u_system::p_logicalnot(::u_system::p_equal(p_a.m_get_p_value(), static_cast<::u_system::t_integer>(30ull)))) {
 	p_n = 0ull;
-	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	p_n = ::u_system::p_intdivide(static_cast<::u_system::t_integer>(1ull), p_n);
 	}
-	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_n), static_cast<::u_system::t_int64>(30ull)))) {
+	if (::u_system::p_logicalnot(::u_system::p_equal(p_n, static_cast<::u_system::t_integer>(30ull)))) {
 	p_n = 0ull;
-	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	p_n = ::u_system::p_intdivide(static_cast<::u_system::t_integer>(1ull), p_n);
 	}
-	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_char>(p_b.m_get_p_tag()), static_cast<::u_system::t_char>(4ull)))) {
+	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_integer>(p_b.m_get_p_tag()), static_cast<::u_system::t_integer>(4ull)))) {
 	p_n = 0ull;
-	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	p_n = ::u_system::p_intdivide(static_cast<::u_system::t_integer>(1ull), p_n);
 	}
-	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_b.m_get_p_value()), static_cast<::u_system::t_int64>(40ull)))) {
+	if (::u_system::p_logicalnot(::u_system::p_equal(p_b.m_get_p_value(), static_cast<::u_system::t_integer>(40ull)))) {
 	p_n = 0ull;
-	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	p_n = ::u_system::p_intdivide(static_cast<::u_system::t_integer>(1ull), p_n);
 	}
-	if (::u_system::p_logicalnot(::u_system::p_equal(static_cast<::u_system::t_int64>(p_outer.p_pair.m_get_p_value()), static_cast<::u_system::t_int64>(50ull)))) {
+	if (::u_system::p_logicalnot(::u_system::p_equal(p_outer.p_pair.m_get_p_value(), static_cast<::u_system::t_integer>(50ull)))) {
 	p_n = 0ull;
-	p_n = static_cast<::u_system::t_integer>(::u_system::p_intdivide(static_cast<::u_system::t_int64>(1ull), static_cast<::u_system::t_int64>(p_n)));
+	p_n = ::u_system::p_intdivide(static_cast<::u_system::t_integer>(1ull), p_n);
 	}
 		return 0;
 	} catch (::u_system::tpcc_pascal_exception<::u_system::t_tobject>& tpcc_exception) {

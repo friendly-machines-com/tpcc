@@ -32,4 +32,18 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/val_builtin_pascal"
 	-o "$tmp/val_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/val_builtin"
 
+if ./mp -Furtl -o"$tmp/subrange.cc" \
+	tests/val_subrange_var_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "Val accepted a distinct subrange as an out base type" >&2
+	exit 1
+fi
+if ! rg -Fq 'no matching overload' "$tmp/stderr"
+then
+	echo "wrong Val subrange out-parameter diagnostic" >&2
+	sed -n '1,20p' "$tmp/stderr" >&2
+	exit 1
+fi
+
 echo "Val builtin tests passed"

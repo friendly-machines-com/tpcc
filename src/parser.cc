@@ -7022,11 +7022,60 @@ static bool is_ordinal_intrinsic_argument(Type* ty) {
 	return intrinsic_ordinal_bounds(ty, &bounds);
 }
 
+static bool integer_type_contains_literal(
+    Type* target, const Integer* literal) {
+	if (auto range =
+	        dynamic_cast<SubrangeType*>(
+	            target)) {
+		ConstEvalContext ctx;
+		ConstEvalResult lower =
+		    range->lower_bound->const_eval(ctx);
+		ConstEvalResult upper =
+		    range->upper_bound->const_eval(ctx);
+		if (lower.kind !=
+		        ConstEvalResult::Kind::Success ||
+		    upper.kind !=
+		        ConstEvalResult::Kind::Success)
+			return false;
+		std::string error;
+		auto classified_lower =
+		    classify_subrange_bound(
+		        lower.node, &error);
+		auto classified_upper =
+		    classify_subrange_bound(
+		        upper.node, &error);
+		if (!classified_lower ||
+		    !classified_upper)
+			return false;
+		auto value = ordinal_value(
+		    literal->negative,
+		    literal->value);
+		return compare_ordinal_value(
+		           value,
+		           classified_lower
+		               ->ordinal_value) >= 0 &&
+		       compare_ordinal_value(
+		           value,
+		           classified_upper
+		               ->ordinal_value) <= 0;
+	}
+	OrdinalBounds bounds;
+	return intrinsic_ordinal_bounds(
+	           target, &bounds) &&
+	       ordinal_bounds_contains(
+	           bounds, literal->negative,
+	           literal->value);
+}
+
 std::optional<MatchRank> Parser::match_argument(
     const Parameter& formal, Node* actual,
     const BuiltinDesc* builtin,
     size_t parameter_index,
-    bool allow_user_conversion) {
+    bool allow_user_conversion,
+    MatchFailure* failure) {
+	if (failure)
+		*failure =
+		    MatchFailure::Incompatible;
 	Type* source = actual ? actual->ty : nullptr;
 	Type* target = formal.ty;
 
@@ -7045,13 +7094,31 @@ std::optional<MatchRank> Parser::match_argument(
 		         BuiltinGenericKind::OrdinalValue ||
 		     builtin->generic_kind ==
 		         BuiltinGenericKind::OrdinalMutation) &&
-		    !is_ordinal_intrinsic_argument(source))
+		    !is_ordinal_intrinsic_argument(source)) {
+			if (failure)
+				*failure =
+				    MatchFailure::
+				        OrdinalRequired;
 			return std::nullopt;
+		}
 		if ((formal.mode == ParamMode::Var ||
-		     formal.mode == ParamMode::Out) &&
-		    (!is_referenceable(actual) ||
-		     contains_packed_projection(actual)))
-			return std::nullopt;
+		     formal.mode == ParamMode::Out)) {
+			if (!is_referenceable(actual)) {
+				if (failure)
+					*failure =
+					    MatchFailure::
+					        NotStorageBacked;
+				return std::nullopt;
+			}
+			if (contains_packed_projection(
+			        actual)) {
+				if (failure)
+					*failure =
+					    MatchFailure::
+					        PackedProjection;
+				return std::nullopt;
+			}
+		}
 		// An omitted Pascal formal type is an explicitly generic storage/value
 		// operation. It must lose to every concrete viable overload.
 		return MatchRank{
@@ -7060,9 +7127,20 @@ std::optional<MatchRank> Parser::match_argument(
 
 	if (formal.mode == ParamMode::Var ||
 	    formal.mode == ParamMode::Out) {
-		if (!is_referenceable(actual) ||
-		    contains_packed_projection(actual))
+		if (!is_referenceable(actual)) {
+			if (failure)
+				*failure =
+				    MatchFailure::
+				        NotStorageBacked;
 			return std::nullopt;
+		}
+		if (contains_packed_projection(actual)) {
+			if (failure)
+				*failure =
+				    MatchFailure::
+				        PackedProjection;
+			return std::nullopt;
+		}
 		if (source == target)
 			return MatchRank{
 			    MatchRank::Tier::Exact, 0};
@@ -7111,21 +7189,12 @@ std::optional<MatchRank> Parser::match_argument(
 	    integer &&
 	    source == &untyped_integer_type()) {
 		if (is_integer_semantic_type(target)) {
-			OrdinalRange range;
-			std::string range_error;
-			if (!ordinal_range_for_type(
-			        target, &range,
-			        &range_error))
-				return std::nullopt;
-			auto value = ordinal_value(
-			    integer->negative,
-			    integer->value);
-			if (compare_ordinal_value(
-			        value,
-			        range.lower_ordinal) < 0 ||
-			    compare_ordinal_value(
-			        value,
-			        range.upper_ordinal) > 0)
+			// Literal fit needs only the ordinal endpoints. Reusing fixed-array
+			// range construction here incorrectly rejects the complete Int64
+			// domain because its element count is 2^64 and cannot fit in the
+			// array length field.
+			if (!integer_type_contains_literal(
+			        target, integer))
 				return std::nullopt;
 
 			unsigned distance = 0;
@@ -7283,6 +7352,80 @@ static bool dominates(
 			strict = true;
 	}
 	return strict;
+}
+
+static Callable* contextual_integer_literal_tie_break(
+    const std::vector<
+        std::pair<Callable*,
+                  std::vector<MatchRank>>>& viable,
+    const std::vector<Callable*>& candidates,
+    const std::vector<Node*>& args) {
+	bool has_contextual_integer = false;
+	for (Node* arg : args)
+		if (auto integer =
+		        dynamic_cast<Integer*>(arg);
+		    integer &&
+		    integer->ty ==
+		        &untyped_integer_type()) {
+			has_contextual_integer = true;
+			break;
+		}
+	if (!has_contextual_integer)
+		return nullptr;
+
+	Callable* best = nullptr;
+	uint64_t best_score = 0;
+	bool tied = false;
+	for (Callable* candidate : candidates) {
+		const std::vector<MatchRank>* ranks =
+		    nullptr;
+		for (const auto& entry : viable)
+			if (entry.first == candidate) {
+				ranks = &entry.second;
+				break;
+			}
+		if (!ranks)
+			continue;
+		uint64_t score = 0;
+		for (size_t i = 0;
+		     i < args.size() &&
+		     i < ranks->size(); ++i) {
+			auto integer =
+			    dynamic_cast<Integer*>(
+			        args[i]);
+			if (!integer ||
+			    integer->ty !=
+			        &untyped_integer_type())
+				continue;
+			uint64_t item =
+			    static_cast<uint64_t>(
+			        (*ranks)[i].tier) *
+			        1000000u +
+			    (*ranks)[i].distance;
+			if (item >
+			    std::numeric_limits<
+			        uint64_t>::max() -
+			        score)
+				score =
+				    std::numeric_limits<
+				        uint64_t>::max();
+			else
+				score += item;
+		}
+		if (!best || score < best_score) {
+			best = candidate;
+			best_score = score;
+			tied = false;
+		} else if (score == best_score) {
+			tied = true;
+		}
+	}
+	// Untyped integer constants retain their magnitude, but Integer is their
+	// default definition. Pareto ranking can leave `ByteValue = 3` tied:
+	// one candidate preserves Byte while another preserves the literal's
+	// default Integer. Use only the contextual integer positions to break
+	// that remaining tie. Nonliteral conversion tradeoffs stay ambiguous.
+	return tied ? nullptr : best;
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
@@ -7537,6 +7680,48 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 		auto match =
 		    match_callable_arguments(c, args);
+		if (!match) {
+			const BuiltinDesc* builtin =
+			    c->builtin_desc
+			        ? c->builtin_desc
+			        : lookup_builtin_desc(
+			              c->cxx_name);
+			for (size_t i = 0;
+			     i < args.size() &&
+			     i < c->ty->formals.size();
+			     ++i) {
+				MatchFailure failure;
+				if (match_argument(
+				        c->ty->formals[i],
+				        args[i], builtin, i,
+				        true, &failure))
+					continue;
+				if (failure ==
+				    MatchFailure::
+				        PackedProjection)
+					emit_parse_error_at(
+					    error_location,
+					    "packed-record field cannot yet be passed "
+					    "as var/out parameter '" +
+					        c->ty->formals[i].pas_name +
+					        "'");
+				if (failure ==
+				    MatchFailure::
+				        NotStorageBacked)
+					emit_parse_error_at(
+					    error_location,
+					    "argument for var/out parameter '" +
+					        c->ty->formals[i].pas_name +
+					        "' is not a storage-backed expression");
+				if (failure ==
+				    MatchFailure::
+				        OrdinalRequired)
+					emit_parse_error_at(
+					    error_location,
+					    name_for_error +
+					        " requires an ordinal argument");
+			}
+		}
 		if (!match ||
 		    (expected_return_type &&
 		     static_cast<RoutineType*>(
@@ -7587,6 +7772,15 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			}
 			if (!dom)
 				non_dominated.push_back(viable[i].first);
+		}
+		if (non_dominated.size() != 1) {
+			if (Callable* literal_choice =
+			        contextual_integer_literal_tie_break(
+			            viable,
+			            non_dominated,
+			            args))
+				non_dominated = {
+				    literal_choice};
 		}
 		if (non_dominated.size() != 1) {
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
@@ -7748,13 +7942,35 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		args[1] = cast(args[1], set_type->item_type);
 	}
 	for (size_t i = 0; i < args.size(); ++i) {
+		MatchFailure failure;
 		if (match_argument(
 		        rty->formals[i], args[i],
-		        builtin, i))
+		        builtin, i, true, &failure))
 			continue;
 		// Selection and application deliberately use the same matcher.
 		// Reimplementing compatibility here previously let routine values
 		// and default arguments obey different var/out rules from named calls.
+		if (failure ==
+		    MatchFailure::PackedProjection)
+			emit_parse_error_at(
+			    error_location,
+			    "packed-record field cannot yet be passed as var/out "
+			    "parameter '" +
+			        rty->formals[i].pas_name +
+			        "'");
+		if (failure ==
+		    MatchFailure::NotStorageBacked)
+			emit_parse_error_at(
+			    error_location,
+			    "argument for var/out parameter '" +
+			        rty->formals[i].pas_name +
+			        "' is not a storage-backed expression");
+		if (failure ==
+		    MatchFailure::OrdinalRequired)
+			emit_parse_error_at(
+			    error_location,
+			    name_for_error +
+			        " requires an ordinal argument");
 		emit_parse_error_at(
 		    error_location,
 		    "argument for parameter '" +

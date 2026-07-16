@@ -64,6 +64,13 @@ struct MatchRank {
 	unsigned distance = 0;
 };
 
+enum class MatchFailure {
+	Incompatible,
+	NotStorageBacked,
+	PackedProjection,
+	OrdinalRequired,
+};
+
 class ParserInputFile {
 public:
 	FILE* input_file;
@@ -298,7 +305,8 @@ private:
 	    const Parameter& formal, Node* actual,
 	    const BuiltinDesc* builtin,
 	    size_t parameter_index,
-	    bool allow_user_conversion = true);
+	    bool allow_user_conversion = true,
+	    MatchFailure* failure = nullptr);
 	std::optional<std::vector<MatchRank>>
 	match_callable_arguments(
 	    Callable* callable,
