@@ -279,6 +279,9 @@ struct InterfaceType: public Type {
 	Frame* children;
 	std::string cxx_name;
 	std::vector<InterfaceType*> super_interfaces; // FIXME: not transitive ?
+	// Source spelling from the optional `['...']` clause. It is metadata for
+	// interface-to-GUID/string conversions, not part of the C++ carrier.
+	std::optional<std::string> guid_literal;
 	InterfaceType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> super_interfaces);
 	InterfaceType(SourceLocation source_location, std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
 	const char* diagnostic_kind() const override;

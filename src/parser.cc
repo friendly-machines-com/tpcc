@@ -3745,7 +3745,16 @@ Type* Parser::parse_interface_type() {
 		} while (maybe_parse_comma());
 		parse_closing_paren();
 	}
+	std::optional<std::string> guid_literal;
+	if (maybe_parse_opening_bracket()) {
+		// Object Pascal places an interface's GUID clause after its optional
+		// ancestor list and before the first member. Preserve the literal for
+		// interface conversions; it has no effect on C++ inheritance or layout.
+		guid_literal = parse_string_literal();
+		parse_closing_bracket();
+	}
 	auto ct = new InterfaceType(current_location(), nullptr, std::move(implemented_interfaces));
+	ct->guid_literal = std::move(guid_literal);
 	ct->children = parse_aggregate_type_body(ct);
 	parse_keyword("end");
 	return ct;
