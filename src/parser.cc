@@ -241,7 +241,9 @@ SourceLocation Parser::current_location() const {
 	return SourceLocation(input_file_name, input_file_line_number);
 }
 
-[[noreturn]] static void emit_parse_error_at(const SourceLocation& loc, const std::string& message) {
+[[noreturn]] static void emit_diagnostic_at(
+    const SourceLocation& loc, const char* severity,
+    const std::string& message) {
 	std::stringstream sst;
 	if (!loc.file_name.empty()) {
 		sst << loc.file_name;
@@ -249,11 +251,23 @@ SourceLocation Parser::current_location() const {
 			sst << '(' << loc.line_number << ')';
 		sst << ": ";
 	}
-	sst << "error: " << message << std::endl;
+	sst << severity << ": " << message << std::endl;
 	std::string r = sst.str();
 	fprintf(stderr, "%s\n", r.c_str());
 	fflush(stderr);
 	exit(1);
+}
+
+[[noreturn]] static void emit_parse_error_at(
+    const SourceLocation& loc,
+    const std::string& message) {
+	emit_diagnostic_at(loc, "error", message);
+}
+
+[[noreturn]] static void emit_fatal_error_at(
+    const SourceLocation& loc,
+    const std::string& message) {
+	emit_diagnostic_at(loc, "fatal", message);
 }
 
 [[noreturn]] void Parser::emit_parse_error_at(SourceLocation loc, std::string message) {
@@ -589,7 +603,9 @@ std::string Parser::expand_include_macro(const std::string& rest) {
 	return std::format("'{:%Y/%m/%d}'", ymd);
 }
 
-void Parser::handle_directive(const std::string& body) {
+void Parser::handle_directive(
+    const std::string& body,
+    SourceLocation directive_location) {
 	auto [name, rest] = split_directive(body);
 	if (name == "ifdef" || name == "ifndef") {
 		bool outer = current_active();
@@ -647,6 +663,14 @@ void Parser::handle_directive(const std::string& body) {
 	}
 	if (!current_active())
 		return;
+	if (name == "error")
+		::emit_parse_error_at(
+		    directive_location,
+		    "user-defined: " + rest);
+	if (name == "fatal")
+		::emit_fatal_error_at(
+		    directive_location,
+		    "user-defined: " + rest);
 	if (name == "push") {
 		saved_directive_states.emplace_back(
 		    directive_state);
@@ -896,6 +920,8 @@ std::string Parser::consume() {
 			consume_lowlevel();
 		}
 	} else if (input_char == '{') {
+		SourceLocation directive_location =
+		    current_location();
 		sst << (char)input_char;
 		consume_lowlevel();
 		if (input_char == '$') {
@@ -908,7 +934,8 @@ std::string Parser::consume() {
 			if (input_char != '}')
 				raise_parse_error("missing end comment");
 			consume_lowlevel(); // skip }
-			handle_directive(body);
+			handle_directive(
+			    body, directive_location);
 			return consume();
 		} else {
 			while (input_char != EOF && input_char != '}') {

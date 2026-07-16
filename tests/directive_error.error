@@ -1,0 +1,1 @@
+tests/directive_error.pp(2): error: user-defined: requested error

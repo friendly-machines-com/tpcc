@@ -246,7 +246,9 @@ private:
 	// trailing `}`). Handles ifdef/ifndef/if/ifopt/else/elseif/endif,
 	// define/undef, option switches, and include; other directives are
 	// consumed and ignored.
-	void handle_directive(const std::string& body);
+	void handle_directive(
+	    const std::string& body,
+	    SourceLocation directive_location);
 	// Expand a `%NAME%` argument in `{$I %NAME%}` to the source text spliced
 	// at that position (a Pascal string literal for %DATE%). Only %DATE% is
 	// handled; any other name raises a parse error.
