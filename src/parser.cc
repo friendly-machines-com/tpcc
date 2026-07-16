@@ -7262,11 +7262,12 @@ static Integer* untyped_integer_constant(
 	    : nullptr;
 }
 
-static unsigned integer_literal_target_distance(
+static std::optional<uint64_t>
+integer_literal_target_distance(
     Type* target, const Integer* literal) {
 	if (target ==
 	    integer_literal_natural_type(literal))
-		return 0;
+		return uint64_t{0};
 
 	OrdinalRange::Value lower;
 	OrdinalRange::Value upper;
@@ -7292,7 +7293,7 @@ static unsigned integer_literal_target_distance(
 		        : std::nullopt;
 		if (!classified_lower ||
 		    !classified_upper)
-			return UINT_MAX;
+			return std::nullopt;
 		lower =
 		    classified_lower->ordinal_value;
 		upper =
@@ -7300,7 +7301,7 @@ static unsigned integer_literal_target_distance(
 	} else {
 		OrdinalBounds bounds;
 		if (!integer_bounds(target, &bounds))
-			return UINT_MAX;
+			return std::nullopt;
 		lower = ordinal_value(
 		    bounds.signed_type,
 		    bounds.signed_type
@@ -7325,14 +7326,12 @@ static unsigned integer_literal_target_distance(
 		width = upper.magnitude -
 		        lower.magnitude;
 	}
-	unsigned width_bits = 0;
-	while (width) {
-		++width_bits;
-		width >>= 1;
-	}
-	// Exact natural type is zero. Every other fitting type is ordered by the
-	// size of its ordinal interval. Equal-size incomparable ranges remain tied.
-	return 1 + width_bits;
+	// Exact natural type is zero. Every other fitting type is ordered by its
+	// complete interval width, not the width's bit count: collapsing 20 and 31
+	// to five bits would make different formal ranges spuriously tie.
+	return width == UINT64_MAX
+	    ? UINT64_MAX
+	    : width + 1;
 }
 
 static bool rank_less(
@@ -7548,9 +7547,9 @@ std::optional<ArgumentMatch> Parser::match_argument(
 					        rank.tier;
 				    combined.distance =
 				        rank.distance >
-				                UINT_MAX -
+				                UINT64_MAX -
 				                    combined.distance
-				            ? UINT_MAX
+				            ? UINT64_MAX
 				            : combined.distance +
 				                  rank.distance;
 			    };
@@ -7585,14 +7584,14 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			        target, untyped_integer))
 				return std::nullopt;
 
-			unsigned distance =
+			auto distance =
 			    integer_literal_target_distance(
 			        target, untyped_integer);
-			if (distance == UINT_MAX)
+			if (!distance)
 				return std::nullopt;
 			return ArgumentMatch{
 			    {MatchRank::Tier::Direct,
-			     distance},
+			     *distance},
 			    new Integer(
 			        untyped_integer->value,
 			        target,
@@ -7787,24 +7786,6 @@ static bool dominates(
 	return strict;
 }
 
-static bool is_predefined_numeric_binary(
-    std::string_view cxx_name) {
-	return cxx_name == "::u_system::p_add" ||
-	       cxx_name == "::u_system::p_subtract" ||
-	       cxx_name == "::u_system::p_multiply" ||
-	       cxx_name == "::u_system::p_divide" ||
-	       cxx_name == "::u_system::p_intdivide" ||
-	       cxx_name == "::u_system::p_modulus" ||
-	       cxx_name == "::u_system::p_bitwiseand" ||
-	       cxx_name == "::u_system::p_bitwiseor" ||
-	       cxx_name == "::u_system::p_bitwisexor" ||
-	       cxx_name == "::u_system::p_lessthan" ||
-	       cxx_name == "::u_system::p_lessthanorequal" ||
-	       cxx_name == "::u_system::p_equal" ||
-	       cxx_name == "::u_system::p_greaterthan" ||
-	       cxx_name == "::u_system::p_greaterthanorequal";
-}
-
 static Type* numeric_operand_type(Node* operand) {
 	if (!operand)
 		return nullptr;
@@ -7846,11 +7827,11 @@ static bool integer_range_contains(
 }
 
 static Type* predefined_numeric_promotion(
-    std::string_view operation,
+    BuiltinNumericOperation operation,
     const std::vector<Node*>& args) {
 	if (args.size() != 2 ||
-	    !is_predefined_numeric_binary(
-	        operation))
+	    operation ==
+	        BuiltinNumericOperation::None)
 		return nullptr;
 	Type* left = numeric_operand_type(
 	    args[0]);
@@ -7859,7 +7840,7 @@ static Type* predefined_numeric_promotion(
 	if (!left || !right)
 		return nullptr;
 	if (operation ==
-	        "::u_system::p_divide" ||
+	        BuiltinNumericOperation::Divide ||
 	    left == single_type() ||
 	    left == double_type() ||
 	    left == extended_type() ||
@@ -7895,25 +7876,61 @@ static Type* predefined_numeric_promotion(
 	return qword_type();
 }
 
+static BuiltinNumericOperation
+callable_numeric_operation(Callable* callable) {
+	if (!callable)
+		return BuiltinNumericOperation::None;
+	const BuiltinDesc* builtin =
+	    callable->builtin_desc
+	        ? callable->builtin_desc
+	        : lookup_builtin_desc(
+	              callable->cxx_name);
+	if (!builtin ||
+	    builtin->numeric_operation ==
+	        BuiltinNumericOperation::None ||
+	    callable->ty->formals.size() != 2)
+		return BuiltinNumericOperation::None;
+	for (const Parameter& formal :
+	     callable->ty->formals) {
+		OrdinalBounds bounds;
+		if (!integer_bounds(
+		        formal.ty, &bounds) &&
+		    formal.ty != single_type() &&
+		    formal.ty != double_type() &&
+		    formal.ty != extended_type())
+			// Several RTL helpers intentionally share a C++ spelling:
+			// p_equal serves pointers and strings as well as numbers, and
+			// p_add serves ShortString. Descriptor metadata identifies the
+			// operation; the concrete Pascal formal types identify whether
+			// this declaration is a numeric row of that operation.
+			return BuiltinNumericOperation::None;
+	}
+	return builtin->numeric_operation;
+}
+
 static Callable* predefined_numeric_choice(
     const std::vector<
         std::pair<Callable*,
                   CallableMatch>>& viable,
     const std::vector<Node*>& args) {
-	std::string_view operation;
+	BuiltinNumericOperation operation =
+	    BuiltinNumericOperation::None;
 	for (const auto& entry : viable) {
 		Callable* callable = entry.first;
-		if (!callable ||
-		    !is_predefined_numeric_binary(
-		        callable->cxx_name))
+		BuiltinNumericOperation candidate_operation =
+		    callable_numeric_operation(callable);
+		if (candidate_operation ==
+		    BuiltinNumericOperation::None)
 			continue;
-		if (operation.empty())
-			operation = callable->cxx_name;
+		if (operation ==
+		    BuiltinNumericOperation::None)
+			operation = candidate_operation;
 		else if (operation !=
-		         callable->cxx_name)
+		         candidate_operation)
 			return nullptr;
 	}
-	if (operation.empty())
+	if (operation ==
+	    BuiltinNumericOperation::None)
 		return nullptr;
 	Type* promoted =
 	    predefined_numeric_promotion(
@@ -7924,7 +7941,8 @@ static Callable* predefined_numeric_choice(
 	for (const auto& entry : viable) {
 		Callable* callable = entry.first;
 		if (!callable ||
-		    callable->cxx_name != operation ||
+		    callable_numeric_operation(
+		        callable) != operation ||
 		    callable->ty->formals.size() != 2 ||
 		    callable->ty->formals[0].ty !=
 		        promoted ||
@@ -8364,33 +8382,61 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				expected_return_type, candidates, viable, none, false);
 		}
 		std::vector<Callable*> non_dominated;
-		if (Callable* numeric =
-		        predefined_numeric_choice(
-		            viable, args)) {
-			// Predefined numeric operators are one parametric language
-			// family. The concrete System declarations expose its possible
-			// carriers; Delphi promotion selects one of them before ordinary
-			// user-overload dominance is considered.
-			non_dominated.push_back(
-			    numeric);
-		} else {
-			for (size_t i = 0;
-			     i < viable.size(); i++) {
-				bool dom = false;
-				for (size_t j = 0;
-				     j < viable.size(); j++) {
-					if (i != j &&
-					    dominates(
-					        viable[j].second.ranks,
-					        viable[i].second.ranks)) {
-						dom = true;
-						break;
-					}
+		Callable* promoted_numeric =
+		    predefined_numeric_choice(
+		        viable, args);
+		std::vector<std::pair<
+		    Callable*, CallableMatch>>
+		    ranked_viable;
+		for (const auto& entry : viable) {
+			// The concrete System rows are one parametric predefined
+			// operation. Replace only those rows with the promoted row; every
+			// user-defined or nonnumeric candidate remains in the same
+			// ordinary dominance comparison.
+			if (promoted_numeric &&
+			    callable_numeric_operation(
+			        entry.first) !=
+			        BuiltinNumericOperation::None &&
+			    entry.first != promoted_numeric)
+				continue;
+			ranked_viable.push_back(entry);
+			if (entry.first ==
+			    promoted_numeric)
+				// The predefined numeric family is one parametric
+				// language candidate. Promotion-selected carrier casts are
+				// its lowering, not source-level argument conversions. Rank
+				// an operand exact when it already has the promoted type and
+				// direct otherwise; retain the original candidate-local
+				// converted expressions for application.
+				for (MatchRank& rank :
+				     ranked_viable.back()
+				         .second.ranks)
+					if (rank.tier !=
+					    MatchRank::Tier::
+					        Exact)
+						rank = MatchRank{
+						    MatchRank::Tier::
+						        Direct,
+						    0};
+		}
+		for (size_t i = 0;
+		     i < ranked_viable.size(); i++) {
+			bool dom = false;
+			for (size_t j = 0;
+			     j < ranked_viable.size(); j++) {
+				if (i != j &&
+				    dominates(
+				        ranked_viable[j]
+				            .second.ranks,
+				        ranked_viable[i]
+				            .second.ranks)) {
+					dom = true;
+					break;
 				}
-				if (!dom)
-					non_dominated.push_back(
-					    viable[i].first);
 			}
+			if (!dom)
+				non_dominated.push_back(
+				    ranked_viable[i].first);
 		}
 		if (non_dominated.size() != 1) {
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
@@ -8420,11 +8466,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	if (chosen_match)
 		args = chosen_match->arguments;
 	if (auto method = dynamic_cast<Method*>(chosen)) {
+		if (!callable_accepts_receiver(
+		        method, receiver))
+			emit_parse_error_at(
+			    error_location,
+			    "internal error: selected method has an "
+			    "incompatible receiver");
 		if (method->is_static) {
-			if (method->ty->kind != ROUTINE)
-				emit_parse_error_at(
-				    error_location,
-				    "static method does not have routine ABI");
 			// FPC evaluates an explicit object/class-reference qualifier
 			// exactly once even though a static method neither dereferences
 			// nor receives it. Exact type/class designators are compile-time
@@ -8436,76 +8484,6 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			        receiver))
 				qualifier_effect = receiver;
 			receiver = nullptr;
-		} else if (!receiver) {
-			emit_parse_error_at(
-			    error_location,
-			    "method '" + name_for_error +
-			        "' has no bound receiver");
-		}
-		auto receiver_class_ref =
-		    receiver
-		    ? dynamic_cast<ClassRefType*>(
-		          receiver->ty)
-		    : nullptr;
-		switch (method->ty->kind) {
-		case CLASS_METHOD: {
-			auto owner =
-			    dynamic_cast<ClassType*>(
-			        method->owner_class);
-			ClassType* actual = receiver_class_ref
-			    ? dynamic_cast<ClassType*>(
-			          receiver_class_ref->target)
-			    : dynamic_cast<ClassType*>(
-			          receiver->ty);
-			bool compatible = false;
-			for (ClassType* current = actual; current;
-			     current = current->super)
-				if (current == owner) {
-					compatible = true;
-					break;
-				}
-			if (!owner || !compatible)
-				emit_parse_error_at(
-				    error_location,
-				    "class method '" +
-				        name_for_error +
-				        "' has an incompatible receiver");
-			break;
-		}
-		case CONSTRUCTOR:
-			// A class reference forms a construction expression; an
-			// existing object invokes the same declaration as an
-			// initializer method. The two applications are separated
-			// after overload selection.
-			break;
-		case METHOD:
-		case DESTRUCTOR:
-			if (dynamic_cast<TypeMemberQualifier*>(
-			        receiver))
-				emit_parse_error_at(
-				    error_location,
-				    "instance method '" +
-				        name_for_error +
-				        "' cannot be called through a type");
-			if (receiver_class_ref)
-				emit_parse_error_at(
-				    error_location,
-				    "instance method '" +
-				        name_for_error +
-				        "' cannot be called through a class reference");
-			break;
-		case CLASS_CONSTRUCTOR:
-		case CLASS_DESTRUCTOR:
-			emit_parse_error_at(
-			    error_location,
-			    "class lifecycle hook is not user-callable");
-			break;
-		case ROUTINE:
-			if (!method->is_static)
-				emit_parse_error_at(
-				    error_location,
-				    "non-static method declaration has routine ABI");
-			break;
 		}
 	}
 	// Materialize missing args from defaults.

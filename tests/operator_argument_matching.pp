@@ -4,6 +4,7 @@ type
   TBox = record
     Value: Integer;
   end;
+  TSmall = 1..10;
 
 const
   SmallConstant = 3;
@@ -19,6 +20,7 @@ var
   Signed64: Int64;
   Unsigned64: QWord;
   Real32: Single;
+  SmallLeft, SmallRight: TSmall;
 
 operator :=(Value: Integer): TBox;
 begin
@@ -35,6 +37,13 @@ operator +(Left: TBox; Right: Integer): TBox;
 begin
   Selected := 2;
   Result.Value := Left.Value + Right
+end;
+
+operator +(Left, Right: TSmall): TBox;
+begin
+  Selected := 3;
+  if (Left = Left) and (Right = Right) then
+    Result.Value := 5
 end;
 
 function NumericKind(Value: Byte): Integer; overload;
@@ -116,5 +125,13 @@ begin
   if NumericKind(+SmallConstant) <> 10 then
     Halt(12);
   if NumericKind(-SmallConstant) <> 16 then
-    Halt(13)
+    Halt(13);
+
+  SmallLeft := 2;
+  SmallRight := 3;
+  Sum := SmallLeft + SmallRight;
+  if Selected <> 3 then
+    Halt(14);
+  if Sum.Value <> 5 then
+    Halt(15)
 end.

@@ -96,8 +96,32 @@ void Emitter::emit_enum_decl(EnumType* e) {
 		return;
 	fprintf(active, "enum ");
 	if (!e->cxx_name.empty())
-		fprintf(active, "%s ", e->cxx_name.c_str());
-	fprintf(active, "{ ");
+		fprintf(active, "%s ",
+		    e->cxx_name.c_str());
+	// Fix the C++ underlying type to the EnumType carrier. An unfixed C++ enum
+	// infers its value range from the listed enumerators, which would make a
+	// Pascal explicit ordinal cast undefined to C++'s sanitizer even when the
+	// value fits the compiler's declared representation.
+	const char* underlying = nullptr;
+	if (e->carrier_signed) {
+		switch (e->carrier_bits) {
+		case 8: underlying = "int8_t"; break;
+		case 16: underlying = "int16_t"; break;
+		case 32: underlying = "int32_t"; break;
+		case 64: underlying = "int64_t"; break;
+		}
+	} else {
+		switch (e->carrier_bits) {
+		case 8: underlying = "uint8_t"; break;
+		case 16: underlying = "uint16_t"; break;
+		case 32: underlying = "uint32_t"; break;
+		case 64: underlying = "uint64_t"; break;
+		}
+	}
+	if (!underlying)
+		unhandled_type(
+		    "enum underlying carrier", e);
+	fprintf(active, ": %s { ", underlying);
 	for (size_t i = 0; i < e->members.size(); i++) {
 		if (i)
 			fprintf(active, ", ");

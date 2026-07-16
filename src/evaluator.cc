@@ -53,11 +53,12 @@ ConstEvalResult const_explicit_ordinal_cast(
 		} while (high_bit != 0);
 	} else if (carrier == char_type()) {
 		bits = 8;
-	} else if (dynamic_cast<EnumType*>(
-	               carrier)) {
-		// Generated enums use a signed 32-bit underlying carrier.
-		bits = 32;
-		signed_target = true;
+	} else if (auto enumeration =
+	               dynamic_cast<EnumType*>(
+	                   carrier)) {
+		bits = enumeration->carrier_bits;
+		signed_target =
+		    enumeration->carrier_signed;
 	} else {
 		return ConstEvalResult::error(
 		    "explicit ordinal cast has a non-ordinal target");

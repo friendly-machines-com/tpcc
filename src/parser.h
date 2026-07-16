@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <stack>
@@ -63,12 +64,12 @@ struct MatchRank {
 		Generic,
 	};
 	Tier tier;
-	unsigned distance = 0;
+	uint64_t distance = 0;
 	/** A user conversion is one outer match operation whose source formal has
 	 * its own ordinary match rank. Keeping that rank structurally avoids
 	 * encoding two ordered quantities into an arbitrary integer offset. */
 	Tier source_tier = Tier::Exact;
-	unsigned source_distance = 0;
+	uint64_t source_distance = 0;
 };
 
 /** One candidate's treatment of one source argument. Matching never mutates

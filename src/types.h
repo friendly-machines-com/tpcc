@@ -219,6 +219,11 @@ struct EnumType: public Type {
 	// C++ identifier emitted for this enum. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
+	// Ordinal representation shared by layout, explicit-cast folding, and C++
+	// enum emission. Source enums use signed 32-bit storage; predefined enums
+	// such as Boolean may specify another fixed carrier.
+	unsigned carrier_bits = 32;
+	bool carrier_signed = true;
 	struct Member {
 		std::string pas_name;
 		std::string cxx_name;
@@ -234,7 +239,11 @@ struct EnumType: public Type {
 	std::vector<Member> members;
 	const Member* min_member() const;
 	const Member* max_member() const;
-	EnumType(SourceLocation source_location, std::string cxx_name, std::string a, std::string b);
+	EnumType(SourceLocation source_location,
+	         std::string cxx_name, std::string a,
+	         std::string b,
+	         unsigned carrier_bits = 32,
+	         bool carrier_signed = true);
 	EnumType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;

@@ -49,8 +49,15 @@ IncompleteType::IncompleteType(SourceLocation source_location, std::string name)
 EnumType::EnumType(SourceLocation source_location) : Type(std::move(source_location)), cxx_name("") {
 }
 
-EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::string a, std::string b)
-    : Type(std::move(source_location)), cxx_name(std::move(p_cxx_name)) {
+EnumType::EnumType(
+    SourceLocation source_location,
+    std::string p_cxx_name, std::string a,
+    std::string b, unsigned p_carrier_bits,
+    bool p_carrier_signed)
+    : Type(std::move(source_location)),
+      cxx_name(std::move(p_cxx_name)),
+      carrier_bits(p_carrier_bits),
+      carrier_signed(p_carrier_signed) {
 	members.push_back(Member{
 	    .pas_name = a,
 	    .cxx_name = cxx_name + "::p_" + a,
@@ -496,10 +503,16 @@ std::optional<TypeLayout> type_layout_impl(
 	if (auto shortstring = dynamic_cast<ShortStringType*>(ty))
 		return TypeLayout{
 		    static_cast<uint64_t>(shortstring->capacity) + 1, 1};
-	if (ty == boolean_type())
-		return TypeLayout{1, 1};
-	if (dynamic_cast<EnumType*>(ty))
-		return TypeLayout{4, 4};
+	if (auto enumeration =
+	        dynamic_cast<EnumType*>(ty)) {
+		uint64_t bytes =
+		    enumeration->carrier_bits / 8;
+		return enumeration->carrier_bits != 0 &&
+		               enumeration->carrier_bits % 8 == 0
+		    ? std::optional<TypeLayout>{
+		          TypeLayout{bytes, bytes}}
+		    : std::nullopt;
+	}
 	if (auto subrange = dynamic_cast<SubrangeType*>(ty))
 		return type_layout_impl(subrange->base_type, visiting);
 	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {

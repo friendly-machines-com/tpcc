@@ -55,7 +55,10 @@ IntrinsicType k_set(SourceLocation::builtin(), "::u_system::t_set", {});
 IntrinsicType k_single(SourceLocation::builtin(), "::u_system::t_single", {}, {}, TypeLayout{4, 4}, IntrinsicCarrier::Float);
 IntrinsicType k_double(SourceLocation::builtin(), "::u_system::t_double", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::Double);
 IntrinsicType k_extended(SourceLocation::builtin(), "::u_system::t_extended", {}, {}, TypeLayout{16, 16}, IntrinsicCarrier::LongDouble);
-EnumType k_boolean(SourceLocation::builtin(), "::u_system::t_boolean", "false", "true");
+EnumType k_boolean(
+    SourceLocation::builtin(),
+    "::u_system::t_boolean", "false", "true",
+    8, false);
 IntrinsicType k_char(SourceLocation::builtin(), "::u_system::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1}, IntrinsicCarrier::Character);
 ShortStringType k_shortstring(SourceLocation::builtin(), 255);
 IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{256, 1}, IntrinsicCarrier::AnsiString);
@@ -557,32 +560,74 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_insert", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
-    {"::u_system::p_bitwiseand", nullptr},
-    {"::u_system::p_bitwiseor", nullptr},
-    {"::u_system::p_bitwisexor", nullptr},
+    {.cxx_name = "::u_system::p_bitwiseand",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::BitwiseAnd},
+    {.cxx_name = "::u_system::p_bitwiseor",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::BitwiseOr},
+    {.cxx_name = "::u_system::p_bitwisexor",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::BitwiseXor},
 
     // Delphi {"::u_system::p_logicalor", nullptr},
     // Delphi {"::u_system::p_logicaland", nullptr},
     {"::u_system::p_logicalnot", fold_logical_not},
     {"::u_system::p_logicalxor", nullptr},
 
-    {"::u_system::p_add", fold_add},
-    {"::u_system::p_subtract", fold_subtract},
+    {.cxx_name = "::u_system::p_add",
+     .const_fold = fold_add,
+     .numeric_operation =
+         BuiltinNumericOperation::Add},
+    {.cxx_name = "::u_system::p_subtract",
+     .const_fold = fold_subtract,
+     .numeric_operation =
+         BuiltinNumericOperation::Subtract},
     {"::u_system::p_positive", fold_unary_plus},
     {"::u_system::p_negative", fold_unary_minus},
-    {"::u_system::p_multiply", fold_multiply},
-    {"::u_system::p_divide", fold_divide},
-    {"::u_system::p_intdivide", fold_intdivide},
+    {.cxx_name = "::u_system::p_multiply",
+     .const_fold = fold_multiply,
+     .numeric_operation =
+         BuiltinNumericOperation::Multiply},
+    {.cxx_name = "::u_system::p_divide",
+     .const_fold = fold_divide,
+     .numeric_operation =
+         BuiltinNumericOperation::Divide},
+    {.cxx_name = "::u_system::p_intdivide",
+     .const_fold = fold_intdivide,
+     .numeric_operation =
+         BuiltinNumericOperation::IntegerDivide},
     {"::u_system::p_assign", nullptr}, // delphi doesnt have it; well it has some kind of "implicit" operator that does the same.
-    {"::u_system::p_modulus", fold_modulus},
+    {.cxx_name = "::u_system::p_modulus",
+     .const_fold = fold_modulus,
+     .numeric_operation =
+         BuiltinNumericOperation::Modulus},
     {"::u_system::p_leftshift", nullptr},
     {"::u_system::p_rightshift", nullptr},
 
-    {"::u_system::p_lessthan", nullptr},
-    {"::u_system::p_lessthanorequal", nullptr},
-    {"::u_system::p_equal", nullptr},
-    {"::u_system::p_greaterthan", nullptr},
-    {"::u_system::p_greaterthanorequal", nullptr},
+    {.cxx_name = "::u_system::p_lessthan",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::LessThan},
+    {.cxx_name = "::u_system::p_lessthanorequal",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::LessThanOrEqual},
+    {.cxx_name = "::u_system::p_equal",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::Equal},
+    {.cxx_name = "::u_system::p_greaterthan",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::GreaterThan},
+    {.cxx_name = "::u_system::p_greaterthanorequal",
+     .const_fold = nullptr,
+     .numeric_operation =
+         BuiltinNumericOperation::GreaterThanOrEqual},
     {"::u_system::p_in", nullptr},
     {"::u_system::p_supports", nullptr},
 
