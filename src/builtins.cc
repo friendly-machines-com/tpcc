@@ -470,7 +470,12 @@ static const BuiltinDesc k_builtins[] = {
         .const_fold = nullptr,
         .syntax_kind = BuiltinSyntaxKind::DisposeValue,
     },
-    {"::u_system::p_getmem", nullptr},
+    {
+        .cxx_name = "::u_system::p_getmem",
+        .const_fold = nullptr,
+        .generic_kind =
+            BuiltinGenericKind::PointerStorageOut,
+    },
     {"::u_system::p_freemem", nullptr},
     {"::u_system::p_rewrite", nullptr},
     {"::u_system::p_reset", nullptr},

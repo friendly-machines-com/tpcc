@@ -19,6 +19,19 @@ struct TypeLayout {
 	uint64_t alignment;
 };
 
+enum class ValueConversionClass {
+	// Distinct Pascal definitions whose constructor explicitly permits a
+	// representation-preserving value match. This is not type identity.
+	Direct,
+	// A value-changing or representation-adjusting implicit conversion.
+	Convert,
+};
+
+struct ValueConversion {
+	ValueConversionClass kind;
+	unsigned distance = 0;
+};
+
 struct SourceLocation {
 	std::string file_name;
 	// Parser-created locations are 1-based. 0 means the location is unknown or
@@ -59,6 +72,14 @@ public:
 	// not repeat the head.
 	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const = 0;
 	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
+	/** Pascal type identity is exactly Type* identity. Value conversion is a
+	 * separate, directional operation owned by the destination constructor;
+	 * subtyping is a separate nominal partial order. Typed var/out matching,
+	 * routine-signature identity, overload ranking, and C++ carrier identity
+	 * must not substitute either relation for their own rules. */
+	virtual std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const;
+	virtual bool is_subtype_of(const Type* target) const;
 	// True iff a variable of this type is represented in C++ emission as a
 	// pointer (i.e. emission in storage position is `t_foo*`, member access
 	// uses `->`, `nil` is a legal value). Pascal `class` and `interface` are
@@ -104,6 +125,8 @@ struct ShortStringType: public Type {
 	uint8_t capacity;
 	ShortStringType(SourceLocation source_location, uint8_t capacity);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -114,6 +137,8 @@ struct FixedArrayType: public Type {
 	OrdinalRange range;
 	FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -123,6 +148,8 @@ struct FixedSetType: public Type {
 	Type* item_type;
 	FixedSetType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -141,12 +168,6 @@ struct TypedFileType: public Type {
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
-
-// Canonical constructor for `file of T`. Equivalent element constructions
-// (for example, two independently parsed `^Integer` types) share one typed
-// file Type*, while incompatible element types remain distinct.
-TypedFileType* typed_file_type(
-    SourceLocation source_location, Type* item_type);
 
 struct AggregateField {
 	std::string pas_name;
@@ -285,6 +306,9 @@ struct InterfaceType: public Type {
 	InterfaceType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> super_interfaces);
 	InterfaceType(SourceLocation source_location, std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
+	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -315,6 +339,9 @@ struct ClassType: public Type {
 	Method* class_destructor = nullptr;
 	ClassType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
+	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -332,6 +359,8 @@ struct ClassRefType : public Type // metaclass
 	   : Type(std::move(source_location)), target(c) {
 	}
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -345,6 +374,9 @@ struct ObjectType: public Type {
 	bool needs_vmt = false;
 	ObjectType(SourceLocation source_location, Frame* children, ObjectType* super);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
+	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -360,6 +392,8 @@ struct PointerType: public Type {
 	            std::string cxx_name = {});
 	bool is_untyped() const { return item_type == nullptr; }
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -437,16 +471,29 @@ public:
 
 	RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
+	/** Names and default expressions are not part of a routine's type.
+	 * Parameter modes and Type* identities are; the result is exact as well.
+	 * This shape helper deliberately leaves the representation category to
+	 * the caller, because a static class-owned Method has receiverless ROUTINE
+	 * ABI while its declaration is still class-owned. */
+	bool same_parameter_and_result_types_as(
+	    const RoutineType* other) const;
+	/** Exact routine-type signature, including plain versus receiver-bearing
+	 * representation. The compiler currently has one Pascal calling
+	 * convention; when conventions become source-visible they belong here. */
+	bool same_signature_as(
+	    const RoutineType* other) const;
+	/** Directional routine-value compatibility. CLASS_METHOD declarations
+	 * become receiver-bearing METHOD values once bound; no other declaration
+	 * category is silently reclassified. */
+	bool accepts_routine_value_from(
+	    const RoutineType* source) const;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
-
-// Routine values are structural within one representation category.
-// Parameter names/defaults are deliberately excluded; modes, parameter types,
-// result type, and plain-vs-of-object category are included.
-bool routine_types_compatible(
-    const RoutineType* from, const RoutineType* to);
 
 class SubrangeType : public Type {
 public:
@@ -456,22 +503,15 @@ public:
 
 	SubrangeType(SourceLocation source_location, Type* base_type, Node* lower_bound, Node* upper_bound);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
-
-// Result type of an arithmetic/bitwise binary op given operand types. Handles
-// UntypedInteger adaptation and integer widening; returns nullptr if the two
-// types don't combine (caller decides whether that's an error).
-Type* common_arith_type(Type* a, Type* b);
 
 // Cost of converting FROM to TO: 0 = same (or Untyped fits), positive =
 // implicit conversion, -1 = no implicit conversion. Integer conversions are
 // ordered by target range distance so overload resolution can prefer the
 // closest fitting ordinal type.
 int conversion_cost(Type* from, Type* to);
-
-// A dominates B iff A's cost is <= B's on every position AND strictly < on
-// at least one. Different-length vectors don't compare (ambiguity later).
-bool dominates(const std::vector<int>& a, const std::vector<int>& b);

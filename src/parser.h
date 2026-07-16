@@ -26,6 +26,7 @@ class Callable;
 class Property;
 class PropertyAccess;
 class Builtin;
+struct BuiltinDesc;
 class RoutineRef;
 class UnitRef;
 
@@ -50,6 +51,17 @@ struct CompilerOptions {
 	// Output path for the program's .cc when the top-level source is a
 	// `program`. Set by main from -o or derived from the source path.
 	std::string program_output_path;
+};
+
+struct MatchRank {
+	enum class Tier {
+		Exact,
+		Direct,
+		Convert,
+		Generic,
+	};
+	Tier tier;
+	unsigned distance = 0;
 };
 
 class ParserInputFile {
@@ -282,12 +294,20 @@ private:
 	Node* mk_membership(Node* item, Node* set);
 	Node* mk_unary_same(std::string id, Node* x);
 	Node* mk_assign(Node* a, Node* b);
+	std::optional<MatchRank> match_argument(
+	    const Parameter& formal, Node* actual,
+	    const BuiltinDesc* builtin,
+	    size_t parameter_index);
+	std::optional<std::vector<MatchRank>>
+	match_callable_arguments(
+	    Callable* callable,
+	    const std::vector<Node*>& args);
 	Node* cast(Node* a, Type* target_ty);
 	Node* resolve_routine_reference(
 	    RoutineRef* reference, RoutineType* target_ty);
 	Node* resolve_routine_code_reference(
 	    RoutineRef* reference);
-	Type* reuse_subrange_type(Node* lower_bound, Node* upper_bound);
+	Type* parse_subrange_type(Node* lower_bound, Node* upper_bound);
 	ClassType* lookup_implicit_tobject_superclass();
 	Node* active_function_result_lvalue(Callable* c) const;
 protected:
@@ -538,7 +558,7 @@ protected:
 	                                                  const std::vector<Node*>& args,
 	                                                  Type* expected_return_type,
 	                                                  const std::vector<Callable*>& candidates,
-	                                                  const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
+	                                                  const std::vector<std::pair<Callable*, std::vector<MatchRank>>>& viable,
 	                                                  const std::vector<Callable*>& non_dominated,
 	                                                  bool ambiguous);
 

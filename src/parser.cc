@@ -303,12 +303,31 @@ Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected
 	return got; // future non-fatal diagnostics can continue with the parsed type
 }
 
-static void append_cost_vector(std::stringstream& sst, const std::vector<int>& costs) {
+static const char* match_tier_name(
+    MatchRank::Tier tier) {
+	switch (tier) {
+	case MatchRank::Tier::Exact:
+		return "exact";
+	case MatchRank::Tier::Direct:
+		return "direct";
+	case MatchRank::Tier::Convert:
+		return "convert";
+	case MatchRank::Tier::Generic:
+		return "generic";
+	}
+	return "invalid";
+}
+
+static void append_cost_vector(
+    std::stringstream& sst,
+    const std::vector<MatchRank>& costs) {
 	sst << "[";
 	for (size_t i = 0; i < costs.size(); ++i) {
 		if (i)
 			sst << ", ";
-		sst << costs[i];
+		sst << match_tier_name(costs[i].tier);
+		if (costs[i].distance)
+			sst << "+" << costs[i].distance;
 	}
 	sst << "]";
 }
@@ -346,7 +365,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 							  const std::vector<Node*>& args,
 							  Type* expected_return_type,
 							  const std::vector<Callable*>& candidates,
-							  const std::vector<std::pair<Callable*, std::vector<int>>>& viable,
+							  const std::vector<std::pair<Callable*, std::vector<MatchRank>>>& viable,
 							  const std::vector<Callable*>& non_dominated,
 							  bool ambiguous) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
@@ -369,7 +388,7 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 
 	sst << "\n  all candidates:";
 	for (Callable* c : sorted_candidates) {
-		const std::vector<int>* viable_cost = nullptr;
+		const std::vector<MatchRank>* viable_cost = nullptr;
 		for (const auto& v : viable) {
 			if (v.first == c) {
 				viable_cost = &v.second;
@@ -1963,6 +1982,48 @@ static bool is_set_item_type(Type* ty) {
 	return intrinsic_ordinal_bounds(ty, &bounds);
 }
 
+static bool conversion_is_better(
+    const ValueConversion& a,
+    const ValueConversion& b) {
+	if (a.kind != b.kind)
+		return a.kind ==
+		       ValueConversionClass::Direct;
+	return a.distance < b.distance;
+}
+
+static Type* infer_set_item_type(
+    Type* current, Type* next) {
+	if (current == &untyped_integer_type())
+		current = integer_type();
+	if (next == &untyped_integer_type())
+		next = integer_type();
+	if (current == next)
+		return current;
+
+	auto next_to_current =
+	    current->value_conversion_from(next);
+	auto current_to_next =
+	    next->value_conversion_from(current);
+	if (next_to_current &&
+	    (!current_to_next ||
+	     conversion_is_better(
+	         *next_to_current,
+	         *current_to_next)))
+		return current;
+	if (current_to_next &&
+	    (!next_to_current ||
+	     conversion_is_better(
+	         *current_to_next,
+	         *next_to_current)))
+		return next;
+	// Set constructors need one ordinal storage domain for all their items.
+	// This is contextual constructor inference, not binary-operator
+	// resolution: neither source operand is rewritten before looking up an
+	// operator. If both directions are equally good there is no principled
+	// common item type, so require context or reject the constructor.
+	return nullptr;
+}
+
 Node* Parser::parse_set_literal() {
 	parse_opening_bracket();
 	std::vector<SetLiteral::Item> items;
@@ -1993,7 +2054,9 @@ Node* Parser::parse_set_literal() {
 			if (item_type == unknown_type()) {
 				item_type = bound_type;
 			} else {
-				Type* common = common_arith_type(item_type, bound_type);
+				Type* common =
+				    infer_set_item_type(
+				        item_type, bound_type);
 				if (!common)
 					raise_type_mismatch("set literal items with a common ordinal type",
 						item_type, bound_type);
@@ -2377,9 +2440,9 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 				if (auto source_routine =
 				        dynamic_cast<RoutineType*>(
 				            value->ty)) {
-					if (!routine_types_compatible(
-					        source_routine,
-					        target_routine))
+					if (!target_routine
+					         ->accepts_routine_value_from(
+					             source_routine))
 						raise_parse_error(
 						    "explicit cast between "
 						    "incompatible routine types");
@@ -2945,15 +3008,11 @@ bool Parser::is_supported_packed_assignment(Node* n) {
 
 Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 	auto fn = resolve_value(id);
-	std::vector<Node*> args;
-	auto common_ty = common_arith_type(a->ty, b->ty);
-	if (common_ty == nullptr) {
-		args.push_back(a);
-		args.push_back(b);
-	} else {
-		args.push_back(cast(a, common_ty));
-		args.push_back(cast(b, common_ty));
-	}
+	// Operators and named routines share one argument matcher. Preserve the
+	// source operands until a declaration has been selected; choosing a
+	// "common" type first changes which overload is exact and makes operator
+	// calls obey a different language from ordinary calls.
+	std::vector<Node*> args{a, b};
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	return make_call(fc, std::move(args));
 }
@@ -2963,22 +3022,6 @@ Node* Parser::mk_assign(Node* a, Node* b) {
 }
 
 Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
-	// `nil` has no type of its own. For an ordinary pointer comparison, the
-	// other operand supplies its exact pointer type before normal operator
-	// resolution runs. Do not widen this to every reference type: classes and
-	// class references have their own comparison rules and are not Pascal
-	// Pointer values.
-	auto a_pointer = a ? dynamic_cast<PointerType*>(a->ty) : nullptr;
-	auto b_pointer = b ? dynamic_cast<PointerType*>(b->ty) : nullptr;
-	if (!a_pointer && dynamic_cast<NilLiteral*>(a) && b_pointer) {
-		a = cast(a, b_pointer);
-		a_pointer = b_pointer;
-	}
-	if (!b_pointer && dynamic_cast<NilLiteral*>(b) && a_pointer) {
-		b = cast(b, a_pointer);
-		b_pointer = a_pointer;
-	}
-
 	RoutineType* a_routine =
 	    a ? dynamic_cast<RoutineType*>(a->ty) : nullptr;
 	RoutineType* b_routine =
@@ -2993,7 +3036,8 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	}
 	if (a_routine || b_routine) {
 		if (id != "=" || !a_routine || !b_routine ||
-		    !routine_types_compatible(a_routine, b_routine))
+		    !a_routine->accepts_routine_value_from(
+		        b_routine))
 			raise_parse_error(
 			    "routine values can only be compared for equality "
 			    "with a compatible routine type");
@@ -3003,15 +3047,11 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	}
 
 	auto fn = resolve_value(id);
-	std::vector<Node*> args;
-	auto common_ty = common_arith_type(a->ty, b->ty);
-	if (common_ty == nullptr) {
-		args.push_back(a);
-		args.push_back(b);
-	} else {
-		args.push_back(cast(a, common_ty));
-		args.push_back(cast(b, common_ty));
-	}
+	// Keep comparison operands in source order and source type. `nil` and
+	// ordinary conversions are contextual matches against each candidate,
+	// exactly as for a named call; the selected formal types are applied only
+	// after overload resolution.
+	std::vector<Node*> args{a, b};
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	Node* call = make_call(fc, std::move(args));
 	/*	if (call->ty->return_type != boolean_type()) {
@@ -4393,7 +4433,7 @@ static Node* convert_integer_subrange_bound(const FoldedSubrangeBound& bound, Ty
 	return nullptr;
 }
 
-Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
+Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	ConstEvalContext ctx;
 	ConstEvalResult lower_folded = lower_bound->const_eval(ctx);
 	ConstEvalResult upper_folded = upper_bound->const_eval(ctx);
@@ -4414,7 +4454,9 @@ Type* Parser::reuse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	if (lower->kind != upper->kind)
 		return raise_type_parse_error("subrange bounds must be compatible ordinal constants");
 
-	// FIXME: reuse existing subranges structurally.
+	// A subrange expression is generative. Its chosen host type and bounds
+	// determine compatibility and lowering, but never replace this definition
+	// with an earlier subrange of the same shape.
 	switch (lower->kind) {
 	case FoldedSubrangeBound::Kind::Integer: {
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
@@ -4493,7 +4535,12 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 			    capacity->value == 0 || capacity->value > 255)
 				return raise_type_parse_error(
 				    "shortstring capacity must be in 1..255");
-			return shortstring_type(
+			// Bracketed string syntax is a type constructor. Do not reuse the
+			// builtin capacity cache: identical constructor operands still
+			// create distinct Pascal definitions, with compatibility handled
+			// separately from identity.
+			return new ShortStringType(
+			    current_location(),
 			    static_cast<uint8_t>(capacity->value));
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
@@ -4503,7 +4550,10 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		parse_keyword("file");
 		if (!maybe_parse_keyword("of"))
 			return file_type();
-		return typed_file_type(
+		// `file of T` is generative even when another definition has the same
+		// element type. The two definitions share a carrier and are
+		// structurally compatible, but they are not the same Pascal type.
+		return new TypedFileType(
 		    current_location(), parse_type_expression(false));
 	} else if (peek_keyword("array")) {
 		return parse_array_type();
@@ -4548,7 +4598,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		if (token_is_identifier_start(input_token)) {
 			std::string id = parse_identifier();
 			if (maybe_parse_period_period())
-				return reuse_subrange_type(parse_value_from_identifier(id), parse_subrange_bound_expression());
+				return parse_subrange_type(parse_value_from_identifier(id), parse_subrange_bound_expression());
 			if (maybe_parse_period()) {
 				UnitRef* unit =
 				    resolve_unit_type_qualifier(id);
@@ -4567,14 +4617,14 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 			if (token_continues_subrange_bound_after_primary(input_token)) {
 				Node* lower_bound = parse_subrange_bound_expression_after_identifier(id);
 				parse_period_period();
-				return reuse_subrange_type(lower_bound, parse_subrange_bound_expression());
+				return parse_subrange_type(lower_bound, parse_subrange_bound_expression());
 			}
 			return resolve_type(id, allow_forward);
 		}
 
 		Node* lower_bound = parse_subrange_bound_expression();
 		parse_period_period();
-		return reuse_subrange_type(lower_bound, parse_subrange_bound_expression());
+		return parse_subrange_type(lower_bound, parse_subrange_bound_expression());
 	}
 }
 
@@ -4947,16 +4997,8 @@ struct TypeBlockResolver {
 		visiting_types.insert(ty);
 		bool ok = normalize_type_contents(ty);
 		visiting_types.erase(ty);
-		if (ok) {
+		if (ok)
 			done_types.insert(ty);
-			if (auto file =
-			        dynamic_cast<TypedFileType*>(ty)) {
-				ty = typed_file_type(
-				    file->source_location,
-				    file->item_type);
-				done_types.insert(ty);
-			}
-		}
 		return ok;
 	}
 
@@ -6441,17 +6483,11 @@ Procedure* Parser::match_or_create_procedure(
 
 	auto sig_matches = [&](Callable* c) -> bool {
 		auto rty = static_cast<RoutineType*>(c->ty);
-		if (rty->formals.size() != sig->formals.size())
-			return false;
-		if (rty->return_type != sig->return_type)
-			return false;
-		for (size_t i = 0; i < sig->formals.size(); i++) {
-			if (rty->formals[i].ty != sig->formals[i].ty)
-				return false;
-			if (rty->formals[i].mode != sig->formals[i].mode)
-				return false;
-		}
-		return true;
+		// Implementation matching is exact routine-signature identity.
+		// Assignment conversion, carrier equality, and parameter names/defaults
+		// answer different questions and must not attach a body to another
+		// overload.
+		return rty->same_signature_as(sig);
 	};
 
 	auto attach_to = [&](Callable* c) -> Procedure* {
@@ -6715,27 +6751,6 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			parse_routine_body(method, owner_frame);
 			return;
 		}
-		// if (is_destructor) {
-		//	if (auto class_type = dynamic_cast<ClassType*>(owner_ty)) {
-		//		method_name = "~" + class_type->cxx_name;
-		//	}
-		// }
-		Node* hit =
-		    owner_frame->lookup_value(method_name);
-		auto m = dynamic_cast<Method*>(hit);
-		// An out-of-line `T.Method` body implements a declaration owned by
-		// exactly T. Normal Frame lookup may find an inherited method, but
-		// owner identity rejects it without bypassing structural lookup or
-		// exposing the frame's declaration table by name.
-		if (!m || m->owner_class != owner_ty)
-			raise_parse_error("no method '" + method_name + "' on '" + first_name + "'");
-		const bool declaration_is_class_method =
-		    m->is_static ||
-		    m->ty->kind == CLASS_METHOD;
-		if (is_class != declaration_is_class_method)
-			raise_parse_error(
-			    "method implementation does not match its class "
-			    "method declaration");
 		RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR
 																      : METHOD,
 							   owner_ty);
@@ -6748,6 +6763,57 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			// FIXME: use
 			parse_semicolon();
 		}
+		Node* hit =
+		    owner_frame->lookup_value(method_name);
+		Method* m = nullptr;
+		auto consider_method =
+		    [&](Callable* callable) {
+			    auto candidate =
+			        dynamic_cast<Method*>(
+			            callable);
+			    if (!candidate ||
+			        candidate->owner_class !=
+			            owner_ty)
+				    return;
+			    bool declaration_is_class_method =
+			        candidate->is_static ||
+			        candidate->ty->kind ==
+			            CLASS_METHOD;
+			    if (is_class !=
+			        declaration_is_class_method)
+				    return;
+			    // `class ... static` is class-owned in Pascal but has
+			    // receiverless ROUTINE ABI. Its out-of-line spelling does not
+			    // repeat `static`, so Method metadata selects that category;
+			    // the visible parameter modes/types and result remain exact.
+			    if (!candidate->ty
+			             ->same_parameter_and_result_types_as(
+			                 sig))
+				    return;
+			    if (m)
+				    raise_parse_error(
+				        "ambiguous method implementation '" +
+				        method_name + "'");
+			    m = candidate;
+		    };
+		if (auto callable =
+		        dynamic_cast<Callable*>(hit))
+			consider_method(callable);
+		else if (auto overloads =
+		             dynamic_cast<OverloadSet*>(
+		                 hit))
+			for (Callable* callable :
+			     overloads->members)
+				consider_method(callable);
+
+		// Structural lookup may return an inherited family. An out-of-line
+		// `T.Method` body can only attach to a declaration owned by exactly T,
+		// and only to its exact Pascal signature.
+		if (!m)
+			raise_parse_error(
+			    "no matching method declaration '" +
+			    method_name + "' on '" +
+			    first_name + "'");
 		if (m->has_body)
 			raise_parse_error("duplicate implementation of '" + method_name + "'");
 		// Pascal permits implementation parameter names to differ from the
@@ -6756,11 +6822,6 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// out-of-line body was parsed.
 		auto declaration_sig =
 		    static_cast<RoutineType*>(m->ty);
-		if (sig->formals.size() !=
-		    declaration_sig->formals.size())
-			raise_parse_error(
-			    "implementation parameter count does not match "
-			    "method declaration");
 		for (size_t i = 0;
 		     i < sig->formals.size(); ++i) {
 			declaration_sig->formals[i].pas_name =
@@ -6854,11 +6915,10 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 	}
 }
 
-// Per-visible-argument conversion costs for a candidate. Returns an empty
-// vector when the candidate is not viable. Pascal binds a method receiver
-// separately and performs single dispatch after selecting a declaration from
-// its member family, so Self is deliberately not an overload-ranking
-// position. Entries past args.size() are zero for default-supplied formals.
+// Pascal binds a method receiver separately and performs single dispatch
+// after selecting a declaration from its member family, so Self is
+// deliberately not an overload-ranking position. Only source-visible
+// parameters enter these ranks.
 static bool is_ordinal_intrinsic_argument(Type* ty) {
 	while (auto subrange = dynamic_cast<SubrangeType*>(ty))
 		ty = subrange->base_type;
@@ -6868,79 +6928,197 @@ static bool is_ordinal_intrinsic_argument(Type* ty) {
 	return intrinsic_ordinal_bounds(ty, &bounds);
 }
 
-static std::vector<int> per_arg_costs(
-    Callable* c, const std::vector<Node*>& args) {
-	auto rty = static_cast<RoutineType*>(c->ty);
-	const BuiltinDesc* builtin = lookup_builtin_desc(c->cxx_name);
+std::optional<MatchRank> Parser::match_argument(
+    const Parameter& formal, Node* actual,
+    const BuiltinDesc* builtin,
+    size_t parameter_index) {
+	Type* source = actual ? actual->ty : nullptr;
+	Type* target = formal.ty;
 
-	if (args.size() > rty->formals.size())
-		return {};
-	for (size_t i = args.size(); i < rty->formals.size(); i++) {
-		if (!rty->formals[i].default_value)
-			return {};
-	}
-	std::vector<int> costs(rty->formals.size(), 0);
-	for (size_t i = 0; i < args.size(); i++) {
-		Type* from = args[i] ? args[i]->ty : nullptr;
+	if (builtin &&
+	    builtin->generic_kind ==
+	        BuiltinGenericKind::Assigned &&
+	    parameter_index == 0 &&
+	    (dynamic_cast<RoutineType*>(source) ||
+	     (source && source->is_reference_type())))
+		return MatchRank{
+		    MatchRank::Tier::Direct, 0};
+
+	if (target == unknown_type()) {
 		if (builtin &&
-		    builtin->generic_kind == BuiltinGenericKind::Assigned &&
-		    i == 0 &&
-		    (dynamic_cast<RoutineType*>(from) ||
-		     (from && from->is_reference_type()))) {
-			costs[i] = 0;
-			continue;
-		}
-		if (rty->formals[i].ty == unknown_type()) {
-			if (builtin &&
-			    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
-			     builtin->generic_kind == BuiltinGenericKind::OrdinalMutation)) {
-				if (!is_ordinal_intrinsic_argument(from))
-					return {};
-			}
-			// This is a constrained generic match. It is viable for every
-			// accepted type but should lose to a concrete exact overload.
-			costs[i] = 1000;
-			continue;
-		}
-			if (auto literal = dynamic_cast<String*>(args[i])) {
-				if (literal->value.size() == 1 &&
-				    dynamic_cast<ShortStringType*>(
-				        rty->formals[i].ty)) {
-				// One-byte quoted literals begin as Char, but Pascal also
-				// permits them in a string context. Keep this worse than an
-				// exact Char overload; cast() pins the selected string type.
-				costs[i] = 1;
-				continue;
-			}
-		}
-		auto mode = rty->formals[i].mode;
-		if (mode == ParamMode::Var || mode == ParamMode::Out) {
-			if (from == rty->formals[i].ty) {
-				costs[i] = 0;
-				continue;
-			}
-			if (rty->formals[i].ty == pointer_type() &&
-			    dynamic_cast<PointerType*>(from)) {
-				// FPC's GetMem(out Pointer, ...) accepts storage of any
-				// typed pointer. Preserve that storage type for C++ template
-				// deduction instead of casting the out argument to void*&.
-				costs[i] = 1;
-				continue;
-			}
-			if (auto subrange = dynamic_cast<SubrangeType*>(from)) {
-				if (subrange->base_type == rty->formals[i].ty) {
-					costs[i] = 1;
-					continue;
-				}
-			}
-			return {};
-		}
-		int cc = conversion_cost(from, rty->formals[i].ty);
-		if (cc < 0)
-			return {};
-		costs[i] = cc;
+		    (builtin->generic_kind ==
+		         BuiltinGenericKind::OrdinalValue ||
+		     builtin->generic_kind ==
+		         BuiltinGenericKind::OrdinalMutation) &&
+		    !is_ordinal_intrinsic_argument(source))
+			return std::nullopt;
+		if ((formal.mode == ParamMode::Var ||
+		     formal.mode == ParamMode::Out) &&
+		    (!is_referenceable(actual) ||
+		     contains_packed_projection(actual)))
+			return std::nullopt;
+		// An omitted Pascal formal type is an explicitly generic storage/value
+		// operation. It must lose to every concrete viable overload.
+		return MatchRank{
+		    MatchRank::Tier::Generic, 0};
 	}
-	return costs;
+
+	if (formal.mode == ParamMode::Var ||
+	    formal.mode == ParamMode::Out) {
+		if (!is_referenceable(actual) ||
+		    contains_packed_projection(actual))
+			return std::nullopt;
+		if (source == target)
+			return MatchRank{
+			    MatchRank::Tier::Exact, 0};
+		if (builtin &&
+		    builtin->generic_kind ==
+		        BuiltinGenericKind::PointerStorageOut &&
+		    formal.mode == ParamMode::Out &&
+		    target == pointer_type() &&
+		    dynamic_cast<PointerType*>(source)) {
+			// This is GetMem's explicit raw-storage contract. Keeping it in
+			// builtin metadata prevents an RTL exception from weakening every
+			// typed mutable-reference parameter in the language.
+			return MatchRank{
+			    MatchRank::Tier::Direct, 0};
+		}
+		return std::nullopt;
+	}
+
+	if (dynamic_cast<NilLiteral*>(actual) &&
+	    (target->is_reference_type() ||
+	     dynamic_cast<RoutineType*>(target)))
+		return MatchRank{
+		    MatchRank::Tier::Direct, 0};
+
+	if (dynamic_cast<RoutineRef*>(actual) &&
+	    dynamic_cast<RoutineType*>(target))
+		return MatchRank{
+		    MatchRank::Tier::Direct, 0};
+
+	if (auto literal = dynamic_cast<String*>(actual);
+	    literal && literal->value.size() == 1 &&
+	    dynamic_cast<ShortStringType*>(target))
+		return MatchRank{
+		    MatchRank::Tier::Direct, 0};
+
+	if (dynamic_cast<SetLiteral*>(actual) &&
+	    dynamic_cast<FixedSetType*>(target))
+		return MatchRank{
+		    MatchRank::Tier::Direct, 0};
+
+	if (source == target)
+		return MatchRank{
+		    MatchRank::Tier::Exact, 0};
+
+	if (auto integer = dynamic_cast<Integer*>(actual);
+	    integer &&
+	    source == &untyped_integer_type()) {
+		if (is_integer_semantic_type(target)) {
+			OrdinalRange range;
+			std::string range_error;
+			if (!ordinal_range_for_type(
+			        target, &range,
+			        &range_error))
+				return std::nullopt;
+			auto value = ordinal_value(
+			    integer->negative,
+			    integer->value);
+			if (compare_ordinal_value(
+			        value,
+			        range.lower_ordinal) < 0 ||
+			    compare_ordinal_value(
+			        value,
+			        range.upper_ordinal) > 0)
+				return std::nullopt;
+
+			unsigned distance = 0;
+			if (target != integer_type()) {
+				auto from_default =
+				    target->value_conversion_from(
+				        integer_type());
+				distance =
+				    1 + (from_default
+				             ? from_default->distance
+				             : 0);
+			}
+			// An untyped integer is a contextual value, not a value of every
+			// integer type simultaneously. Prefer the language's default
+			// Integer when it fits; otherwise use the closest fitting
+			// destination range. This preserves literal information without
+			// pre-casting operator operands before overload selection.
+			return MatchRank{
+			    MatchRank::Tier::Direct,
+			    distance};
+		}
+	}
+
+	auto conversion =
+	    target->value_conversion_from(source);
+	if (!conversion)
+		return std::nullopt;
+	return MatchRank{
+	    conversion->kind ==
+	            ValueConversionClass::Direct
+	        ? MatchRank::Tier::Direct
+	        : MatchRank::Tier::Convert,
+	    conversion->distance};
+}
+
+std::optional<std::vector<MatchRank>>
+Parser::match_callable_arguments(
+    Callable* callable,
+    const std::vector<Node*>& args) {
+	auto signature =
+	    static_cast<RoutineType*>(callable->ty);
+	if (args.size() > signature->formals.size())
+		return std::nullopt;
+	for (size_t i = args.size();
+	     i < signature->formals.size(); ++i)
+		if (!signature->formals[i].default_value)
+			return std::nullopt;
+
+	const BuiltinDesc* builtin =
+	    callable->builtin_desc
+	        ? callable->builtin_desc
+	        : lookup_builtin_desc(
+	              callable->cxx_name);
+	std::vector<MatchRank> ranks(
+	    signature->formals.size(),
+	    MatchRank{MatchRank::Tier::Exact, 0});
+	for (size_t i = 0; i < args.size(); ++i) {
+		auto rank = match_argument(
+		    signature->formals[i], args[i],
+		    builtin, i);
+		if (!rank)
+			return std::nullopt;
+		ranks[i] = *rank;
+	}
+	return ranks;
+}
+
+static bool rank_less(
+    const MatchRank& a, const MatchRank& b) {
+	if (a.tier != b.tier)
+		return static_cast<unsigned>(a.tier) <
+		       static_cast<unsigned>(b.tier);
+	return a.distance < b.distance;
+}
+
+static bool dominates(
+    const std::vector<MatchRank>& a,
+    const std::vector<MatchRank>& b) {
+	if (a.size() != b.size())
+		return false;
+	bool strict = false;
+	for (size_t i = 0; i < a.size(); ++i) {
+		if (rank_less(b[i], a[i]))
+			return false;
+		if (rank_less(a[i], b[i]))
+			strict = true;
+	}
+	return strict;
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
@@ -7070,7 +7248,8 @@ Node* Parser::resolve_routine_reference(
 			    reference->receiver != nullptr;
 		}
 		if (category_matches &&
-		    routine_types_compatible(candidate->ty, target_ty))
+		    target_ty->accepts_routine_value_from(
+		        candidate->ty))
 			compatible.push_back(candidate);
 	}
 
@@ -7192,10 +7371,20 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		if (name_for_error.empty() && !c->pas_name.empty()) {
 			name_for_error = c->pas_name;
 		}
-		if (expected_return_type &&
-		    static_cast<RoutineType*>(c->ty)->return_type != expected_return_type) {
+		auto match =
+		    match_callable_arguments(c, args);
+		if (!match ||
+		    (expected_return_type &&
+		     static_cast<RoutineType*>(
+		         c->ty)->return_type !=
+		         expected_return_type)) {
 			std::vector<Callable*> candidates{c};
-			std::vector<std::pair<Callable*, std::vector<int>>> viable;
+			std::vector<std::pair<
+			    Callable*,
+			    std::vector<MatchRank>>> viable;
+			if (match)
+				viable.push_back(
+				    {c, *match});
 			std::vector<Callable*> none;
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args,
 				expected_return_type, candidates, viable, none, false);
@@ -7203,16 +7392,20 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		chosen = c;
 	} else if (auto os = dynamic_cast<OverloadSet*>(target)) {
 		std::vector<Callable*> candidates = os->members;
-		std::vector<std::pair<Callable*, std::vector<int>>> viable;
+		std::vector<std::pair<
+		    Callable*,
+		    std::vector<MatchRank>>> viable;
 		for (auto* c : candidates) {
 			if (name_for_error.empty() && !c->pas_name.empty()) {
 				name_for_error = c->pas_name;
 			}
-			auto costs = per_arg_costs(c, args);
-			if (!costs.empty() &&
+			auto costs =
+			    match_callable_arguments(c, args);
+			if (costs &&
 			    (!expected_return_type ||
 			     static_cast<RoutineType*>(c->ty)->return_type == expected_return_type))
-				viable.push_back({c, std::move(costs)});
+				viable.push_back(
+				    {c, std::move(*costs)});
 		}
 		if (viable.empty()) {
 			std::vector<Callable*> none;
@@ -7354,7 +7547,10 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
 	}
 	const BuiltinDesc* builtin = chosen
-	    ? lookup_builtin_desc(chosen->cxx_name)
+	    ? (chosen->builtin_desc
+	           ? chosen->builtin_desc
+	           : lookup_builtin_desc(
+	                 chosen->cxx_name))
 	    : nullptr;
 	if (builtin &&
 	    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
@@ -7387,45 +7583,19 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		// retain their exact, related types at the C++ call boundary.
 		args[1] = cast(args[1], set_type->item_type);
 	}
-	for (size_t i = 0; i < args.size(); i++) {
-		if (!chosen) {
-			Type* from = args[i] ? args[i]->ty : nullptr;
-			Type* to = rty->formals[i].ty;
-			ParamMode mode = rty->formals[i].mode;
-			bool compatible =
-			    dynamic_cast<NilLiteral*>(args[i]) ||
-			    (dynamic_cast<RoutineRef*>(args[i]) &&
-			     dynamic_cast<RoutineType*>(to));
-			if (mode == ParamMode::Var ||
-			    mode == ParamMode::Out) {
-				compatible = from == to;
-				if (auto subrange =
-				        dynamic_cast<SubrangeType*>(from))
-					compatible =
-					    subrange->base_type == to;
-			} else if (!compatible) {
-				compatible =
-				    conversion_cost(from, to) >= 0;
-			}
-			if (!compatible)
-				emit_parse_error_at(
-				    error_location,
-				    "argument for routine value parameter '" +
-				    rty->formals[i].pas_name +
-				    "' has an incompatible type");
-		}
-		auto mode = rty->formals[i].mode;
-		if (mode != ParamMode::Var && mode != ParamMode::Out)
+	for (size_t i = 0; i < args.size(); ++i) {
+		if (match_argument(
+		        rty->formals[i], args[i],
+		        builtin, i))
 			continue;
-		if (!is_referenceable(args[i])) {
-			emit_parse_error_at(error_location,
-				"argument for var/out parameter '" + rty->formals[i].pas_name + "' is not a storage-backed expression");
-		}
-		if (contains_packed_projection(args[i])) {
-			emit_parse_error_at(error_location,
-				"packed-record field cannot yet be passed as var/out parameter '" +
-				rty->formals[i].pas_name + "'");
-		}
+		// Selection and application deliberately use the same matcher.
+		// Reimplementing compatibility here previously let routine values
+		// and default arguments obey different var/out rules from named calls.
+		emit_parse_error_at(
+		    error_location,
+		    "argument for parameter '" +
+		        rty->formals[i].pas_name +
+		        "' has an incompatible type");
 	}
 	// Insert Cast for any arg whose type differs from the formal.
 	for (size_t i = 0; i < args.size(); i++) {
@@ -7441,18 +7611,23 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			continue; // untyped formal preserves the argument's exact Pascal type
 		auto mode = rty->formals[i].mode;
 		if (mode == ParamMode::Var || mode == ParamMode::Out) {
-			// Integer subranges use their base type as their C++ storage
-			// carrier. Preserve that storage expression: casting it would
-			// manufacture an rvalue and lose the var/out destination.
-			if (auto subrange = dynamic_cast<SubrangeType*>(args[i]->ty))
-				if (subrange->base_type == t)
-					continue;
-			// FPC permits a typed pointer variable for an out Pointer formal.
-			// The RTL template receives T*& and performs a real C++ pointer
-			// conversion from malloc's void* result.
-			if (t == pointer_type() &&
-			    dynamic_cast<PointerType*>(args[i]->ty))
+			if (args[i]->ty == t)
 				continue;
+			if (builtin &&
+			    builtin->generic_kind ==
+			        BuiltinGenericKind::PointerStorageOut &&
+			    mode == ParamMode::Out &&
+			    t == pointer_type() &&
+			    dynamic_cast<PointerType*>(
+			        args[i]->ty))
+				continue;
+			// A mutable reference is never materialized through a value
+			// conversion. Reaching this branch means selection and
+			// application have diverged, which is a compiler defect.
+			emit_parse_error_at(
+			    error_location,
+			    "internal error: selected var/out "
+			    "argument requires conversion");
 		}
 		args[i] = cast(args[i], t);
 	}

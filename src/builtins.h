@@ -38,6 +38,10 @@ enum class BuiltinGenericKind {
 	// Assigned accepts object pointers, plain routine values, and method
 	// routine values. system.pp can only spell its Pointer overload.
 	Assigned,
+	// GetMem's `out Pointer` is explicitly raw pointer storage: the RTL
+	// template may write a typed pointer variable without pretending that
+	// ordinary typed var/out parameters are covariant.
+	PointerStorageOut,
 };
 
 enum class BuiltinSyntaxKind {
@@ -92,6 +96,8 @@ public:
 	              std::optional<OrdinalBounds> ordinal_bounds = {},
 	              std::optional<TypeLayout> layout = {});
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

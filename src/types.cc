@@ -11,6 +11,15 @@
 
 Type::Type(SourceLocation source_location) : source_location(std::move(source_location)) {}
 
+std::optional<ValueConversion>
+Type::value_conversion_from(const Type*) const {
+	return std::nullopt;
+}
+
+bool Type::is_subtype_of(const Type* target) const {
+	return this == target;
+}
+
 IncompleteType::IncompleteType(SourceLocation source_location, std::string name)
     : Type(std::move(source_location)), name(std::move(name)), resolved(nullptr) {}
 
@@ -541,307 +550,454 @@ static int integer_conversion_cost(Type* from, Type* to) {
 	return cost;
 }
 
-static bool routine_signature_type_equal(
-    Type* a, Type* b) {
-	if (a == b)
-		return true;
-	return conversion_cost(a, b) == 0 &&
-	       conversion_cost(b, a) == 0;
+static ValueConversion direct_conversion(unsigned distance = 0) {
+	return ValueConversion{
+	    ValueConversionClass::Direct, distance};
 }
 
-bool routine_types_compatible(
-    const RoutineType* from, const RoutineType* to) {
-	if (!from || !to)
+static ValueConversion implicit_conversion(unsigned distance = 0) {
+	return ValueConversion{
+	    ValueConversionClass::Convert, distance};
+}
+
+std::optional<ValueConversion>
+IntrinsicType::value_conversion_from(
+    const Type* source_const) const {
+	auto source = const_cast<Type*>(source_const);
+	auto target = const_cast<IntrinsicType*>(this);
+	if (source == &untyped_integer_type()) {
+		// The expression matcher checks the literal's actual magnitude. At the
+		// type level it is a contextual integer value, not another nominal
+		// integer definition.
+		if (integer_widening_rank(target) >= 0)
+			return direct_conversion();
+		if (real_widening_rank(target) >= 0)
+			return implicit_conversion(
+			    500 + real_widening_rank(target));
+	}
+
+	if ((source == char_type() && target == byte_type()) ||
+	    (source == byte_type() && target == char_type()))
+		return implicit_conversion(20);
+
+	int integer_cost =
+	    integer_conversion_cost(source, target);
+	if (integer_cost >= 0)
+		return implicit_conversion(
+		    static_cast<unsigned>(integer_cost));
+
+	int source_real = real_widening_rank(source);
+	int target_real = real_widening_rank(target);
+	if (source_real >= 0 && target_real >= 0) {
+		unsigned distance = static_cast<unsigned>(
+		    std::abs(target_real - source_real));
+		if (target_real < source_real)
+			distance += 200;
+		return implicit_conversion(distance);
+	}
+	if (integer_widening_rank(source) >= 0 &&
+	    target_real >= 0)
+		return implicit_conversion(
+		    500 + static_cast<unsigned>(target_real));
+	return std::nullopt;
+}
+
+std::optional<ValueConversion>
+ShortStringType::value_conversion_from(
+    const Type* source) const {
+	auto string =
+	    dynamic_cast<const ShortStringType*>(source);
+	if (!string)
+		return std::nullopt;
+	unsigned distance = static_cast<unsigned>(
+	    std::abs(static_cast<int>(capacity) -
+	             static_cast<int>(string->capacity)));
+	if (capacity == string->capacity)
+		return direct_conversion();
+	if (string->capacity > capacity)
+		distance += 256;
+	return implicit_conversion(distance);
+}
+
+std::optional<ValueConversion>
+FixedSetType::value_conversion_from(
+    const Type* source) const {
+	auto set = dynamic_cast<const FixedSetType*>(source);
+	if (!set)
+		return std::nullopt;
+	// A set constructor decides which ordinal domain its bits represent.
+	// Value compatibility may therefore cross definition identity only when
+	// both set definitions name the exact same item definition.
+	if (set->item_type == item_type)
+		return direct_conversion();
+	return std::nullopt;
+}
+
+std::optional<ValueConversion>
+FixedArrayType::value_conversion_from(
+    const Type* source) const {
+	auto array =
+	    dynamic_cast<const FixedArrayType*>(source);
+	if (!array)
+		return std::nullopt;
+	// Fixed-array assignment is a constructor-specific whole-value operation.
+	// Equal byte size is insufficient: the index domain, exact element
+	// definition, and both ordinal bounds must agree.
+	if (array->range.base_type != range.base_type ||
+	    array->item_type != item_type ||
+	    array->range.lower_ordinal.negative !=
+	        range.lower_ordinal.negative ||
+	    array->range.lower_ordinal.magnitude !=
+	        range.lower_ordinal.magnitude ||
+	    array->range.upper_ordinal.negative !=
+	        range.upper_ordinal.negative ||
+	    array->range.upper_ordinal.magnitude !=
+	        range.upper_ordinal.magnitude)
+		return std::nullopt;
+	return direct_conversion();
+}
+
+static bool interface_is_or_extends(
+    const InterfaceType* source,
+    const InterfaceType* target) {
+	if (source == target)
+		return true;
+	for (InterfaceType* parent :
+	     source->super_interfaces)
+		if (interface_is_or_extends(parent, target))
+			return true;
+	return false;
+}
+
+bool InterfaceType::is_subtype_of(
+    const Type* target) const {
+	auto target_interface =
+	    dynamic_cast<const InterfaceType*>(target);
+	return target_interface &&
+	       interface_is_or_extends(
+	           this, target_interface);
+}
+
+static bool class_implements_interface(
+    const ClassType* source,
+    const InterfaceType* target) {
+	for (const ClassType* current = source;
+	     current; current = current->super)
+		for (InterfaceType* implemented :
+		     current->implemented_interfaces)
+			if (interface_is_or_extends(
+			        implemented, target))
+				return true;
+	return false;
+}
+
+bool ClassType::is_subtype_of(
+    const Type* target) const {
+	if (auto target_class =
+	        dynamic_cast<const ClassType*>(target)) {
+		for (const ClassType* current = this;
+		     current; current = current->super)
+			if (current == target_class)
+				return true;
 		return false;
-	// A receiver-bearing class method is stored as CLASS_METHOD so the
-	// declaration emitter routes it to m_meta. Once bound to its metaclass
-	// receiver, however, its Pascal value representation is exactly the same
-	// two-word `of object` category as an instance method.
-	auto value_kind = [](RoutineKind kind) {
-		return kind == CLASS_METHOD
-		    ? METHOD
-		    : kind;
-	};
-	RoutineKind from_kind =
-	    value_kind(from->kind);
-	RoutineKind to_kind =
-	    value_kind(to->kind);
-	if (from_kind != to_kind)
+	}
+	if (auto target_interface =
+	        dynamic_cast<const InterfaceType*>(target))
+		return class_implements_interface(
+		    this, target_interface);
+	return false;
+}
+
+bool ObjectType::is_subtype_of(
+    const Type* target) const {
+	auto target_object =
+	    dynamic_cast<const ObjectType*>(target);
+	if (!target_object)
 		return false;
-	if (from_kind != ROUTINE &&
-	    from_kind != METHOD)
+	for (const ObjectType* current = this;
+	     current; current = current->super)
+		if (current == target_object)
+			return true;
+	return false;
+}
+
+static unsigned class_inheritance_distance(
+    const ClassType* source,
+    const ClassType* target) {
+	unsigned distance = 0;
+	for (const ClassType* current = source;
+	     current; current = current->super, ++distance)
+		if (current == target)
+			return distance;
+	return std::numeric_limits<unsigned>::max();
+}
+
+static unsigned object_inheritance_distance(
+    const ObjectType* source,
+    const ObjectType* target) {
+	unsigned distance = 0;
+	for (const ObjectType* current = source;
+	     current; current = current->super, ++distance)
+		if (current == target)
+			return distance;
+	return std::numeric_limits<unsigned>::max();
+}
+
+std::optional<ValueConversion>
+ClassType::value_conversion_from(
+    const Type* source) const {
+	auto source_class =
+	    dynamic_cast<const ClassType*>(source);
+	if (!source_class ||
+	    !source_class->is_subtype_of(this))
+		return std::nullopt;
+	return implicit_conversion(
+	    class_inheritance_distance(source_class, this));
+}
+
+std::optional<ValueConversion>
+InterfaceType::value_conversion_from(
+    const Type* source) const {
+	if (!source || !source->is_subtype_of(this))
+		return std::nullopt;
+	return implicit_conversion(1);
+}
+
+std::optional<ValueConversion>
+ObjectType::value_conversion_from(
+    const Type* source) const {
+	auto source_object =
+	    dynamic_cast<const ObjectType*>(source);
+	if (!source_object ||
+	    !source_object->is_subtype_of(this))
+		return std::nullopt;
+	return implicit_conversion(
+	    object_inheritance_distance(
+	        source_object, this));
+}
+
+std::optional<ValueConversion>
+ClassRefType::value_conversion_from(
+    const Type* source) const {
+	auto source_ref =
+	    dynamic_cast<const ClassRefType*>(source);
+	if (!source_ref)
+		return std::nullopt;
+	if (source_ref->target == target)
+		return direct_conversion();
+	if (source_ref->target &&
+	    source_ref->target->is_subtype_of(target)) {
+		auto source_class =
+		    dynamic_cast<const ClassType*>(
+		        source_ref->target);
+		auto target_class =
+		    dynamic_cast<const ClassType*>(target);
+		unsigned distance =
+		    source_class && target_class
+		        ? class_inheritance_distance(
+		              source_class, target_class)
+		        : 1;
+		return implicit_conversion(distance);
+	}
+	return std::nullopt;
+}
+
+std::optional<ValueConversion>
+PointerType::value_conversion_from(
+    const Type* source) const {
+	auto source_pointer =
+	    dynamic_cast<const PointerType*>(source);
+	if (!source_pointer)
+		return std::nullopt;
+	if (source_pointer->item_type == item_type)
+		return direct_conversion();
+	if (source_pointer->is_untyped() || is_untyped())
+		return implicit_conversion(20);
+	auto source_object =
+	    dynamic_cast<const ObjectType*>(
+	        source_pointer->item_type);
+	auto target_object =
+	    dynamic_cast<const ObjectType*>(item_type);
+	if (source_object && target_object &&
+	    source_object->is_subtype_of(target_object))
+		return implicit_conversion(
+		    object_inheritance_distance(
+		        source_object, target_object));
+	return std::nullopt;
+}
+
+struct FoldedOrdinalValue {
+	bool negative;
+	uint64_t magnitude;
+};
+
+static std::optional<FoldedOrdinalValue>
+fold_ordinal_value(Node* node) {
+	if (!node)
+		return std::nullopt;
+	ConstEvalContext ctx;
+	ConstEvalResult folded = node->const_eval(ctx);
+	if (folded.kind !=
+	    ConstEvalResult::Kind::Success)
+		return std::nullopt;
+	if (auto integer =
+	        dynamic_cast<Integer*>(folded.node))
+		return FoldedOrdinalValue{
+		    integer->negative, integer->value};
+	if (auto member =
+	        dynamic_cast<EnumMemberRef*>(folded.node)) {
+		if (member->value < 0)
+			return FoldedOrdinalValue{
+			    true,
+			    static_cast<uint64_t>(
+			        -(member->value + 1)) + 1};
+		return FoldedOrdinalValue{
+		    false,
+		    static_cast<uint64_t>(member->value)};
+	}
+	return std::nullopt;
+}
+
+static int compare_folded_ordinals(
+    const FoldedOrdinalValue& a,
+    const FoldedOrdinalValue& b) {
+	if (a.negative != b.negative)
+		return a.negative ? -1 : 1;
+	if (a.magnitude == b.magnitude)
+		return 0;
+	if (a.negative)
+		return a.magnitude > b.magnitude
+		    ? -1
+		    : 1;
+	return a.magnitude < b.magnitude
+	    ? -1
+	    : 1;
+}
+
+static bool subrange_contains(
+    const SubrangeType* outer,
+    const SubrangeType* inner) {
+	if (!outer || !inner ||
+	    outer->base_type != inner->base_type)
 		return false;
-	if (!routine_signature_type_equal(
-	        from->return_type, to->return_type) ||
-	    from->formals.size() != to->formals.size())
+	auto outer_low =
+	    fold_ordinal_value(outer->lower_bound);
+	auto outer_high =
+	    fold_ordinal_value(outer->upper_bound);
+	auto inner_low =
+	    fold_ordinal_value(inner->lower_bound);
+	auto inner_high =
+	    fold_ordinal_value(inner->upper_bound);
+	return outer_low && outer_high &&
+	       inner_low && inner_high &&
+	       compare_folded_ordinals(
+	           *outer_low, *inner_low) <= 0 &&
+	       compare_folded_ordinals(
+	           *outer_high, *inner_high) >= 0;
+}
+
+std::optional<ValueConversion>
+SubrangeType::value_conversion_from(
+    const Type* source) const {
+	if (auto source_range =
+	        dynamic_cast<const SubrangeType*>(source)) {
+		if (source_range->base_type != base_type)
+			return std::nullopt;
+		return subrange_contains(this, source_range)
+		    ? std::optional<ValueConversion>{
+		          direct_conversion()}
+		    : std::optional<ValueConversion>{
+		          implicit_conversion(200)};
+	}
+	if (source == base_type)
+		return implicit_conversion(200);
+	auto base_conversion =
+	    base_type->value_conversion_from(source);
+	if (base_conversion)
+		return implicit_conversion(
+		    200 + base_conversion->distance);
+	return std::nullopt;
+}
+
+std::optional<ValueConversion>
+RoutineType::value_conversion_from(
+    const Type* source) const {
+	auto routine =
+	    dynamic_cast<const RoutineType*>(source);
+	if (routine &&
+	    accepts_routine_value_from(routine))
+		return direct_conversion();
+	return std::nullopt;
+}
+
+bool RoutineType::same_parameter_and_result_types_as(
+    const RoutineType* other) const {
+	if (!other ||
+	    return_type != other->return_type ||
+	    formals.size() != other->formals.size())
 		return false;
-	for (size_t i = 0; i < from->formals.size(); ++i) {
-		const Parameter& a = from->formals[i];
-		const Parameter& b = to->formals[i];
-		if (a.mode != b.mode)
-			return false;
-		// Pointer and nested routine types can be independently parsed but
-		// structurally identical. Require zero-cost compatibility both ways;
-		// widening and other implicit conversions are not signature identity.
-		if (!routine_signature_type_equal(a.ty, b.ty))
+	for (size_t i = 0; i < formals.size(); ++i) {
+		if (formals[i].mode !=
+		        other->formals[i].mode ||
+		    formals[i].ty !=
+		        other->formals[i].ty)
 			return false;
 	}
 	return true;
 }
 
-static bool file_item_types_equal(Type* a, Type* b) {
-	if (a == b)
-		return true;
-	while (auto incomplete = dynamic_cast<IncompleteType*>(a)) {
-		if (!incomplete->resolved)
-			return false;
-		a = incomplete->resolved;
-	}
-	while (auto incomplete = dynamic_cast<IncompleteType*>(b)) {
-		if (!incomplete->resolved)
-			return false;
-		b = incomplete->resolved;
-	}
-	if (a == b)
-		return true;
-	if (auto a_string = dynamic_cast<ShortStringType*>(a)) {
-		auto b_string = dynamic_cast<ShortStringType*>(b);
-		return b_string &&
-		       a_string->capacity == b_string->capacity;
-	}
-	if (auto a_pointer = dynamic_cast<PointerType*>(a)) {
-		auto b_pointer = dynamic_cast<PointerType*>(b);
-		return b_pointer &&
-		       file_item_types_equal(
-		           a_pointer->item_type, b_pointer->item_type);
-	}
-	if (auto a_set = dynamic_cast<FixedSetType*>(a)) {
-		auto b_set = dynamic_cast<FixedSetType*>(b);
-		return b_set &&
-		       file_item_types_equal(
-		           a_set->item_type, b_set->item_type);
-	}
-	if (auto a_array = dynamic_cast<FixedArrayType*>(a)) {
-		auto b_array = dynamic_cast<FixedArrayType*>(b);
-		return b_array &&
-		       a_array->range.lower_ordinal.negative ==
-		           b_array->range.lower_ordinal.negative &&
-		       a_array->range.lower_ordinal.magnitude ==
-		           b_array->range.lower_ordinal.magnitude &&
-		       a_array->range.upper_ordinal.negative ==
-		           b_array->range.upper_ordinal.negative &&
-		       a_array->range.upper_ordinal.magnitude ==
-		           b_array->range.upper_ordinal.magnitude &&
-		       file_item_types_equal(
-		           a_array->range.base_type,
-		           b_array->range.base_type) &&
-		       file_item_types_equal(
-		           a_array->item_type, b_array->item_type);
-	}
-	if (auto a_classref = dynamic_cast<ClassRefType*>(a)) {
-		auto b_classref = dynamic_cast<ClassRefType*>(b);
-		return b_classref &&
-		       file_item_types_equal(
-		           a_classref->target, b_classref->target);
-	}
-	if (auto a_routine = dynamic_cast<RoutineType*>(a)) {
-		auto b_routine = dynamic_cast<RoutineType*>(b);
-		return b_routine &&
-		       routine_types_compatible(a_routine, b_routine);
-	}
-	if (auto a_file = dynamic_cast<TypedFileType*>(a)) {
-		auto b_file = dynamic_cast<TypedFileType*>(b);
-		return b_file &&
-		       file_item_types_equal(
-		           a_file->item_type, b_file->item_type);
-	}
-	return false;
+bool RoutineType::same_signature_as(
+    const RoutineType* other) const {
+	return other && kind == other->kind &&
+	       same_parameter_and_result_types_as(other);
 }
 
-TypedFileType* typed_file_type(
-    SourceLocation source_location, Type* item_type) {
-	static std::vector<TypedFileType*> types;
-	for (TypedFileType* type : types)
-		if (file_item_types_equal(
-		        type->item_type, item_type))
-			return type;
-	auto result = new TypedFileType(
-	    std::move(source_location), item_type);
-	types.push_back(result);
-	return result;
+bool RoutineType::accepts_routine_value_from(
+    const RoutineType* source) const {
+	if (!source)
+		return false;
+	auto value_kind = [](RoutineKind kind) {
+		// A class method is declared on m_meta, but a bound reference carries
+		// that metaclass receiver in the same two-word representation as every
+		// other `procedure of object`.
+		return kind == CLASS_METHOD
+		    ? METHOD
+		    : kind;
+	};
+	RoutineKind source_kind =
+	    value_kind(source->kind);
+	RoutineKind target_kind =
+	    value_kind(kind);
+	if (source_kind != target_kind ||
+	    (target_kind != ROUTINE &&
+	     target_kind != METHOD))
+		return false;
+	return same_parameter_and_result_types_as(
+	    source);
 }
 
-Type* common_arith_type(Type* a, Type* b) {
-	if (!a || !b)
-		return nullptr;
-	if (a == &untyped_integer_type() && b == &untyped_integer_type())
-		return integer_type();
-	if (a == b)
-		return a;
-	if (dynamic_cast<ShortStringType*>(a) && b == char_type()) {
-		return a;
-	} else if (a == char_type() &&
-		   dynamic_cast<ShortStringType*>(b)) {
-		return b;
-	}
-	if (a == &untyped_integer_type())
-		return b;
-	if (b == &untyped_integer_type())
-		return a;
-	int ra = integer_widening_rank(a), rb = integer_widening_rank(b);
-	if (ra >= 0 && rb >= 0)
-		return (ra >= rb) ? a : b;
-	int rra = real_widening_rank(a), rrb = real_widening_rank(b);
-	if (rra >= 0 && rrb >= 0)
-		return (rra >= rrb) ? a : b;
-	if (rra >= 0 && rb >= 0)
-		return a;
-	if (rrb >= 0 && ra >= 0)
-		return b;
-	return nullptr;
-}
-
-// FIXME: add enums, sets; add class-to-interface via implemented_interfaces
 int conversion_cost(Type* from, Type* to) {
 	if (!from || !to)
 		return -1;
 	if (from == to)
 		return 0;
-	if (auto from_routine = dynamic_cast<RoutineType*>(from)) {
-		auto to_routine = dynamic_cast<RoutineType*>(to);
-		return to_routine &&
-		       routine_types_compatible(from_routine, to_routine)
-		    ? 0
-		    : -1;
-	}
-	// Every ShortString capacity belongs to the same Pascal string family.
-	// Conversion is length-aware and truncates to the destination capacity.
-	// Treat capacities as equal for overload ranking, matching FPC's rule that
-	// `string` and `string[N]` do not distinguish overloads.
-	if (dynamic_cast<ShortStringType*>(from) &&
-	    dynamic_cast<ShortStringType*>(to))
-		return 0;
-	if (auto from_file = dynamic_cast<TypedFileType*>(from)) {
-		auto to_file = dynamic_cast<TypedFileType*>(to);
-		return to_file &&
-		       file_item_types_equal(
-		           from_file->item_type, to_file->item_type)
-		    ? 0
-		    : -1;
-	}
-	if (from == &untyped_integer_type()) {
-		int real_to = real_widening_rank(to);
-		if (real_to >= 0)
-			return 500 + real_to;
-		return 0; // literal adapts exactly to concrete integer carriers
-	}
-	// Char and Byte remain nominally distinct (so exact overloads can
-	// distinguish them), but Pascal permits ordinal conversion between their
-	// identical unsigned eight-bit ranges.
-	if ((from == char_type() && to == byte_type()) ||
-	    (from == byte_type() && to == char_type()))
-		return 20;
-	// Set types are structural in their ordinal item type. Empty set literals
-	// carry unknown_type() until context supplies the destination item type.
-	if (auto from_set = dynamic_cast<FixedSetType*>(from)) {
-		if (auto to_set = dynamic_cast<FixedSetType*>(to)) {
-			if (from_set->item_type == unknown_type())
-				return 0;
-			return conversion_cost(from_set->item_type, to_set->item_type);
-		}
-	}
-	// Pointer types are structural in Pascal. Independently-created `^T`
-	// nodes with the same target are assignment-compatible.
-	if (auto from_pointer = dynamic_cast<PointerType*>(from)) {
-		if (auto to_pointer = dynamic_cast<PointerType*>(to)) {
-			if (from_pointer->item_type == to_pointer->item_type)
-				return 0;
-			// Old-style objects are values, but pointers to them follow the
-			// same single-inheritance adjustment as the generated C++
-			// carriers. This permits ^Derived -> ^Base without pretending the
-			// ObjectType itself is a reference type.
-			auto from_object =
-			    dynamic_cast<ObjectType*>(
-			        from_pointer->item_type);
-			auto to_object =
-			    dynamic_cast<ObjectType*>(
-			        to_pointer->item_type);
-			int depth = 0;
-			for (ObjectType* current = from_object;
-			     current; current = current->super, ++depth)
-				if (current == to_object)
-					return depth;
-		}
-	}
-	// Pascal's untyped Pointer is assignment-compatible with every typed
-	// object pointer. Cast emission performs the corresponding C++ void*
-	// conversion; no pointer representation is copied bytewise.
-	if ((from == pointer_type() && dynamic_cast<PointerType*>(to)) ||
-	    (dynamic_cast<PointerType*>(from) && to == pointer_type()))
-		return 20;
-	// Subclass-to-superclass: implicit, cost = depth (1 per inheritance step).
-	// Identity handled by `from == to` above.
-	if (from->is_reference_type() && to->is_reference_type()) {
-		int depth = 0;
-		for (ClassType* cur = dynamic_cast<ClassType*>(from); cur; cur = cur->super, ++depth)
-			if (cur->super == to)
-				return depth + 1;
-		depth = 0;
-		for (ObjectType* cur = dynamic_cast<ObjectType*>(from); cur; cur = cur->super, ++depth)
-			if (cur->super == to)
-				return depth + 1;
-		// METAclass references: class of Derived -> class of Base
-		if (auto from_classref = dynamic_cast<ClassRefType*>(from)) {
-			if (auto to_classref = dynamic_cast<ClassRefType*>(to)) {
-				int depth = 0;
-				// Class-reference targets are normalized when their type
-				// block closes. Call scoring is a post-declaration phase and
-				// must not backpatch parser placeholders.
-				for (ClassType* cur = dynamic_cast<ClassType*>(from_classref->target); cur; cur = cur->super, ++depth) {
-					if (cur == to_classref->target)
-						return depth;
-				}
-				return -1;
-			}
-		}
+	auto conversion =
+	    to->value_conversion_from(from);
+	if (!conversion)
 		return -1;
-	}
-	int rfrom = integer_widening_rank(from);
-	int int_cost = integer_conversion_cost(from, to);
-	if (int_cost >= 0)
-		return int_cost;
-	int real_from = real_widening_rank(from);
-	int real_to = real_widening_rank(to);
-	if (real_from >= 0 && real_to >= 0) {
-		int cost = 2 + std::abs(real_to - real_from);
-		if (real_to < real_from)
-			cost += 200; // permitted narrowing, never preferred by overloads
-		return cost;
-	}
-	// Pascal permits integer-to-real assignment/conversion. This can be lossy:
-	// large Int64/QWord values are not all exactly representable. Any viable
-	// integer overload must beat a real overload for integer operands, so keep
-	// this in a cost band above even widening to Int64/QWord. Single beats
-	// Double, which beats Extended, when real overloads are otherwise
-	// candidates.
-	if (rfrom >= 0 && real_to >= 0)
-		return 500 + real_to;
-	return -1;
-}
-
-// A dominates B iff A's cost is <= B's on every position AND strictly < on
-// at least one. Different-length vectors don't compare (ambiguity later).
-bool dominates(const std::vector<int>& a, const std::vector<int>& b) {
-	if (a.size() != b.size())
-		return false;
-	bool strict = false;
-	for (size_t i = 0; i < a.size(); i++) {
-		if (a[i] > b[i])
-			return false;
-		if (a[i] < b[i])
-			strict = true;
-	}
-	return strict;
+	// Exact identity is the only zero-cost relation. Direct constructor
+	// matches occupy a lower band than actual value conversions so overload
+	// ranking cannot mistake representational compatibility for identity.
+	unsigned base =
+	    conversion->kind ==
+	            ValueConversionClass::Direct
+	        ? 1
+	        : 1000;
+	unsigned cost = base + conversion->distance;
+	return cost > static_cast<unsigned>(
+	                  std::numeric_limits<int>::max())
+	    ? std::numeric_limits<int>::max()
+	    : static_cast<int>(cost);
 }
 
 #include "cst.h"
