@@ -6456,6 +6456,9 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	if (sig->kind == METHOD ||
 	    sig->kind == CLASS_METHOD ||
 	    is_static) {
+		const bool old_object_method =
+		    dynamic_cast<ObjectType*>(
+		        owner_class) != nullptr;
 		bool override_target_found = false;
 		auto inspect_ancestor_binding =
 		    [&](Node* binding) {
@@ -6485,15 +6488,23 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 				        if (!cxx_callable_signatures_collide(
 				                m, ancestor))
 					        return;
-				        if (vk ==
-				                Method::VirtualKind::Override &&
-				            exact_signature)
+				        bool intended_override =
+				            exact_signature &&
+				            ((old_object_method &&
+				              vk != Method::
+				                        VirtualKind::None) ||
+				             (!old_object_method &&
+				              vk == Method::
+				                        VirtualKind::Override));
+				        if (intended_override)
 					        return;
 				        // C++ virtual overriding is based on the emitted name
 				        // and carrier signature even when Pascal selected a
 				        // distinct signature or requested a fresh virtual
-				        // slot. Reject that lowering instead of silently
-				        // changing Pascal dispatch.
+				        // slot. Old-style objects are the exception: repeating
+				        // `virtual` on the exact derived declaration is their
+				        // normal override spelling. Reject every other
+				        // lowering instead of silently changing Pascal dispatch.
 				        raise_parse_error(
 				            "method '" + pas_name +
 				            "' would accidentally override an "

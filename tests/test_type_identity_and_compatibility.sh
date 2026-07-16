@@ -8,6 +8,28 @@ mkdir -p "$tmp"
 
 cd "$root"
 
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-Isrc \
+	-Irtl \
+	tests/type_conversion_algebra.cc \
+	src/cst.o \
+	src/directive_expr.o \
+	src/frame.o \
+	src/types.o \
+	src/evaluator.o \
+	src/builtins.o \
+	src/units.o \
+	src/emit.o \
+	src/diagnostic.o \
+	-o "$tmp/type_conversion_algebra"
+
+"$tmp/type_conversion_algebra"
+
 ./mp -Furtl -o"$tmp/type_identity.cc" \
 	tests/type_identity_and_compatibility.pp
 
