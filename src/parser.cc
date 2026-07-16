@@ -436,6 +436,109 @@ static std::string compact_directive_argument(
 	return compact;
 }
 
+static constexpr std::array<
+    DirectiveSwitchCategory, 26>
+directive_switch_categories = {
+    DirectiveSwitchCategory::RecordPacking, // A
+    DirectiveSwitchCategory::Local,         // B
+    DirectiveSwitchCategory::Local,         // C
+    DirectiveSwitchCategory::Module,        // D
+    DirectiveSwitchCategory::Module,        // E
+    DirectiveSwitchCategory::Unsupported,   // F
+    DirectiveSwitchCategory::Local,         // G
+    DirectiveSwitchCategory::Local,         // H
+    DirectiveSwitchCategory::Local,         // I
+    DirectiveSwitchCategory::Local,         // J
+    DirectiveSwitchCategory::Unsupported,   // K
+    DirectiveSwitchCategory::Unsupported,   // L
+    DirectiveSwitchCategory::Local,         // M
+    DirectiveSwitchCategory::Unsupported,   // N
+    DirectiveSwitchCategory::Optimizer,     // O
+    DirectiveSwitchCategory::Module,        // P
+    DirectiveSwitchCategory::Local,         // Q
+    DirectiveSwitchCategory::Local,         // R
+    DirectiveSwitchCategory::Local,         // S
+    DirectiveSwitchCategory::Local,         // T
+    DirectiveSwitchCategory::Unsupported,   // U
+    DirectiveSwitchCategory::Local,         // V
+    DirectiveSwitchCategory::Local,         // W
+    DirectiveSwitchCategory::Module,        // X
+    DirectiveSwitchCategory::Unsupported,   // Y
+    DirectiveSwitchCategory::EnumPacking,   // Z
+};
+
+static std::optional<size_t>
+directive_switch_index(char letter) {
+	unsigned char ch =
+	    static_cast<unsigned char>(letter);
+	ch = static_cast<unsigned char>(
+	    std::tolower(ch));
+	if (ch < 'a' || ch > 'z')
+		return std::nullopt;
+	return static_cast<size_t>(ch - 'a');
+}
+
+bool DirectiveState::switch_enabled(
+    char letter) const {
+	auto index = directive_switch_index(letter);
+	if (!index)
+		return false;
+	switch (directive_switch_categories[*index]) {
+	case DirectiveSwitchCategory::Local:
+		return local_switches[*index];
+	case DirectiveSwitchCategory::Module:
+		return module_switches[*index];
+	case DirectiveSwitchCategory::Optimizer:
+		return optimizer_switches[*index];
+	case DirectiveSwitchCategory::RecordPacking:
+		return record_packing;
+	case DirectiveSwitchCategory::EnumPacking:
+		return enum_packing;
+	case DirectiveSwitchCategory::Unsupported:
+		return false;
+	}
+	return false;
+}
+
+void DirectiveState::set_switch(
+    char letter, bool enabled) {
+	auto index = directive_switch_index(letter);
+	if (!index)
+		return;
+	switch (directive_switch_categories[*index]) {
+	case DirectiveSwitchCategory::Local:
+		local_switches[*index] = enabled;
+		break;
+	case DirectiveSwitchCategory::Module:
+		module_switches[*index] = enabled;
+		break;
+	case DirectiveSwitchCategory::Optimizer:
+		optimizer_switches[*index] = enabled;
+		break;
+	case DirectiveSwitchCategory::RecordPacking:
+		record_packing = enabled;
+		break;
+	case DirectiveSwitchCategory::EnumPacking:
+		enum_packing = enabled;
+		break;
+	case DirectiveSwitchCategory::Unsupported:
+		break;
+	}
+}
+
+SavedDirectiveState::SavedDirectiveState(
+    const DirectiveState& state)
+    : local_switches(state.local_switches),
+      record_packing(state.record_packing),
+      enum_packing(state.enum_packing) {}
+
+void SavedDirectiveState::restore(
+    DirectiveState& state) const {
+	state.local_switches = local_switches;
+	state.record_packing = record_packing;
+	state.enum_packing = enum_packing;
+}
+
 // Extract the content of a single-quoted string literal token (with '' escape).
 // FIXME: Remove and use evaluate().
 static std::string extract_string_literal(const std::string& token) {
@@ -512,7 +615,8 @@ void Parser::handle_directive(const std::string& body) {
 			    "$ifopt expects one option letter followed by + or -");
 		const bool requested = option[1] == '+';
 		const bool cond =
-		    option_switches[option[0] - 'a'] == requested;
+		    directive_state.switch_enabled(
+		        option[0]) == requested;
 		const bool outer = current_active();
 		ifdef_stack.push_back({outer, cond, outer && cond});
 		return;
@@ -543,6 +647,20 @@ void Parser::handle_directive(const std::string& body) {
 	}
 	if (!current_active())
 		return;
+	if (name == "push") {
+		saved_directive_states.emplace_back(
+		    directive_state);
+		return;
+	}
+	if (name == "pop") {
+		if (saved_directive_states.empty())
+			raise_parse_error(
+			    "$pop without preceding $push");
+		saved_directive_states.back().restore(
+		    directive_state);
+		saved_directive_states.pop_back();
+		return;
+	}
 	if (name == "define") {
 		// `{$define X}` sets X with no value; `{$define X := VALUE}` stores
 		// VALUE (trimmed) so numeric-compare {$if X < N} etc. can consume it.
@@ -571,27 +689,37 @@ void Parser::handle_directive(const std::string& body) {
 			options->defines.erase(rest);
 		return;
 	}
-	if (name == "i" &&
-	    (rest == "+" || rest == "-")) {
-		// This is the {$I+}/{$I-} I/O-checking switch, not the short
-		// spelling of {$INCLUDE file}. File operations currently preserve
-		// their status in IOResult in either mode; recognizing the switch
-		// here prevents the tokenizer from treating "+" or "-" as an
-		// include filename.
-		option_switches['i' - 'a'] = rest == "+";
-		return;
-	}
 	if (name.size() == 1 &&
 	    name[0] >= 'a' && name[0] <= 'z') {
-		const std::string state =
-		    compact_directive_argument(rest);
-		if (state == "+" || state == "-") {
-			// Conditional compilation observes option directives even when
-			// the corresponding runtime/code-generation behavior is not yet
-			// implemented. Like {$define}, a switch in an inactive branch
-			// cannot change the state seen after that branch.
-			option_switches[name[0] - 'a'] =
-			    state == "+";
+		const std::string switches =
+		    name + compact_directive_argument(rest);
+		if (switches.size() >= 2 &&
+		    (switches[1] == '+' ||
+		     switches[1] == '-')) {
+			size_t position = 0;
+			while (position < switches.size()) {
+				if (position + 1 >=
+				        switches.size() ||
+				    switches[position] < 'a' ||
+				    switches[position] > 'z' ||
+				    (switches[position + 1] != '+' &&
+				     switches[position + 1] != '-'))
+					raise_parse_error(
+					    "malformed option switch list");
+				directive_state.set_switch(
+				    switches[position],
+				    switches[position + 1] == '+');
+				position += 2;
+				if (position == switches.size())
+					break;
+				if (switches[position] != ',')
+					raise_parse_error(
+					    "malformed option switch list");
+				++position;
+				if (position == switches.size())
+					raise_parse_error(
+					    "malformed option switch list");
+			}
 			return;
 		}
 	}

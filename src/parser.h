@@ -96,6 +96,47 @@ struct ScopeEntry {
 	ScopeValueLookup lookup_value(
 	    const std::string& name) const;
 };
+
+enum class DirectiveSwitchCategory {
+	Unsupported,
+	Local,
+	Module,
+	Optimizer,
+	RecordPacking,
+	EnumPacking,
+};
+
+/** Source-visible compiler-directive state.
+ *
+ *  The category split is semantic: local and representation settings are
+ *  scoped by PUSH/POP, while module and optimizer settings persist. IFOPT and
+ *  switch assignment consult this same state instead of maintaining a second
+ *  table of answers. */
+class DirectiveState {
+	friend class SavedDirectiveState;
+	std::array<bool, 26> local_switches{};
+	std::array<bool, 26> module_switches{};
+	std::array<bool, 26> optimizer_switches{};
+	bool record_packing = false;
+	bool enum_packing = false;
+
+public:
+	bool switch_enabled(char letter) const;
+	void set_switch(char letter, bool enabled);
+};
+
+/** Exactly the PUSH/POP-scoped subset of DirectiveState. */
+class SavedDirectiveState {
+	std::array<bool, 26> local_switches;
+	bool record_packing;
+	bool enum_packing;
+
+public:
+	explicit SavedDirectiveState(
+	    const DirectiveState& state);
+	void restore(DirectiveState& state) const;
+};
+
 class Parser {
 private:
 	FILE* input_file;
@@ -179,10 +220,11 @@ private:
 	Emitter* emitter;
 	// Shared across the top-level parser and any sub-parsers it spawns.
 	CompilerOptions* options;
-	// Current A..Z source option states queried by {$ifopt X+/-}. TPCC has no
-	// command-line option-switch flags, so all begin off; active source
-	// directives such as {$Q+} update the corresponding entry.
-	std::array<bool, 26> option_switches{};
+	DirectiveState directive_state;
+	// This stack belongs to the source parser rather than an input file:
+	// include files participate in their parent's directive scope.
+	std::vector<SavedDirectiveState>
+	    saved_directive_states;
 	// One frame per open {$ifdef}/{$if}/{$ifndef}/{$ifopt}. Empty = top of
 	// file, always active. `outer` records the enclosing state at push time so
 	// $else and $elseif can restore correctly. `taken` records whether any
