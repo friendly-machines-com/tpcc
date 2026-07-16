@@ -30,6 +30,8 @@
 static Frame* body_frame_of(Type* ty);
 static Type* call_result_type(Node* callee);
 static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error);
+static bool enum_range_has_gaps(
+    Type* ty, const OrdinalRange& range);
 static Type* subrange_range_type(Type* ty);
 static Type* integer_literal_natural_type(
     const Integer* literal);
@@ -1591,35 +1593,181 @@ void Parser::maybe_parse_statement() {
 		Node* control = resolve_lvalue(control_name);
 		if (!dynamic_cast<StorageSlot*>(control))
 			raise_parse_error("for control variable must be a simple variable");
-		if (!maybe_parse_colon_equals())
-			raise_parse_error("expected ':=' after for control variable");
-		Node* initial = cast(parse_expression(), control->ty);
-		bool descending;
-		if (maybe_parse_keyword("to"))
-			descending = false;
-		else if (maybe_parse_keyword("downto"))
-			descending = true;
-		else
-			raise_parse_error("expected 'to' or 'downto' in for statement");
-		Node* final = cast(parse_expression(), control->ty);
-		parse_keyword("do");
+		if (maybe_parse_colon_equals()) {
+			Node* initial = cast(
+			    parse_expression(),
+			    control->ty);
+			bool descending;
+			if (maybe_parse_keyword("to"))
+				descending = false;
+			else if (maybe_parse_keyword(
+				     "downto"))
+				descending = true;
+			else
+				raise_parse_error(
+				    "expected 'to' or 'downto' in for statement");
+			Node* final = cast(
+			    parse_expression(),
+			    control->ty);
+			parse_keyword("do");
 
-		OrdinalBounds bounds;
-		if (!intrinsic_ordinal_bounds(control->ty, &bounds) &&
-		    !dynamic_cast<EnumType*>(control->ty) &&
-		    !dynamic_cast<SubrangeType*>(control->ty))
-			raise_parse_error("for control variable must have an ordinal type");
+			OrdinalBounds bounds;
+			if (!intrinsic_ordinal_bounds(
+				control->ty, &bounds) &&
+			    !dynamic_cast<EnumType*>(
+				control->ty) &&
+			    !dynamic_cast<SubrangeType*>(
+				control->ty))
+				raise_parse_error(
+				    "for control variable must have an ordinal type");
 
-		if (emitter)
-			emitter->emit_for_prologue(control, initial, final, descending);
-		++loop_depth;
-		loop_try_depths.push_back(
-		    protected_try_depth);
-		parse_statement();
-		loop_try_depths.pop_back();
-		--loop_depth;
-		if (emitter)
-			emitter->emit_for_epilogue();
+			if (emitter)
+				emitter->emit_for_prologue(
+				    control, initial, final,
+				    descending);
+			++loop_depth;
+			loop_try_depths.push_back(
+			    protected_try_depth);
+			parse_statement();
+			loop_try_depths.pop_back();
+			--loop_depth;
+			if (emitter)
+				emitter->emit_for_epilogue();
+		} else if (maybe_parse_keyword("in")) {
+			Node* collection = nullptr;
+			Type* ordinal_designator = nullptr;
+			// `for X in Name` follows ordinary Pascal name hiding: a visible
+			// value is the collection even when a type of the same spelling
+			// also exists. Type interpretation is the fallback used only
+			// when value lookup finds nothing.
+			Node* visible_value =
+			    maybe_resolve_value(
+				input_token);
+			if (!visible_value &&
+			    maybe_resolve_type(
+				input_token))
+				ordinal_designator =
+				    parse_type_expression(
+					false);
+			else
+				collection =
+				    parse_expression();
+			parse_keyword("do");
+
+			OrdinalRange range;
+			std::string range_error;
+			Type* element_type = nullptr;
+
+			if (ordinal_designator) {
+				if (!ordinal_range_for_type(
+					ordinal_designator,
+					&range,
+					&range_error))
+					raise_parse_error(
+					    range_error);
+				if (enum_range_has_gaps(
+					ordinal_designator,
+					range))
+					raise_parse_error(
+					    "for-in ordinal type has non-contiguous enum values");
+				element_type =
+				    ordinal_designator;
+			} else {
+				if (auto bracket =
+					dynamic_cast<
+					    BracketLiteral*>(
+					    collection)) {
+					Type* item_type =
+					    bracket
+						->default_set_item_type;
+					if (item_type ==
+					    unknown_type())
+						item_type =
+						    control->ty;
+					collection = cast(
+					    collection,
+					    new FixedSetType(
+						current_location(),
+						item_type));
+				}
+				Type* collection_type =
+				    collection
+					? collection->ty
+					: nullptr;
+				element_type =
+				    collection_type
+					? collection_type
+					      ->sequence_element_type()
+					: nullptr;
+				if (!element_type) {
+					auto set =
+					    dynamic_cast<
+						FixedSetType*>(
+						collection_type);
+					if (!set)
+						raise_parse_error(
+						    "for-in collection has no built-in enumeration");
+					element_type =
+					    set->item_type;
+					if (!ordinal_range_for_type(
+						element_type,
+						&range,
+						&range_error))
+						raise_parse_error(
+						    range_error);
+					if (enum_range_has_gaps(
+						element_type,
+						range))
+						raise_parse_error(
+						    "for-in set item type has non-contiguous enum values");
+				}
+			}
+
+			Node* current =
+			    new BuiltinEnumeratorCurrent(
+				element_type);
+			// Assign the enumerator's exact element through the ordinary
+			// assignment matcher. This keeps loop-control conversion rules
+			// identical to an explicit assignment written by the user.
+			Node* assignment =
+			    mk_assign(control, current);
+			if (emitter) {
+				if (ordinal_designator) {
+					emitter
+					    ->emit_for_in_ordinal_prologue(
+						ordinal_designator,
+						range.lower_bound,
+						range.upper_bound,
+						assignment);
+				} else if (dynamic_cast<
+					       FixedSetType*>(
+					       collection->ty)) {
+					emitter
+					    ->emit_for_in_set_prologue(
+						collection,
+						range.lower_bound,
+						range.upper_bound,
+						assignment);
+				} else {
+					emitter
+					    ->emit_for_in_sequence_prologue(
+						collection,
+						assignment);
+				}
+			}
+			++loop_depth;
+			loop_try_depths.push_back(
+			    protected_try_depth);
+			parse_statement();
+			loop_try_depths.pop_back();
+			--loop_depth;
+			if (emitter)
+				emitter
+				    ->emit_for_in_epilogue();
+		} else {
+			raise_parse_error(
+			    "expected ':=' or 'in' after for control variable");
+		}
 	} else if (peek_keyword("repeat")) {
 		parse_keyword("repeat");
 		if (emitter)
@@ -2147,25 +2295,29 @@ static Type* infer_set_item_type(
 	return nullptr;
 }
 
-Node* Parser::parse_set_literal() {
+Node* Parser::parse_bracket_literal() {
 	parse_opening_bracket();
-	std::vector<SetLiteral::Item> items;
+	std::vector<BracketLiteral::Item> items;
 	if (input_token != "]") {
 		do {
 			Node* lower = parse_expression();
 			Node* upper = nullptr;
 			if (maybe_parse_period_period())
 				upper = parse_expression();
-			items.push_back(SetLiteral::Item{lower, upper});
+			items.push_back(
+			    BracketLiteral::Item{
+				lower, upper});
 		} while (maybe_parse_comma());
 	}
 	parse_closing_bracket();
 
-	// An empty set acquires its item type from assignment, a formal parameter,
-	// or the left operand of `in`. Non-empty constructors infer one common
-	// ordinal item type, then convert every bound to it.
+	// Do not convert the items here. Set, dynamic-array, and open-array
+	// candidates must each see the original nodes. The inferred ordinal type
+	// is retained only as the historical set interpretation when no array
+	// destination supplies another context.
 	Type* item_type = unknown_type();
-	for (const SetLiteral::Item& item : items) {
+	for (const BracketLiteral::Item& item :
+	     items) {
 		for (Node* bound : {item.lower, item.upper}) {
 			if (!bound)
 				continue;
@@ -2191,25 +2343,8 @@ Node* Parser::parse_set_literal() {
 			}
 		}
 	}
-	if (item_type != unknown_type()) {
-		for (SetLiteral::Item& item : items) {
-			// Keep contextual integer constants untyped inside the constructor.
-			// The inferred set item type describes a standalone literal, but a
-			// later assignment to `set of 1..10` must still check the actual
-			// values 2 and 7 rather than treating each as the entire Byte
-			// domain. Candidate matching creates its own typed item nodes.
-			if (!untyped_integer_constant(
-				item.lower))
-				item.lower =
-				    cast(item.lower, item_type);
-			if (item.upper &&
-			    !untyped_integer_constant(
-				item.upper))
-				item.upper = cast(item.upper, item_type);
-		}
-	}
-	return new SetLiteral(std::move(items),
-			      new FixedSetType(current_location(), item_type));
+	return new BracketLiteral(
+	    std::move(items), item_type);
 }
 
 Node* Parser::parse_new_or_dispose(bool is_new) {
@@ -2354,7 +2489,7 @@ Node* Parser::parse_value() {
 	if (peek_keyword("inherited"))
 		return parse_inherited();
 	if (input_token == "[")
-		return parse_set_literal();
+		return parse_bracket_literal();
 	if (maybe_parse_opening_paren()) { // grouping paren
 		auto result = parse_expression();
 		parse_closing_paren();
@@ -2452,9 +2587,55 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 		// value expressions.
 		if (auto kind = type_bound_kind_for_builtin(value); kind && input_token == "(") {
 			parse_opening_paren();
-			Type* target_ty = parse_type_expression(false);
+			// Low/High accept either a type or a value. Their argument syntax
+			// is otherwise ambiguous, so use the same rule as New's
+			// type-or-value form: an ordinary visible value wins, and a named
+			// type is considered only when no value has that spelling.
+			const bool explicit_type_start =
+			    peek_keyword("array") ||
+			    peek_keyword("string") ||
+			    peek_keyword("set") ||
+			    peek_keyword("file") ||
+			    peek_keyword("object") ||
+			    peek_keyword("packed") ||
+			    peek_keyword("record") ||
+			    peek_keyword("class") ||
+			    peek_keyword("interface") ||
+			    peek_keyword("procedure") ||
+			    peek_keyword("function") ||
+			    peek_keyword("operator") ||
+			    input_token == "^";
+			Node* visible_value =
+			    maybe_resolve_value(input_token);
+			Type* visible_type =
+			    visible_value
+				? nullptr
+				: maybe_resolve_type(
+				      input_token);
+			if (explicit_type_start ||
+			    visible_type) {
+				Type* target_ty =
+				    parse_type_expression(false);
+				parse_closing_paren();
+				return new TypeBound(
+				    *kind, target_ty);
+			}
+			Node* operand = parse_expression();
 			parse_closing_paren();
-			return new TypeBound(*kind, target_ty);
+			Type* operand_type =
+			    operand ? operand->ty : nullptr;
+			Type* result_type =
+			    operand_type
+				? operand_type
+				      ->sequence_index_type()
+				: nullptr;
+			if (!result_type)
+				raise_type_kind_mismatch(
+				    "Low/High value operand",
+				    "string or array",
+				    operand_type);
+			return new ValueBound(
+			    *kind, operand, result_type);
 		}
 		BuiltinSyntaxKind syntax_kind = syntax_kind_for_builtin(value);
 		if (syntax_kind == BuiltinSyntaxKind::NewValue ||
@@ -3201,6 +3382,18 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 }
 
 Node* Parser::mk_membership(Node* item, Node* set) {
+	if (auto bracket =
+		dynamic_cast<BracketLiteral*>(set)) {
+		Type* item_type =
+		    bracket->default_set_item_type;
+		if (item_type == unknown_type())
+			item_type = item->ty;
+		set = cast(
+		    set,
+		    new FixedSetType(
+			current_location(),
+			item_type));
+	}
 	auto set_type = dynamic_cast<FixedSetType*>(set ? set->ty : nullptr);
 	if (!set_type)
 		raise_parse_error("right operand of 'in' is not a set");
@@ -3468,23 +3661,18 @@ Property* Parser::default_property_for_type(Type* ty) {
 	if (ty->default_property)
 		return ty->default_property;
 
-	// Built-in containers participate through the same Property node used by
-	// source declarations. Their accessor is the RTL reference operation.
-	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
-		auto accessor = create_builtin_value("::u_system::p_index");
-		array->default_property = new Property(
-		    "items", array->item_type, {array->range.base_type},
-		    accessor, accessor, true);
-		return array->default_property;
-	}
-	if (dynamic_cast<ShortStringType*>(ty) ||
-	    ty == ansistring_type()) {
+	// Every semantic sequence supplies its element and index types through
+	// Type. The compiler-synthesized property is therefore the same ordinary
+	// Property representation used by source declarations; C++ carrier
+	// spellings never participate in index lookup.
+	if (Type* element = ty->sequence_element_type()) {
 		Node* read_accessor = create_builtin_value("::u_system::p_index");
 		Node* write_accessor = ty == ansistring_type()
 					   ? create_builtin_value("::u_system::tpcc_index_write")
 					   : read_accessor;
 		ty->default_property = new Property(
-		    "items", char_type(), {integer_type()},
+		    "items", element,
+		    {ty->sequence_index_type()},
 		    read_accessor, write_accessor, true);
 		return ty->default_property;
 	}
@@ -3712,9 +3900,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 					member_names.push_back(parse_identifier());
 				parse_colon();
 				auto ty = parse_type_expression(false);
-				if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
-				    dynamic_cast<PackedRecordType*>(owner_class) &&
-				    intrinsic && intrinsic->cxx_name == "::u_system::t_ansistring") {
+				if (dynamic_cast<PackedRecordType*>(
+					owner_class) &&
+				    ty->has_managed_lifetime()) {
 					raise_parse_error("managed fields inside packed records are not implemented");
 				}
 				for (const auto& member_name : member_names) {
@@ -3817,9 +4005,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			} while (maybe_parse_comma());
 			parse_colon();
 			auto ty = parse_type_expression(false);
-			if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty);
-			    dynamic_cast<PackedRecordType*>(owner_class) &&
-			    intrinsic && intrinsic->cxx_name == "::u_system::t_ansistring") {
+			if (dynamic_cast<PackedRecordType*>(
+				owner_class) &&
+			    ty->has_managed_lifetime()) {
 				raise_parse_error("managed fields inside packed records are not implemented");
 			}
 			for (auto member_name : member_names) {
@@ -3907,11 +4095,8 @@ VariantPart* Parser::parse_record_variant(
 					    parse_identifier());
 				parse_colon();
 				auto fty = parse_type_expression(false);
-				if (auto intrinsic =
-					dynamic_cast<IntrinsicType*>(fty);
-				    packed && intrinsic &&
-				    intrinsic->cxx_name ==
-					"::u_system::t_ansistring")
+				if (packed &&
+				    fty->has_managed_lifetime())
 					raise_parse_error(
 					    "managed fields inside packed records are not implemented");
 				for (const auto& fname : names) {
@@ -4167,9 +4352,22 @@ Type* Parser::parse_object_type() {
 	return ot;
 }
 
-Type* Parser::parse_array_type() {
+Type* Parser::parse_array_type(bool direct_formal) {
 	parse_keyword("array");
-	parse_opening_bracket();
+	if (!maybe_parse_opening_bracket()) {
+		parse_keyword("of");
+		// Only the outer array constructor written directly in a formal is an
+		// open-array contract. Its element is parsed normally, so
+		// `const X: array of array of T` means an open array of dynamic arrays
+		// rather than two nested open contracts.
+		Type* item_type =
+		    parse_type_expression(false);
+		if (direct_formal)
+			return new OpenArrayType(
+			    current_location(), item_type);
+		return new DynamicArrayType(
+		    current_location(), item_type);
+	}
 	std::vector<Type*> bounds_types;
 	do {
 		bounds_types.push_back(parse_type_expression(false));
@@ -4190,6 +4388,15 @@ Type* Parser::parse_array_type() {
 		item_type = new FixedArrayType(current_location(), *it, range, item_type);
 	}
 	return item_type;
+}
+
+Type* Parser::parse_formal_type_expression() {
+	// Open-array meaning belongs only to the outer `array of` written
+	// directly as a formal type. Keeping this decision at that syntactic
+	// boundary prevents a parser mode from leaking into nested element types.
+	if (peek_keyword("array"))
+		return parse_array_type(true);
+	return parse_type_expression(false);
 }
 
 Type* Parser::parse_enum_type() {
@@ -4539,6 +4746,43 @@ static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* err
 	return false;
 }
 
+static bool enum_range_has_gaps(
+    Type* ty, const OrdinalRange& range) {
+	while (auto subrange =
+		   dynamic_cast<SubrangeType*>(ty))
+		ty = subrange->base_type;
+	auto enumeration =
+	    dynamic_cast<EnumType*>(ty);
+	if (!enumeration)
+		return false;
+	// Builtin ordinal iteration advances the carrier by one. Sparse or
+	// duplicate enum ordinals would therefore either manufacture values that
+	// have no Pascal enumerator or make one carrier value name two members.
+	std::vector<int64_t> values;
+	for (const EnumType::Member& member :
+	     enumeration->members) {
+		OrdinalRange::Value value =
+		    ordinal_value(member.value);
+		if (compare_ordinal_value(
+			value,
+			range.lower_ordinal) >= 0 &&
+		    compare_ordinal_value(
+			value,
+			range.upper_ordinal) <= 0)
+			values.push_back(
+			    member.value);
+	}
+	std::sort(values.begin(), values.end());
+	if (values.size() != range.length ||
+	    values.empty())
+		return range.length != 0;
+	for (std::size_t i = 1;
+	     i < values.size(); ++i)
+		if (values[i] != values[i - 1] + 1)
+			return true;
+	return false;
+}
+
 static Type* infer_integer_subrange_host(OrdinalRange::Value lo, OrdinalRange::Value hi, std::string* error) {
 	// Match the BP/FPC-style representation choice: choose the smallest
 	// builtin integer type that can represent the whole range, preferring
@@ -4702,7 +4946,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		return new TypedFileType(
 		    current_location(), parse_type_expression(false));
 	} else if (peek_keyword("array")) {
-		return parse_array_type();
+		return parse_array_type(false);
 	} else if (peek_keyword("object")) {
 		return parse_object_type();
 	} else if (peek_keyword("packed") || peek_keyword("record")) {
@@ -5188,6 +5432,23 @@ struct TypeBlockResolver {
 			for (Node* element : n->elements)
 				if (!normalize_node(element))
 					return false;
+		if (auto n = dynamic_cast<ArrayLiteral*>(node))
+			for (Node* element : n->elements)
+				if (!normalize_node(element))
+					return false;
+		if (auto n =
+			dynamic_cast<BracketLiteral*>(
+			    node)) {
+			if (!normalize_type(
+				n->default_set_item_type))
+				return false;
+			for (auto& item : n->items)
+				if (!normalize_node(
+					item.lower) ||
+				    !normalize_node(
+					item.upper))
+					return false;
+		}
 		if (auto n = dynamic_cast<RecordLiteral*>(node))
 			for (auto& field : n->fields)
 				if (!normalize_node(field.slot) ||
@@ -5429,6 +5690,12 @@ struct TypeBlockResolver {
 			       normalize_node(a->range.lower_bound) &&
 			       normalize_node(a->range.upper_bound);
 		}
+		if (auto a =
+			dynamic_cast<DynamicArrayType*>(ty))
+			return normalize_type(a->item_type);
+		if (auto a =
+			dynamic_cast<OpenArrayType*>(ty))
+			return normalize_type(a->item_type);
 		if (auto s = dynamic_cast<FixedSetType*>(ty))
 			return normalize_type(s->item_type);
 		if (auto f = dynamic_cast<TypedFileType*>(ty))
@@ -5563,6 +5830,14 @@ struct TypeBlockResolver {
 			dynamic_cast<FixedArrayType*>(ty))
 			ok = validate_complete_type(array->bounds) &&
 			     validate_complete_type(array->item_type);
+		else if (auto array =
+			     dynamic_cast<DynamicArrayType*>(ty))
+			ok = validate_complete_type(
+			    array->item_type);
+		else if (auto array =
+			     dynamic_cast<OpenArrayType*>(ty))
+			ok = validate_complete_type(
+			    array->item_type);
 		else if (auto set =
 			     dynamic_cast<FixedSetType*>(ty))
 			ok = validate_complete_type(set->item_type);
@@ -5671,6 +5946,7 @@ struct TypeBlockResolver {
 		    dynamic_cast<InterfaceType*>(ty) ||
 		    dynamic_cast<ClassRefType*>(ty) ||
 		    dynamic_cast<RoutineType*>(ty) ||
+		    dynamic_cast<DynamicArrayType*>(ty) ||
 		    dynamic_cast<FixedSetType*>(ty) ||
 		    dynamic_cast<TypedFileType*>(ty))
 			return true;
@@ -5714,6 +5990,14 @@ struct TypeBlockResolver {
 		validating_type_name = name;
 		if (!validate_complete_type(ty))
 			return false;
+		if (auto packed =
+			dynamic_cast<PackedRecordType*>(
+			    ty);
+		    packed &&
+		    packed->has_managed_lifetime())
+			return fail(
+			    "packed record type '" + name +
+			    "' contains managed storage");
 
 		// A class/interface value is a reference, but its declaration still
 		// owns fields which must themselves have finite storage. Inspect the
@@ -6323,7 +6607,9 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 			names.push_back(parse_identifier());
 			while (maybe_parse_comma())
 				names.push_back(parse_identifier());
-			Type* ty = maybe_parse_colon() ? parse_type_expression(false) : unknown_type();
+			Type* ty = maybe_parse_colon()
+				       ? parse_formal_type_expression()
+				       : unknown_type();
 			Node* default_value = nullptr;
 			if (maybe_parse_equal()) {
 				if (names.size() > 1) {
@@ -7353,6 +7639,12 @@ integer_literal_target_distance(
 
 static bool rank_less(
     const MatchRank& a, const MatchRank& b) {
+	if (a.contextual_construction !=
+	    b.contextual_construction)
+		return static_cast<unsigned>(
+			   a.contextual_construction) <
+		       static_cast<unsigned>(
+			   b.contextual_construction);
 	if (a.tier != b.tier)
 		return static_cast<unsigned>(a.tier) <
 		       static_cast<unsigned>(b.tier);
@@ -7395,6 +7687,20 @@ std::optional<ArgumentMatch> Parser::match_argument(
 
 	if (target == unknown_type()) {
 		if (builtin &&
+		    builtin->generic_kind ==
+			BuiltinGenericKind::SequenceLength &&
+		    parameter_index == 0 &&
+		    (!source ||
+		     !source->sequence_element_type()))
+			return std::nullopt;
+		if (builtin &&
+		    builtin->generic_kind ==
+			BuiltinGenericKind::SequenceResize &&
+		    parameter_index == 0 &&
+		    (!source ||
+		     !source->sequence_is_resizable()))
+			return std::nullopt;
+		if (builtin &&
 		    (builtin->generic_kind ==
 			 BuiltinGenericKind::OrdinalValue ||
 		     builtin->generic_kind ==
@@ -7429,6 +7735,184 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		return ArgumentMatch{
 		    {MatchRank::Tier::Generic, 0},
 		    actual};
+	}
+
+	if (auto literal =
+		dynamic_cast<BracketLiteral*>(
+		    actual)) {
+		// A bracket expression is intentionally uncommitted while overloads
+		// are ranked. Build a fresh set or array node for this candidate so
+		// testing one candidate cannot change the expression seen by another.
+		auto target_set =
+		    dynamic_cast<FixedSetType*>(
+			target);
+		auto target_dynamic =
+		    dynamic_cast<DynamicArrayType*>(
+			target);
+		auto target_open =
+		    dynamic_cast<OpenArrayType*>(
+			target);
+		if (!target_set && !target_dynamic &&
+		    !target_open)
+			return std::nullopt;
+		if (formal.mode == ParamMode::Var ||
+		    formal.mode == ParamMode::Out)
+			return std::nullopt;
+
+		Type* item_type =
+		    target_set
+			? target_set->item_type
+		    : target_dynamic
+			? target_dynamic
+			      ->item_type
+			: target_open->item_type;
+		Parameter item_formal(
+		    "", "", item_type,
+		    ParamMode::Value, nullptr);
+		MatchRank combined{
+		    MatchRank::Tier::Direct, 0};
+		if (!target_set)
+			combined.contextual_construction =
+			    MatchRank::
+				ContextualConstruction::
+				    Array;
+		std::vector<SetLiteral::Item>
+		    set_items;
+		std::vector<Node*> array_items;
+		if (target_set)
+			set_items.reserve(
+			    literal->items.size());
+		else
+			array_items.reserve(
+			    literal->items.size());
+
+		auto combine =
+		    [&](const MatchRank& rank) {
+			    if (static_cast<unsigned>(
+				    rank.tier) >
+				static_cast<unsigned>(
+				    combined.tier))
+				    combined.tier =
+					rank.tier;
+			    combined.distance =
+				rank.distance >
+					UINT64_MAX -
+					    combined.distance
+				    ? UINT64_MAX
+				    : combined.distance +
+					  rank.distance;
+		    };
+		for (const BracketLiteral::Item& item :
+		     literal->items) {
+			if (!target_set && item.upper)
+				return std::nullopt;
+			auto lower = match_argument(
+			    item_formal, item.lower,
+			    nullptr, 0, false, failure);
+			if (!lower)
+				return std::nullopt;
+			combine(lower->rank);
+			if (!target_set) {
+				array_items.push_back(
+				    lower->value);
+				continue;
+			}
+			Node* upper_value = nullptr;
+			if (item.upper) {
+				auto upper = match_argument(
+				    item_formal,
+				    item.upper, nullptr,
+				    0, false, failure);
+				if (!upper)
+					return std::nullopt;
+				combine(upper->rank);
+				upper_value =
+				    upper->value;
+			}
+			set_items.push_back(
+			    SetLiteral::Item{
+				lower->value,
+				upper_value});
+		}
+		if (target_set)
+			return ArgumentMatch{
+			    combined,
+			    new SetLiteral(
+				std::move(set_items),
+				target)};
+		return ArgumentMatch{
+		    combined,
+		    new ArrayLiteral(
+			std::move(array_items),
+			target)};
+	}
+
+	if (auto open =
+		dynamic_cast<OpenArrayType*>(
+		    target)) {
+		// Open arrays expose element storage, not the nominal identity of the
+		// source array variable. Exact element Type* is nevertheless required:
+		// a view cannot perform an element conversion while preserving direct
+		// reads and writes.
+		if (!source ||
+		    source->array_element_type() !=
+			open->item_type)
+			return std::nullopt;
+		if (formal.mode == ParamMode::Var ||
+		    formal.mode == ParamMode::Out) {
+			if (!is_referenceable(actual)) {
+				if (failure)
+					*failure =
+					    MatchFailure::
+						NotStorageBacked;
+				return std::nullopt;
+			}
+			if (contains_packed_projection(
+				actual)) {
+				if (failure)
+					*failure =
+					    MatchFailure::
+						PackedProjection;
+				return std::nullopt;
+			}
+		}
+		if (formal.mode == ParamMode::Const &&
+		    contains_packed_projection(actual)) {
+			if (failure)
+				*failure =
+				    MatchFailure::
+					PackedProjection;
+			return std::nullopt;
+		}
+		Node* converted = nullptr;
+		// These are distinct semantic operations, not cosmetic casts: const
+		// aliases read-only storage, var aliases mutable storage, out resets
+		// that storage before entry, and value owns a call-lifetime copy.
+		switch (formal.mode) {
+		case ParamMode::Const:
+			converted =
+			    new OpenArrayConstView(
+				actual, target);
+			break;
+		case ParamMode::Var:
+			converted =
+			    new OpenArrayMutableView(
+				actual, target);
+			break;
+		case ParamMode::Out:
+			converted =
+			    new OpenArrayOutView(
+				actual, target);
+			break;
+		case ParamMode::Value:
+			converted =
+			    new OpenArrayValueCopy(
+				actual, target);
+			break;
+		}
+		return ArgumentMatch{
+		    {MatchRank::Tier::Direct, 0},
+		    converted};
 	}
 
 	if (formal.mode == ParamMode::Var ||
@@ -7524,67 +8008,6 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		return ArgumentMatch{
 		    {MatchRank::Tier::Direct, 0},
 		    new String(literal->value, target)};
-
-	if (auto literal =
-		dynamic_cast<SetLiteral*>(actual)) {
-		auto target_set =
-		    dynamic_cast<FixedSetType*>(target);
-		if (!target_set)
-			return std::nullopt;
-		Parameter item_formal(
-		    "", "", target_set->item_type,
-		    ParamMode::Value, nullptr);
-		std::vector<SetLiteral::Item> items;
-		items.reserve(literal->items.size());
-		MatchRank combined{
-		    MatchRank::Tier::Direct, 0};
-		for (const SetLiteral::Item& item :
-		     literal->items) {
-			auto lower = match_argument(
-			    item_formal, item.lower,
-			    nullptr, 0, false, failure);
-			if (!lower)
-				return std::nullopt;
-			std::optional<ArgumentMatch> upper;
-			if (item.upper) {
-				upper = match_argument(
-				    item_formal, item.upper,
-				    nullptr, 0, false,
-				    failure);
-				if (!upper)
-					return std::nullopt;
-			}
-			auto combine =
-			    [&](const MatchRank& rank) {
-				    if (static_cast<unsigned>(
-					    rank.tier) >
-					static_cast<unsigned>(
-					    combined.tier))
-					    combined.tier =
-						rank.tier;
-				    combined.distance =
-					rank.distance >
-						UINT64_MAX -
-						    combined.distance
-					    ? UINT64_MAX
-					    : combined.distance +
-						  rank.distance;
-			    };
-			combine(lower->rank);
-			if (upper)
-				combine(upper->rank);
-			items.push_back(
-			    SetLiteral::Item{
-				lower->value,
-				upper
-				    ? upper->value
-				    : nullptr});
-		}
-		return ArgumentMatch{
-		    combined,
-		    new SetLiteral(
-			std::move(items), target)};
-	}
 
 	if (source == target)
 		return ArgumentMatch{
@@ -8381,6 +8804,24 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		// retain their exact, related types at the C++ call boundary.
 		args[1] = cast(args[1], set_type->item_type);
 	}
+	if (builtin &&
+	    builtin->generic_kind ==
+		BuiltinGenericKind::SequenceLength &&
+	    (args.empty() || !args[0] ||
+	     !args[0]->ty->sequence_element_type()))
+		emit_parse_error_at(
+		    error_location,
+		    name_for_error +
+			" requires a string or array argument");
+	if (builtin &&
+	    builtin->generic_kind ==
+		BuiltinGenericKind::SequenceResize &&
+	    (args.empty() || !args[0] ||
+	     !args[0]->ty->sequence_is_resizable()))
+		emit_parse_error_at(
+		    error_location,
+		    name_for_error +
+			" requires a writable AnsiString or dynamic array");
 	return FinalizedCall{
 	    receiver, chosen ? static_cast<Node*>(chosen) : target,
 	    qualifier_effect};

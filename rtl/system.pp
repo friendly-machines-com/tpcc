@@ -386,7 +386,8 @@ operator =(a, b: shortstring): Boolean; external name '::u_system::p_equal';
 operator +(a, b: shortstring): shortstring; external name '::u_system::p_add';
 operator :=(a: shortstring): ansistring; external name '::u_system::p_implicit';
 
-procedure SetLength(var destination: AnsiString; value: LongInt); external name '::u_system::p_setlength';
+procedure SetLength(var destination: AnsiString; value: SizeInt); overload; external name '::u_system::p_setlength';
+procedure SetLength(var destination; value: SizeInt); overload; external name '::u_system::p_setlength'; // generic resizable-sequence intrinsic
 procedure UniqueString(var value: AnsiString); external name '::u_system::p_uniquestring';
 
 implementation

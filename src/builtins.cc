@@ -61,7 +61,7 @@ EnumType k_boolean(
     8, false);
 IntrinsicType k_char(SourceLocation::builtin(), "::u_system::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1}, IntrinsicCarrier::Character);
 ShortStringType k_shortstring(SourceLocation::builtin(), 255);
-IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{256, 1}, IntrinsicCarrier::AnsiString);
+IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::AnsiString);
 IntrinsicType k_text(SourceLocation::builtin(), "::u_system::t_text", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::Text);
 IntrinsicType k_file(SourceLocation::builtin(), "::u_system::t_file", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::File);
 PointerType k_pointer(
@@ -197,6 +197,32 @@ bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
 		return false;
 	*out = *intrinsic->ordinal_bounds;
 	return true;
+}
+
+Type* IntrinsicType::sequence_element_type() const {
+	return carrier == IntrinsicCarrier::AnsiString
+		   ? char_type()
+		   : nullptr;
+}
+
+Type* IntrinsicType::sequence_index_type() const {
+	return carrier == IntrinsicCarrier::AnsiString
+		   ? integer_type()
+		   : nullptr;
+}
+
+Type* IntrinsicType::sequence_length_type() const {
+	return carrier == IntrinsicCarrier::AnsiString
+		   ? sizeint_type()
+		   : nullptr;
+}
+
+bool IntrinsicType::sequence_is_resizable() const {
+	return carrier == IntrinsicCarrier::AnsiString;
+}
+
+bool IntrinsicType::has_managed_lifetime() const {
+	return carrier == IntrinsicCarrier::AnsiString;
 }
 
 bool integer_bounds(
@@ -527,7 +553,7 @@ static const BuiltinDesc k_builtins[] = {
 	.const_fold = nullptr,
 	.syntax_kind = BuiltinSyntaxKind::WriteLn,
     },
-    {"::u_system::p_setlength", nullptr},
+    {"::u_system::p_setlength", nullptr, {}, BuiltinGenericKind::SequenceResize},
     {"::u_system::p_uniquestring", nullptr},
     {"::u_system::m_new_instance", nullptr},
     {
@@ -538,6 +564,8 @@ static const BuiltinDesc k_builtins[] = {
     {
 	.cxx_name = "::u_system::p_length",
 	.const_fold = fold_length,
+	.generic_kind =
+	    BuiltinGenericKind::SequenceLength,
     },
     {"::u_system::p_index", nullptr},
     {"::u_system::tpcc_index_write", nullptr},

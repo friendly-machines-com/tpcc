@@ -111,11 +111,41 @@ RoutineRef::RoutineRef(Node* receiver, Node* candidates)
 RoutineEqual::RoutineEqual(Node* a, Node* b)
     : BinaryOperation(a, b) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+OpenArrayConstView::OpenArrayConstView(
+    Node* value, Type* target)
+    : UnaryOperation(value) {
+	this->ty = target;
+}
+OpenArrayMutableView::OpenArrayMutableView(
+    Node* value, Type* target)
+    : UnaryOperation(value) {
+	this->ty = target;
+}
+OpenArrayOutView::OpenArrayOutView(
+    Node* value, Type* target)
+    : UnaryOperation(value) {
+	this->ty = target;
+}
+OpenArrayValueCopy::OpenArrayValueCopy(
+    Node* value, Type* target)
+    : UnaryOperation(value) {
+	this->ty = target;
+}
 ExplicitCast::ExplicitCast(
     Node* value, Type* target)
     : Cast(value, target) {}
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
     : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
+ValueBound::ValueBound(
+    TypeBoundKind kind, Node* value,
+    Type* result_type)
+    : UnaryOperation(value), kind(kind) {
+	this->ty = result_type;
+}
+BuiltinEnumeratorCurrent::BuiltinEnumeratorCurrent(
+    Type* element_type) {
+	this->ty = element_type;
+}
 SizeOf::SizeOf(Type* operand_type)
     : operand_type(operand_type) { this->ty = sizeint_type(); }
 
@@ -154,6 +184,21 @@ Real::Real(long double value, Type* ty) {
 }
 
 FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty)
+    : elements(std::move(elements)) {
+	this->ty = ty;
+}
+
+BracketLiteral::BracketLiteral(
+    std::vector<Item> items,
+    Type* default_set_item_type)
+    : items(std::move(items)),
+      default_set_item_type(
+	  default_set_item_type) {
+	this->ty = unknown_type();
+}
+
+ArrayLiteral::ArrayLiteral(
+    std::vector<Node*> elements, Type* ty)
     : elements(std::move(elements)) {
 	this->ty = ty;
 }
@@ -781,8 +826,110 @@ void SetLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	}
 }
 
+const char* BracketLiteral::diagnostic_kind() const {
+	return "bracket_literal";
+}
+ConstEvalResult BracketLiteral::const_eval(
+    ConstEvalContext& ctx) const {
+	std::vector<SetLiteral::Item> folded;
+	folded.reserve(items.size());
+	for (const Item& item : items) {
+		ConstEvalResult lower =
+		    item.lower
+			? item.lower->const_eval(ctx)
+			: ConstEvalResult::not_constant();
+		if (lower.kind !=
+		    ConstEvalResult::Kind::Success)
+			return lower;
+		Node* upper = nullptr;
+		if (item.upper) {
+			ConstEvalResult result =
+			    item.upper->const_eval(ctx);
+			if (result.kind !=
+			    ConstEvalResult::Kind::Success)
+				return result;
+			upper = result.node;
+		}
+		folded.push_back(
+		    SetLiteral::Item{
+			lower.node, upper});
+	}
+	return ConstEvalResult::success(
+	    new SetLiteral(
+		std::move(folded),
+		new FixedSetType(
+		    default_set_item_type
+			? default_set_item_type
+			      ->source_location
+			: SourceLocation::internal(),
+		    default_set_item_type)));
+}
+void BracketLiteral::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_type_edge(default_set_item_type);
+	for (const Item& item : items) {
+		ctx->add_value_edge(item.lower);
+		ctx->add_value_edge(item.upper);
+	}
+}
+void BracketLiteral::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "bracket literal";
+	for (const Item& item : items) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "item: "
+		    << ctx->known_value_ref(item.lower);
+		if (item.upper)
+			out << " .. "
+			    << ctx->known_value_ref(
+				   item.upper);
+	}
+}
+
+const char* ArrayLiteral::diagnostic_kind() const {
+	return "array_literal";
+}
+ConstEvalResult ArrayLiteral::const_eval(
+    ConstEvalContext&) const {
+	return ConstEvalResult::not_constant();
+}
+void ArrayLiteral::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	for (Node* element : elements)
+		ctx->add_value_edge(element);
+}
+void ArrayLiteral::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "array literal : "
+	    << ctx->known_type_ref(ty);
+	for (Node* element : elements) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "item: "
+		    << ctx->known_value_ref(element);
+	}
+}
+
 const char* NilLiteral::diagnostic_kind() const { return "nil"; }
 void NilLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "nil : " << ctx->known_type_ref(ty); }
+
+const char* OpenArrayConstView::diagnostic_kind() const {
+	return "open_array_const_view";
+}
+const char* OpenArrayMutableView::diagnostic_kind() const {
+	return "open_array_mutable_view";
+}
+const char* OpenArrayOutView::diagnostic_kind() const {
+	return "open_array_out_view";
+}
+const char* OpenArrayValueCopy::diagnostic_kind() const {
+	return "open_array_value_copy";
+}
 
 const char* TypeBound::diagnostic_kind() const { return kind == TypeBoundKind::Low ? "low" : "high"; }
 void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const {
@@ -792,6 +939,21 @@ void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 ConstEvalResult TypeBound::const_eval(ConstEvalContext&) const { return const_eval_type_bound(kind, operand_type); }
 void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
+}
+
+const char* ValueBound::diagnostic_kind() const {
+	return kind == TypeBoundKind::Low
+		   ? "low"
+		   : "high";
+}
+ConstEvalResult ValueBound::const_eval(
+    ConstEvalContext&) const {
+	return ConstEvalResult::not_constant();
+}
+
+const char*
+BuiltinEnumeratorCurrent::diagnostic_kind() const {
+	return "builtin_enumerator_current";
 }
 
 const char* SizeOf::diagnostic_kind() const { return "sizeof"; }

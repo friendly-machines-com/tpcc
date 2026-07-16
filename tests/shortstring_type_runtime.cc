@@ -16,9 +16,12 @@ int main() {
 	static_assert(
 	    std::is_trivially_default_constructible_v<
 	        ::u_system::t_shortstring<22>>);
-	static_assert(std::is_aggregate_v<::u_system::t_ansistring>);
 	static_assert(
-	    std::is_trivially_default_constructible_v<
+	    sizeof(::u_system::t_ansistring) == sizeof(void*));
+	static_assert(
+	    alignof(::u_system::t_ansistring) == alignof(void*));
+	static_assert(
+	    !std::is_trivially_copyable_v<
 	        ::u_system::t_ansistring>);
 
 	std::array<char, 255> payload{};

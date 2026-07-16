@@ -15,9 +15,10 @@ static bool equals(
     const ::u_system::t_ansistring& value,
     const char* bytes,
     std::size_t length) {
-	return value.length == length &&
-	       std::memcmp(value.data, bytes, length) == 0 &&
-	       value.data[length] == 0;
+	return value.m_length() ==
+		   static_cast<::u_system::t_sizeint>(length) &&
+	       std::memcmp(value.m_data(), bytes, length) == 0 &&
+	       value.m_data()[length] == 0;
 }
 
 int main() {
@@ -44,16 +45,18 @@ int main() {
 	if (!equals(assigned, "abc", 3))
 		return 8;
 	::u_system::p_setlength(assigned, 5);
-	if (assigned.length != 5 ||
-	    assigned.data[3] != 0 ||
-	    assigned.data[4] != 0 ||
-	    assigned.data[5] != 0)
+	if (assigned.m_length() != 5 ||
+	    assigned.m_data()[3] != 0 ||
+	    assigned.m_data()[4] != 0 ||
+	    assigned.m_data()[5] != 0)
 		return 9;
 	::u_system::p_setlength(assigned, -1);
-	if (assigned.length != 0 || assigned.data[0] != 0)
+	if (assigned.m_length() != 0 ||
+	    assigned.m_data()[0] != 0)
 		return 10;
 	::u_system::p_setlength(assigned, 1000);
-	if (assigned.length != 254 || assigned.data[254] != 0)
+	if (assigned.m_length() != 1000 ||
+	    assigned.m_data()[1000] != 0)
 		return 11;
 	return 0;
 }

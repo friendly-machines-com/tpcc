@@ -381,6 +381,34 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Open-array arguments are views or copies of an existing array value; they
+ * are not Pascal value conversions between the nominal source array and the
+ * formal-only OpenArrayType. Separate nodes keep parameter-mode lifetime and
+ * mutation semantics explicit in diagnostics and emission. */
+class OpenArrayConstView: public UnaryOperation {
+public:
+	OpenArrayConstView(Node* value, Type* target);
+	const char* diagnostic_kind() const override;
+};
+
+class OpenArrayMutableView: public UnaryOperation {
+public:
+	OpenArrayMutableView(Node* value, Type* target);
+	const char* diagnostic_kind() const override;
+};
+
+class OpenArrayOutView: public UnaryOperation {
+public:
+	OpenArrayOutView(Node* value, Type* target);
+	const char* diagnostic_kind() const override;
+};
+
+class OpenArrayValueCopy: public UnaryOperation {
+public:
+	OpenArrayValueCopy(Node* value, Type* target);
+	const char* diagnostic_kind() const override;
+};
+
 /** User-written Pascal value cast `T(E)`. It shares carrier-directed emission
  * with Cast, but ordinal constant evaluation uses explicit truncation and
  * extension rather than implicit destination-range checking. */
@@ -492,6 +520,48 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Source bracket constructor before a destination is selected. Items retain
+ * their original nodes and ranges so each overload candidate can construct a
+ * set or array independently without mutating the shared expression. */
+class BracketLiteral: public Node {
+public:
+	struct Item {
+		Node* lower;
+		Node* upper;
+	};
+	std::vector<Item> items;
+	Type* default_set_item_type;
+	BracketLiteral(
+	    std::vector<Item> items,
+	    Type* default_set_item_type);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(
+	    ConstEvalContext& ctx) const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** A bracket constructor selected as a dynamic-array value or as the
+ * call-lifetime owner for an open-array formal. Node::ty distinguishes those
+ * two ordinary semantic type constructors; no secondary kind is needed. */
+class ArrayLiteral: public Node {
+public:
+	std::vector<Node*> elements;
+	ArrayLiteral(
+	    std::vector<Node*> elements, Type* ty);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(
+	    ConstEvalContext& ctx) const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
 /** A type-directed Pascal record constant `(field: value; ...)`.
  *
  * Field names are resolved while parsing, so later phases use StorageSlot
@@ -554,6 +624,30 @@ public:
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+/** Runtime-sized `Low(value)` / `High(value)`. Fixed bounds still use
+ * TypeBound; this node preserves the one evaluated sequence expression needed
+ * by dynamic arrays, open arrays, and strings. */
+class ValueBound: public UnaryOperation {
+public:
+	TypeBoundKind kind;
+	ValueBound(
+	    TypeBoundKind kind, Node* value,
+	    Type* result_type);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(
+	    ConstEvalContext& ctx) const override;
+};
+
+/** Current value of the private RTL adapter in an emitted built-in for-in
+ * loop. It is never registered in a Pascal Frame; its Type lets the ordinary
+ * assignment matcher perform the loop-variable conversion before emission. */
+class BuiltinEnumeratorCurrent: public Node {
+public:
+	explicit BuiltinEnumeratorCurrent(
+	    Type* element_type);
+	const char* diagnostic_kind() const override;
 };
 
 /** Pascal `SizeOf(T)` / `SizeOf(expression)`, normalized to the operand's

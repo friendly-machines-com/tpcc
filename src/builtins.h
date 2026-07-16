@@ -46,6 +46,14 @@ enum class BuiltinGenericKind {
 	// intrinsic storage contract, not general var/out covariance: the formal
 	// must be the subrange's exact compiler-selected base carrier.
 	ValOutput,
+	// Pascal declarations cannot spell "any sequence type". Length's omitted
+	// formal is therefore accepted only when the actual semantic Type
+	// supplies the sequence contract used by indexing and iteration.
+	SequenceLength,
+	// SetLength has the narrower omitted-type contract "a writable resizable
+	// sequence". The Type owns that property; this tag merely selects the
+	// question for the otherwise unexpressible generic formal.
+	SequenceResize,
 };
 
 enum class BuiltinSyntaxKind {
@@ -128,6 +136,11 @@ public:
 	bool is_subtype_of(const Type* target) const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
+	Type* sequence_element_type() const override;
+	Type* sequence_index_type() const override;
+	Type* sequence_length_type() const override;
+	bool sequence_is_resizable() const override;
+	bool has_managed_lifetime() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

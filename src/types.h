@@ -86,6 +86,40 @@ public:
 	virtual std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const;
 	virtual bool is_subtype_of(const Type* target) const;
+	/** Exact contract identity for a type written directly in a routine
+	 * formal. Most Pascal types use definition identity. Open arrays override
+	 * this because separately parsed `array of T` formals describe the same
+	 * call contract when their element Type* is identical, even though neither
+	 * occurrence is a storable Pascal type. */
+	virtual bool same_formal_contract_as(
+	    const Type* other) const;
+	/** Sequence operations are properties of the Pascal semantic type, not of
+	 * a C++ spelling recognized by the parser. A null element type means this
+	 * type does not support indexing/Length or built-in sequence iteration. */
+	virtual Type* sequence_element_type() const {
+		return nullptr;
+	}
+	// Non-null only for actual array constructors. Strings are sequences but
+	// do not become open-array storage merely because their elements are
+	// characters.
+	virtual Type* array_element_type() const {
+		return nullptr;
+	}
+	virtual Type* sequence_index_type() const {
+		return nullptr;
+	}
+	virtual Type* sequence_length_type() const {
+		return nullptr;
+	}
+	virtual bool sequence_is_resizable() const {
+		return false;
+	}
+	// True when ordinary C++ construction, copy, or destruction participates
+	// in the Pascal value's lifetime. Bytewise packed-field projection cannot
+	// safely manufacture such a value by memcpy.
+	virtual bool has_managed_lifetime() const {
+		return false;
+	}
 	/** Whether this type and OTHER erase to the same C++ type spelling.
 	 * This backend equivalence never participates in Pascal lookup,
 	 * conversion, var/out matching, or signature identity; it exists to
@@ -147,6 +181,9 @@ struct ShortStringType: public Type {
 	value_conversion_from(const Type* source) const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
+	Type* sequence_element_type() const override;
+	Type* sequence_index_type() const override;
+	Type* sequence_length_type() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -159,9 +196,79 @@ struct FixedArrayType: public Type {
 	const char* diagnostic_kind() const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
+	Type* sequence_element_type() const override {
+		return item_type;
+	}
+	Type* array_element_type() const override {
+		return item_type;
+	}
+	Type* sequence_index_type() const override {
+		return range.base_type;
+	}
+	Type* sequence_length_type() const override;
+	bool has_managed_lifetime() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
+/** A managed `array of T` value. Every constructor occurrence is a distinct
+ * Pascal definition; item-carrier equality below is backend erasure only. */
+struct DynamicArrayType: public Type {
+	Type* item_type;
+	DynamicArrayType(
+	    SourceLocation source_location,
+	    Type* item_type);
+	const char* diagnostic_kind() const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
+	Type* sequence_element_type() const override {
+		return item_type;
+	}
+	Type* array_element_type() const override {
+		return item_type;
+	}
+	Type* sequence_index_type() const override;
+	Type* sequence_length_type() const override;
+	bool sequence_is_resizable() const override {
+		return true;
+	}
+	bool has_managed_lifetime() const override {
+		return true;
+	}
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** A directly written formal `array of T`. It is a non-owning call contract,
+ * never a storage or result type. Separate occurrences correspond by exact
+ * element Type* rather than by their own generative identities. */
+struct OpenArrayType: public Type {
+	Type* item_type;
+	OpenArrayType(
+	    SourceLocation source_location,
+	    Type* item_type);
+	const char* diagnostic_kind() const override;
+	bool same_formal_contract_as(
+	    const Type* other) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
+	Type* sequence_element_type() const override {
+		return item_type;
+	}
+	Type* array_element_type() const override {
+		return item_type;
+	}
+	Type* sequence_index_type() const override;
+	Type* sequence_length_type() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
 };
 
 struct FixedSetType: public Type {
@@ -286,6 +393,7 @@ struct RecordType: public Type {
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	bool has_managed_lifetime() const override;
 };
 
 /** A byte-packed Pascal record.
@@ -309,6 +417,7 @@ struct PackedRecordType: public Type {
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	bool has_managed_lifetime() const override;
 };
 
 struct AggregateFieldLayout {
@@ -416,6 +525,7 @@ struct ObjectType: public Type {
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	bool has_managed_lifetime() const override;
 };
 
 struct PointerType: public Type {

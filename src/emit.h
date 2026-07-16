@@ -160,6 +160,15 @@ public:
 	void emit_repeat_epilogue(Node* condition);
 	void emit_for_prologue(Node* control, Node* initial, Node* final, bool descending);
 	void emit_for_epilogue();
+	void emit_for_in_sequence_prologue(
+	    Node* collection, Node* current_assignment);
+	void emit_for_in_set_prologue(
+	    Node* collection, Node* lower,
+	    Node* upper, Node* current_assignment);
+	void emit_for_in_ordinal_prologue(
+	    Type* ordinal_type, Node* lower,
+	    Node* upper, Node* current_assignment);
+	void emit_for_in_epilogue();
 	void emit_loop_control(
 	    bool is_break, unsigned try_depth = 0,
 	    unsigned target_try_depth = 0);

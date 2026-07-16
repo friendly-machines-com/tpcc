@@ -56,6 +56,10 @@ struct CompilerOptions {
 };
 
 struct MatchRank {
+	enum class ContextualConstruction {
+		OrdinaryOrSet,
+		Array,
+	};
 	enum class Tier {
 		Exact,
 		Direct,
@@ -70,6 +74,11 @@ struct MatchRank {
 	 * encoding two ordered quantities into an arbitrary integer offset. */
 	Tier source_tier = Tier::Exact;
 	uint64_t source_distance = 0;
+	// Bracket syntax has a historical direct set interpretation. Array
+	// construction is contextual and therefore loses to a viable set
+	// interpretation before ordinary per-element ranks are compared.
+	ContextualConstruction contextual_construction =
+	    ContextualConstruction::OrdinaryOrSet;
 };
 
 /** One candidate's treatment of one source argument. Matching never mutates
@@ -387,7 +396,7 @@ protected:
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
 	Node* parse_numeral();
-	Node* parse_set_literal();
+	Node* parse_bracket_literal();
 	Node* parse_storage_initializer(Type* ty);
 	Node* resolve_lvalue(std::string name);
 	Node* maybe_resolve_value(std::string name);
@@ -455,7 +464,8 @@ protected:
 	Node* parse_subrange_bound_expression_after_identifier(std::string id);
 	Node* parse_sum();
 	Node* parse_sum_tail(Node* result);
-	Type* parse_array_type();
+	Type* parse_array_type(
+	    bool direct_formal = false);
 	Type* parse_object_type();
 	Type* parse_record_type();
 	Type* parse_procedure_type();
@@ -467,6 +477,7 @@ protected:
 	Type* parse_interface_type();
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);
+	Type* parse_formal_type_expression();
 	Node* parse_expression();
 	void parse_statement();
 	Frame* parse_aggregate_type_body(Type* owner_class);

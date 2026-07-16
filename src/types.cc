@@ -2,6 +2,7 @@
 #include "builtins.h"
 #include "cst.h"
 #include "evaluator.h"
+#include "frame.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
@@ -18,6 +19,11 @@ Type::value_conversion_from(const Type*) const {
 
 bool Type::is_subtype_of(const Type* target) const {
 	return this == target;
+}
+
+bool Type::same_formal_contract_as(
+    const Type* other) const {
+	return this == other;
 }
 
 bool Type::same_cxx_carrier_as(
@@ -97,10 +103,59 @@ FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, Ord
 	this->item_type = item_type;
 }
 
+DynamicArrayType::DynamicArrayType(
+    SourceLocation source_location, Type* item_type)
+    : Type(std::move(source_location)),
+      item_type(item_type) {
+}
+
+OpenArrayType::OpenArrayType(
+    SourceLocation source_location, Type* item_type)
+    : Type(std::move(source_location)),
+      item_type(item_type) {
+}
+
 ShortStringType::ShortStringType(
     SourceLocation source_location, uint8_t capacity)
     : Type(std::move(source_location)), capacity(capacity) {
 	assert(capacity != 0);
+}
+
+Type* ShortStringType::sequence_element_type() const {
+	return char_type();
+}
+
+Type* ShortStringType::sequence_index_type() const {
+	return integer_type();
+}
+
+Type* ShortStringType::sequence_length_type() const {
+	return byte_type();
+}
+
+Type* FixedArrayType::sequence_length_type() const {
+	return sizeint_type();
+}
+
+bool FixedArrayType::has_managed_lifetime() const {
+	return item_type &&
+	       item_type->has_managed_lifetime();
+}
+
+Type* DynamicArrayType::sequence_index_type() const {
+	return sizeint_type();
+}
+
+Type* DynamicArrayType::sequence_length_type() const {
+	return sizeint_type();
+}
+
+Type* OpenArrayType::sequence_index_type() const {
+	return sizeint_type();
+}
+
+Type* OpenArrayType::sequence_length_type() const {
+	return sizeint_type();
 }
 
 FixedSetType::FixedSetType(SourceLocation source_location, Type* item_type)
@@ -157,6 +212,69 @@ ObjectType::ObjectType(SourceLocation source_location, Frame* children, ObjectTy
 	this->needs_vmt = super && super->needs_vmt;
 }
 
+static bool variant_has_managed_lifetime(
+    const VariantPart* variant) {
+	if (!variant)
+		return false;
+	if (variant->selector_type &&
+	    variant->selector_type
+		->has_managed_lifetime())
+		return true;
+	for (const VariantArm& arm :
+	     variant->arms) {
+		for (const AggregateField& field :
+		     arm.fields)
+			if (field.ty &&
+			    field.ty
+				->has_managed_lifetime())
+				return true;
+		if (variant_has_managed_lifetime(
+			arm.variant))
+			return true;
+	}
+	return false;
+}
+
+bool RecordType::has_managed_lifetime() const {
+	for (const AggregateField& field : fields)
+		if (field.ty &&
+		    field.ty->has_managed_lifetime())
+			return true;
+	return variant_has_managed_lifetime(
+	    variant);
+}
+
+bool PackedRecordType::has_managed_lifetime() const {
+	for (const AggregateField& field : fields)
+		if (field.ty &&
+		    field.ty->has_managed_lifetime())
+			return true;
+	return variant_has_managed_lifetime(
+	    variant);
+}
+
+bool ObjectType::has_managed_lifetime() const {
+	if (super &&
+	    super->has_managed_lifetime())
+		return true;
+	if (!children)
+		return false;
+	for (const auto& declaration :
+	     children->value_declarations()) {
+		auto slot =
+		    dynamic_cast<StorageSlot*>(
+			declaration.second.value);
+		if (slot &&
+		    slot->kind ==
+			StorageSlot::Kind::
+			    AggregateMember &&
+		    slot->ty &&
+		    slot->ty->has_managed_lifetime())
+			return true;
+	}
+	return false;
+}
+
 ModuleType::ModuleType(
     SourceLocation source_location, Frame* children)
     : Type(std::move(source_location)) {
@@ -207,6 +325,41 @@ bool FixedArrayType::
 	return lower_type && other_lower_type &&
 	       lower_type->same_cxx_carrier_as(
 		   other_lower_type);
+}
+
+bool DynamicArrayType::
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
+	auto array =
+	    dynamic_cast<const DynamicArrayType*>(
+		other);
+	return array &&
+	       item_type->same_cxx_carrier_as(
+		   array->item_type);
+}
+
+bool OpenArrayType::same_formal_contract_as(
+    const Type* other) const {
+	auto array =
+	    dynamic_cast<const OpenArrayType*>(
+		other);
+	// Each `array of T` formal is a fresh type constructor occurrence, but
+	// repeated declarations of one callable still have the same Pascal
+	// signature when their element Type is identical. This relation is only
+	// declaration-contract equality; it does not make open-array values
+	// nominally identical.
+	return array && item_type == array->item_type;
+}
+
+bool OpenArrayType::
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
+	auto array =
+	    dynamic_cast<const OpenArrayType*>(
+		other);
+	return array &&
+	       item_type->same_cxx_carrier_as(
+		   array->item_type);
 }
 
 bool FixedSetType::
@@ -525,6 +678,13 @@ std::optional<TypeLayout> type_layout_impl(
 			return std::nullopt;
 		return TypeLayout{size, item->alignment};
 	}
+	// A dynamic array stores one shared-buffer handle, independent of its
+	// element type or current length. An open array is the non-owning
+	// data-and-count descriptor passed by open-array formals.
+	if (dynamic_cast<DynamicArrayType*>(ty))
+		return TypeLayout{8, 8};
+	if (dynamic_cast<OpenArrayType*>(ty))
+		return TypeLayout{16, 8};
 	if (dynamic_cast<FixedSetType*>(ty))
 		return TypeLayout{24, 8};
 	if (dynamic_cast<TypedFileType*>(ty))
@@ -1201,8 +1361,8 @@ bool RoutineType::same_parameter_and_result_types_as(
 	for (size_t i = 0; i < formals.size(); ++i) {
 		if (formals[i].mode !=
 			other->formals[i].mode ||
-		    formals[i].ty !=
-			other->formals[i].ty)
+		    !formals[i].ty->same_formal_contract_as(
+			other->formals[i].ty))
 			return false;
 	}
 	return true;
@@ -1220,8 +1380,8 @@ bool RoutineType::same_overload_signature_as(
 	    formals.size() != other->formals.size())
 		return false;
 	for (size_t i = 0; i < formals.size(); ++i)
-		if (formals[i].ty !=
-		    other->formals[i].ty)
+		if (!formals[i].ty->same_formal_contract_as(
+			other->formals[i].ty))
 			return false;
 	return true;
 }
@@ -1274,6 +1434,20 @@ bool RoutineType::same_cxx_parameter_list_as(
 	for (size_t i = 0; i < formals.size(); ++i) {
 		const Parameter& a = formals[i];
 		const Parameter& b = other->formals[i];
+		auto a_open =
+		    dynamic_cast<OpenArrayType*>(a.ty);
+		auto b_open =
+		    dynamic_cast<OpenArrayType*>(b.ty);
+		if (a_open || b_open) {
+			if (!a_open || !b_open ||
+			    (a.mode == ParamMode::Const) !=
+				(b.mode == ParamMode::Const) ||
+			    !a_open->item_type
+				 ->same_cxx_carrier_as(
+				     b_open->item_type))
+				return false;
+			continue;
+		}
 		if (carrier_mode(a.mode) !=
 		    carrier_mode(b.mode))
 			return false;
@@ -1386,6 +1560,36 @@ void FixedArrayType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstr
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "item: ...";
+}
+
+const char* DynamicArrayType::diagnostic_kind() const {
+	return "dynamic array";
+}
+void DynamicArrayType::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	ctx->add_type_edge(item_type);
+}
+void DynamicArrayType::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "item: " << ctx->known_type_ref(item_type);
+}
+
+const char* OpenArrayType::diagnostic_kind() const {
+	return "open array";
+}
+void OpenArrayType::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	ctx->add_type_edge(item_type);
+}
+void OpenArrayType::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "item: " << ctx->known_type_ref(item_type);
 }
 
 const char* FixedSetType::diagnostic_kind() const { return "set"; }

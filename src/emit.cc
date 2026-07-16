@@ -1233,6 +1233,106 @@ void Emitter::emit_for_epilogue() {
 	fprintf(active, "\t}\n");
 }
 
+static void emit_for_in_loop_open(
+    Emitter* emitter, FILE* active,
+    Node* current_assignment) {
+	// Every builtin iteration family has the same observable loop protocol.
+	// Only adapter construction differs, so keeping the move/current loop
+	// here prevents sequence, set, and ordinal paths from drifting apart.
+	fprintf(active,
+		"\twhile (tpcc_for_enumerator.m_move_next()) {\n");
+	emitter->emit_statement(
+	    current_assignment);
+}
+
+void Emitter::emit_for_in_sequence_prologue(
+    Node* collection, Node* current_assignment) {
+	if (!active)
+		return;
+	fprintf(active, "\t{\n");
+	// Pascal evaluates the collection expression once. `auto&&` also extends
+	// the lifetime of a temporary through the loop; m_enumerate then chooses
+	// whether a view is sufficient or an owning handle must pin its storage.
+	fprintf(active,
+		"\tauto&& tpcc_for_collection = ");
+	emit_expression(collection);
+	fprintf(active, ";\n");
+	fprintf(active,
+		"\tauto tpcc_for_enumerator = "
+		"::u_system::m_enumerate("
+		"tpcc_for_collection);\n");
+	emit_for_in_loop_open(
+	    this, active, current_assignment);
+}
+
+void Emitter::emit_for_in_set_prologue(
+    Node* collection, Node* lower,
+    Node* upper, Node* current_assignment) {
+	if (!active)
+		return;
+	fprintf(active, "\t{\n");
+	fprintf(active,
+		"\tauto&& tpcc_for_collection = ");
+	emit_expression(collection);
+	fprintf(active, ";\n");
+	fprintf(active,
+		"\tauto tpcc_for_enumerator = "
+		"::u_system::m_enumerate("
+		"tpcc_for_collection, ");
+	// t_set stores normalized spans, not its Pascal declaration bounds. Pass
+	// the semantic item domain explicitly so iteration neither escapes a
+	// subrange nor depends on the carrier's internal representation.
+	auto set_type =
+	    dynamic_cast<FixedSetType*>(
+		collection ? collection->ty : nullptr);
+	if (!set_type)
+		unhandled_node(
+		    "for-in set source has non-set type",
+		    collection);
+	fprintf(active, "static_cast<");
+	emit_type_ref(set_type->item_type);
+	fprintf(active, ">(");
+	emit_expression(lower);
+	fprintf(active, "), static_cast<");
+	emit_type_ref(set_type->item_type);
+	fprintf(active, ">(");
+	emit_expression(upper);
+	fprintf(active, "));\n");
+	emit_for_in_loop_open(
+	    this, active, current_assignment);
+}
+
+void Emitter::emit_for_in_ordinal_prologue(
+    Type* ordinal_type, Node* lower,
+    Node* upper, Node* current_assignment) {
+	if (!active)
+		return;
+	fprintf(active, "\t{\n");
+	fprintf(active,
+		"\tauto tpcc_for_enumerator = "
+		"::u_system::m_enumerate("
+		"::u_system::m_ordinal_range<");
+	emit_type_ref(ordinal_type);
+	fprintf(active, ">{static_cast<");
+	emit_type_ref(ordinal_type);
+	fprintf(active, ">(");
+	emit_expression(lower);
+	fprintf(active, "), static_cast<");
+	emit_type_ref(ordinal_type);
+	fprintf(active, ">(");
+	emit_expression(upper);
+	fprintf(active, ")});\n");
+	emit_for_in_loop_open(
+	    this, active, current_assignment);
+}
+
+void Emitter::emit_for_in_epilogue() {
+	if (!active)
+		return;
+	fprintf(active, "\t}\n");
+	fprintf(active, "\t}\n");
+}
+
 void Emitter::emit_loop_control(
     bool is_break, unsigned try_depth,
     unsigned target_try_depth) {
@@ -1251,10 +1351,22 @@ void Emitter::emit_loop_control(
 
 void Emitter::emit_formal_parameter(
     const Parameter& formal, bool with_name) {
-	if (formal.ty == unknown_type() &&
-	    (formal.mode == ParamMode::Var ||
-	     formal.mode == ParamMode::Out ||
-	     formal.mode == ParamMode::Const)) {
+	if (auto open =
+		dynamic_cast<OpenArrayType*>(
+		    formal.ty)) {
+		// Every mode passes one two-word view by value. Constness belongs to
+		// the viewed elements; a C++ reference here would instead refer to the
+		// temporary descriptor and would not model Pascal var/out element
+		// access.
+		fprintf(active, "::u_system::t_openarray<");
+		if (formal.mode == ParamMode::Const)
+			fprintf(active, "const ");
+		emit_type_ref(open->item_type);
+		fprintf(active, ">");
+	} else if (formal.ty == unknown_type() &&
+		   (formal.mode == ParamMode::Var ||
+		    formal.mode == ParamMode::Out ||
+		    formal.mode == ParamMode::Const)) {
 		fprintf(active, formal.mode == ParamMode::Const
 				    ? "::u_system::tpcc_const_storage_ref"
 				    : "::u_system::tpcc_storage_ref");
@@ -2410,6 +2522,48 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 void Emitter::emit_expression(Node* expr) {
 	if (!active)
 		return;
+	if (dynamic_cast<BuiltinEnumeratorCurrent*>(
+		expr)) {
+		fprintf(active,
+			"tpcc_for_enumerator.m_current()");
+		return;
+	}
+	if (auto view =
+		dynamic_cast<OpenArrayConstView*>(
+		    expr)) {
+		fprintf(active,
+			"::u_system::m_openarray_const_view(");
+		emit_expression(view->a);
+		fprintf(active, ")");
+		return;
+	}
+	if (auto view =
+		dynamic_cast<OpenArrayMutableView*>(
+		    expr)) {
+		fprintf(active,
+			"::u_system::m_openarray_mutable_view(");
+		emit_writable_expression(view->a);
+		fprintf(active, ")");
+		return;
+	}
+	if (auto view =
+		dynamic_cast<OpenArrayOutView*>(
+		    expr)) {
+		fprintf(active,
+			"::u_system::m_openarray_out_view(");
+		emit_writable_expression(view->a);
+		fprintf(active, ")");
+		return;
+	}
+	if (auto copy =
+		dynamic_cast<OpenArrayValueCopy*>(
+		    expr)) {
+		fprintf(active,
+			"::u_system::m_openarray_value_copy(");
+		emit_expression(copy->a);
+		fprintf(active, ")");
+		return;
+	}
 	if (auto sequence =
 		dynamic_cast<EvaluateThen*>(expr)) {
 		fprintf(active, "(static_cast<void>(");
@@ -2513,6 +2667,36 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "\\%03o", static_cast<unsigned>(ch));
 		fputc('"', active);
 		fprintf(active, ", %zu)", s->value.size());
+		return;
+	}
+	if (auto a = dynamic_cast<ArrayLiteral*>(expr)) {
+		Type* item_type = nullptr;
+		if (auto dynamic =
+			dynamic_cast<DynamicArrayType*>(
+			    a->ty)) {
+			item_type = dynamic->item_type;
+			emit_type_ref(dynamic);
+			fprintf(active, "::m_from_values({");
+		} else if (auto open =
+			       dynamic_cast<OpenArrayType*>(
+				   a->ty)) {
+			item_type = open->item_type;
+			fprintf(active,
+				"::u_system::m_openarray_values<");
+			emit_type_ref(item_type);
+			fprintf(active, ">({");
+		} else {
+			unhandled_node(
+			    "array literal has non-dynamic/open type",
+			    a);
+		}
+		for (size_t i = 0;
+		     i < a->elements.size(); ++i) {
+			if (i)
+				fprintf(active, ", ");
+			emit_expression(a->elements[i]);
+		}
+		fprintf(active, "})");
 		return;
 	}
 	if (auto a = dynamic_cast<FixedArrayLiteral*>(expr)) {
@@ -3048,6 +3232,16 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "; })");
 		return;
 	}
+	if (auto bound =
+		dynamic_cast<ValueBound*>(expr)) {
+		fprintf(active,
+			bound->kind == TypeBoundKind::Low
+			    ? "::u_system::p_low("
+			    : "::u_system::p_high(");
+		emit_expression(bound->a);
+		fprintf(active, ")");
+		return;
+	}
 	if (auto tb = dynamic_cast<TypeBound*>(expr)) {
 		if (auto enum_type =
 			dynamic_cast<EnumType*>(
@@ -3469,6 +3663,18 @@ void Emitter::emit_type_ref(Type* ty) {
 	if (auto f = dynamic_cast<TypedFileType*>(ty)) {
 		fprintf(active, "::u_system::t_typedfile<");
 		emit_type_ref(f->item_type);
+		fprintf(active, ">");
+		return;
+	}
+	if (auto a = dynamic_cast<DynamicArrayType*>(ty)) {
+		fprintf(active, "::u_system::t_dynamicarray<");
+		emit_type_ref(a->item_type);
+		fprintf(active, ">");
+		return;
+	}
+	if (auto a = dynamic_cast<OpenArrayType*>(ty)) {
+		fprintf(active, "::u_system::t_openarray<");
+		emit_type_ref(a->item_type);
 		fprintf(active, ">");
 		return;
 	}

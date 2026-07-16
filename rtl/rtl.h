@@ -14,6 +14,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <bit>
 #include <charconv>
@@ -540,6 +541,27 @@ struct t_shortstring {
 	t_char length;
 	t_char data[Capacity];
 
+	constexpr t_byte m_length() const {
+		return static_cast<t_byte>(length);
+	}
+
+	constexpr t_integer m_low() const {
+		return 1;
+	}
+
+	constexpr t_integer m_high() const {
+		return static_cast<t_integer>(
+		    m_length());
+	}
+
+	constexpr t_char* m_data() {
+		return data;
+	}
+
+	constexpr const t_char* m_data() const {
+		return data;
+	}
+
 	std::string m_string() const {
 		std::string result;
 		const std::size_t count =
@@ -832,6 +854,35 @@ template<typename T, std::size_t length, auto low>
 struct t_fixedarray {
 	T items[length];
 
+	constexpr t_sizeint m_length() const {
+		return static_cast<t_sizeint>(length);
+	}
+
+	constexpr auto m_low() const {
+		return low;
+	}
+
+	constexpr auto m_high() const {
+		using value_type = decltype(low);
+		using traits =
+		    tpcc_ordinal_storage<value_type>;
+		using storage_type =
+		    typename traits::type;
+		return traits::make(
+		    static_cast<storage_type>(
+			traits::get(low) +
+			static_cast<storage_type>(
+			    length - 1)));
+	}
+
+	constexpr T* m_data() {
+		return items;
+	}
+
+	constexpr const T* m_data() const {
+		return items;
+	}
+
 	template<typename I>
 	constexpr T& operator[](I index) {
 		return items[static_cast<std::ptrdiff_t>(index) - static_cast<std::ptrdiff_t>(low)];
@@ -1014,191 +1065,986 @@ inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
 }
 
 template<typename T>
-struct t_dynamicarray {
-	int length;
-	T* items;
+struct m_shared_block {
+	std::atomic<std::size_t> references{1};
+	std::vector<T> values;
+
+	explicit m_shared_block(
+	    std::vector<T> values)
+	    : values(std::move(values)) {
+	}
 };
 
-// Placeholder carrier for Pascal AnsiString. It remains inline until managed
-// strings are implemented, but it is deliberately independent of
-// t_shortstring<N>: data[0..capacity-1] are payload and data[length] is always
-// the PChar-compatible zero terminator.
-struct t_ansistring {
-	static constexpr std::size_t capacity =
-	    std::numeric_limits<uint8_t>::max() - 1;
-	t_char length;
-	t_char data[capacity + 1];
+// The public managed carriers below must remain one pointer wide. This
+// private handle supplies the shared reference-counting and exception-safe
+// block replacement without imposing one mutation policy: dynamic arrays
+// deliberately share element writes, while AnsiString detaches before a
+// writable character escapes.
+template<typename T>
+class m_shared_buffer {
+	m_shared_block<T>* block = nullptr;
 
-	// FPC's explicit Pointer(AnsiString) and PtrInt(AnsiString)
-	// conversions expose the address of character 1, never the address of
-	// the managed-string variable/carrier. Keep that representation fact on
-	// the string carrier so conversion emission does not know its layout.
-	t_pointer m_pointer() const noexcept {
-		return const_cast<t_char*>(data);
+	void m_retain() noexcept {
+		if (block)
+			block->references.fetch_add(
+			    1, std::memory_order_relaxed);
+	}
+
+	void m_release() noexcept {
+		if (block &&
+		    block->references.fetch_sub(
+			1, std::memory_order_acq_rel) == 1)
+			delete block;
+	}
+
+public:
+	m_shared_buffer() = default;
+
+	m_shared_buffer(const m_shared_buffer& other)
+	    : block(other.block) {
+		m_retain();
+	}
+
+	m_shared_buffer(m_shared_buffer&& other) noexcept
+	    : block(std::exchange(other.block, nullptr)) {
+	}
+
+	~m_shared_buffer() {
+		m_release();
+	}
+
+	m_shared_buffer& operator=(
+	    const m_shared_buffer& other) {
+		if (this == &other)
+			return *this;
+		m_shared_buffer replacement(other);
+		std::swap(block, replacement.block);
+		return *this;
+	}
+
+	m_shared_buffer& operator=(
+	    m_shared_buffer&& other) noexcept {
+		if (this == &other)
+			return *this;
+		m_release();
+		block = std::exchange(
+		    other.block, nullptr);
+		return *this;
+	}
+
+	std::size_t m_size() const noexcept {
+		return block ? block->values.size() : 0;
+	}
+
+	const T* m_data() const noexcept {
+		return block ? block->values.data() : nullptr;
+	}
+
+	T* m_shared_data() noexcept {
+		return block ? block->values.data() : nullptr;
+	}
+
+	void m_replace(std::vector<T> values) {
+		auto* replacement =
+		    values.empty()
+			? nullptr
+			: new m_shared_block<T>(
+			      std::move(values));
+		m_release();
+		block = replacement;
+	}
+
+	void m_make_unique() {
+		if (!block ||
+		    block->references.load(
+			std::memory_order_acquire) == 1)
+			return;
+		std::vector<T> copy = block->values;
+		m_replace(std::move(copy));
+	}
+};
+
+static_assert(
+    sizeof(m_shared_buffer<t_byte>) ==
+    sizeof(void*));
+
+template<typename T>
+struct t_dynamicarray {
+	m_shared_buffer<T> storage;
+
+	t_sizeint m_length() const {
+		return static_cast<t_sizeint>(
+		    storage.m_size());
+	}
+
+	t_sizeint m_low() const {
+		return 0;
+	}
+
+	t_sizeint m_high() const {
+		return m_length() - 1;
+	}
+
+	T* m_data() {
+		return storage.m_shared_data();
+	}
+
+	const T* m_data() const {
+		return storage.m_data();
+	}
+
+	static t_dynamicarray m_from_values(
+	    std::initializer_list<T> values) {
+		t_dynamicarray result;
+		result.storage.m_replace(
+		    std::vector<T>(
+			values.begin(),
+			values.end()));
+		return result;
+	}
+
+	void m_resize(t_sizeint requested_length) {
+		const std::size_t new_length =
+		    requested_length <= 0
+			? 0
+			: static_cast<std::size_t>(
+			      requested_length);
+		std::vector<T> replacement(new_length);
+		const std::size_t copied = std::min(
+		    storage.m_size(), new_length);
+		std::copy_n(
+		    storage.m_data(), copied,
+		    replacement.data());
+		// SetLength is a handle operation. Replacing the block even when the
+		// size is unchanged ensures aliases retain their original array.
+		storage.m_replace(std::move(replacement));
+	}
+};
+
+static_assert(
+    sizeof(t_dynamicarray<t_byte>) ==
+    sizeof(void*));
+static_assert(
+    alignof(t_dynamicarray<t_byte>) ==
+    alignof(void*));
+
+template<typename T>
+struct t_openarray {
+	T* data = nullptr;
+	t_sizeint count = 0;
+
+	t_sizeint m_length() const {
+		return count;
+	}
+
+	t_sizeint m_low() const {
+		return 0;
+	}
+
+	t_sizeint m_high() const {
+		return m_length() - 1;
+	}
+
+	T* m_data() const {
+		return data;
+	}
+};
+
+static_assert(
+    sizeof(t_openarray<t_byte>) ==
+    sizeof(void*) * 2);
+
+template<typename T>
+class m_openarray_owner {
+	// A value open-array argument is a copy whose storage must survive until
+	// the complete call expression finishes. The conversion below exposes a
+	// descriptor while this owner remains the materialized argument object.
+	std::vector<T> values;
+
+public:
+	m_openarray_owner(
+	    const T* data, std::size_t count)
+	    : values() {
+		if (count != 0)
+			values.assign(
+			    data, data + count);
+	}
+
+	explicit m_openarray_owner(
+	    std::vector<T> values)
+	    : values(std::move(values)) {
+	}
+
+	operator t_openarray<T>() {
+		return t_openarray<T>{
+		    values.data(),
+		    static_cast<t_sizeint>(
+			values.size()),
+		};
+	}
+
+	operator t_openarray<const T>() const {
+		return t_openarray<const T>{
+		    values.data(),
+		    static_cast<t_sizeint>(
+			values.size()),
+		};
+	}
+};
+
+template<typename T>
+inline m_openarray_owner<T>
+m_openarray_values(
+    std::initializer_list<T> values) {
+	return m_openarray_owner<T>{
+	    std::vector<T>(
+		values.begin(), values.end())};
+}
+
+template<typename T, std::size_t N, auto Low>
+inline t_openarray<const T>
+m_openarray_const_view(
+    const t_fixedarray<T, N, Low>& value) {
+	return t_openarray<const T>{
+	    value.m_data(),
+	    value.m_length(),
+	};
+}
+
+template<typename T>
+inline t_openarray<const T>
+m_openarray_const_view(
+    const t_dynamicarray<T>& value) {
+	return t_openarray<const T>{
+	    value.m_data(),
+	    value.m_length(),
+	};
+}
+
+template<typename T>
+inline t_openarray<const std::remove_const_t<T>>
+m_openarray_const_view(t_openarray<T> value) {
+	return {
+	    value.m_data(),
+	    value.m_length(),
+	};
+}
+
+template<typename T, std::size_t N, auto Low>
+inline t_openarray<T>
+m_openarray_mutable_view(
+    t_fixedarray<T, N, Low>& value) {
+	return t_openarray<T>{
+	    value.m_data(),
+	    value.m_length(),
+	};
+}
+
+template<typename T>
+inline t_openarray<T>
+m_openarray_mutable_view(
+    t_dynamicarray<T>& value) {
+	return t_openarray<T>{
+	    value.m_data(),
+	    value.m_length(),
+	};
+}
+
+template<typename T>
+requires (!std::is_const_v<T>)
+inline t_openarray<T>
+m_openarray_mutable_view(t_openarray<T> value) {
+	return value;
+}
+
+template<typename T>
+inline t_openarray<T>
+m_openarray_reset(t_openarray<T> value) {
+	// The currently supported managed carriers implement Pascal default
+	// initialization through assignment from T{}. Custom Initialize/Finalize
+	// hooks require a separate lifetime protocol and must not be guessed here.
+	for (t_sizeint i = 0;
+	     i < value.m_length(); ++i)
+		value.m_data()[i] = T{};
+	return value;
+}
+
+template<typename T, std::size_t N, auto Low>
+inline t_openarray<T>
+m_openarray_out_view(
+    t_fixedarray<T, N, Low>& value) {
+	return m_openarray_reset(
+	    m_openarray_mutable_view(value));
+}
+
+template<typename T>
+inline t_openarray<T>
+m_openarray_out_view(
+    t_dynamicarray<T>& value) {
+	return m_openarray_reset(
+	    m_openarray_mutable_view(value));
+}
+
+template<typename T>
+requires (!std::is_const_v<T>)
+inline t_openarray<T>
+m_openarray_out_view(t_openarray<T> value) {
+	return m_openarray_reset(value);
+}
+
+template<typename T, std::size_t N, auto Low>
+inline m_openarray_owner<T>
+m_openarray_value_copy(
+    const t_fixedarray<T, N, Low>& value) {
+	return m_openarray_owner<T>{
+	    value.m_data(),
+	    static_cast<std::size_t>(
+		value.m_length()),
+	};
+}
+
+template<typename T>
+inline m_openarray_owner<T>
+m_openarray_value_copy(
+    const t_dynamicarray<T>& value) {
+	return m_openarray_owner<T>{
+	    value.m_data(),
+	    static_cast<std::size_t>(
+		value.m_length()),
+	};
+}
+
+template<typename T>
+inline m_openarray_owner<std::remove_const_t<T>>
+m_openarray_value_copy(t_openarray<T> value) {
+	using item_type =
+	    std::remove_const_t<T>;
+	return m_openarray_owner<item_type>{
+	    value.m_data(),
+	    static_cast<std::size_t>(
+		value.m_length()),
+	};
+}
+
+struct t_ansistring {
+	m_shared_buffer<t_char> storage;
+
+	t_sizeint m_length() const {
+		const std::size_t stored =
+		    storage.m_size();
+		return stored == 0
+			   ? 0
+			   : static_cast<t_sizeint>(
+				 stored - 1);
+	}
+
+	t_sizeint m_low() const {
+		return 1;
+	}
+
+	t_sizeint m_high() const {
+		return m_length();
+	}
+
+	const t_char* m_data() const noexcept {
+		if (const t_char* data =
+			storage.m_data())
+			return data;
+		static const t_char zero{0};
+		return &zero;
+	}
+
+	void m_make_unique() {
+		if (storage.m_size() == 0) {
+			storage.m_replace(
+			    std::vector<t_char>{
+				t_char{0}});
+			return;
+		}
+		storage.m_make_unique();
+	}
+
+	t_char* m_writable_data() {
+		m_make_unique();
+		return storage.m_shared_data();
+	}
+
+	// Explicit Pointer(AnsiString) exposes character one. Because the result
+	// is writable Pascal Pointer storage, detachment happens before it escapes.
+	t_pointer m_pointer() {
+		return m_writable_data();
 	}
 
 	std::string m_string() const {
 		std::string result;
 		const std::size_t count =
-		    std::min<std::size_t>(
-		        length.value, capacity);
+		    static_cast<std::size_t>(
+			m_length());
 		result.reserve(count);
+		const t_char* data = m_data();
 		for (std::size_t i = 0; i < count; ++i)
 			result.push_back(
-			    static_cast<char>(data[i].value));
+			    static_cast<char>(
+				data[i].value));
 		return result;
 	}
 
 	template<typename I>
 	t_char& index(I index) {
 		const std::ptrdiff_t actual =
-		    static_cast<std::ptrdiff_t>(index);
-		if (actual < 0 ||
-		    actual > static_cast<std::ptrdiff_t>(capacity))
+		    static_cast<std::ptrdiff_t>(
+			index);
+		if (actual < 1 ||
+		    actual >
+			static_cast<std::ptrdiff_t>(
+			    m_length()))
 			m_runtime_error(201);
-		return actual == 0
-		    ? length
-		    : data[static_cast<std::size_t>(actual - 1)];
+		return m_writable_data()[
+		    static_cast<std::size_t>(
+			actual - 1)];
 	}
 
 	template<typename I>
 	const t_char& index(I index) const {
 		const std::ptrdiff_t actual =
-		    static_cast<std::ptrdiff_t>(index);
-		if (actual < 0 ||
-		    actual > static_cast<std::ptrdiff_t>(capacity))
+		    static_cast<std::ptrdiff_t>(
+			index);
+		if (actual < 1 ||
+		    actual >
+			static_cast<std::ptrdiff_t>(
+			    m_length()))
 			m_runtime_error(201);
-		return actual == 0
-		    ? length
-		    : data[static_cast<std::size_t>(actual - 1)];
+		return m_data()[
+		    static_cast<std::size_t>(
+			actual - 1)];
 	}
 
 	template<typename I>
 	std::size_t storage_extent(I index) const {
 		const std::ptrdiff_t actual =
-		    static_cast<std::ptrdiff_t>(index);
-		if (actual < 0 ||
-		    actual > static_cast<std::ptrdiff_t>(capacity))
+		    static_cast<std::ptrdiff_t>(
+			index);
+		if (actual < 1 ||
+		    actual >
+			static_cast<std::ptrdiff_t>(
+			    m_length()))
 			m_runtime_error(201);
-		return actual == 0
-		    ? sizeof(length)
-		    : capacity -
-		          static_cast<std::size_t>(actual - 1);
+		return static_cast<std::size_t>(
+		    m_length() - actual + 2);
 	}
 
 	template<std::size_t SourceCapacity>
-	void assign(const t_shortstring<SourceCapacity>& source) {
-		const std::size_t copied = std::min(
-		    static_cast<std::size_t>(source.length),
-		    capacity);
-		if (copied != 0)
-			std::memcpy(data, source.data, copied);
-		set_length(copied);
+	void assign(
+	    const t_shortstring<SourceCapacity>& source) {
+		const std::size_t copied =
+		    static_cast<std::size_t>(
+			source.m_length());
+		std::vector<t_char> replacement(
+		    copied + 1, t_char{0});
+		std::copy_n(
+		    source.m_data(), copied,
+		    replacement.data());
+		storage.m_replace(
+		    std::move(replacement));
 	}
 
-	void set_length(std::size_t new_length) {
-		const std::size_t bounded =
-		    std::min(new_length, capacity);
-		length = t_char{static_cast<uint8_t>(bounded)};
-		data[bounded] = t_char{0};
-	}
-
-	void resize(t_integer requested_length) {
-		const std::size_t old_length = length;
+	void m_resize(t_sizeint requested_length) {
 		const std::size_t new_length =
 		    requested_length <= 0
-		        ? 0
-		        : std::min(
-		              static_cast<std::size_t>(
-		                  requested_length),
-		              capacity);
-		if (new_length > old_length)
-			std::fill(
-			    data + old_length,
-			    data + new_length, t_char{0});
-		set_length(new_length);
+			? 0
+			: static_cast<std::size_t>(
+			      requested_length);
+		std::vector<t_char> replacement(
+		    new_length + 1, t_char{0});
+		const std::size_t copied = std::min(
+		    static_cast<std::size_t>(
+			m_length()),
+		    new_length);
+		std::copy_n(
+		    m_data(), copied,
+		    replacement.data());
+		storage.m_replace(
+		    std::move(replacement));
 	}
 
 	t_ansistring slice(
 	    t_sizeint index, t_sizeint count) const {
-		t_ansistring result{};
+		t_ansistring result;
 		if (count <= 0)
 			return result;
 		if (index < 1)
 			index = 1;
 		const std::size_t start =
-		    static_cast<std::size_t>(index - 1);
-		const std::size_t source_length = length;
+		    static_cast<std::size_t>(
+			index - 1);
+		const std::size_t source_length =
+		    static_cast<std::size_t>(
+			m_length());
 		if (start >= source_length)
 			return result;
-		const std::size_t copied = std::min({
+		const std::size_t copied = std::min(
 		    static_cast<std::size_t>(count),
-		    source_length - start,
-		    capacity,
-		});
-		if (copied != 0)
-			std::memcpy(
-			    result.data, data + start, copied);
-		result.set_length(copied);
+		    source_length - start);
+		std::vector<t_char> replacement(
+		    copied + 1, t_char{0});
+		std::copy_n(
+		    m_data() + start, copied,
+		    replacement.data());
+		result.storage.m_replace(
+		    std::move(replacement));
 		return result;
 	}
 
-	void erase(t_longint index, t_longint count) {
+	void erase(
+	    t_longint index, t_longint count) {
 		if (index < 1 || count <= 0)
 			return;
 		const std::size_t start =
-		    static_cast<std::size_t>(index - 1);
-		const std::size_t old_length = length;
+		    static_cast<std::size_t>(
+			index - 1);
+		const std::size_t old_length =
+		    static_cast<std::size_t>(
+			m_length());
 		if (start >= old_length)
 			return;
 		const std::size_t removed = std::min(
 		    static_cast<std::size_t>(count),
 		    old_length - start);
-		const std::size_t tail =
-		    old_length - start - removed;
-		std::memmove(
-		    data + start, data + start + removed, tail);
-		set_length(old_length - removed);
+		std::vector<t_char> replacement(
+		    old_length - removed + 1,
+		    t_char{0});
+		std::copy_n(
+		    m_data(), start,
+		    replacement.data());
+		std::copy(
+		    m_data() + start + removed,
+		    m_data() + old_length,
+		    replacement.data() + start);
+		storage.m_replace(
+		    std::move(replacement));
 	}
 
 	void insert(
-	    const t_ansistring& source, t_longint index) {
-		if (source.length == 0)
+	    const t_ansistring& source,
+	    t_longint index) {
+		const std::size_t source_length =
+		    static_cast<std::size_t>(
+			source.m_length());
+		if (source_length == 0)
 			return;
+		const std::size_t old_length =
+		    static_cast<std::size_t>(
+			m_length());
 		if (index < 1)
 			index = 1;
 		std::size_t start =
-		    static_cast<std::size_t>(index - 1);
-		if (start > length)
-			start = length;
-
-		const t_ansistring stable_source = source;
-		const std::size_t copied = std::min(
 		    static_cast<std::size_t>(
-		        stable_source.length),
-		    capacity - start);
-		if (copied == 0)
-			return;
-		const std::size_t remaining =
-		    capacity - (start + copied);
-		const std::size_t tail = std::min(
-		    static_cast<std::size_t>(length) - start,
-		    remaining);
-		if (tail != 0)
-			std::memmove(
-			    data + start + copied,
-			    data + start, tail);
-		std::memcpy(
-		    data + start, stable_source.data, copied);
-		set_length(start + copied + tail);
+			index - 1);
+		if (start > old_length)
+			start = old_length;
+
+		// Copy both source ranges before replacing the shared block. This also
+		// covers Insert(S, S, I) without an alias-specific branch.
+		std::vector<t_char> replacement(
+		    old_length + source_length + 1,
+		    t_char{0});
+		std::copy_n(
+		    m_data(), start,
+		    replacement.data());
+		std::copy_n(
+		    source.m_data(), source_length,
+		    replacement.data() + start);
+		std::copy(
+		    m_data() + start,
+		    m_data() + old_length,
+		    replacement.data() + start +
+			source_length);
+		storage.m_replace(
+		    std::move(replacement));
 	}
 };
-static_assert(sizeof(t_ansistring) == 256);
-static_assert(alignof(t_ansistring) == 1);
-static_assert(std::is_aggregate_v<t_ansistring>);
+
 static_assert(
-    std::is_trivially_default_constructible_v<t_ansistring>);
-static_assert(std::is_trivially_copyable_v<t_ansistring>);
+    sizeof(t_ansistring) == sizeof(void*));
+static_assert(
+    alignof(t_ansistring) == alignof(void*));
+
+template<typename T, typename I>
+inline T& p_index(
+    t_dynamicarray<T>& value, I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual >= static_cast<std::ptrdiff_t>(
+			  value.m_length()))
+		m_runtime_error(201);
+	return value.m_data()[
+	    static_cast<std::size_t>(actual)];
+}
+
+template<typename T, typename I>
+inline const T& p_index(
+    const t_dynamicarray<T>& value, I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual >= static_cast<std::ptrdiff_t>(
+			  value.m_length()))
+		m_runtime_error(201);
+	return value.m_data()[
+	    static_cast<std::size_t>(actual)];
+}
+
+template<typename T, typename I>
+inline tpcc_typed_storage_ref<T>
+tpcc_make_storage_ref(
+    t_dynamicarray<T>& value, I index) {
+	T& selected = p_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_storage_ref<T>{
+	    {
+		reinterpret_cast<std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, typename I>
+inline tpcc_typed_const_storage_ref<T>
+tpcc_make_const_storage_ref(
+    const t_dynamicarray<T>& value, I index) {
+	const T& selected = p_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+		reinterpret_cast<const std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, typename I>
+inline T& p_index(
+    t_openarray<T> value, I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual < 0 ||
+	    actual >= static_cast<std::ptrdiff_t>(
+			  value.m_length()))
+		m_runtime_error(201);
+	return value.m_data()[
+	    static_cast<std::size_t>(actual)];
+}
+
+template<typename T, typename I>
+requires (!std::is_const_v<T>)
+inline tpcc_typed_storage_ref<T>
+tpcc_make_storage_ref(
+    t_openarray<T> value, I index) {
+	T& selected = p_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_storage_ref<T>{
+	    {
+		reinterpret_cast<std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, typename I>
+inline tpcc_typed_const_storage_ref<T>
+tpcc_make_const_storage_ref(
+    t_openarray<const T> value, I index) {
+	const T& selected = p_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+		reinterpret_cast<const std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T>
+class m_array_view_enumerator {
+	T* data;
+	std::size_t count;
+	std::size_t next = 0;
+
+public:
+	m_array_view_enumerator(
+	    T* data, std::size_t count)
+	    : data(data), count(count) {
+	}
+
+	bool m_move_next() {
+		if (next == count)
+			return false;
+		++next;
+		return true;
+	}
+
+	decltype(auto) m_current() const {
+		return data[next - 1];
+	}
+};
+
+template<typename T>
+class m_dynamicarray_enumerator {
+	// Copying the shared handle pins the exact buffer selected when iteration
+	// begins. A later SetLength on the source replaces its handle and cannot
+	// invalidate this traversal.
+	t_dynamicarray<T> value;
+	std::size_t next = 0;
+
+public:
+	explicit m_dynamicarray_enumerator(
+	    const t_dynamicarray<T>& value)
+	    : value(value) {
+	}
+
+	bool m_move_next() {
+		if (next ==
+		    static_cast<std::size_t>(
+			value.m_length()))
+			return false;
+		++next;
+		return true;
+	}
+
+	decltype(auto) m_current() const {
+		return value.m_data()[next - 1];
+	}
+};
+
+template<typename String>
+class m_string_enumerator {
+	// Strings use the same snapshot rule as dynamic arrays. Short strings copy
+	// their inline bytes; AnsiString copies its shared handle and relies on
+	// copy-on-write before either alias is modified.
+	String value;
+	std::size_t next = 0;
+
+public:
+	explicit m_string_enumerator(
+	    const String& value)
+	    : value(value) {
+	}
+
+	bool m_move_next() {
+		if (next ==
+		    static_cast<std::size_t>(
+			value.m_length()))
+			return false;
+		++next;
+		return true;
+	}
+
+	t_char m_current() const {
+		return value.m_data()[next - 1];
+	}
+};
+
+template<typename T>
+inline T m_ordinal_from_storage(
+    typename tpcc_ordinal_storage<T>::type value) {
+	return tpcc_ordinal_storage<T>::make(
+	    value);
+}
+
+template<typename T>
+class m_ordinal_enumerator {
+	using traits = tpcc_ordinal_storage<T>;
+	using storage_type = typename traits::type;
+	storage_type lower;
+	storage_type upper;
+	storage_type current{};
+	bool started = false;
+	bool valid;
+
+public:
+	m_ordinal_enumerator(T lower, T upper)
+	    : lower(traits::get(lower)),
+	      upper(traits::get(upper)),
+	      valid(this->lower <= this->upper) {
+	}
+
+	bool m_move_next() {
+		if (!valid)
+			return false;
+		if (!started) {
+			current = lower;
+			started = true;
+			return true;
+		}
+		if (current == upper)
+			return false;
+		++current;
+		return true;
+	}
+
+	T m_current() const {
+		return m_ordinal_from_storage<T>(
+		    current);
+	}
+};
+
+template<typename T>
+struct m_ordinal_range {
+	T lower;
+	T upper;
+};
+
+template<typename T>
+inline m_ordinal_enumerator<T>
+m_enumerate(m_ordinal_range<T> range) {
+	return m_ordinal_enumerator<T>{
+	    range.lower, range.upper};
+}
+
+template<typename T>
+class m_set_enumerator {
+	using traits = tpcc_ordinal_storage<T>;
+	using storage_type = typename traits::type;
+	t_set<T> value;
+	storage_type lower;
+	storage_type upper;
+	storage_type current{};
+	bool started = false;
+	bool exhausted;
+
+public:
+	m_set_enumerator(
+	    const t_set<T>& value,
+	    T lower, T upper)
+	    : value(value),
+	      lower(traits::get(lower)),
+	      upper(traits::get(upper)),
+	      exhausted(this->lower >
+			    this->upper ||
+			value.spans.empty()) {
+	}
+
+	bool m_move_next() {
+		// Scan the declared ordinal domain and ask set membership for each
+		// value. This yields each Pascal value once even if stored spans
+		// overlap or are represented differently after normalization.
+		while (!exhausted) {
+			if (!started) {
+				current = lower;
+				started = true;
+			} else if (current == upper) {
+				exhausted = true;
+				return false;
+			} else {
+				++current;
+			}
+			if (p_in(
+				m_ordinal_from_storage<T>(
+				    current),
+				value) == p_true)
+				return true;
+		}
+		return false;
+	}
+
+	T m_current() const {
+		return m_ordinal_from_storage<T>(
+		    current);
+	}
+};
+
+template<typename T, std::size_t N, auto Low>
+inline m_array_view_enumerator<T>
+m_enumerate(t_fixedarray<T, N, Low>& value) {
+	return {
+	    value.m_data(),
+	    static_cast<std::size_t>(
+		value.m_length())};
+}
+
+template<typename T, std::size_t N, auto Low>
+inline m_array_view_enumerator<const T>
+m_enumerate(
+    const t_fixedarray<T, N, Low>& value) {
+	return {
+	    value.m_data(),
+	    static_cast<std::size_t>(
+		value.m_length())};
+}
+
+template<typename T>
+inline m_dynamicarray_enumerator<T>
+m_enumerate(
+    const t_dynamicarray<T>& value) {
+	return m_dynamicarray_enumerator<T>{
+	    value};
+}
+
+template<typename T>
+inline m_array_view_enumerator<T>
+m_enumerate(t_openarray<T> value) {
+	return {
+	    value.m_data(),
+	    static_cast<std::size_t>(
+		value.m_length())};
+}
+
+template<std::size_t Capacity>
+inline m_string_enumerator<
+    t_shortstring<Capacity>>
+m_enumerate(
+    const t_shortstring<Capacity>& value) {
+	return m_string_enumerator<
+	    t_shortstring<Capacity>>{value};
+}
+
+inline m_string_enumerator<t_ansistring>
+m_enumerate(const t_ansistring& value) {
+	return m_string_enumerator<
+	    t_ansistring>{value};
+}
+
+template<typename T>
+inline m_set_enumerator<T>
+m_enumerate(
+    const t_set<T>& value, T lower,
+    T upper) {
+	return m_set_enumerator<T>{
+	    value, lower, upper};
+}
 
 struct binary_file_state {
 	std::string name;
@@ -1651,13 +2497,7 @@ inline std::string tpcc_render_write_value(
 	std::ostringstream out;
 	if constexpr (tpcc_is_shortstring_v<T> ||
 		              std::is_same_v<T, t_ansistring>) {
-		const std::size_t length = value.length.value;
-		std::string result;
-		result.reserve(length);
-		for (std::size_t i = 0; i < length; ++i)
-			result.push_back(
-			    static_cast<char>(value.data[i].value));
-		return result;
+		return value.m_string();
 	} else if constexpr (std::is_same_v<T, t_char>) {
 		return std::string(
 		    1, static_cast<char>(value.value));
@@ -1747,11 +2587,8 @@ inline void p_writeln(
 	out.put('\n');
 }
 
-// Mutation of an AnsiString element must detach shared storage before a
-// writable character reference escapes. The temporary inline representation
-// is already unique, so this becomes a real copy-on-write barrier when
-// t_ansistring acquires managed storage.
-inline void p_uniquestring(t_ansistring&) {
+inline void p_uniquestring(t_ansistring& value) {
+	value.m_make_unique();
 }
 
 template<typename I>
@@ -1872,13 +2709,23 @@ requires
      std::is_same_v<Haystack, t_ansistring>)
 inline t_longint p_pos(
     const Needle& needle, const Haystack& haystack) {
-	if (needle.length == 0)
+	const std::size_t needle_length =
+	    static_cast<std::size_t>(
+		needle.m_length());
+	const std::size_t haystack_length =
+	    static_cast<std::size_t>(
+		haystack.m_length());
+	if (needle_length == 0)
 		return 1;
-	if (needle.length > haystack.length)
+	if (needle_length > haystack_length)
 		return 0;
-	const std::size_t last = static_cast<std::size_t>(haystack.length - needle.length);
+	const std::size_t last =
+	    haystack_length - needle_length;
 	for (std::size_t offset = 0; offset <= last; ++offset) {
-		if (std::memcmp(haystack.data + offset, needle.data, needle.length) == 0)
+		if (std::memcmp(
+			haystack.m_data() + offset,
+			needle.m_data(),
+			needle_length) == 0)
 			return static_cast<t_longint>(offset + 1);
 	}
 	return 0;
@@ -1890,8 +2737,13 @@ requires
     std::is_same_v<Haystack, t_ansistring>
 inline t_longint p_pos(
     t_char needle, const Haystack& haystack) {
-	for (std::size_t offset = 0; offset < haystack.length; ++offset) {
-		if (haystack.data[offset] == needle)
+	const std::size_t length =
+	    static_cast<std::size_t>(
+		haystack.m_length());
+	for (std::size_t offset = 0;
+	     offset < length; ++offset) {
+		if (haystack.m_data()[offset] ==
+		    needle)
 			return static_cast<t_longint>(offset + 1);
 	}
 	return 0;
@@ -2123,19 +2975,53 @@ template<typename T> inline T p_high() {
 	else
 		return std::numeric_limits<T>::max();
 }
-template<std::size_t Capacity>
-inline t_byte p_length(const t_shortstring<Capacity>& s) {
-	return static_cast<t_byte>(s.length);
-}
-inline t_sizeint p_length(const t_ansistring& s) { return s.length; }
-inline void p_setlength(t_ansistring& s, t_integer value) {
-	s.resize(value);
-}
-template<typename T, std::size_t N> inline t_sizeint p_length(const T (&)[N]) { return static_cast<t_sizeint>(N); }
-template<typename T, std::size_t N, auto Low> inline t_sizeint p_length(const t_fixedarray<T, N, Low>&) { return static_cast<t_sizeint>(N); }
 template<typename T>
-inline t_sizeint p_length(tpcc_typed_const_storage_ref<T> value) {
+requires requires(const T& value) {
+	value.m_low();
+}
+inline auto p_low(const T& value) {
+	return value.m_low();
+}
+template<typename T>
+requires requires(const T& value) {
+	value.m_high();
+}
+inline auto p_high(const T& value) {
+	return value.m_high();
+}
+template<typename T>
+requires requires(const T& value) {
+	value.m_length();
+}
+inline auto p_length(const T& value) {
+	// Length is one Pascal operation, but representation and exact result type
+	// belong to the carrier (for example Byte for short strings and SizeInt
+	// for dynamic arrays). The generic wrapper must not reproduce those rules.
+	return value.m_length();
+}
+
+template<typename T>
+inline auto p_length(
+    tpcc_typed_const_storage_ref<T> value)
+    -> decltype(p_length(*value.value)) {
 	return p_length(*value.value);
+}
+
+inline void p_setlength(
+    t_ansistring& value,
+    t_sizeint length) {
+	value.m_resize(length);
+}
+
+template<typename T>
+inline void p_setlength(
+    tpcc_typed_storage_ref<T> value,
+    t_sizeint length)
+requires requires(T& sequence) {
+	sequence.m_resize(length);
+}
+{
+	value.value->m_resize(length);
 }
 template<typename T>
 inline t_sizeint p_sizeof(tpcc_typed_const_storage_ref<T>) {
