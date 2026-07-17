@@ -758,14 +758,6 @@ static int real_widening_rank(
 	return -1;
 }
 
-static bool ordinal_bounds_contain_range(const OrdinalBounds& outer, const OrdinalBounds& inner) {
-	if (inner.signed_type) {
-		if (!outer.signed_type || outer.min_magnitude < inner.min_magnitude)
-			return false;
-	}
-	return outer.max_positive >= inner.max_positive;
-}
-
 static bool integer_like_bounds(
     const Type* ty, OrdinalBounds* out) {
 	if (integer_bounds(ty, out))
@@ -829,14 +821,11 @@ static int integer_conversion_cost(
 	if (!integer_like_bounds(from, &from_bounds) || !integer_like_bounds(to, &to_bounds))
 		return -1;
 
-	// Viability and preference are different questions. A high cost can make
-	// a narrowing conversion lose to another overload, but it still silently
-	// loses data in an assignment or a singleton call. Admit only mathematical
-	// range inclusion here; explicit ordinal casts implement truncation.
-	if (!ordinal_bounds_contain_range(
-		to_bounds, from_bounds))
-		return -1;
-
+	// Compatible integer-family conversions are viable in both directions.
+	// Candidate matching separately records whether the source interval fits
+	// the destination interval: a non-narrowing candidate wins before this
+	// ordinary distance is compared, and a selected narrowing conversion is
+	// lowered through the caller's {$R} state.
 	uint64_t distance = ordinal_lower_bound_distance(from_bounds, to_bounds);
 	distance = saturating_add(distance, unsigned_abs_diff(from_bounds.max_positive, to_bounds.max_positive));
 
@@ -875,6 +864,14 @@ IntrinsicType::value_conversion_from(
 	if ((source == char_type() && target == byte_type()) ||
 	    (source == byte_type() && target == char_type()))
 		return implicit_conversion(20);
+	if (target == char_type()) {
+		auto range =
+		    dynamic_cast<const SubrangeType*>(
+			source);
+		if (range &&
+		    range->base_type == target)
+			return direct_conversion();
+	}
 
 	int integer_cost =
 	    integer_conversion_cost(source, target);
@@ -1308,6 +1305,19 @@ bool IntrinsicType::is_subtype_of(
 	       ordinal_domain_is_subset(this, target);
 }
 
+std::optional<ValueConversion>
+EnumType::value_conversion_from(
+    const Type* source) const {
+	if (source &&
+	    ordinal_domains_are_compatible(
+		source, this) &&
+	    source->is_subtype_of(this))
+		// Only this enum's own subranges are compatible, and their complete
+		// domains are contained by the enum declaration.
+		return direct_conversion();
+	return std::nullopt;
+}
+
 bool IntrinsicType::
     same_cxx_carrier_definition_as(
 	const Type* other) const {
@@ -1341,14 +1351,15 @@ SubrangeType::value_conversion_from(
     const Type* source) const {
 	if (!source ||
 	    !ordinal_domains_are_compatible(
-		source, this) ||
-	    !source->is_subtype_of(this))
+		source, this))
 		return std::nullopt;
-	// A source domain already contained by this subrange needs no value
-	// change. Wider domains are not viable implicitly: their current runtime
-	// value cannot make a type-wide conversion safe, and literals are checked
-	// separately from their retained signed magnitude.
-	return direct_conversion();
+	// Contextual literals are checked against the exact endpoints before this
+	// type-level path. Runtime sources remain viable in both directions; the
+	// matcher marks a wider source as candidate-level narrowing and the
+	// selected Cast applies {$R}.
+	return source->is_subtype_of(this)
+		   ? direct_conversion()
+		   : implicit_conversion();
 }
 
 std::optional<ValueConversion>

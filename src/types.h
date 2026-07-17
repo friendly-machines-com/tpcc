@@ -358,6 +358,9 @@ struct EnumType: public Type {
 	         bool carrier_signed = true);
 	EnumType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(
+	    const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

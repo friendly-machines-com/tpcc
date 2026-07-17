@@ -8292,6 +8292,31 @@ static bool rank_less(
 	       b.source_distance;
 }
 
+static bool ordinal_conversion_requires_runtime_narrowing(
+    Type* source, Type* target) {
+	OrdinalRange source_range;
+	OrdinalRange target_range;
+	std::string ignored_error;
+	if (!source || !target ||
+	    !ordinal_range_for_type(
+		source, &source_range,
+		&ignored_error) ||
+	    !ordinal_range_for_type(
+		target, &target_range,
+		&ignored_error))
+		return false;
+	// value_conversion_from owns family/nominal compatibility. This helper is
+	// asked only after that conversion is known to be viable and answers the
+	// distinct interval-containment question used by {$R} and candidate
+	// preference.
+	return compare_ordinal_value(
+		   source_range.lower_ordinal,
+		   target_range.lower_ordinal) < 0 ||
+	       compare_ordinal_value(
+		   source_range.upper_ordinal,
+		   target_range.upper_ordinal) > 0;
+}
+
 std::optional<ArgumentMatch> Parser::match_argument(
     const Parameter& formal, Node* actual,
     const BuiltinDesc* builtin,
@@ -8386,8 +8411,20 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    dynamic_cast<OpenArrayType*>(
 			target);
 		if (!target_set && !target_dynamic &&
-		    !target_open)
+		    !target_open) {
+			// The bracket expression is still uncommitted: although the
+			// required final type is not a container, a single user
+			// conversion may declare a set or array source formal and construct
+			// this syntax directly in that context. Re-enter the ordinary
+			// conversion-family lookup only from the outer match; matching the
+			// operator's source formal passes allow_user_conversion=false and
+			// therefore cannot form an A -> B -> C chain.
+			if (allow_user_conversion)
+				return match_user_conversion(
+				    actual, target, failure,
+				    conversion_failure);
 			return std::nullopt;
+		}
 		if (formal.mode == ParamMode::Var ||
 		    formal.mode == ParamMode::Out)
 			return std::nullopt;
@@ -8404,6 +8441,8 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    ParamMode::Value, nullptr);
 		MatchRank combined{
 		    MatchRank::Tier::Direct, 0};
+		bool requires_runtime_narrowing =
+		    false;
 		if (!target_set)
 			combined.contextual_construction =
 			    MatchRank::
@@ -8445,6 +8484,10 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			if (!lower)
 				return std::nullopt;
 			combine(lower->rank);
+			requires_runtime_narrowing =
+			    requires_runtime_narrowing ||
+			    lower
+				->requires_runtime_narrowing;
 			if (!target_set) {
 				array_items.push_back(
 				    lower->value);
@@ -8459,6 +8502,10 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				if (!upper)
 					return std::nullopt;
 				combine(upper->rank);
+				requires_runtime_narrowing =
+				    requires_runtime_narrowing ||
+				    upper
+					->requires_runtime_narrowing;
 				upper_value =
 				    upper->value;
 			}
@@ -8472,12 +8519,14 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    combined,
 			    new SetLiteral(
 				std::move(set_items),
-				target)};
+				target),
+			    requires_runtime_narrowing};
 		return ArgumentMatch{
 		    combined,
 		    new ArrayLiteral(
 			std::move(array_items),
-			target)};
+			target),
+		    requires_runtime_narrowing};
 	}
 
 	if (auto open =
@@ -8689,7 +8738,9 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			 : MatchRank::Tier::Convert,
 		     conversion->distance},
 		    make_implicit_cast(
-			actual, target)};
+			actual, target),
+		    ordinal_conversion_requires_runtime_narrowing(
+			source, target)};
 	if (allow_user_conversion)
 		return match_user_conversion(
 		    actual, target, failure,
@@ -8730,6 +8781,10 @@ Parser::match_callable_arguments(
 		    match->rank);
 		result.arguments.push_back(
 		    match->value);
+		result.requires_runtime_narrowing =
+		    result.requires_runtime_narrowing ||
+		    match
+			->requires_runtime_narrowing;
 	}
 	return result;
 }
@@ -8772,6 +8827,56 @@ Parser::match_user_conversion(
 	Callable* best_candidate = nullptr;
 	std::optional<ArgumentMatch> best_source;
 	std::vector<Callable*> best_candidates;
+	auto source_is_single_edge =
+	    [&](const Parameter& formal,
+		const ArgumentMatch& match) {
+		    if (match.requires_runtime_narrowing)
+			    return false;
+		    if (match.rank.tier ==
+			MatchRank::Tier::Exact)
+			    return true;
+		    // An uncommitted literal has no typed A value which must first
+		    // undergo an A -> B conversion. Candidate-local construction of
+		    // that literal directly as the declared source formal B therefore
+		    // leaves the user B -> C operation as the one conversion edge.
+		    // Keep this list tied to the CST forms which match_argument
+		    // actually contextualizes; a favorable Direct rank by itself
+		    // must never reopen typed widening, narrowing, or subtyping.
+		    if (untyped_integer_constant(
+			    actual))
+			    return match.value &&
+				   match.value->ty ==
+				       formal.ty &&
+				   dynamic_cast<Integer*>(
+				       match.value);
+		    if (dynamic_cast<BracketLiteral*>(
+			    actual))
+			    return match.value &&
+				   match.value != actual &&
+				   match.value->ty ==
+				       formal.ty &&
+				   (dynamic_cast<SetLiteral*>(
+					match.value) ||
+				    dynamic_cast<ArrayLiteral*>(
+					match.value));
+		    if (dynamic_cast<NilLiteral*>(
+			    actual))
+			    return match.value &&
+				   match.value != actual &&
+				   match.value->ty ==
+				       formal.ty &&
+				   dynamic_cast<NilLiteral*>(
+				       match.value);
+		    if (dynamic_cast<String*>(
+			    actual))
+			    return match.value &&
+				   match.value != actual &&
+				   match.value->ty ==
+				       formal.ty &&
+				   dynamic_cast<String*>(
+				       match.value);
+		    return false;
+	    };
 	for (Callable* candidate : candidates) {
 		if (!dynamic_cast<Procedure*>(
 			candidate) ||
@@ -8788,14 +8893,23 @@ Parser::match_user_conversion(
 		auto source_match = match_argument(
 		    candidate->ty->formals[0],
 		    actual, builtin, 0, false);
-		if (!source_match)
+		if (!source_match ||
+		    !source_is_single_edge(
+			candidate->ty->formals[0],
+			*source_match))
+			// One implicit conversion is one edge. A conversion operator
+			// declared B -> C cannot first convert an A actual to its B
+			// source formal; only an exact A -> C declaration is a candidate.
+			// The sole exception above directly constructs an uncommitted
+			// literal as B, because no typed A exists in that case.
 			continue;
 		if (conversion_failure)
 			conversion_failure->viable.push_back(
 			    {candidate,
 			     CallableMatch{
 				 {source_match->rank},
-				 {source_match->value}}});
+				 {source_match->value},
+				 false}});
 		if (!best_source ||
 		    rank_less(
 			source_match->rank,
@@ -8804,8 +8918,8 @@ Parser::match_user_conversion(
 			best_source = *source_match;
 			best_candidates = {candidate};
 		} else if (!rank_less(
-			       best_source->rank,
-			       source_match->rank)) {
+			best_source->rank,
+			source_match->rank)) {
 			best_candidates.push_back(
 			    candidate);
 		}
@@ -8826,13 +8940,12 @@ Parser::match_user_conversion(
 		return std::nullopt;
 	}
 
-	// A source-defined conversion is one explicit language operation. Do not
-	// recursively search for a conversion into its own source parameter:
-	// that would invent arbitrary implicit conversion chains and could
-	// recurse through the same operator family forever. UserConvert is below
-	// every intrinsic conversion and above an omitted-type generic formal;
-	// its nested source rank orders conversion operators without a numeric
-	// encoding or another resolution pass.
+	// A source-defined conversion is one explicit language operation. Its
+	// source match above is exact or direct contextual literal construction,
+	// so this call is the only conversion edge from a typed source value.
+	// UserConvert remains below every intrinsic conversion and above an
+	// omitted-type generic formal; retaining the nested source rank keeps the
+	// representation complete without a numeric encoding or another pass.
 	auto call = new ProcCall(
 	    nullptr, best_candidate,
 	    std::vector<Node*>{
@@ -8842,19 +8955,29 @@ Parser::match_user_conversion(
 	    {MatchRank::Tier::UserConvert,
 	     0, best_source->rank.tier,
 	     best_source->rank.distance},
-	    call};
+	    call,
+	    false};
 }
 
 static bool dominates(
-    const std::vector<MatchRank>& a,
-    const std::vector<MatchRank>& b) {
-	if (a.size() != b.size())
+    const CallableMatch& a,
+    const CallableMatch& b) {
+	// A declaration which can accept every argument without runtime ordinal
+	// narrowing is categorically better than one which cannot. Only candidates
+	// in the same category reach the pre-existing Pareto comparison below.
+	if (a.requires_runtime_narrowing !=
+	    b.requires_runtime_narrowing)
+		return !a.requires_runtime_narrowing;
+	if (a.ranks.size() != b.ranks.size())
 		return false;
 	bool strict = false;
-	for (size_t i = 0; i < a.size(); ++i) {
-		if (rank_less(b[i], a[i]))
+	for (size_t i = 0;
+	     i < a.ranks.size(); ++i) {
+		if (rank_less(
+			b.ranks[i], a.ranks[i]))
 			return false;
-		if (rank_less(a[i], b[i]))
+		if (rank_less(
+			a.ranks[i], b.ranks[i]))
 			strict = true;
 	}
 	return strict;
@@ -8875,7 +8998,8 @@ Node* Parser::make_implicit_cast(
 		&ignored_error);
 	if (ordinal_conversion &&
 	    directive_state.switch_enabled('r') &&
-	    !value->ty->is_subtype_of(target))
+	    ordinal_conversion_requires_runtime_narrowing(
+		value->ty, target))
 		// Preserve the check only when the source type's complete domain is
 		// not already known to fit. This is a semantic no-op optimization:
 		// overload viability and the conversion selected above are unchanged.
@@ -9323,9 +9447,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				if (i != j &&
 				    dominates(
 					viable[j]
-					    .second.ranks,
+					    .second,
 					viable[i]
-					    .second.ranks)) {
+					    .second)) {
 					dom = true;
 					break;
 				}
