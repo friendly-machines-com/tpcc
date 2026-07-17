@@ -17,10 +17,10 @@ then
 	exit 1
 fi
 if ! rg -q \
-	'p_coerced = static_cast<::u_system::t_single>\(p_e\);' \
+	'p_coerced = ::u_system::m_real_cast<::u_system::t_single>\(p_e\);' \
 	"$tmp/single_type.cc"
 then
-	echo "numeric Coerce did not lower to static_cast<Single>" >&2
+	echo "numeric Coerce did not lower to the defined unchecked real cast" >&2
 	exit 1
 fi
 

@@ -108,7 +108,10 @@ begin
     Halt(3);
   if NumericKind(Signed32 + Unsigned32) <> 12 then
     Halt(4);
-  if NumericKind(Signed64 + Unsigned64) <> 13 then
+  { Neither 64-bit integer family contains the other's complete domain.
+    Their overloads therefore require runtime narrowing, while Extended
+    accepts both without a range failure and wins the candidate-wide rule. }
+  if NumericKind(Signed64 + Unsigned64) <> 15 then
     Halt(5);
   if NumericKind(Real32 + Real32) <> 15 then
     Halt(6);

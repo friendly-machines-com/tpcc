@@ -89,10 +89,11 @@ struct ArgumentMatch {
 	MatchRank rank;
 	Node* value;
 	// True when applying this otherwise-viable argument conversion requires
-	// committing an ordinal value to a destination whose complete domain does
-	// not contain the source domain. This is candidate information, not a new
-	// conversion tier: overload selection first prefers a candidate with no
-	// such conversion, then applies the existing per-argument rank algebra.
+	// committing an ordinal or real value to a destination whose complete
+	// runtime range does not contain the source range. This is candidate
+	// information, not a new conversion tier: overload selection first
+	// prefers a candidate with no such conversion, then applies the existing
+	// per-argument rank algebra.
 	bool requires_runtime_narrowing = false;
 };
 

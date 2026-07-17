@@ -882,13 +882,15 @@ IntrinsicType::value_conversion_from(
 	int source_real = real_widening_rank(source);
 	int target_real = real_widening_rank(target);
 	if (source_real >= 0 && target_real >= 0) {
-		// Single -> Double -> Extended preserves every source value on the
-		// supported target. The reverse direction is lossy and belongs behind
-		// an explicit cast, not a worse overload rank.
-		if (target_real < source_real)
-			return std::nullopt;
+		// All real-family directions are viable. Candidate matching records
+		// the reverse direction as runtime narrowing so an entirely
+		// non-narrowing overload wins first and a selected conversion uses the
+		// caller's {$R} state. Distance still orders candidates within either
+		// category without creating a second real-conversion mechanism.
 		unsigned distance = static_cast<unsigned>(
-		    target_real - source_real);
+		    source_real < target_real
+			? target_real - source_real
+			: source_real - target_real);
 		return implicit_conversion(distance);
 	}
 	if (integer_widening_rank(source) >= 0 &&

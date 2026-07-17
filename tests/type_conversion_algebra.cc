@@ -38,13 +38,15 @@ int main() {
 	assert(integer_to_int64);
 	assert(byte_to_shortint);
 	assert(cardinal_to_int64);
-	assert(!double_to_single);
+	assert(double_to_single);
 	assert(single_to_double);
 	assert(shortint_to_int64->kind ==
 	       ValueConversionClass::Convert);
 	assert(integer_to_cardinal->kind ==
 	       ValueConversionClass::Convert);
 	assert(byte_to_shortint->kind ==
+	       ValueConversionClass::Convert);
+	assert(double_to_single->kind ==
 	       ValueConversionClass::Convert);
 	assert(shortint_to_single->kind ==
 	       ValueConversionClass::Convert);

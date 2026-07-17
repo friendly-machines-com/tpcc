@@ -381,9 +381,10 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-/** An implicit ordinal conversion selected while {$R+} is active. Conversion
- * viability is still decided by the ordinary Type conversion rules; this
- * node only preserves the destination-boundary check until C++ emission. */
+/** An implicit ordinal or real narrowing conversion selected while {$R+} is
+ * active. Conversion viability is still decided by the ordinary Type
+ * conversion rules; this node only preserves the destination-boundary check
+ * until C++ emission. */
 class RangeCheckedCast: public Cast {
 public:
 	RangeCheckedCast(Node* value, Type* target);

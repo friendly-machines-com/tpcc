@@ -609,6 +609,69 @@ inline Target m_range_checked_ordinal_cast(
 	return m_ordinal_cast<Target>(source);
 }
 
+// C++ leaves an out-of-range floating-to-floating conversion undefined.
+// Pascal's unchecked real narrowing still needs a stable result, so finite
+// overflow is made explicit as signed infinity. Precision rounding and
+// underflow remain the target format's ordinary conversion behavior, while an
+// infinity or NaN already present in the source propagates to the corresponding
+// special value supported by every TPCC real carrier.
+template<typename Target, typename Source>
+requires std::is_floating_point_v<Target> &&
+	 std::is_floating_point_v<Source>
+inline Target m_real_cast(Source source) {
+	static_assert(
+	    std::numeric_limits<Target>::
+		has_infinity);
+	if constexpr (
+	    std::numeric_limits<Target>::
+		max_exponent <
+	    std::numeric_limits<Source>::
+		max_exponent) {
+		const Source maximum =
+		    static_cast<Source>(
+			std::numeric_limits<
+			    Target>::max());
+		if (std::isfinite(source) &&
+		    (source < -maximum ||
+		     source > maximum)) {
+			const Target infinity =
+			    std::numeric_limits<
+				Target>::
+				infinity();
+			return std::signbit(source)
+				   ? -infinity
+				   : infinity;
+		}
+	}
+	return static_cast<Target>(source);
+}
+
+template<typename Target, typename Source>
+requires std::is_floating_point_v<Target> &&
+	 std::is_floating_point_v<Source>
+inline Target m_range_checked_real_cast(
+    Source source) {
+	// SOURCE is by value so the comparisons and conversion evaluate the
+	// Pascal expression exactly once. Only finite overflow is a range failure:
+	// ordinary precision rounding/underflow is inherent in real narrowing,
+	// while existing infinities and NaNs are representable target values.
+	if constexpr (
+	    std::numeric_limits<Target>::
+		max_exponent <
+	    std::numeric_limits<Source>::
+		max_exponent) {
+		const Source maximum =
+		    static_cast<Source>(
+			std::numeric_limits<
+			    Target>::max());
+		if (std::isfinite(source) &&
+		    (source < -maximum ||
+		     source > maximum))
+			m_runtime_error(201);
+	}
+	return m_real_cast<Target>(source);
+}
+
 using tpcc_unknown_type = void*;
 
 inline t_boolean tpcc_bool_to_boolean(bool value) {

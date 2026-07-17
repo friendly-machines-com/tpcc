@@ -3669,6 +3669,12 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
+		auto real_type =
+		    [](Type* type) {
+			    return type == single_type() ||
+				   type == double_type() ||
+				   type == extended_type();
+		    };
 		auto ordinal_type =
 		    [](Type* type) {
 			    while (auto range =
@@ -3685,6 +3691,17 @@ void Emitter::emit_expression(Node* expr) {
 		    };
 		if (dynamic_cast<RangeCheckedCast*>(
 			ca)) {
+			if (ca->a &&
+			    real_type(ca->a->ty) &&
+			    real_type(ca->ty)) {
+				fprintf(active,
+					"::u_system::m_range_checked_real_cast<");
+				emit_type_ref(ca->ty);
+				fprintf(active, ">(");
+				emit_expression(ca->a);
+				fprintf(active, ")");
+				return;
+			}
 			TypeBound lower(
 			    TypeBoundKind::Low,
 			    ca->ty);
@@ -3700,6 +3717,21 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(&lower);
 			fprintf(active, ", ");
 			emit_expression(&upper);
+			fprintf(active, ")");
+			return;
+		}
+		if (ca->a &&
+		    real_type(ca->a->ty) &&
+		    real_type(ca->ty)) {
+			// Explicit real casts and {$R-} implicit narrowing are unchecked
+			// Pascal conversions, but direct C++ floating narrowing is
+			// undefined when a finite source exceeds the target range. The RTL
+			// operation supplies the defined signed-infinity result.
+			fprintf(active,
+				"::u_system::m_real_cast<");
+			emit_type_ref(ca->ty);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
 			fprintf(active, ")");
 			return;
 		}
@@ -3899,6 +3931,23 @@ void Emitter::emit_expression(Node* expr) {
 		    co->target_type == single_type() ||
 		    co->target_type == double_type() ||
 		    co->target_type == extended_type();
+		bool real_source =
+		    co->a &&
+		    (co->a->ty == single_type() ||
+		     co->a->ty == double_type() ||
+		     co->a->ty == extended_type());
+		if (numeric && real_source) {
+			// `as` is explicit and therefore ignores {$R}, but it shares the
+			// defined unchecked real conversion instead of exposing C++
+			// out-of-range conversion behavior.
+			fprintf(active,
+				"::u_system::m_real_cast<");
+			emit_type_ref(co->target_type);
+			fprintf(active, ">(");
+			emit_expression(co->a);
+			fprintf(active, ")");
+			return;
+		}
 		fprintf(active, numeric
 				    ? "static_cast<"
 				    : "dynamic_cast<");

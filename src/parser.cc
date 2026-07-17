@@ -8292,29 +8292,117 @@ static bool rank_less(
 	       b.source_distance;
 }
 
-static bool ordinal_conversion_requires_runtime_narrowing(
+static int real_range_rank(Type* type) {
+	if (type == single_type())
+		return 0;
+	if (type == double_type())
+		return 1;
+	if (type == extended_type())
+		return 2;
+	return -1;
+}
+
+static bool ordinal_interval_for_conversion(
+    Type* type, OrdinalRange::Value* lower,
+    OrdinalRange::Value* upper) {
+	if (auto range =
+		dynamic_cast<SubrangeType*>(
+		    type)) {
+		ConstEvalContext context;
+		ConstEvalResult folded_lower =
+		    range->lower_bound->const_eval(
+			context);
+		ConstEvalResult folded_upper =
+		    range->upper_bound->const_eval(
+			context);
+		if (folded_lower.kind !=
+			ConstEvalResult::Kind::Success ||
+		    folded_upper.kind !=
+			ConstEvalResult::Kind::Success)
+			return false;
+		std::string error;
+		auto classified_lower =
+		    classify_subrange_bound(
+			folded_lower.node, &error);
+		auto classified_upper =
+		    classify_subrange_bound(
+			folded_upper.node, &error);
+		if (!classified_lower ||
+		    !classified_upper)
+			return false;
+		*lower =
+		    classified_lower
+			->ordinal_value;
+		*upper =
+		    classified_upper
+			->ordinal_value;
+		return true;
+	}
+	if (auto enumeration =
+		dynamic_cast<EnumType*>(
+		    type)) {
+		const EnumType::Member* minimum =
+		    enumeration->min_member();
+		const EnumType::Member* maximum =
+		    enumeration->max_member();
+		if (!minimum || !maximum)
+			return false;
+		*lower =
+		    ordinal_value(
+			minimum->value);
+		*upper =
+		    ordinal_value(
+			maximum->value);
+		return true;
+	}
+	OrdinalBounds bounds;
+	if (!intrinsic_ordinal_bounds(
+		type, &bounds))
+		return false;
+	*lower = ordinal_value(
+	    bounds.signed_type,
+	    bounds.signed_type
+		? bounds.min_magnitude
+		: 0);
+	*upper = ordinal_value(
+	    false, bounds.max_positive);
+	return true;
+}
+
+static bool conversion_requires_runtime_narrowing(
     Type* source, Type* target) {
-	OrdinalRange source_range;
-	OrdinalRange target_range;
-	std::string ignored_error;
+	const int source_real =
+	    real_range_rank(source);
+	const int target_real =
+	    real_range_rank(target);
+	if (source_real >= 0 &&
+	    target_real >= 0)
+		return source_real > target_real;
+
+	OrdinalRange::Value source_lower;
+	OrdinalRange::Value source_upper;
+	OrdinalRange::Value target_lower;
+	OrdinalRange::Value target_upper;
 	if (!source || !target ||
-	    !ordinal_range_for_type(
-		source, &source_range,
-		&ignored_error) ||
-	    !ordinal_range_for_type(
-		target, &target_range,
-		&ignored_error))
+	    !ordinal_interval_for_conversion(
+		source, &source_lower,
+		&source_upper) ||
+	    !ordinal_interval_for_conversion(
+		target, &target_lower,
+		&target_upper))
 		return false;
 	// value_conversion_from owns family/nominal compatibility. This helper is
 	// asked only after that conversion is known to be viable and answers the
-	// distinct interval-containment question used by {$R} and candidate
-	// preference.
+	// distinct range-containment question used by {$R} and candidate
+	// preference. Do not use ordinal_range_for_type here: that helper also
+	// computes an array element count and necessarily rejects a complete
+	// 64-bit domain of 2^64 values, while a conversion needs only endpoints.
 	return compare_ordinal_value(
-		   source_range.lower_ordinal,
-		   target_range.lower_ordinal) < 0 ||
+		   source_lower,
+		   target_lower) < 0 ||
 	       compare_ordinal_value(
-		   source_range.upper_ordinal,
-		   target_range.upper_ordinal) > 0;
+		   source_upper,
+		   target_upper) > 0;
 }
 
 std::optional<ArgumentMatch> Parser::match_argument(
@@ -8739,7 +8827,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		     conversion->distance},
 		    make_implicit_cast(
 			actual, target),
-		    ordinal_conversion_requires_runtime_narrowing(
+		    conversion_requires_runtime_narrowing(
 			source, target)};
 	if (allow_user_conversion)
 		return match_user_conversion(
@@ -8962,7 +9050,7 @@ Parser::match_user_conversion(
 static bool dominates(
     const CallableMatch& a,
     const CallableMatch& b) {
-	// A declaration which can accept every argument without runtime ordinal
+	// A declaration which can accept every argument without runtime range
 	// narrowing is categorically better than one which cannot. Only candidates
 	// in the same category reach the pre-existing Pareto comparison below.
 	if (a.requires_runtime_narrowing !=
@@ -8985,24 +9073,14 @@ static bool dominates(
 
 Node* Parser::make_implicit_cast(
     Node* value, Type* target) {
-	OrdinalRange source_range;
-	OrdinalRange target_range;
-	std::string ignored_error;
-	const bool ordinal_conversion =
-	    value && value->ty &&
-	    ordinal_range_for_type(
-		value->ty, &source_range,
-		&ignored_error) &&
-	    ordinal_range_for_type(
-		target, &target_range,
-		&ignored_error);
-	if (ordinal_conversion &&
+	if (value && value->ty &&
 	    directive_state.switch_enabled('r') &&
-	    ordinal_conversion_requires_runtime_narrowing(
+	    conversion_requires_runtime_narrowing(
 		value->ty, target))
-		// Preserve the check only when the source type's complete domain is
-		// not already known to fit. This is a semantic no-op optimization:
-		// overload viability and the conversion selected above are unchanged.
+		// Preserve the check only when the source type's complete ordinal
+		// domain or real exponent range is not already known to fit. This is a
+		// semantic no-op optimization: overload viability and the conversion
+		// selected above are unchanged.
 		return new RangeCheckedCast(
 		    value, target);
 	return new Cast(value, target);
