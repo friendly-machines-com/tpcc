@@ -622,6 +622,9 @@ inline Target m_real_cast(Source source) {
 	static_assert(
 	    std::numeric_limits<Target>::
 		has_infinity);
+	static_assert(
+	    std::numeric_limits<Target>::
+		has_quiet_NaN);
 	if constexpr (
 	    std::numeric_limits<Target>::
 		max_exponent <
@@ -631,14 +634,14 @@ inline Target m_real_cast(Source source) {
 		    static_cast<Source>(
 			std::numeric_limits<
 			    Target>::max());
-		if (std::isfinite(source) &&
+		if (__builtin_isfinite(source) &&
 		    (source < -maximum ||
 		     source > maximum)) {
 			const Target infinity =
 			    std::numeric_limits<
 				Target>::
 				infinity();
-			return std::signbit(source)
+			return __builtin_signbit(source)
 				   ? -infinity
 				   : infinity;
 		}
@@ -664,7 +667,7 @@ inline Target m_range_checked_real_cast(
 		    static_cast<Source>(
 			std::numeric_limits<
 			    Target>::max());
-		if (std::isfinite(source) &&
+		if (__builtin_isfinite(source) &&
 		    (source < -maximum ||
 		     source > maximum))
 			m_runtime_error(201);
