@@ -179,24 +179,26 @@ void Emitter::emit_static_member_declaration(
 		slot->cxx_name.c_str());
 }
 
-// Apply the `p_` prefix to a Pascal value identifier.
+// Apply the backend prefix to a Pascal value identifier. Operator tokens
+// receive `o_` because their C++ namespace must remain disjoint from an
+// ordinary Pascal routine whose source name describes the same operation.
 std::string cxx_value_name(std::string pas_name) {
 	static constexpr std::pair<
 	    std::string_view,
 	    std::string_view>
 	    operator_names[] = {
-		{":=", "p_implicit"},
-		{"+", "p_operator_plus"},
-		{"-", "p_operator_minus"},
-		{"*", "p_operator_multiply"},
-		{"/", "p_operator_divide"},
-		{"**", "p_operator_power"},
-		{"=", "p_operator_equal"},
-		{"<", "p_operator_less"},
-		{"<=", "p_operator_less_equal"},
-		{">", "p_operator_greater"},
-		{">=", "p_operator_greater_equal"},
-		{"><", "p_operator_symmetric_difference"},
+		{":=", "o_implicit"},
+		{"+", "o_operator_plus"},
+		{"-", "o_operator_minus"},
+		{"*", "o_operator_multiply"},
+		{"/", "o_operator_divide"},
+		{"**", "o_operator_power"},
+		{"=", "o_operator_equal"},
+		{"<", "o_operator_less"},
+		{"<=", "o_operator_less_equal"},
+		{">", "o_operator_greater"},
+		{">=", "o_operator_greater_equal"},
+		{"><", "o_operator_symmetric_difference"},
 	    };
 	for (const auto& [spelling, name] :
 	     operator_names)
@@ -916,7 +918,22 @@ void Emitter::emit_statement(Node* stmt) {
 						fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
 						fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source));\n");
 						fprintf(active, "\t\tauto tpcc_overlay_field = tpcc_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
-						fprintf(active, "\t\t::u_system::p_index(tpcc_overlay_field, ");
+						const char* index_name =
+						    "::u_system::p_index";
+						if (indexed_property) {
+							auto builtin =
+							    dynamic_cast<Builtin*>(
+								indexed_property
+								    ->property
+								    ->write_accessor);
+							if (builtin &&
+							    builtin->desc &&
+							    builtin->desc->cxx_name ==
+								"::u_system::m_unchecked_index")
+								index_name =
+								    "::u_system::m_unchecked_index";
+						}
+						fprintf(active, "\t\t%s(tpcc_overlay_field, ", index_name);
 						emit_expression(indexed_argument);
 						fprintf(active, ") = ");
 						emit_expression(a->b);
@@ -2495,8 +2512,19 @@ void Emitter::emit_storage_ref(Node* expr) {
 		return;
 	}
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
-		if (dynamic_cast<Builtin*>(property->property->write_accessor)) {
-			fprintf(active, "::u_system::tpcc_make_storage_ref(");
+		if (auto builtin =
+			dynamic_cast<Builtin*>(
+			    property->property
+				->write_accessor)) {
+			const bool unchecked =
+			    builtin->desc &&
+			    builtin->desc->cxx_name ==
+				"::u_system::m_unchecked_index";
+			fprintf(
+			    active,
+			    unchecked
+				? "::u_system::m_unchecked_storage_ref("
+				: "::u_system::tpcc_make_storage_ref(");
 			emit_expression(property->receiver);
 			for (Node* index : property->indexes) {
 				fprintf(active, ", ");
@@ -2530,8 +2558,19 @@ void Emitter::emit_const_storage_ref(Node* expr) {
 		return;
 	}
 	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
-		if (dynamic_cast<Builtin*>(property->property->read_accessor)) {
-			fprintf(active, "::u_system::tpcc_make_const_storage_ref(");
+		if (auto builtin =
+			dynamic_cast<Builtin*>(
+			    property->property
+				->read_accessor)) {
+			const bool unchecked =
+			    builtin->desc &&
+			    builtin->desc->cxx_name ==
+				"::u_system::m_unchecked_index";
+			fprintf(
+			    active,
+			    unchecked
+				? "::u_system::m_unchecked_const_storage_ref("
+				: "::u_system::tpcc_make_const_storage_ref(");
 			emit_expression(property->receiver);
 			for (Node* index : property->indexes) {
 				fprintf(active, ", ");
@@ -3320,6 +3359,19 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto tb = dynamic_cast<TypeBound*>(expr)) {
+		if (auto range =
+			dynamic_cast<SubrangeType*>(
+			    tb->operand_type)) {
+			// Subranges erase to their base C++ carrier, so p_low<T>() and
+			// p_high<T>() would describe the carrier rather than the Pascal
+			// destination. Emit the declaration's actual constant bounds.
+			emit_expression(
+			    tb->kind ==
+				    TypeBoundKind::Low
+				? range->lower_bound
+				: range->upper_bound);
+			return;
+		}
 		if (auto enum_type =
 			dynamic_cast<EnumType*>(
 			    tb->operand_type)) {
@@ -3363,10 +3415,33 @@ void Emitter::emit_expression(Node* expr) {
 				   integer_bounds(
 				       type, &bounds);
 		    };
-		if (dynamic_cast<ExplicitCast*>(ca) &&
-		    ca->a &&
+		if (dynamic_cast<RangeCheckedCast*>(
+			ca)) {
+			TypeBound lower(
+			    TypeBoundKind::Low,
+			    ca->ty);
+			TypeBound upper(
+			    TypeBoundKind::High,
+			    ca->ty);
+			fprintf(active,
+				"::u_system::m_range_checked_ordinal_cast<");
+			emit_type_ref(ca->ty);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ", ");
+			emit_expression(&lower);
+			fprintf(active, ", ");
+			emit_expression(&upper);
+			fprintf(active, ")");
+			return;
+		}
+		if (ca->a &&
 		    ordinal_type(ca->a->ty) &&
 		    ordinal_type(ca->ty)) {
+			// Both explicit ordinal casts and {$R-} implicit conversions
+			// are representation operations. The RTL path gives them
+			// defined modulo/bit behavior instead of relying on C++'s
+			// implementation-defined out-of-range signed conversions.
 			fprintf(active,
 				"::u_system::m_ordinal_cast<");
 			emit_type_ref(ca->ty);

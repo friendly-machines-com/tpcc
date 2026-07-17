@@ -111,6 +111,9 @@ RoutineRef::RoutineRef(Node* receiver, Node* candidates)
 RoutineEqual::RoutineEqual(Node* a, Node* b)
     : BinaryOperation(a, b) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+RangeCheckedCast::RangeCheckedCast(
+    Node* value, Type* target)
+    : Cast(value, target) {}
 OpenArrayConstView::OpenArrayConstView(
     Node* value, Type* target)
     : UnaryOperation(value) {
@@ -572,12 +575,81 @@ void Raise::print_diagnostic_definition(
 }
 
 const char* Cast::diagnostic_kind() const { return "cast"; }
+
+struct ConstantOrdinal {
+	bool negative;
+	uint64_t magnitude;
+};
+
+static std::optional<ConstantOrdinal>
+constant_ordinal(Node* node) {
+	if (auto integer =
+		dynamic_cast<Integer*>(node))
+		return ConstantOrdinal{
+		    integer->negative,
+		    integer->value};
+	if (auto member =
+		dynamic_cast<EnumMemberRef*>(node)) {
+		if (member->value < 0)
+			return ConstantOrdinal{
+			    true,
+			    static_cast<uint64_t>(
+				-(member->value + 1)) +
+				1};
+		return ConstantOrdinal{
+		    false,
+		    static_cast<uint64_t>(
+			member->value)};
+	}
+	if (auto character =
+		dynamic_cast<String*>(node);
+	    character &&
+	    character->ty == char_type() &&
+	    character->value.size() == 1)
+		return ConstantOrdinal{
+		    false,
+		    static_cast<unsigned char>(
+			character->value.front())};
+	return std::nullopt;
+}
+
+static int compare_constant_ordinals(
+    const ConstantOrdinal& left,
+    const ConstantOrdinal& right) {
+	if (left.negative != right.negative)
+		return left.negative ? -1 : 1;
+	if (left.magnitude == right.magnitude)
+		return 0;
+	if (left.negative)
+		return left.magnitude >
+			       right.magnitude
+			   ? -1
+			   : 1;
+	return left.magnitude <
+		       right.magnitude
+		   ? -1
+		   : 1;
+}
+
 ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult r = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (r.kind != ConstEvalResult::Kind::Success)
 		return r;
-	if (auto i = dynamic_cast<Integer*>(r.node))
-		return const_convert_integer(i->value, i->negative, i->ty, ty);
+	if (auto ordinal = constant_ordinal(r.node)) {
+		ConstEvalResult converted =
+		    const_explicit_ordinal_cast(
+			ordinal->magnitude,
+			ordinal->negative, ty);
+		if (converted.kind !=
+		    ConstEvalResult::Kind::Error)
+			return converted;
+		if (auto i =
+			dynamic_cast<Integer*>(
+			    r.node))
+			return const_convert_integer(
+			    i->value, i->negative,
+			    i->ty, ty);
+	}
 	if (auto real = dynamic_cast<Real*>(r.node)) {
 		if ((real->ty == single_type() ||
 		     real->ty == double_type() ||
@@ -590,6 +662,50 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	return ConstEvalResult::not_constant();
 }
 void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }
+const char* RangeCheckedCast::diagnostic_kind() const {
+	return "range_checked_cast";
+}
+ConstEvalResult RangeCheckedCast::const_eval(
+    ConstEvalContext& ctx) const {
+	ConstEvalResult value =
+	    a ? a->const_eval(ctx)
+	      : ConstEvalResult::not_constant();
+	if (value.kind !=
+	    ConstEvalResult::Kind::Success)
+		return value;
+	auto ordinal =
+	    constant_ordinal(value.node);
+	if (!ordinal)
+		return Cast::const_eval(ctx);
+	ConstEvalResult lower =
+	    const_eval_type_bound(
+		TypeBoundKind::Low, ty);
+	ConstEvalResult upper =
+	    const_eval_type_bound(
+		TypeBoundKind::High, ty);
+	if (lower.kind !=
+		ConstEvalResult::Kind::Success)
+		return lower;
+	if (upper.kind !=
+		ConstEvalResult::Kind::Success)
+		return upper;
+	auto lower_ordinal =
+	    constant_ordinal(lower.node);
+	auto upper_ordinal =
+	    constant_ordinal(upper.node);
+	if (!lower_ordinal || !upper_ordinal)
+		return ConstEvalResult::error(
+		    "range-checked conversion has non-ordinal bounds");
+	if (compare_constant_ordinals(
+		*ordinal, *lower_ordinal) < 0 ||
+	    compare_constant_ordinals(
+		*ordinal, *upper_ordinal) > 0)
+		return ConstEvalResult::error(
+		    "integer constant out of range for target type");
+	return const_explicit_ordinal_cast(
+	    ordinal->magnitude,
+	    ordinal->negative, ty);
+}
 const char* ExplicitCast::diagnostic_kind() const {
 	return "explicit_cast";
 }

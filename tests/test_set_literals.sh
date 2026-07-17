@@ -17,7 +17,7 @@ if ! rg -q '::u_system::tpcc_set_range' "$tmp/set_literals.cc"; then
 	echo "set range did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q '::u_system::p_in' "$tmp/set_literals.cc"; then
+if ! rg -q '::u_system::o_in' "$tmp/set_literals.cc"; then
 	echo "set membership did not lower through the RTL" >&2
 	exit 1
 fi

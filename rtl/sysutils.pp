@@ -14,6 +14,7 @@ type
   end;
   EIntError = class(Exception);
   ERangeError = class(EIntError);
+  EIntOverflow = class(EIntError);
   EHeapMemoryError = class(Exception);
   EOutOfMemory = class(EHeapMemoryError);
   EAccessViolation = class(Exception);
@@ -38,6 +39,7 @@ var
 begin
   case ErrorCode of
     201: E := ERangeError.Create('Range check error');
+    215: E := EIntOverflow.Create('Arithmetic overflow');
     203: E := EOutOfMemory.Create('Out of memory');
     211: E := EAbstractError.Create('Abstract method called');
     216: E := EAccessViolation.Create('Access violation');

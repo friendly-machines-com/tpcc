@@ -7,7 +7,8 @@
 //
 // Naming convention:
 //   t_<name>  - a Pascal-visible TYPE
-//   p_<name>  - a Pascal-visible value (including procedure or function or operation)
+//   p_<name>  - a Pascal-visible ordinary value, procedure, or function
+//   o_<name>  - a Pascal operator operation
 //   m_<name>  - Pascal-invisible views that are used by the compiler
 // Anything else in this namespace is implementation detail and not reachable
 // from Pascal source.
@@ -47,7 +48,7 @@ namespace u_system {
 
 // C++ does not include a function result in overload identity. Pascal
 // implicit-conversion selection does include the context-requested
-// destination, so generated p_implicit declarations and calls carry this
+// destination, so generated o_implicit declarations and calls carry this
 // otherwise-empty backend parameter. It is not a Pascal formal and the
 // conversion remains an ordinary value-returning operation.
 template<typename Destination>
@@ -525,6 +526,60 @@ constexpr Target m_ordinal_cast(Source source) {
 	return target_traits::make(stored);
 }
 
+template<typename T>
+constexpr auto m_ordinal_sign_magnitude(
+    T value) {
+	using traits = tpcc_ordinal_storage<T>;
+	using storage = typename traits::type;
+	static_assert(std::is_integral_v<storage>);
+	using unsigned_storage =
+	    std::make_unsigned_t<storage>;
+	const storage raw = traits::get(value);
+	const bool negative =
+	    std::is_signed_v<storage> && raw < 0;
+	const unsigned_storage bits =
+	    static_cast<unsigned_storage>(raw);
+	const uint64_t magnitude =
+	    negative
+		? static_cast<uint64_t>(
+		      unsigned_storage{0} - bits)
+		: static_cast<uint64_t>(bits);
+	return std::pair<bool, uint64_t>{
+	    negative, magnitude};
+}
+
+template<typename Left, typename Right>
+constexpr bool m_ordinal_less(
+    Left left, Right right) {
+	const auto [left_negative,
+		    left_magnitude] =
+	    m_ordinal_sign_magnitude(left);
+	const auto [right_negative,
+		    right_magnitude] =
+	    m_ordinal_sign_magnitude(right);
+	if (left_negative != right_negative)
+		return left_negative;
+	if (left_magnitude == right_magnitude)
+		return false;
+	if (left_negative)
+		return left_magnitude >
+		       right_magnitude;
+	return left_magnitude <
+	       right_magnitude;
+}
+
+template<typename Target, typename Source,
+	 typename Lower, typename Upper>
+inline Target m_range_checked_ordinal_cast(
+    Source source, Lower lower, Upper upper) {
+	// SOURCE is a by-value parameter so an expression with side effects is
+	// evaluated exactly once before both comparisons and the conversion.
+	if (m_ordinal_less(source, lower) ||
+	    m_ordinal_less(upper, source))
+		m_runtime_error(201);
+	return m_ordinal_cast<Target>(source);
+}
+
 using tpcc_unknown_type = void*;
 
 inline t_boolean tpcc_bool_to_boolean(bool value) {
@@ -797,7 +852,7 @@ inline t_set<T> tpcc_make_set(std::initializer_list<tpcc_set_span> spans) {
 }
 
 template<typename Value, typename T>
-inline t_boolean p_in(Value value, const t_set<T>& set) {
+inline t_boolean o_in(Value value, const t_set<T>& set) {
 	const int64_t key = tpcc_set_key(value);
 	for (const tpcc_set_span& span : set.spans)
 		if (span.lower <= key && key <= span.upper)
@@ -806,9 +861,9 @@ inline t_boolean p_in(Value value, const t_set<T>& set) {
 }
 
 template<typename Value, typename T>
-inline t_boolean p_in(tpcc_typed_const_storage_ref<Value> value,
+inline t_boolean o_in(tpcc_typed_const_storage_ref<Value> value,
     tpcc_typed_const_storage_ref<t_set<T>> set) {
-	return p_in(*value.value, *set.value);
+	return o_in(*value.value, *set.value);
 }
 
 // VALUE is intentionally separate from T. The Pascal checker has already
@@ -915,6 +970,26 @@ inline const T& p_index(const t_fixedarray<T, length, low>& value, I index) {
 }
 
 template<typename T, std::size_t length, auto low, typename I>
+inline T& m_unchecked_index(
+    t_fixedarray<T, length, low>& value,
+    I index) {
+	return value.items[
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(index) -
+		static_cast<std::ptrdiff_t>(low))];
+}
+
+template<typename T, std::size_t length, auto low, typename I>
+inline const T& m_unchecked_index(
+    const t_fixedarray<T, length, low>& value,
+    I index) {
+	return value.items[
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(index) -
+		static_cast<std::ptrdiff_t>(low))];
+}
+
+template<typename T, std::size_t length, auto low, typename I>
 inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(
     t_fixedarray<T, length, low>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
@@ -951,6 +1026,50 @@ inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
 	};
 }
 
+template<typename T, std::size_t length, auto low, typename I>
+inline tpcc_typed_storage_ref<T>
+m_unchecked_storage_ref(
+    t_fixedarray<T, length, low>& value,
+    I index) {
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index) -
+		static_cast<std::ptrdiff_t>(low));
+	T& selected =
+	    m_unchecked_index(value, index);
+	return tpcc_typed_storage_ref<T>{
+	    {
+		reinterpret_cast<std::byte*>(
+		    std::addressof(selected)),
+		(length - offset) * sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, std::size_t length, auto low, typename I>
+inline tpcc_typed_const_storage_ref<T>
+m_unchecked_const_storage_ref(
+    const t_fixedarray<T, length, low>& value,
+    I index) {
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index) -
+		static_cast<std::ptrdiff_t>(low));
+	const T& selected =
+	    m_unchecked_index(value, index);
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+		reinterpret_cast<const std::byte*>(
+		    std::addressof(selected)),
+		(length - offset) * sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
 template<std::size_t Capacity, typename I>
 inline t_char& p_index(t_shortstring<Capacity>& value, I index) {
 	const std::ptrdiff_t actual = static_cast<std::ptrdiff_t>(index);
@@ -972,6 +1091,30 @@ inline const t_char& p_index(
 	if (actual == 0)
 		return value.length;
 	return value.data[static_cast<std::size_t>(actual - 1)];
+}
+
+template<std::size_t Capacity, typename I>
+inline t_char& m_unchecked_index(
+    t_shortstring<Capacity>& value,
+    I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual == 0)
+		return value.length;
+	return value.data[
+	    static_cast<std::size_t>(actual - 1)];
+}
+
+template<std::size_t Capacity, typename I>
+inline const t_char& m_unchecked_index(
+    const t_shortstring<Capacity>& value,
+    I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual == 0)
+		return value.length;
+	return value.data[
+	    static_cast<std::size_t>(actual - 1)];
 }
 
 template<std::size_t Capacity, typename I>
@@ -1025,6 +1168,67 @@ inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
 	        Capacity - offset,
 	    },
 	    std::addressof(value.data[offset]),
+	};
+}
+
+template<std::size_t Capacity, typename I>
+inline tpcc_typed_storage_ref<t_char>
+m_unchecked_storage_ref(
+    t_shortstring<Capacity>& value, I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual == 0)
+		return tpcc_typed_storage_ref<t_char>{
+		    {
+			reinterpret_cast<std::byte*>(
+			    std::addressof(
+				value.length)),
+			sizeof(value.length),
+		    },
+		    std::addressof(value.length),
+		};
+	const std::size_t offset =
+	    static_cast<std::size_t>(actual - 1);
+	t_char& selected =
+	    m_unchecked_index(value, index);
+	return tpcc_typed_storage_ref<t_char>{
+	    {
+		reinterpret_cast<std::byte*>(
+		    std::addressof(selected)),
+		Capacity - offset,
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<std::size_t Capacity, typename I>
+inline tpcc_typed_const_storage_ref<t_char>
+m_unchecked_const_storage_ref(
+    const t_shortstring<Capacity>& value,
+    I index) {
+	const std::ptrdiff_t actual =
+	    static_cast<std::ptrdiff_t>(index);
+	if (actual == 0)
+		return tpcc_typed_const_storage_ref<t_char>{
+		    {
+			reinterpret_cast<const std::byte*>(
+			    std::addressof(
+				value.length)),
+			sizeof(value.length),
+		    },
+		    std::addressof(value.length),
+		};
+	const std::size_t offset =
+	    static_cast<std::size_t>(actual - 1);
+	const t_char& selected =
+	    m_unchecked_index(value, index);
+	return tpcc_typed_const_storage_ref<t_char>{
+	    {
+		reinterpret_cast<const std::byte*>(
+		    std::addressof(selected)),
+		Capacity - offset,
+	    },
+	    std::addressof(selected),
 	};
 }
 
@@ -1696,6 +1900,25 @@ inline const T& p_index(
 }
 
 template<typename T, typename I>
+inline T& m_unchecked_index(
+    t_dynamicarray<T>& value, I index) {
+	return value.m_data()[
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index))];
+}
+
+template<typename T, typename I>
+inline const T& m_unchecked_index(
+    const t_dynamicarray<T>& value,
+    I index) {
+	return value.m_data()[
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index))];
+}
+
+template<typename T, typename I>
 inline tpcc_typed_storage_ref<T>
 tpcc_make_storage_ref(
     t_dynamicarray<T>& value, I index) {
@@ -1740,6 +1963,53 @@ tpcc_make_const_storage_ref(
 }
 
 template<typename T, typename I>
+inline tpcc_typed_storage_ref<T>
+m_unchecked_storage_ref(
+    t_dynamicarray<T>& value, I index) {
+	T& selected =
+	    m_unchecked_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_storage_ref<T>{
+	    {
+		reinterpret_cast<std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, typename I>
+inline tpcc_typed_const_storage_ref<T>
+m_unchecked_const_storage_ref(
+    const t_dynamicarray<T>& value,
+    I index) {
+	const T& selected =
+	    m_unchecked_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+		reinterpret_cast<const std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, typename I>
 inline T& p_index(
     t_openarray<T> value, I index) {
 	const std::ptrdiff_t actual =
@@ -1750,6 +2020,15 @@ inline T& p_index(
 		m_runtime_error(201);
 	return value.m_data()[
 	    static_cast<std::size_t>(actual)];
+}
+
+template<typename T, typename I>
+inline T& m_unchecked_index(
+    t_openarray<T> value, I index) {
+	return value.m_data()[
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index))];
 }
 
 template<typename T, typename I>
@@ -1780,6 +2059,53 @@ inline tpcc_typed_const_storage_ref<T>
 tpcc_make_const_storage_ref(
     t_openarray<const T> value, I index) {
 	const T& selected = p_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_const_storage_ref<T>{
+	    {
+		reinterpret_cast<const std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, typename I>
+requires (!std::is_const_v<T>)
+inline tpcc_typed_storage_ref<T>
+m_unchecked_storage_ref(
+    t_openarray<T> value, I index) {
+	T& selected =
+	    m_unchecked_index(value, index);
+	const std::size_t offset =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_storage_ref<T>{
+	    {
+		reinterpret_cast<std::byte*>(
+		    std::addressof(selected)),
+		(static_cast<std::size_t>(
+		     value.m_length()) -
+		 offset) *
+		    sizeof(T),
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename T, typename I>
+inline tpcc_typed_const_storage_ref<T>
+m_unchecked_const_storage_ref(
+    t_openarray<const T> value, I index) {
+	const T& selected =
+	    m_unchecked_index(value, index);
 	const std::size_t offset =
 	    static_cast<std::size_t>(
 		static_cast<std::ptrdiff_t>(
@@ -2604,6 +2930,27 @@ inline const t_char& p_index(
 }
 
 template<typename I>
+inline t_char& m_unchecked_index(
+    t_ansistring& value, I index) {
+	p_uniquestring(value);
+	return value.m_writable_data()[
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index) -
+		1)];
+}
+
+template<typename I>
+inline const t_char& m_unchecked_index(
+    const t_ansistring& value, I index) {
+	return value.m_data()[
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index) -
+		1)];
+}
+
+template<typename I>
 inline tpcc_typed_storage_ref<t_char> tpcc_make_storage_ref(
     t_ansistring& value, I index) {
 	p_uniquestring(value);
@@ -2633,6 +2980,50 @@ inline tpcc_typed_const_storage_ref<t_char> tpcc_make_const_storage_ref(
 }
 
 template<typename I>
+inline tpcc_typed_storage_ref<t_char>
+m_unchecked_storage_ref(
+    t_ansistring& value, I index) {
+	t_char& selected =
+	    m_unchecked_index(value, index);
+	const std::size_t actual =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_storage_ref<t_char>{
+	    {
+		reinterpret_cast<std::byte*>(
+		    std::addressof(selected)),
+		static_cast<std::size_t>(
+		    value.m_length()) -
+		    actual + 2,
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename I>
+inline tpcc_typed_const_storage_ref<t_char>
+m_unchecked_const_storage_ref(
+    const t_ansistring& value, I index) {
+	const t_char& selected =
+	    m_unchecked_index(value, index);
+	const std::size_t actual =
+	    static_cast<std::size_t>(
+		static_cast<std::ptrdiff_t>(
+		    index));
+	return tpcc_typed_const_storage_ref<t_char>{
+	    {
+		reinterpret_cast<const std::byte*>(
+		    std::addressof(selected)),
+		static_cast<std::size_t>(
+		    value.m_length()) -
+		    actual + 2,
+	    },
+	    std::addressof(selected),
+	};
+}
+
+template<typename I>
 inline t_char& tpcc_index_write(t_ansistring& value, I index) {
 	p_uniquestring(value);
 	return value.index(index);
@@ -2649,7 +3040,7 @@ inline t_shortstring<Capacity> tpcc_shortstring_from_c(
 	return result;
 }
 
-inline t_shortstring<255> p_implicit(
+inline t_shortstring<255> o_implicit(
     t_char value,
     m_implicit_target<t_shortstring<255>>) {
 	t_shortstring<255> result{};
@@ -2870,7 +3261,7 @@ inline void p_insert(const t_ansistring& source, t_ansistring& destination, t_lo
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
-inline t_shortstring<255> p_add(
+inline t_shortstring<255> m_shortstring_add(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
 	t_shortstring<255> result{};
@@ -2886,6 +3277,22 @@ inline t_shortstring<255> p_add(
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_shortstring<255> o_unchecked_add(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
+	return m_shortstring_add(a, b);
+}
+
+template<std::size_t ACapacity, std::size_t BCapacity>
+inline t_shortstring<255> o_add(
+    const t_shortstring<ACapacity>& a,
+    const t_shortstring<BCapacity>& b) {
+	// String concatenation has no integer overflow distinction, but it still
+	// occupies the checked family selected before operand overloads are known.
+	return m_shortstring_add(a, b);
+}
+
+template<std::size_t ACapacity, std::size_t BCapacity>
 inline int tpcc_stringcmp(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
@@ -2897,63 +3304,63 @@ inline int tpcc_stringcmp(
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
-inline t_boolean p_lessthan(
+inline t_boolean o_lessthan(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) < 0);
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
-inline t_boolean p_lessthanorequal(
+inline t_boolean o_lessthanorequal(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) <= 0);
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
-inline t_boolean p_equal(
+inline t_boolean o_equal(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) == 0);
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
-inline t_boolean p_greaterthan(
+inline t_boolean o_greaterthan(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) > 0);
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>
-inline t_boolean p_greaterthanorequal(
+inline t_boolean o_greaterthanorequal(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) >= 0);
 }
 
-inline t_char p_implicit(
+inline t_char o_implicit(
     t_char value,
     m_implicit_target<t_char>) {
 	return value;
 }
 template<std::size_t Capacity>
-inline t_ansistring p_implicit(
+inline t_ansistring o_implicit(
     t_shortstring<Capacity> value,
     m_implicit_target<t_ansistring>) {
 	t_ansistring result{};
 	result.assign(value);
 	return result;
 }
-inline t_boolean p_lessthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value < b.value); }
-inline t_boolean p_lessthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value <= b.value); }
-inline t_boolean p_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value == b.value); }
-inline t_boolean p_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value > b.value); }
-inline t_boolean p_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
+inline t_boolean o_lessthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value < b.value); }
+inline t_boolean o_lessthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value <= b.value); }
+inline t_boolean o_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value == b.value); }
+inline t_boolean o_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value > b.value); }
+inline t_boolean o_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
 
 // Pascal Pointer equality compares pointer values; it does not inspect the
 // pointed-to storage. Typed pointers reach this overload through Pascal's
 // existing typed-pointer/untyped-Pointer compatibility conversion.
-inline t_boolean p_equal(t_pointer a, t_pointer b) {
+inline t_boolean o_equal(t_pointer a, t_pointer b) {
 	return tpcc_bool_to_boolean(a == b);
 }
 
@@ -3028,34 +3435,199 @@ inline t_sizeint p_sizeof(tpcc_typed_const_storage_ref<T>) {
 	return static_cast<t_sizeint>(sizeof(T));
 }
 
-#define TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, ARITH_RESULT, DIV_RESULT) \
-	inline ARITH_RESULT p_add(T a, T b) { return static_cast<ARITH_RESULT>(a) + static_cast<ARITH_RESULT>(b); } \
-	inline ARITH_RESULT p_subtract(T a, T b) { return static_cast<ARITH_RESULT>(a) - static_cast<ARITH_RESULT>(b); } \
-	inline T p_positive(T b) { return +b; } \
-	/* For unsigned T, unary minus wraps modulo T's range; this is intentional RTL behavior, not a widening or signed conversion. */ \
-	inline T p_negative(T b) { return -b; } \
-	inline ARITH_RESULT p_multiply(T a, T b) { return static_cast<ARITH_RESULT>(a) * static_cast<ARITH_RESULT>(b); } \
-	inline DIV_RESULT p_divide(T a, T b) { return static_cast<DIV_RESULT>(a) / static_cast<DIV_RESULT>(b); } \
-	inline T p_implicit(T source, m_implicit_target<T>) { T target = source; return target; } \
-	inline t_boolean p_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
-	inline t_boolean p_lessthanorequal(T a, T b) { return tpcc_bool_to_boolean(a <= b); } \
-	inline t_boolean p_equal(T a, T b) { return tpcc_bool_to_boolean(a == b); } \
-	inline t_boolean p_greaterthan(T a, T b) { return tpcc_bool_to_boolean(a > b); } \
-	inline t_boolean p_greaterthanorequal(T a, T b) { return tpcc_bool_to_boolean(a >= b); }
+template<typename T>
+requires std::is_integral_v<T>
+inline T m_integer_from_bits(
+    std::make_unsigned_t<T> bits) {
+	if constexpr (std::is_signed_v<T>)
+		// C++ conversion from an out-of-range unsigned value to a signed type
+		// is implementation-defined. bit_cast states the two's-complement
+		// carrier operation TPCC needs for unchecked Pascal arithmetic.
+		return std::bit_cast<T>(bits);
+	else
+		return bits;
+}
+
+template<typename Result, typename Operand>
+requires std::is_integral_v<Result>
+inline Result m_arithmetic_operand(Operand value) {
+	return static_cast<Result>(value);
+}
+
+template<typename Result, typename Operand>
+requires std::is_integral_v<Result>
+inline std::make_unsigned_t<Result>
+m_arithmetic_operand_bits(Operand value) {
+	return static_cast<std::make_unsigned_t<Result>>(
+	    m_arithmetic_operand<Result>(value));
+}
+
+#define TPCC_DEFINE_INTEGER_ARITHMETIC_OPERATIONS(T, ARITH_RESULT, DIV_RESULT) \
+	inline ARITH_RESULT o_unchecked_add(T a, T b) { \
+		using U = std::make_unsigned_t<ARITH_RESULT>; \
+		return m_integer_from_bits<ARITH_RESULT>(static_cast<U>(m_arithmetic_operand_bits<ARITH_RESULT>(a) + m_arithmetic_operand_bits<ARITH_RESULT>(b))); \
+	} \
+	inline ARITH_RESULT o_add(T a, T b) { \
+		ARITH_RESULT result; \
+		if (__builtin_add_overflow(m_arithmetic_operand<ARITH_RESULT>(a), m_arithmetic_operand<ARITH_RESULT>(b), &result)) \
+			m_runtime_error(215); \
+		return result; \
+	} \
+	inline ARITH_RESULT o_unchecked_subtract(T a, T b) { \
+		using U = std::make_unsigned_t<ARITH_RESULT>; \
+		return m_integer_from_bits<ARITH_RESULT>(static_cast<U>(m_arithmetic_operand_bits<ARITH_RESULT>(a) - m_arithmetic_operand_bits<ARITH_RESULT>(b))); \
+	} \
+	inline ARITH_RESULT o_subtract(T a, T b) { \
+		ARITH_RESULT result; \
+		if (__builtin_sub_overflow(m_arithmetic_operand<ARITH_RESULT>(a), m_arithmetic_operand<ARITH_RESULT>(b), &result)) \
+			m_runtime_error(215); \
+		return result; \
+	} \
+	inline T o_positive(T b) { return b; } \
+	inline T o_unchecked_negative(T b) { \
+		using U = std::make_unsigned_t<T>; \
+		return m_integer_from_bits<T>(static_cast<U>(U{0} - m_arithmetic_operand_bits<T>(b))); \
+	} \
+	inline T o_negative(T b) { \
+		T result; \
+		if (__builtin_sub_overflow(T{0}, b, &result)) \
+			m_runtime_error(215); \
+		return result; \
+	} \
+	inline ARITH_RESULT o_unchecked_multiply(T a, T b) { \
+		using U = std::make_unsigned_t<ARITH_RESULT>; \
+		return m_integer_from_bits<ARITH_RESULT>(static_cast<U>(m_arithmetic_operand_bits<ARITH_RESULT>(a) * m_arithmetic_operand_bits<ARITH_RESULT>(b))); \
+	} \
+	inline ARITH_RESULT o_multiply(T a, T b) { \
+		ARITH_RESULT result; \
+		if (__builtin_mul_overflow(m_arithmetic_operand<ARITH_RESULT>(a), m_arithmetic_operand<ARITH_RESULT>(b), &result)) \
+			m_runtime_error(215); \
+		return result; \
+	} \
+	inline DIV_RESULT o_divide(T a, T b) { return static_cast<DIV_RESULT>(a) / static_cast<DIV_RESULT>(b); } \
+	inline T o_implicit(T source, m_implicit_target<T>) { T target = source; return target; } \
+	inline t_boolean o_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
+	inline t_boolean o_lessthanorequal(T a, T b) { return tpcc_bool_to_boolean(a <= b); } \
+	inline t_boolean o_equal(T a, T b) { return tpcc_bool_to_boolean(a == b); } \
+	inline t_boolean o_greaterthan(T a, T b) { return tpcc_bool_to_boolean(a > b); } \
+	inline t_boolean o_greaterthanorequal(T a, T b) { return tpcc_bool_to_boolean(a >= b); }
+
+#define TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(T) \
+	inline T o_unchecked_add(T a, T b) { return a + b; } \
+	inline T o_add(T a, T b) { return a + b; } \
+	inline T o_unchecked_subtract(T a, T b) { return a - b; } \
+	inline T o_subtract(T a, T b) { return a - b; } \
+	inline T o_positive(T b) { return b; } \
+	inline T o_unchecked_negative(T b) { return -b; } \
+	inline T o_negative(T b) { return -b; } \
+	inline T o_unchecked_multiply(T a, T b) { return a * b; } \
+	inline T o_multiply(T a, T b) { return a * b; } \
+	inline T o_divide(T a, T b) { return a / b; } \
+	inline T o_implicit(T source, m_implicit_target<T>) { T target = source; return target; } \
+	inline t_boolean o_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
+	inline t_boolean o_lessthanorequal(T a, T b) { return tpcc_bool_to_boolean(a <= b); } \
+	inline t_boolean o_equal(T a, T b) { return tpcc_bool_to_boolean(a == b); } \
+	inline t_boolean o_greaterthan(T a, T b) { return tpcc_bool_to_boolean(a > b); } \
+	inline t_boolean o_greaterthanorequal(T a, T b) { return tpcc_bool_to_boolean(a >= b); }
+
+template<typename Result>
+requires std::is_integral_v<Result>
+inline Result m_unchecked_intdivide(
+    Result a, Result b) {
+	if (b == 0)
+		m_runtime_error(200);
+	if constexpr (std::is_signed_v<Result>)
+		if (a == std::numeric_limits<Result>::min() &&
+		    b == Result{-1})
+			// The mathematical positive result has the same low bits as
+			// Low(Result). Return those bits without executing C++'s
+			// undefined minimum/-1 division.
+			return std::numeric_limits<Result>::min();
+	return a / b;
+}
+
+template<typename Result>
+requires std::is_integral_v<Result>
+inline Result m_checked_intdivide(
+    Result a, Result b) {
+	if (b == 0)
+		m_runtime_error(200);
+	if constexpr (std::is_signed_v<Result>)
+		if (a == std::numeric_limits<Result>::min() &&
+		    b == Result{-1})
+			m_runtime_error(215);
+	return a / b;
+}
+
+template<typename Result>
+requires std::is_integral_v<Result>
+inline Result m_modulus(
+    Result a, Result b) {
+	if (b == 0)
+		m_runtime_error(200);
+	if constexpr (std::is_signed_v<Result>)
+		if (a == std::numeric_limits<Result>::min() &&
+		    b == Result{-1})
+			// Pascal's remainder is exactly zero here, but evaluating the
+			// equivalent C++ `%` expression would still be undefined.
+			return 0;
+	return a % b;
+}
+
+template<typename Result, typename Count>
+requires std::is_integral_v<Result> &&
+	 std::is_integral_v<Count>
+inline Result m_leftshift(
+    Result value, Count count) {
+	using UResult = std::make_unsigned_t<Result>;
+	constexpr unsigned width =
+	    std::numeric_limits<UResult>::digits;
+	if constexpr (std::is_signed_v<Count>)
+		if (count < 0)
+			return 0;
+	using UCount = std::make_unsigned_t<Count>;
+	UCount amount = static_cast<UCount>(count);
+	if (amount >= width)
+		return 0;
+	return m_integer_from_bits<Result>(
+	    static_cast<UResult>(
+		static_cast<UResult>(value) <<
+		amount));
+}
+
+template<typename Result, typename Count>
+requires std::is_integral_v<Result> &&
+	 std::is_integral_v<Count>
+inline Result m_rightshift(
+    Result value, Count count) {
+	using UResult = std::make_unsigned_t<Result>;
+	constexpr unsigned width =
+	    std::numeric_limits<UResult>::digits;
+	if constexpr (std::is_signed_v<Count>)
+		if (count < 0)
+			return 0;
+	using UCount = std::make_unsigned_t<Count>;
+	UCount amount = static_cast<UCount>(count);
+	if (amount >= width)
+		return 0;
+	return m_integer_from_bits<Result>(
+	    static_cast<UResult>(value) >> amount);
+}
 
 #define TPCC_DEFINE_INTEGER_OPERATIONS(T, INTEGER_RESULT) \
 	/* Delphi calls unary `not` LogicalNot even for integer bitwise complement; there is no separate BitwiseNot overload name. */ \
-	inline T p_logicalnot(T a) { return static_cast<T>(~a); } \
-	inline INTEGER_RESULT p_bitwiseand(T a, T b) { return static_cast<INTEGER_RESULT>(a) & static_cast<INTEGER_RESULT>(b); } \
-	inline INTEGER_RESULT p_bitwiseor(T a, T b) { return static_cast<INTEGER_RESULT>(a) | static_cast<INTEGER_RESULT>(b); } \
-	inline INTEGER_RESULT p_bitwisexor(T a, T b) { return static_cast<INTEGER_RESULT>(a) ^ static_cast<INTEGER_RESULT>(b); } \
-	inline INTEGER_RESULT p_intdivide(T a, T b) { return static_cast<INTEGER_RESULT>(a) / static_cast<INTEGER_RESULT>(b); } \
-	inline INTEGER_RESULT p_modulus(T a, T b) { return static_cast<INTEGER_RESULT>(a) % static_cast<INTEGER_RESULT>(b); } \
-	inline T p_leftshift(T a, T b) { return a << b; } /* FIXME: b smaller */ \
-	inline T p_rightshift(T a, T b) { return a >> b; } /* FIXME: b smaller */
+	inline T o_logicalnot(T a) { return static_cast<T>(~a); } \
+	inline INTEGER_RESULT o_bitwiseand(T a, T b) { return static_cast<INTEGER_RESULT>(a) & static_cast<INTEGER_RESULT>(b); } \
+	inline INTEGER_RESULT o_bitwiseor(T a, T b) { return static_cast<INTEGER_RESULT>(a) | static_cast<INTEGER_RESULT>(b); } \
+	inline INTEGER_RESULT o_bitwisexor(T a, T b) { return static_cast<INTEGER_RESULT>(a) ^ static_cast<INTEGER_RESULT>(b); } \
+	inline INTEGER_RESULT o_unchecked_intdivide(T a, T b) { return m_unchecked_intdivide(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); } \
+	inline INTEGER_RESULT o_intdivide(T a, T b) { return m_checked_intdivide(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); } \
+	inline INTEGER_RESULT o_modulus(T a, T b) { return m_modulus(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); } \
+	inline INTEGER_RESULT o_leftshift(T a, T b) { return m_leftshift(m_arithmetic_operand<INTEGER_RESULT>(a), b); } \
+	inline INTEGER_RESULT o_rightshift(T a, T b) { return m_rightshift(m_arithmetic_operand<INTEGER_RESULT>(a), b); }
 
 #define TPCC_DEFINE_INTEGRAL_OPERATIONS(T, INTEGER_RESULT) \
-	TPCC_DEFINE_ARITHMETIC_OPERATIONS(T, INTEGER_RESULT, t_double) \
+	TPCC_DEFINE_INTEGER_ARITHMETIC_OPERATIONS(T, INTEGER_RESULT, t_double) \
 	TPCC_DEFINE_INTEGER_OPERATIONS(T, INTEGER_RESULT)
 
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_byte, t_integer)
@@ -3066,9 +3638,9 @@ TPCC_DEFINE_INTEGRAL_OPERATIONS(t_longword, t_longword)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_integer, t_integer)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_int64, t_int64)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_qword, t_qword)
-TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_single, t_single, t_single)
-TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_double, t_double, t_double)
-TPCC_DEFINE_ARITHMETIC_OPERATIONS(t_extended, t_extended, t_extended)
+TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_single)
+TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_double)
+TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_extended)
 
 // Floating-to-integer conversion is undefined in C++ when the finite value is
 // outside the destination range (and for NaN/infinity). Check before casting
@@ -3133,15 +3705,15 @@ constexpr T tpcc_for_pred(T value) {
 	return static_cast<T>(tpcc_for_ordinal_value(value) - 1);
 }
 
-inline t_boolean p_logicalnot(t_boolean a) {
+inline t_boolean o_logicalnot(t_boolean a) {
 	return tpcc_bool_to_boolean(!a);
 }
 
-inline t_boolean p_logicalxor(t_boolean a, t_boolean b) {
+inline t_boolean o_logicalxor(t_boolean a, t_boolean b) {
 	return tpcc_bool_to_boolean(((a != 0) ^ (b != 0)) != 0);
 }
 
-inline t_boolean p_implicit(
+inline t_boolean o_implicit(
     t_boolean b,
     m_implicit_target<t_boolean>) {
 	return b;

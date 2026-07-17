@@ -37,7 +37,7 @@ int main() {
 		return 6;
 	if (!equals(p_trimmed, "abc", 3))
 		return 7;
-	auto assigned = ::u_system::p_implicit(
+	auto assigned = ::u_system::o_implicit(
 	    ::u_system::tpcc_shortstring_from_c(
 	        "abc", strlen("abc")),
 	    ::u_system::m_implicit_target<

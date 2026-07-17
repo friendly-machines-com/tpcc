@@ -75,193 +75,238 @@ var
   // bits are retained for source compatibility and ignored by this runtime.
   FileMode: Byte external name '::u_system::p_filemode';
   
-operator+(a: Cardinal): Cardinal; external name '::u_system::p_positive';
-operator+(a: Integer): Integer; external name '::u_system::p_positive';
-operator+(a: QWord): QWord; external name '::u_system::p_positive';
-operator+(a: Int64): Int64; external name '::u_system::p_positive';
-operator+(a: Single): Single; external name '::u_system::p_positive';
-operator+(a: Double): Double; external name '::u_system::p_positive';
-operator+(a: Extended): Extended; external name '::u_system::p_positive';
+operator Positive(a: Cardinal): Cardinal; external name '::u_system::o_positive';
+operator Positive(a: Integer): Integer; external name '::u_system::o_positive';
+operator Positive(a: QWord): QWord; external name '::u_system::o_positive';
+operator Positive(a: Int64): Int64; external name '::u_system::o_positive';
+operator Positive(a: Single): Single; external name '::u_system::o_positive';
+operator Positive(a: Double): Double; external name '::u_system::o_positive';
+operator Positive(a: Extended): Extended; external name '::u_system::o_positive';
 
-operator+(a, b: Byte): Integer; external name '::u_system::p_add';
-operator+(a, b: ShortInt): Integer; external name '::u_system::p_add';
-operator+(a, b: Word): Integer; external name '::u_system::p_add';
-operator+(a, b: SmallInt): Integer; external name '::u_system::p_add';
-operator+(a, b: Cardinal): Cardinal; external name '::u_system::p_add';
-operator+(a, b: Integer): Integer; external name '::u_system::p_add';
-operator+(a, b: QWord): QWord; external name '::u_system::p_add';
-operator+(a, b: Int64): Int64; external name '::u_system::p_add';
-operator+(a, b: Extended): Extended; external name '::u_system::p_add';
+// The parser chooses one of these ordinary operator families before overload
+// resolution. Keeping both rows explicit also lets user-defined arithmetic
+// make the same checked/unchecked promise as System arithmetic.
+operator UncheckedAdd(a, b: Byte): Integer; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: Word): Integer; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: SmallInt): Integer; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: Cardinal): Cardinal; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: Integer): Integer; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: QWord): QWord; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: Int64): Int64; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: Extended): Extended; external name '::u_system::o_unchecked_add';
+operator Add(a, b: Byte): Integer; external name '::u_system::o_add';
+operator Add(a, b: ShortInt): Integer; external name '::u_system::o_add';
+operator Add(a, b: Word): Integer; external name '::u_system::o_add';
+operator Add(a, b: SmallInt): Integer; external name '::u_system::o_add';
+operator Add(a, b: Cardinal): Cardinal; external name '::u_system::o_add';
+operator Add(a, b: Integer): Integer; external name '::u_system::o_add';
+operator Add(a, b: QWord): QWord; external name '::u_system::o_add';
+operator Add(a, b: Int64): Int64; external name '::u_system::o_add';
+operator Add(a, b: Extended): Extended; external name '::u_system::o_add';
 
-operator-(a: Cardinal): Cardinal; external name '::u_system::p_negative';
-operator-(a: Integer): Integer; external name '::u_system::p_negative';
-operator-(a: QWord): QWord; external name '::u_system::p_negative';
-operator-(a: Int64): Int64; external name '::u_system::p_negative';
-operator-(a: Single): Single; external name '::u_system::p_negative';
-operator-(a: Double): Double; external name '::u_system::p_negative';
-operator-(a: Extended): Extended; external name '::u_system::p_negative';
+operator UncheckedNegative(a: Cardinal): Cardinal; external name '::u_system::o_unchecked_negative';
+operator UncheckedNegative(a: Integer): Integer; external name '::u_system::o_unchecked_negative';
+operator UncheckedNegative(a: QWord): QWord; external name '::u_system::o_unchecked_negative';
+operator UncheckedNegative(a: Int64): Int64; external name '::u_system::o_unchecked_negative';
+operator UncheckedNegative(a: Single): Single; external name '::u_system::o_unchecked_negative';
+operator UncheckedNegative(a: Double): Double; external name '::u_system::o_unchecked_negative';
+operator UncheckedNegative(a: Extended): Extended; external name '::u_system::o_unchecked_negative';
+operator Negative(a: Cardinal): Cardinal; external name '::u_system::o_negative';
+operator Negative(a: Integer): Integer; external name '::u_system::o_negative';
+operator Negative(a: QWord): QWord; external name '::u_system::o_negative';
+operator Negative(a: Int64): Int64; external name '::u_system::o_negative';
+operator Negative(a: Single): Single; external name '::u_system::o_negative';
+operator Negative(a: Double): Double; external name '::u_system::o_negative';
+operator Negative(a: Extended): Extended; external name '::u_system::o_negative';
 
-operator-(a, b: Byte): Integer; external name '::u_system::p_subtract';
-operator-(a, b: ShortInt): Integer; external name '::u_system::p_subtract';
-operator-(a, b: Word): Integer; external name '::u_system::p_subtract';
-operator-(a, b: SmallInt): Integer; external name '::u_system::p_subtract';
-operator-(a, b: Cardinal): Cardinal; external name '::u_system::p_subtract';
-operator-(a, b: Integer): Integer; external name '::u_system::p_subtract';
-operator-(a, b: QWord): QWord; external name '::u_system::p_subtract';
-operator-(a, b: Int64): Int64; external name '::u_system::p_subtract';
-operator-(a, b: Extended): Extended; external name '::u_system::p_subtract';
+operator UncheckedSubtract(a, b: Byte): Integer; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: Word): Integer; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: SmallInt): Integer; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: Cardinal): Cardinal; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: Integer): Integer; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: QWord): QWord; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: Int64): Int64; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: Extended): Extended; external name '::u_system::o_unchecked_subtract';
+operator Subtract(a, b: Byte): Integer; external name '::u_system::o_subtract';
+operator Subtract(a, b: ShortInt): Integer; external name '::u_system::o_subtract';
+operator Subtract(a, b: Word): Integer; external name '::u_system::o_subtract';
+operator Subtract(a, b: SmallInt): Integer; external name '::u_system::o_subtract';
+operator Subtract(a, b: Cardinal): Cardinal; external name '::u_system::o_subtract';
+operator Subtract(a, b: Integer): Integer; external name '::u_system::o_subtract';
+operator Subtract(a, b: QWord): QWord; external name '::u_system::o_subtract';
+operator Subtract(a, b: Int64): Int64; external name '::u_system::o_subtract';
+operator Subtract(a, b: Extended): Extended; external name '::u_system::o_subtract';
 
-operator*(a, b: Byte): Integer; external name '::u_system::p_multiply';
-operator*(a, b: ShortInt): Integer; external name '::u_system::p_multiply';
-operator*(a, b: Word): Integer; external name '::u_system::p_multiply';
-operator*(a, b: SmallInt): Integer; external name '::u_system::p_multiply';
-operator*(a, b: Cardinal): Cardinal; external name '::u_system::p_multiply';
-operator*(a, b: Integer): Integer; external name '::u_system::p_multiply';
-operator*(a, b: QWord): QWord; external name '::u_system::p_multiply';
-operator*(a, b: Int64): Int64; external name '::u_system::p_multiply';
-operator*(a, b: Extended): Extended; external name '::u_system::p_multiply';
+operator UncheckedMultiply(a, b: Byte): Integer; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: Word): Integer; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: SmallInt): Integer; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: Cardinal): Cardinal; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: Integer): Integer; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: QWord): QWord; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: Int64): Int64; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: Extended): Extended; external name '::u_system::o_unchecked_multiply';
+operator Multiply(a, b: Byte): Integer; external name '::u_system::o_multiply';
+operator Multiply(a, b: ShortInt): Integer; external name '::u_system::o_multiply';
+operator Multiply(a, b: Word): Integer; external name '::u_system::o_multiply';
+operator Multiply(a, b: SmallInt): Integer; external name '::u_system::o_multiply';
+operator Multiply(a, b: Cardinal): Cardinal; external name '::u_system::o_multiply';
+operator Multiply(a, b: Integer): Integer; external name '::u_system::o_multiply';
+operator Multiply(a, b: QWord): QWord; external name '::u_system::o_multiply';
+operator Multiply(a, b: Int64): Int64; external name '::u_system::o_multiply';
+operator Multiply(a, b: Extended): Extended; external name '::u_system::o_multiply';
 
 // FIXME: FPC uses Double, Delphi uses Extended
-operator/(a, b: Byte): Double; external name '::u_system::p_divide';
-operator/(a, b: ShortInt): Double; external name '::u_system::p_divide';
-operator/(a, b: Word): Double; external name '::u_system::p_divide';
-operator/(a, b: SmallInt): Double; external name '::u_system::p_divide';
-operator/(a, b: Cardinal): Double; external name '::u_system::p_divide';
-operator/(a, b: Integer): Double; external name '::u_system::p_divide';
-operator/(a, b: QWord): Double; external name '::u_system::p_divide';
-operator/(a, b: Int64): Double; external name '::u_system::p_divide';
-operator/(a, b: Double): Double; external name '::u_system::p_divide';
-operator/(a, b: Extended): Extended; external name '::u_system::p_divide';
+operator Divide(a, b: Byte): Double; external name '::u_system::o_divide';
+operator Divide(a, b: ShortInt): Double; external name '::u_system::o_divide';
+operator Divide(a, b: Word): Double; external name '::u_system::o_divide';
+operator Divide(a, b: SmallInt): Double; external name '::u_system::o_divide';
+operator Divide(a, b: Cardinal): Double; external name '::u_system::o_divide';
+operator Divide(a, b: Integer): Double; external name '::u_system::o_divide';
+operator Divide(a, b: QWord): Double; external name '::u_system::o_divide';
+operator Divide(a, b: Int64): Double; external name '::u_system::o_divide';
+operator Divide(a, b: Double): Double; external name '::u_system::o_divide';
+operator Divide(a, b: Extended): Extended; external name '::u_system::o_divide';
 
-operator :=(a: Char): ShortString; external name '::u_system::p_implicit';
+operator :=(a: Char): ShortString; external name '::u_system::o_implicit';
 
-operator <(a, b: Char): Boolean; external name '::u_system::p_lessthan';
-operator <=(a, b: Char): Boolean; external name '::u_system::p_lessthanorequal';
-operator =(a, b: Char): Boolean; external name '::u_system::p_equal';
-operator >(a, b: Char): Boolean; external name '::u_system::p_greaterthan';
-operator >=(a, b: Char): Boolean; external name '::u_system::p_greaterthanorequal';
+operator <(a, b: Char): Boolean; external name '::u_system::o_lessthan';
+operator <=(a, b: Char): Boolean; external name '::u_system::o_lessthanorequal';
+operator =(a, b: Char): Boolean; external name '::u_system::o_equal';
+operator >(a, b: Char): Boolean; external name '::u_system::o_greaterthan';
+operator >=(a, b: Char): Boolean; external name '::u_system::o_greaterthanorequal';
 
 // Typed and untyped pointers share Pascal's ordinary pointer equality. Call
 // matching tests each source operand against this Pointer formal, including
 // contextual nil, then applies the selected formal carrier after selection.
 // No operand is pre-cast merely to choose an operator overload.
-operator =(a, b: Pointer): Boolean; external name '::u_system::p_equal';
+operator =(a, b: Pointer): Boolean; external name '::u_system::o_equal';
 
-operator <(a, b: Byte): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: ShortInt): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: Word): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: SmallInt): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: Cardinal): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: Integer): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: QWord): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: Int64): Boolean; external name '::u_system::p_lessthan';
-operator <(a, b: Extended): Boolean; external name '::u_system::p_lessthan';
+operator <(a, b: Byte): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: ShortInt): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Word): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: SmallInt): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Cardinal): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Integer): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: QWord): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Int64): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Extended): Boolean; external name '::u_system::o_lessthan';
 
-operator <=(a, b: Byte): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: ShortInt): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: Word): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: SmallInt): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: Cardinal): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: Integer): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: QWord): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: Int64): Boolean; external name '::u_system::p_lessthanorequal';
-operator <=(a, b: Extended): Boolean; external name '::u_system::p_lessthanorequal';
+operator <=(a, b: Byte): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: ShortInt): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Word): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: SmallInt): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Cardinal): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Integer): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: QWord): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Int64): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Extended): Boolean; external name '::u_system::o_lessthanorequal';
 
-operator =(a, b: Byte): Boolean; external name '::u_system::p_equal';
-operator =(a, b: ShortInt): Boolean; external name '::u_system::p_equal';
-operator =(a, b: Word): Boolean; external name '::u_system::p_equal';
-operator =(a, b: SmallInt): Boolean; external name '::u_system::p_equal';
-operator =(a, b: Cardinal): Boolean; external name '::u_system::p_equal';
-operator =(a, b: Integer): Boolean; external name '::u_system::p_equal';
-operator =(a, b: QWord): Boolean; external name '::u_system::p_equal';
-operator =(a, b: Int64): Boolean; external name '::u_system::p_equal';
-operator =(a, b: Extended): Boolean; external name '::u_system::p_equal';
+operator =(a, b: Byte): Boolean; external name '::u_system::o_equal';
+operator =(a, b: ShortInt): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Word): Boolean; external name '::u_system::o_equal';
+operator =(a, b: SmallInt): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Cardinal): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Integer): Boolean; external name '::u_system::o_equal';
+operator =(a, b: QWord): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Int64): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Extended): Boolean; external name '::u_system::o_equal';
 
-operator >(a, b: Byte): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: ShortInt): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: Word): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: SmallInt): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: Cardinal): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: Integer): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: QWord): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: Int64): Boolean; external name '::u_system::p_greaterthan';
-operator >(a, b: Extended): Boolean; external name '::u_system::p_greaterthan';
+operator >(a, b: Byte): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: ShortInt): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Word): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: SmallInt): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Cardinal): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Integer): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: QWord): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Int64): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Extended): Boolean; external name '::u_system::o_greaterthan';
 
-operator >=(a, b: Byte): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: ShortInt): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: Word): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: SmallInt): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: Cardinal): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: Integer): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: QWord): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: Int64): Boolean; external name '::u_system::p_greaterthanorequal';
-operator >=(a, b: Extended): Boolean; external name '::u_system::p_greaterthanorequal';
+operator >=(a, b: Byte): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: ShortInt): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Word): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: SmallInt): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Cardinal): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Integer): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: QWord): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Int64): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Extended): Boolean; external name '::u_system::o_greaterthanorequal';
 
-operator div(a, b: Byte): Integer; external name '::u_system::p_intdivide';
-operator div(a, b: ShortInt): Integer; external name '::u_system::p_intdivide';
-operator div(a, b: Word): Integer; external name '::u_system::p_intdivide';
-operator div(a, b: SmallInt): Integer; external name '::u_system::p_intdivide';
-operator div(a, b: Cardinal): Cardinal; external name '::u_system::p_intdivide';
-operator div(a, b: Integer): Integer; external name '::u_system::p_intdivide';
-operator div(a, b: QWord): QWord; external name '::u_system::p_intdivide';
-operator div(a, b: Int64): Int64; external name '::u_system::p_intdivide';
-operator mod(a, b: Byte): Integer; external name '::u_system::p_modulus';
-operator mod(a, b: ShortInt): Integer; external name '::u_system::p_modulus';
-operator mod(a, b: Word): Integer; external name '::u_system::p_modulus';
-operator mod(a, b: SmallInt): Integer; external name '::u_system::p_modulus';
-operator mod(a, b: Cardinal): Cardinal; external name '::u_system::p_modulus';
-operator mod(a, b: Integer): Integer; external name '::u_system::p_modulus';
-operator mod(a, b: QWord): QWord; external name '::u_system::p_modulus';
-operator mod(a, b: Int64): Int64; external name '::u_system::p_modulus';
+operator UncheckedIntDivide(a, b: Byte): Integer; external name '::u_system::o_unchecked_intdivide';
+operator UncheckedIntDivide(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_intdivide';
+operator UncheckedIntDivide(a, b: Word): Integer; external name '::u_system::o_unchecked_intdivide';
+operator UncheckedIntDivide(a, b: SmallInt): Integer; external name '::u_system::o_unchecked_intdivide';
+operator UncheckedIntDivide(a, b: Cardinal): Cardinal; external name '::u_system::o_unchecked_intdivide';
+operator UncheckedIntDivide(a, b: Integer): Integer; external name '::u_system::o_unchecked_intdivide';
+operator UncheckedIntDivide(a, b: QWord): QWord; external name '::u_system::o_unchecked_intdivide';
+operator UncheckedIntDivide(a, b: Int64): Int64; external name '::u_system::o_unchecked_intdivide';
+operator IntDivide(a, b: Byte): Integer; external name '::u_system::o_intdivide';
+operator IntDivide(a, b: ShortInt): Integer; external name '::u_system::o_intdivide';
+operator IntDivide(a, b: Word): Integer; external name '::u_system::o_intdivide';
+operator IntDivide(a, b: SmallInt): Integer; external name '::u_system::o_intdivide';
+operator IntDivide(a, b: Cardinal): Cardinal; external name '::u_system::o_intdivide';
+operator IntDivide(a, b: Integer): Integer; external name '::u_system::o_intdivide';
+operator IntDivide(a, b: QWord): QWord; external name '::u_system::o_intdivide';
+operator IntDivide(a, b: Int64): Int64; external name '::u_system::o_intdivide';
+operator Modulus(a, b: Byte): Integer; external name '::u_system::o_modulus';
+operator Modulus(a, b: ShortInt): Integer; external name '::u_system::o_modulus';
+operator Modulus(a, b: Word): Integer; external name '::u_system::o_modulus';
+operator Modulus(a, b: SmallInt): Integer; external name '::u_system::o_modulus';
+operator Modulus(a, b: Cardinal): Cardinal; external name '::u_system::o_modulus';
+operator Modulus(a, b: Integer): Integer; external name '::u_system::o_modulus';
+operator Modulus(a, b: QWord): QWord; external name '::u_system::o_modulus';
+operator Modulus(a, b: Int64): Int64; external name '::u_system::o_modulus';
 
 // Delphi exposes only the named unary operator LogicalNot: the same `not`
 // token means Boolean negation for Boolean and width-preserving bitwise
 // complement for integers. Keep every concrete integer signature here so
 // overload resolution preserves the operand type instead of widening it.
-operator not(a: Byte): Byte; external name '::u_system::p_logicalnot';
-operator not(a: ShortInt): ShortInt; external name '::u_system::p_logicalnot';
-operator not(a: Word): Word; external name '::u_system::p_logicalnot';
-operator not(a: SmallInt): SmallInt; external name '::u_system::p_logicalnot';
-operator not(a: Cardinal): Cardinal; external name '::u_system::p_logicalnot';
-operator not(a: Integer): Integer; external name '::u_system::p_logicalnot';
-operator not(a: QWord): QWord; external name '::u_system::p_logicalnot';
-operator not(a: Int64): Int64; external name '::u_system::p_logicalnot';
-operator not(a: PtrInt): PtrInt; external name '::u_system::p_logicalnot';
-operator not(a: PtrUInt): PtrUInt; external name '::u_system::p_logicalnot';
-operator not(a: SizeInt): SizeInt; external name '::u_system::p_logicalnot';
-operator not(a: SizeUInt): SizeUInt; external name '::u_system::p_logicalnot';
+operator not(a: Byte): Byte; external name '::u_system::o_logicalnot';
+operator not(a: ShortInt): ShortInt; external name '::u_system::o_logicalnot';
+operator not(a: Word): Word; external name '::u_system::o_logicalnot';
+operator not(a: SmallInt): SmallInt; external name '::u_system::o_logicalnot';
+operator not(a: Cardinal): Cardinal; external name '::u_system::o_logicalnot';
+operator not(a: Integer): Integer; external name '::u_system::o_logicalnot';
+operator not(a: QWord): QWord; external name '::u_system::o_logicalnot';
+operator not(a: Int64): Int64; external name '::u_system::o_logicalnot';
+operator not(a: PtrInt): PtrInt; external name '::u_system::o_logicalnot';
+operator not(a: PtrUInt): PtrUInt; external name '::u_system::o_logicalnot';
+operator not(a: SizeInt): SizeInt; external name '::u_system::o_logicalnot';
+operator not(a: SizeUInt): SizeUInt; external name '::u_system::o_logicalnot';
 
-operator and(a, b: Byte): Integer; external name '::u_system::p_bitwiseand';
-operator and(a, b: ShortInt): Integer; external name '::u_system::p_bitwiseand';
-operator and(a, b: Word): Integer; external name '::u_system::p_bitwiseand';
-operator and(a, b: SmallInt): Integer; external name '::u_system::p_bitwiseand';
-operator and(a, b: Cardinal): Cardinal; external name '::u_system::p_bitwiseand';
-operator and(a, b: Integer): Integer; external name '::u_system::p_bitwiseand';
-operator and(a, b: QWord): QWord; external name '::u_system::p_bitwiseand';
-operator and(a, b: Int64): Int64; external name '::u_system::p_bitwiseand';
-operator or(a, b: Byte): Integer; external name '::u_system::p_bitwiseor';
-operator or(a, b: ShortInt): Integer; external name '::u_system::p_bitwiseor';
-operator or(a, b: Word): Integer; external name '::u_system::p_bitwiseor';
-operator or(a, b: SmallInt): Integer; external name '::u_system::p_bitwiseor';
-operator or(a, b: Cardinal): Cardinal; external name '::u_system::p_bitwiseor';
-operator or(a, b: Integer): Integer; external name '::u_system::p_bitwiseor';
-operator or(a, b: QWord): QWord; external name '::u_system::p_bitwiseor';
-operator or(a, b: Int64): Int64; external name '::u_system::p_bitwiseor';
-operator xor(a, b: Byte): Integer; external name '::u_system::p_bitwisexor';
-operator xor(a, b: ShortInt): Integer; external name '::u_system::p_bitwisexor';
-operator xor(a, b: Word): Integer; external name '::u_system::p_bitwisexor';
-operator xor(a, b: SmallInt): Integer; external name '::u_system::p_bitwisexor';
-operator xor(a, b: Cardinal): Cardinal; external name '::u_system::p_bitwisexor';
-operator xor(a, b: Integer): Integer; external name '::u_system::p_bitwisexor';
-operator xor(a, b: QWord): QWord; external name '::u_system::p_bitwisexor';
-operator xor(a, b: Int64): Int64; external name '::u_system::p_bitwisexor';
+operator and(a, b: Byte): Integer; external name '::u_system::o_bitwiseand';
+operator and(a, b: ShortInt): Integer; external name '::u_system::o_bitwiseand';
+operator and(a, b: Word): Integer; external name '::u_system::o_bitwiseand';
+operator and(a, b: SmallInt): Integer; external name '::u_system::o_bitwiseand';
+operator and(a, b: Cardinal): Cardinal; external name '::u_system::o_bitwiseand';
+operator and(a, b: Integer): Integer; external name '::u_system::o_bitwiseand';
+operator and(a, b: QWord): QWord; external name '::u_system::o_bitwiseand';
+operator and(a, b: Int64): Int64; external name '::u_system::o_bitwiseand';
+operator or(a, b: Byte): Integer; external name '::u_system::o_bitwiseor';
+operator or(a, b: ShortInt): Integer; external name '::u_system::o_bitwiseor';
+operator or(a, b: Word): Integer; external name '::u_system::o_bitwiseor';
+operator or(a, b: SmallInt): Integer; external name '::u_system::o_bitwiseor';
+operator or(a, b: Cardinal): Cardinal; external name '::u_system::o_bitwiseor';
+operator or(a, b: Integer): Integer; external name '::u_system::o_bitwiseor';
+operator or(a, b: QWord): QWord; external name '::u_system::o_bitwiseor';
+operator or(a, b: Int64): Int64; external name '::u_system::o_bitwiseor';
+operator xor(a, b: Byte): Integer; external name '::u_system::o_bitwisexor';
+operator xor(a, b: ShortInt): Integer; external name '::u_system::o_bitwisexor';
+operator xor(a, b: Word): Integer; external name '::u_system::o_bitwisexor';
+operator xor(a, b: SmallInt): Integer; external name '::u_system::o_bitwisexor';
+operator xor(a, b: Cardinal): Cardinal; external name '::u_system::o_bitwisexor';
+operator xor(a, b: Integer): Integer; external name '::u_system::o_bitwisexor';
+operator xor(a, b: QWord): QWord; external name '::u_system::o_bitwisexor';
+operator xor(a, b: Int64): Int64; external name '::u_system::o_bitwisexor';
 
-operator shl(a, b: Cardinal): Cardinal; external name '::u_system::p_leftshift';
-operator shr(a, b: Cardinal): Cardinal; external name '::u_system::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
+operator shl(a, b: Cardinal): Cardinal; external name '::u_system::o_leftshift';
+operator shr(a, b: Cardinal): Cardinal; external name '::u_system::o_rightshift'; // FIXME is shl shr operand 2 a byte ?
 
-operator shl(a, b: Int64): Cardinal; external name '::u_system::p_leftshift';
-operator shr(a, b: Int64): Cardinal; external name '::u_system::p_rightshift'; // FIXME is shl shr operand 2 a byte ?
-operator in(const item; const values): Boolean; external name '::u_system::p_in';
+operator shl(a, b: Int64): Cardinal; external name '::u_system::o_leftshift';
+operator shr(a, b: Int64): Cardinal; external name '::u_system::o_rightshift'; // FIXME is shl shr operand 2 a byte ?
+operator in(const item; const values): Boolean; external name '::u_system::o_in';
 
 function ord(const x): Cardinal; external name '::u_system::p_ord'; // generic intrinsic
 function chr(value: Byte): Char; external name '::u_system::p_chr';
@@ -379,12 +424,13 @@ procedure insert(const source: ShortString; var destination: ShortString; index:
 procedure insert(source: Char; var destination: ShortString; index: LongInt); overload; external name '::u_system::p_insert';
 procedure insert(const source: AnsiString; var destination: AnsiString; index: LongInt); overload; external name '::u_system::p_insert';
 
-operator xor(a, b: Boolean): Boolean; external name '::u_system::p_logicalxor';
-operator not(a: Boolean): Boolean; external name '::u_system::p_logicalnot';
+operator xor(a, b: Boolean): Boolean; external name '::u_system::o_logicalxor';
+operator not(a: Boolean): Boolean; external name '::u_system::o_logicalnot';
 
-operator =(a, b: shortstring): Boolean; external name '::u_system::p_equal';
-operator +(a, b: shortstring): shortstring; external name '::u_system::p_add';
-operator :=(a: shortstring): ansistring; external name '::u_system::p_implicit';
+operator =(a, b: shortstring): Boolean; external name '::u_system::o_equal';
+operator UncheckedAdd(a, b: shortstring): shortstring; external name '::u_system::o_unchecked_add';
+operator Add(a, b: shortstring): shortstring; external name '::u_system::o_add';
+operator :=(a: shortstring): ansistring; external name '::u_system::o_implicit';
 
 procedure SetLength(var destination: AnsiString; value: SizeInt); overload; external name '::u_system::p_setlength';
 procedure SetLength(var destination; value: SizeInt); overload; external name '::u_system::p_setlength'; // generic resizable-sequence intrinsic

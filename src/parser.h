@@ -371,6 +371,8 @@ private:
 	    MatchFailure* failure,
 	    UserConversionFailure*
 	        conversion_failure);
+	Node* make_implicit_cast(
+	    Node* value, Type* target);
 	Node* cast(Node* a, Type* target_ty);
 	Node* resolve_routine_reference(
 	    RoutineRef* reference, RoutineType* target_ty);
@@ -628,7 +630,10 @@ protected:
 	void parse_class_lifecycle_prototype(
 	    ClassType* owner_class, RoutineKind kind);
 	Procedure* match_or_create_procedure(
-	    const std::string& pas_name, RoutineType* sig,
+	    const std::string& pas_name,
+	    const std::vector<std::string>& frame_names,
+	    const std::string& cxx_name,
+	    RoutineType* sig,
 	    bool had_paren, bool has_overload,
 	    bool short_form_implementation);
 	/** Parse `procedure NAME(...);` (is_function=false) or

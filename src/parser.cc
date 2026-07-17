@@ -3554,7 +3554,11 @@ bool Parser::property_read_is_place(PropertyAccess* access) {
 			   ? true
 			   : is_referenceable(access->receiver);
 	if (auto builtin = dynamic_cast<Builtin*>(accessor))
-		return builtin->desc && builtin->desc->cxx_name == "::u_system::p_index" &&
+		return builtin->desc &&
+		       (builtin->desc->cxx_name ==
+			    "::u_system::p_index" ||
+			builtin->desc->cxx_name ==
+			    "::u_system::m_unchecked_index") &&
 		       is_referenceable(access->receiver);
 	return false; // ordinary Pascal getter calls return values
 }
@@ -3627,8 +3631,74 @@ bool Parser::is_supported_packed_assignment(Node* n) {
 	return false;
 }
 
+// Operator identities live outside the ordinary Pascal identifier namespace:
+// an ordinary function Add must not collide with either arithmetic contract,
+// and these spellings are also suitable as future RTTI operation names.
+static constexpr const char* k_op_addition =
+    "&op_Addition";
+static constexpr const char* k_op_checked_addition =
+    "&op_CheckedAddition";
+static constexpr const char* k_op_subtraction =
+    "&op_Subtraction";
+static constexpr const char* k_op_checked_subtraction =
+    "&op_CheckedSubtraction";
+static constexpr const char* k_op_multiply =
+    "&op_Multiply";
+static constexpr const char* k_op_checked_multiply =
+    "&op_CheckedMultiply";
+static constexpr const char* k_op_unary_negation =
+    "&op_UnaryNegation";
+static constexpr const char* k_op_checked_unary_negation =
+    "&op_CheckedUnaryNegation";
+static constexpr const char* k_op_intdivide =
+    "&op_IntDivide";
+static constexpr const char* k_op_checked_intdivide =
+    "&op_CheckedIntDivide";
+static constexpr const char* k_op_positive =
+    "&op_UnaryPlus";
+static constexpr const char* k_op_divide =
+    "&op_Division";
+static constexpr const char* k_op_modulus =
+    "&op_Modulus";
+
+static std::string operator_expression_frame_name(
+    const std::string& source_token, size_t arity,
+    bool overflow_checks) {
+	if (arity == 2 && source_token == "+")
+		return overflow_checks
+			   ? k_op_checked_addition
+			   : k_op_addition;
+	if (arity == 2 && source_token == "-")
+		return overflow_checks
+			   ? k_op_checked_subtraction
+			   : k_op_subtraction;
+	if (arity == 2 && source_token == "*")
+		return overflow_checks
+			   ? k_op_checked_multiply
+			   : k_op_multiply;
+	if (arity == 1 && source_token == "-")
+		return overflow_checks
+			   ? k_op_checked_unary_negation
+			   : k_op_unary_negation;
+	if (arity == 2 && source_token == "div")
+		return overflow_checks
+			   ? k_op_checked_intdivide
+			   : k_op_intdivide;
+	if (arity == 1 && source_token == "+")
+		return k_op_positive;
+	if (arity == 2 && source_token == "/")
+		return k_op_divide;
+	if (arity == 2 && source_token == "mod")
+		return k_op_modulus;
+	return source_token;
+}
+
 Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
-	auto fn = resolve_value(id);
+	const std::string frame_name =
+	    operator_expression_frame_name(
+		id, 2,
+		directive_state.switch_enabled('q'));
+	auto fn = resolve_value(frame_name);
 	// Operators and named routines share one argument matcher. Preserve the
 	// source operands until a declaration has been selected; choosing a
 	// "common" type first changes which overload is exact and makes operator
@@ -3736,7 +3806,11 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 			    integer->negative);
 		}
 	}
-	auto fn = resolve_value(id);
+	const std::string frame_name =
+	    operator_expression_frame_name(
+		id, 1,
+		directive_state.switch_enabled('q'));
+	auto fn = resolve_value(frame_name);
 	std::vector<Node*> args;
 	args.push_back(x);
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
@@ -4012,6 +4086,31 @@ PropertyAccess* Parser::apply_property(Node* receiver, Property* property, std::
 	}
 	for (size_t i = 0; i < indexes.size(); ++i) {
 		indexes[i] = cast(indexes[i], property->index_types[i]);
+	}
+	if (!directive_state.switch_enabled('r') &&
+	    receiver &&
+	    !dynamic_cast<PointerType*>(
+		receiver->ty)) {
+		auto builtin =
+		    dynamic_cast<Builtin*>(
+			property->read_accessor);
+		if (builtin && builtin->desc &&
+		    builtin->desc->cxx_name ==
+			"::u_system::p_index") {
+			Node* unchecked =
+			    create_builtin_value(
+				"::u_system::m_unchecked_index");
+			// Built-in indexing and source properties use the same
+			// PropertyAccess representation. Select a different ordinary
+			// accessor only for the synthesized built-in property; a user
+			// getter keeps the definition-site behavior of its own body.
+			property = new Property(
+			    property->pas_name,
+			    property->ty,
+			    property->index_types,
+			    unchecked, unchecked,
+			    property->is_default);
+		}
 	}
 	return new PropertyAccess(receiver, property, std::move(indexes));
 }
@@ -7300,11 +7399,43 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 
 // Helper to handle overload matching and short-form implementation resolution
 Procedure* Parser::match_or_create_procedure(
-    const std::string& pas_name, RoutineType* sig,
+    const std::string& pas_name,
+    const std::vector<std::string>& frame_names,
+    const std::string& cxx_name,
+    RoutineType* sig,
     bool had_paren, bool has_overload,
     bool short_form_implementation) {
 	Frame* enclosing = current_declaration_frame();
-	Node* existing = enclosing->lookup_value(pas_name);
+	if (frame_names.empty())
+		raise_parse_error(
+		    "routine has no declaration identity");
+	Node* existing =
+	    enclosing->lookup_value(frame_names.front());
+
+	auto family_contains =
+	    [](Node* family, Callable* candidate) {
+		    if (family == candidate)
+			    return true;
+		    if (auto overloads =
+			    dynamic_cast<OverloadSet*>(family))
+			    for (Callable* member :
+				 overloads->members)
+				    if (member == candidate)
+					    return true;
+		    return false;
+	    };
+
+	auto has_every_frame_binding =
+	    [&](Callable* candidate) {
+		    for (const std::string& frame_name :
+			 frame_names)
+			    if (!family_contains(
+				    enclosing->lookup_value(
+					frame_name),
+				    candidate))
+				    return false;
+		    return true;
+	    };
 
 	auto sig_matches = [&](Callable* c) -> bool {
 		auto rty = static_cast<RoutineType*>(c->ty);
@@ -7335,13 +7466,15 @@ Procedure* Parser::match_or_create_procedure(
 			return;
 		if (auto ec = dynamic_cast<Callable*>(node)) {
 			if ((short_form_implementation || sig_matches(ec)) &&
-			    !ec->has_body)
+			    !ec->has_body &&
+			    has_every_frame_binding(ec))
 				target = attach_to(ec);
 		} else if (auto os = dynamic_cast<OverloadSet*>(node)) {
 			if (short_form_implementation) {
 				Callable* pick = nullptr;
 				for (auto* m : os->members) {
-					if (!m->has_body) {
+					if (!m->has_body &&
+					    has_every_frame_binding(m)) {
 						if (pick)
 							raise_parse_error("ambiguous short-form impl");
 						pick = m;
@@ -7351,7 +7484,9 @@ Procedure* Parser::match_or_create_procedure(
 					target = attach_to(pick);
 			} else {
 				for (auto* m : os->members) {
-					if (!m->has_body && sig_matches(m)) {
+					if (!m->has_body &&
+					    sig_matches(m) &&
+					    has_every_frame_binding(m)) {
 						if (target)
 							raise_parse_error("ambiguous overload match");
 						target = attach_to(m);
@@ -7371,22 +7506,30 @@ Procedure* Parser::match_or_create_procedure(
 		raise_parse_error("no unimplemented prototype");
 
 	if (!target) {
-		target = new Procedure(cxx_value_name(pas_name), pas_name, sig, has_overload);
+		target = new Procedure(
+		    cxx_name, pas_name, sig,
+		    has_overload);
 		target->ty = sig;
 		target->owning_unit =
 		    declaration_unit(enclosing);
-		auto registration =
-		    enclosing->register_callable(
-			pas_name, target);
-		if (registration.kind ==
-		    CallableRegistration::Kind::
-			CxxCarrierCollision)
-			raise_cxx_carrier_collision(
-			    pas_name, target,
-			    registration);
-		if (registration.kind !=
-		    CallableRegistration::Kind::Added) {
-			raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+		for (const std::string& frame_name :
+		     frame_names) {
+			auto registration =
+			    enclosing->register_callable(
+				frame_name, target);
+			if (registration.kind ==
+			    CallableRegistration::Kind::
+				CxxCarrierCollision)
+				raise_cxx_carrier_collision(
+				    pas_name, target,
+				    registration);
+			if (registration.kind !=
+			    CallableRegistration::Kind::
+				Added) {
+				raise_parse_error(
+				    "duplicate identifier or overload directive mismatch: " +
+				    pas_name);
+			}
 		}
 	}
 	return target;
@@ -7514,12 +7657,128 @@ Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
 	}
 }
 
+struct ParsedOperatorIdentity {
+	std::vector<std::string> frame_names;
+	std::string cxx_name;
+};
+
+static ParsedOperatorIdentity parsed_operator_identity(
+    const std::string& source_name, size_t arity) {
+	auto one = [](const char* frame_name,
+		      const char* cxx_name) {
+		return ParsedOperatorIdentity{
+		    {frame_name}, cxx_name};
+	};
+	auto legacy_pair =
+	    [](const char* regular_name,
+	       const char* checked_name,
+	       const char* cxx_name) {
+		    // A symbolic declaration predates caller-selected checked
+		    // operator families. Binding its one Callable under both names
+		    // preserves that compatibility contract without creating a
+		    // second body or emitted C++ function.
+		    return ParsedOperatorIdentity{
+			{regular_name, checked_name},
+			cxx_name};
+	    };
+
+	if (source_name == "add")
+		return one(k_op_checked_addition, "o_add");
+	if (source_name == "uncheckedadd")
+		return one(k_op_addition, "o_unchecked_add");
+	if (source_name == "subtract")
+		return one(
+		    k_op_checked_subtraction,
+		    "o_subtract");
+	if (source_name == "uncheckedsubtract")
+		return one(
+		    k_op_subtraction,
+		    "o_unchecked_subtract");
+	if (source_name == "multiply")
+		return one(
+		    k_op_checked_multiply,
+		    "o_multiply");
+	if (source_name == "uncheckedmultiply")
+		return one(
+		    k_op_multiply,
+		    "o_unchecked_multiply");
+	if (source_name == "negative")
+		return one(
+		    k_op_checked_unary_negation,
+		    "o_negative");
+	if (source_name == "uncheckednegative")
+		return one(
+		    k_op_unary_negation,
+		    "o_unchecked_negative");
+	if (source_name == "intdivide")
+		return one(
+		    k_op_checked_intdivide,
+		    "o_intdivide");
+	if (source_name == "uncheckedintdivide")
+		return one(
+		    k_op_intdivide,
+		    "o_unchecked_intdivide");
+	if (source_name == "positive")
+		return one(k_op_positive, "o_positive");
+	if (source_name == "divide")
+		return one(k_op_divide, "o_divide");
+	if (source_name == "modulus")
+		return one(k_op_modulus, "o_modulus");
+
+	if (source_name == "+" && arity == 2)
+		return legacy_pair(
+		    k_op_addition,
+		    k_op_checked_addition,
+		    "o_operator_plus");
+	if (source_name == "+" && arity == 1)
+		return one(
+		    k_op_positive,
+		    "o_operator_plus");
+	if (source_name == "-" && arity == 2)
+		return legacy_pair(
+		    k_op_subtraction,
+		    k_op_checked_subtraction,
+		    "o_operator_minus");
+	if (source_name == "-" && arity == 1)
+		return legacy_pair(
+		    k_op_unary_negation,
+		    k_op_checked_unary_negation,
+		    "o_operator_minus");
+	if (source_name == "*" && arity == 2)
+		return legacy_pair(
+		    k_op_multiply,
+		    k_op_checked_multiply,
+		    "o_operator_multiply");
+	if (source_name == "div" && arity == 2)
+		return legacy_pair(
+		    k_op_intdivide,
+		    k_op_checked_intdivide,
+		    "o_operator_intdivide");
+	if (source_name == "/" && arity == 2)
+		return one(
+		    k_op_divide,
+		    "o_operator_divide");
+	if (source_name == "mod" && arity == 2)
+		return one(
+		    k_op_modulus,
+		    "o_operator_modulus");
+
+	std::string cxx_name =
+	    cxx_value_name(source_name);
+	if (cxx_name.starts_with("p_"))
+		cxx_name.replace(0, 2, "o_");
+	return ParsedOperatorIdentity{
+	    {source_name}, std::move(cxx_name)};
+}
+
 void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool is_decl_only) {
 	bool has_overload = false;
 	std::string first_name;
+	bool is_operator = false;
 	bool is_destructor = false;
 	bool is_constructor = false;
 	if (peek_keyword("operator")) {
+		is_operator = true;
 		if (!is_function) {
 			raise_parse_error("custom operator should have a return value");
 		}
@@ -7724,8 +7983,21 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// parameter list.
 		const bool short_form_implementation =
 		    !is_decl_only && body_follows && !had_paren;
+		ParsedOperatorIdentity operator_identity;
+		if (is_operator)
+			operator_identity =
+			    parsed_operator_identity(
+				first_name,
+				sig->formals.size());
+		else
+			operator_identity = {
+			    {first_name},
+			    cxx_value_name(first_name)};
 		Procedure* target = match_or_create_procedure(
-		    first_name, sig, had_paren, has_overload,
+		    first_name,
+		    operator_identity.frame_names,
+		    operator_identity.cxx_name,
+		    sig, had_paren, has_overload,
 		    short_form_implementation);
 		if (external_cxx_name) {
 			target->owning_unit = nullptr;
@@ -8355,7 +8627,8 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			 ? MatchRank::Tier::Direct
 			 : MatchRank::Tier::Convert,
 		     conversion->distance},
-		    new Cast(actual, target)};
+		    make_implicit_cast(
+			actual, target)};
 	if (allow_user_conversion)
 		return match_user_conversion(
 		    actual, target, failure,
@@ -8524,6 +8797,30 @@ static bool dominates(
 			strict = true;
 	}
 	return strict;
+}
+
+Node* Parser::make_implicit_cast(
+    Node* value, Type* target) {
+	OrdinalRange source_range;
+	OrdinalRange target_range;
+	std::string ignored_error;
+	const bool ordinal_conversion =
+	    value && value->ty &&
+	    ordinal_range_for_type(
+		value->ty, &source_range,
+		&ignored_error) &&
+	    ordinal_range_for_type(
+		target, &target_range,
+		&ignored_error);
+	if (ordinal_conversion &&
+	    directive_state.switch_enabled('r') &&
+	    !value->ty->is_subtype_of(target))
+		// Preserve the check only when the source type's complete domain is
+		// not already known to fit. This is a semantic no-op optimization:
+		// overload viability and the conversion selected above are unchanged.
+		return new RangeCheckedCast(
+		    value, target);
+	return new Cast(value, target);
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {

@@ -381,6 +381,17 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** An implicit ordinal conversion selected while {$R+} is active. Conversion
+ * viability is still decided by the ordinary Type conversion rules; this
+ * node only preserves the destination-boundary check until C++ emission. */
+class RangeCheckedCast: public Cast {
+public:
+	RangeCheckedCast(Node* value, Type* target);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(
+	    ConstEvalContext& ctx) const override;
+};
+
 /** Open-array arguments are views or copies of an existing array value; they
  * are not Pascal value conversions between the nominal source array and the
  * formal-only OpenArrayType. Separate nodes keep parameter-mode lifetime and

@@ -255,11 +255,40 @@ static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Ty
 	return const_convert_integer(magnitude, negative, ty, ty);
 }
 
+static uint64_t unchecked_integer_bits(
+    const Integer* value) {
+	return value->negative
+		   ? uint64_t{0} - value->value
+		   : value->value;
+}
+
+static ConstEvalResult fold_unchecked_integer_bits(
+    uint64_t bits, Type* result_ty) {
+	// The explicit ordinal cast is TPCC's existing representation conversion:
+	// it truncates to the Pascal carrier width and then interprets that bit
+	// pattern with the carrier's signedness.
+	return const_explicit_ordinal_cast(
+	    bits, false, result_ty);
+}
+
 static ConstEvalResult fold_unary_minus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 1 || !const_integer_arg(args[0]))
 		return ConstEvalResult::not_constant();
 	auto i = const_integer_arg(args[0]);
 	return fold_integer_result(i->value, !i->negative && i->value != 0, result_ty);
+}
+
+static ConstEvalResult fold_unchecked_unary_minus(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 1 ||
+	    !const_integer_arg(args[0]))
+		return ConstEvalResult::not_constant();
+	return fold_unchecked_integer_bits(
+	    uint64_t{0} -
+		unchecked_integer_bits(
+		    const_integer_arg(args[0])),
+	    result_ty);
 }
 
 static ConstEvalResult fold_unary_plus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -342,6 +371,39 @@ static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& a
 static ConstEvalResult fold_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, false); }
 static ConstEvalResult fold_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, true); }
 
+static ConstEvalResult fold_unchecked_add_sub(
+    Type* result_ty,
+    const std::vector<Node*>& args,
+    bool subtract) {
+	if (args.size() != 2 ||
+	    !const_integer_arg(args[0]) ||
+	    !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	uint64_t a =
+	    unchecked_integer_bits(
+		const_integer_arg(args[0]));
+	uint64_t b =
+	    unchecked_integer_bits(
+		const_integer_arg(args[1]));
+	return fold_unchecked_integer_bits(
+	    subtract ? a - b : a + b,
+	    result_ty);
+}
+
+static ConstEvalResult fold_unchecked_add(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_unchecked_add_sub(
+	    result_ty, args, false);
+}
+
+static ConstEvalResult fold_unchecked_subtract(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_unchecked_add_sub(
+	    result_ty, args, true);
+}
+
 static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
 		return ConstEvalResult::not_constant();
@@ -355,6 +417,21 @@ static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const s
 	return fold_integer_result(mag, neg, result_ty);
 }
 
+static ConstEvalResult fold_unchecked_multiply(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 2 ||
+	    !const_integer_arg(args[0]) ||
+	    !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	return fold_unchecked_integer_bits(
+	    unchecked_integer_bits(
+		const_integer_arg(args[0])) *
+		unchecked_integer_bits(
+		    const_integer_arg(args[1])),
+	    result_ty);
+}
+
 static ConstEvalResult fold_intdivide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
 		return ConstEvalResult::not_constant();
@@ -365,6 +442,26 @@ static ConstEvalResult fold_intdivide(ConstEvalContext&, Type* result_ty, const 
 	uint64_t mag = a->value / b->value;
 	bool neg = (a->negative != b->negative) && mag != 0;
 	return fold_integer_result(mag, neg, result_ty);
+}
+
+static ConstEvalResult fold_unchecked_intdivide(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 2 ||
+	    !const_integer_arg(args[0]) ||
+	    !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	auto a = const_integer_arg(args[0]);
+	auto b = const_integer_arg(args[1]);
+	if (b->value == 0)
+		return ConstEvalResult::error(
+		    "integer constant division by zero");
+	uint64_t magnitude = a->value / b->value;
+	bool negative =
+	    (a->negative != b->negative) &&
+	    magnitude != 0;
+	return const_explicit_ordinal_cast(
+	    magnitude, negative, result_ty);
 }
 
 static ConstEvalResult fold_modulus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -568,6 +665,7 @@ static const BuiltinDesc k_builtins[] = {
 	    BuiltinGenericKind::SequenceLength,
     },
     {"::u_system::p_index", nullptr},
+    {"::u_system::m_unchecked_index", nullptr},
     {"::u_system::tpcc_index_write", nullptr},
     {"::u_system::p_chr", fold_chr},
     {"::u_system::p_fillchar", nullptr},
@@ -587,36 +685,41 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_insert", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
-    {"::u_system::p_bitwiseand", nullptr},
-    {"::u_system::p_bitwiseor", nullptr},
-    {"::u_system::p_bitwisexor", nullptr},
+    {"::u_system::o_bitwiseand", nullptr},
+    {"::u_system::o_bitwiseor", nullptr},
+    {"::u_system::o_bitwisexor", nullptr},
 
     // Delphi {"::u_system::p_logicalor", nullptr},
     // Delphi {"::u_system::p_logicaland", nullptr},
-    {"::u_system::p_logicalnot", fold_logical_not},
-    {"::u_system::p_logicalxor", nullptr},
+    {"::u_system::o_logicalnot", fold_logical_not},
+    {"::u_system::o_logicalxor", nullptr},
 
-    {"::u_system::p_add", fold_add},
-    {"::u_system::p_subtract", fold_subtract},
-    {"::u_system::p_positive", fold_unary_plus},
-    {"::u_system::p_negative", fold_unary_minus},
-    {"::u_system::p_multiply", fold_multiply},
-    {"::u_system::p_divide", fold_divide},
-    {"::u_system::p_intdivide", fold_intdivide},
-    {"::u_system::p_implicit", nullptr},
+    {"::u_system::o_unchecked_add", fold_unchecked_add},
+    {"::u_system::o_add", fold_add},
+    {"::u_system::o_unchecked_subtract", fold_unchecked_subtract},
+    {"::u_system::o_subtract", fold_subtract},
+    {"::u_system::o_positive", fold_unary_plus},
+    {"::u_system::o_unchecked_negative", fold_unchecked_unary_minus},
+    {"::u_system::o_negative", fold_unary_minus},
+    {"::u_system::o_unchecked_multiply", fold_unchecked_multiply},
+    {"::u_system::o_multiply", fold_multiply},
+    {"::u_system::o_divide", fold_divide},
+    {"::u_system::o_unchecked_intdivide", fold_unchecked_intdivide},
+    {"::u_system::o_intdivide", fold_intdivide},
+    {"::u_system::o_implicit", nullptr},
     // Old-style file Assign is an ordinary procedure, not an implicit
     // conversion despite sharing the Pascal spelling "assign".
     {"::u_system::p_assign", nullptr},
-    {"::u_system::p_modulus", fold_modulus},
-    {"::u_system::p_leftshift", nullptr},
-    {"::u_system::p_rightshift", nullptr},
+    {"::u_system::o_modulus", fold_modulus},
+    {"::u_system::o_leftshift", nullptr},
+    {"::u_system::o_rightshift", nullptr},
 
-    {"::u_system::p_lessthan", nullptr},
-    {"::u_system::p_lessthanorequal", nullptr},
-    {"::u_system::p_equal", nullptr},
-    {"::u_system::p_greaterthan", nullptr},
-    {"::u_system::p_greaterthanorequal", nullptr},
-    {"::u_system::p_in", nullptr},
+    {"::u_system::o_lessthan", nullptr},
+    {"::u_system::o_lessthanorequal", nullptr},
+    {"::u_system::o_equal", nullptr},
+    {"::u_system::o_greaterthan", nullptr},
+    {"::u_system::o_greaterthanorequal", nullptr},
+    {"::u_system::o_in", nullptr},
     {"::u_system::p_supports", nullptr},
 
     {"::u_system::t_boolean::p_true", nullptr},

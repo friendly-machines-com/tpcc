@@ -26,7 +26,7 @@ then
 	exit 1
 fi
 if ! rg -Fq \
-	'reinterpret_cast<::u_system::t_byte*>(::u_system::p_add' \
+	'reinterpret_cast<::u_system::t_byte*>(::u_system::o_unchecked_add' \
 	"$tmp/ansistring_pointer_cast.cc"
 then
 	echo "pointer-sized integer did not convert to a typed pointer" >&2
