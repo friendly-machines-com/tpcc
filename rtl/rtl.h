@@ -2411,7 +2411,7 @@ public:
 			} else {
 				++current;
 			}
-			if (p_in(
+			if (o_in(
 				m_ordinal_from_storage<T>(
 				    current),
 				value) == p_true)
