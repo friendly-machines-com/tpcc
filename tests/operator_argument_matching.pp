@@ -15,6 +15,8 @@ var
   Box: TBox;
   Sum: TBox;
   LeftByte, RightByte: Byte;
+  Unsigned16: Word;
+  Signed8: ShortInt;
   Signed32: Integer;
   Unsigned32: Cardinal;
   Signed64: Int64;
@@ -98,6 +100,8 @@ begin
 
   LeftByte := 6;
   RightByte := 3;
+  Unsigned16 := 2;
+  Signed8 := -1;
   Signed32 := -1;
   Unsigned32 := 2;
   Signed64 := -1;
@@ -108,10 +112,10 @@ begin
     Halt(3);
   if NumericKind(Signed32 + Unsigned32) <> 12 then
     Halt(4);
-  { Neither 64-bit integer family contains the other's complete domain.
-    Their overloads therefore require runtime narrowing, while Extended
-    accepts both without a range failure and wins the candidate-wide rule. }
-  if NumericKind(Signed64 + Unsigned64) <> 15 then
+  { Int64 is Pascal's preferred arithmetic promotion from QWord even though
+    that conversion still requires a caller-side range check. A real-domain
+    fallback must not steal an expression whose source operands are integers. }
+  if NumericKind(Signed64 + Unsigned64) <> 12 then
     Halt(5);
   if NumericKind(Real32 + Real32) <> 15 then
     Halt(6);
@@ -129,6 +133,14 @@ begin
     Halt(12);
   if NumericKind(-SmallConstant) <> 16 then
     Halt(13);
+  if NumericKind(Unsigned64 + Signed32) <> 13 then
+    Halt(16);
+  if NumericKind(Unsigned64 + Signed64) <> 12 then
+    Halt(17);
+  if NumericKind(Unsigned16 + Signed8) <> 11 then
+    Halt(18);
+  if NumericKind(LeftByte + Signed8) <> 11 then
+    Halt(19);
 
   SmallLeft := 2;
   SmallRight := 3;

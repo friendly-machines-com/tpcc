@@ -822,10 +822,9 @@ static int integer_conversion_cost(
 		return -1;
 
 	// Compatible integer-family conversions are viable in both directions.
-	// Candidate matching separately records whether the source interval fits
-	// the destination interval: a non-narrowing candidate wins before this
-	// ordinary distance is compared, and a selected narrowing conversion is
-	// lowered through the caller's {$R} state.
+	// Candidate matching separately classifies promotion direction and whether
+	// the source interval fits the destination. The former orders overloads;
+	// the latter controls the selected edge's caller-side {$R} check.
 	uint64_t distance = ordinal_lower_bound_distance(from_bounds, to_bounds);
 	distance = saturating_add(distance, unsigned_abs_diff(from_bounds.max_positive, to_bounds.max_positive));
 
@@ -883,10 +882,9 @@ IntrinsicType::value_conversion_from(
 	int target_real = real_widening_rank(target);
 	if (source_real >= 0 && target_real >= 0) {
 		// All real-family directions are viable. Candidate matching records
-		// the reverse direction as runtime narrowing so an entirely
-		// non-narrowing overload wins first and a selected conversion uses the
-		// caller's {$R} state. Distance still orders candidates within either
-		// category without creating a second real-conversion mechanism.
+		// promotion versus demotion independently from the selected narrowing
+		// edge's {$R} obligation. Distance orders candidates whose qualitative
+		// profiles are otherwise equal.
 		unsigned distance = static_cast<unsigned>(
 		    source_real < target_real
 			? target_real - source_real
@@ -1357,8 +1355,8 @@ SubrangeType::value_conversion_from(
 		return std::nullopt;
 	// Contextual literals are checked against the exact endpoints before this
 	// type-level path. Runtime sources remain viable in both directions; the
-	// matcher marks a wider source as candidate-level narrowing and the
-	// selected Cast applies {$R}.
+	// matcher classifies a wider source as a demotion and the selected Cast
+	// independently applies {$R}.
 	return source->is_subtype_of(this)
 		   ? direct_conversion()
 		   : implicit_conversion();

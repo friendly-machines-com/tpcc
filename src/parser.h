@@ -81,6 +81,29 @@ struct MatchRank {
 	    ContextualConstruction::OrdinaryOrSet;
 };
 
+/** Qualitative numeric direction is independent of the ordinary conversion
+ * tier and of {$R}. In particular, Pascal prefers QWord -> Int64 as a usual
+ * arithmetic promotion even though that edge still needs a range check.
+ * Keeping this product separate prevents a range-safe Integer -> Extended
+ * fallback from categorically stealing an all-integer operation. */
+enum class NumericPreference {
+	// Exact, contextual-literal, and nonnumeric matches do not participate in
+	// numeric profile ordering; their existing MatchRank still applies.
+	Neutral,
+	// Conversion follows the language's numeric promotion order.
+	Promotion,
+	// Conversion reverses that order, or narrows equal-ranked subrange bounds.
+	Demotion,
+	// Integer to real, or an admitted integer/character-family crossing.
+	DomainChange,
+};
+
+struct NumericConversionProfile {
+	NumericPreference preference =
+	    NumericPreference::Neutral;
+	bool requires_range_check = false;
+};
+
 /** One candidate's treatment of one source argument. Matching never mutates
  * the source CST node. `value` is the candidate-local expression to use if
  * that candidate wins; it retains contextual literal typing or the exact
@@ -88,19 +111,14 @@ struct MatchRank {
 struct ArgumentMatch {
 	MatchRank rank;
 	Node* value;
-	// True when applying this otherwise-viable argument conversion requires
-	// committing an ordinal or real value to a destination whose complete
-	// runtime range does not contain the source range. This is candidate
-	// information, not a new conversion tier: overload selection first
-	// prefers a candidate with no such conversion, then applies the existing
-	// per-argument rank algebra.
-	bool requires_runtime_narrowing = false;
+	NumericConversionProfile numeric_profile;
 };
 
 struct CallableMatch {
 	std::vector<MatchRank> ranks;
 	std::vector<Node*> arguments;
-	bool requires_runtime_narrowing = false;
+	std::vector<NumericConversionProfile>
+	    numeric_profile;
 };
 
 /** Candidate information retained when an implicit conversion search fails.

@@ -27,6 +27,8 @@ var
   W: Word;
   I: Integer;
   C: Cardinal;
+  Signed64, MixedInt64: Int64;
+  Unsigned64, MixedQWord: QWord;
   Narrow: TNarrow;
   Wide: TWide;
   Shade: TShade;
@@ -102,6 +104,18 @@ begin
   Letter := Character;
   if Ord(Letter) <> Ord('z') then
     Halt(5);
+  { Promotion preference chooses the integer carrier; runtime range checking
+    independently governs the signed/unsigned operand conversion for the call. }
+  Signed64 := 0;
+  Unsigned64 := High(QWord);
+  MixedInt64 := Signed64 + Unsigned64;
+  if MixedInt64 <> -1 then
+    Halt(22);
+  I := -1;
+  Unsigned64 := 2;
+  MixedQWord := Unsigned64 + I;
+  if MixedQWord <> 1 then
+    Halt(23);
 
   {$R+}
   C := 15;
@@ -255,5 +269,29 @@ begin
       Caught := True
   end;
   if not Caught then
-    Halt(21)
+    Halt(21);
+
+  Signed64 := 0;
+  Unsigned64 := High(QWord);
+  Caught := False;
+  try
+    MixedInt64 := Signed64 + Unsigned64
+  except
+    on ERangeError do
+      Caught := True
+  end;
+  if not Caught then
+    Halt(24);
+
+  I := -1;
+  Unsigned64 := 2;
+  Caught := False;
+  try
+    MixedQWord := Unsigned64 + I
+  except
+    on ERangeError do
+      Caught := True
+  end;
+  if not Caught then
+    Halt(25)
 end.

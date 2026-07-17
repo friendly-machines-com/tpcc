@@ -8302,6 +8302,21 @@ static int real_range_rank(Type* type) {
 	return -1;
 }
 
+static std::optional<int>
+integer_preference_rank(Type* type) {
+	while (auto range =
+		   dynamic_cast<SubrangeType*>(
+		       type))
+		type = range->base_type;
+	auto intrinsic =
+	    dynamic_cast<IntrinsicType*>(
+		type);
+	if (!intrinsic ||
+	    !intrinsic->rank)
+		return std::nullopt;
+	return *intrinsic->rank;
+}
+
 static bool ordinal_interval_for_conversion(
     Type* type, OrdinalRange::Value* lower,
     OrdinalRange::Value* upper) {
@@ -8369,7 +8384,7 @@ static bool ordinal_interval_for_conversion(
 	return true;
 }
 
-static bool conversion_requires_runtime_narrowing(
+static bool conversion_requires_range_check(
     Type* source, Type* target) {
 	const int source_real =
 	    real_range_rank(source);
@@ -8393,16 +8408,144 @@ static bool conversion_requires_runtime_narrowing(
 		return false;
 	// value_conversion_from owns family/nominal compatibility. This helper is
 	// asked only after that conversion is known to be viable and answers the
-	// distinct range-containment question used by {$R} and candidate
-	// preference. Do not use ordinal_range_for_type here: that helper also
-	// computes an array element count and necessarily rejects a complete
-	// 64-bit domain of 2^64 values, while a conversion needs only endpoints.
+	// distinct range-containment question used by {$R}. Overload preference is
+	// deliberately separate: a usual arithmetic promotion such as
+	// QWord -> Int64 can still require this check. Do not use
+	// ordinal_range_for_type here: that helper also computes an array element
+	// count and necessarily rejects a complete 64-bit domain of 2^64 values,
+	// while a conversion needs only endpoints.
 	return compare_ordinal_value(
 		   source_lower,
 		   target_lower) < 0 ||
 	       compare_ordinal_value(
 		   source_upper,
 		   target_upper) > 0;
+}
+
+static NumericConversionProfile
+numeric_conversion_profile(
+    Type* source, Type* target) {
+	NumericConversionProfile result;
+	if (!source || !target ||
+	    source == target)
+		return result;
+	result.requires_range_check =
+	    conversion_requires_range_check(
+		source, target);
+
+	auto source_integer =
+	    integer_preference_rank(source);
+	auto target_integer =
+	    integer_preference_rank(target);
+	if (source_integer &&
+	    target_integer) {
+		if (*target_integer >
+		    *source_integer)
+			result.preference =
+			    NumericPreference::
+				Promotion;
+		else if (*target_integer <
+			 *source_integer)
+			result.preference =
+			    NumericPreference::
+				Demotion;
+		else
+			// Equal-ranked subranges use their semantic bounds to
+			// distinguish widening from narrowing.
+			result.preference =
+			    result
+				    .requires_range_check
+				? NumericPreference::
+				      Demotion
+				: NumericPreference::
+				      Promotion;
+		return result;
+	}
+
+	const int source_real =
+	    real_range_rank(source);
+	const int target_real =
+	    real_range_rank(target);
+	if (source_real >= 0 &&
+	    target_real >= 0) {
+		result.preference =
+		    target_real >= source_real
+			? NumericPreference::
+			      Promotion
+			: NumericPreference::
+			      Demotion;
+		return result;
+	}
+	if ((source_integer &&
+	     target_real >= 0) ||
+	    (source_real >= 0 &&
+	     target_integer)) {
+		result.preference =
+		    NumericPreference::
+			DomainChange;
+		return result;
+	}
+
+	const bool source_character =
+	    subrange_range_type(source) ==
+	    char_type();
+	const bool target_character =
+	    subrange_range_type(target) ==
+	    char_type();
+	if ((source_integer &&
+	     target_character) ||
+	    (source_character &&
+	     target_integer)) {
+		result.preference =
+		    NumericPreference::
+			DomainChange;
+		return result;
+	}
+
+	OrdinalRange::Value source_lower;
+	OrdinalRange::Value source_upper;
+	OrdinalRange::Value target_lower;
+	OrdinalRange::Value target_upper;
+	if (ordinal_interval_for_conversion(
+		source, &source_lower,
+		&source_upper) &&
+	    ordinal_interval_for_conversion(
+		target, &target_lower,
+		&target_upper))
+		// Remaining admitted ordinal conversions are within one nominal
+		// character or enumeration family. Domain containment is their
+		// promotion relation because they have no intrinsic numeric rank.
+		result.preference =
+		    result.requires_range_check
+			? NumericPreference::
+			      Demotion
+			: NumericPreference::
+			      Promotion;
+	return result;
+}
+
+static bool numeric_profile_less(
+    const NumericConversionProfile& a,
+    const NumericConversionProfile& b) {
+	if (a.preference !=
+	    b.preference)
+		return static_cast<unsigned>(
+			   a.preference) <
+		       static_cast<unsigned>(
+			   b.preference);
+	if (a.requires_range_check !=
+	    b.requires_range_check)
+		return !a.requires_range_check;
+	return false;
+}
+
+static NumericConversionProfile
+worse_numeric_profile(
+    const NumericConversionProfile& a,
+    const NumericConversionProfile& b) {
+	return numeric_profile_less(a, b)
+		   ? b
+		   : a;
 }
 
 std::optional<ArgumentMatch> Parser::match_argument(
@@ -8529,8 +8672,8 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    ParamMode::Value, nullptr);
 		MatchRank combined{
 		    MatchRank::Tier::Direct, 0};
-		bool requires_runtime_narrowing =
-		    false;
+		NumericConversionProfile
+		    combined_numeric_profile;
 		if (!target_set)
 			combined.contextual_construction =
 			    MatchRank::
@@ -8572,10 +8715,11 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			if (!lower)
 				return std::nullopt;
 			combine(lower->rank);
-			requires_runtime_narrowing =
-			    requires_runtime_narrowing ||
-			    lower
-				->requires_runtime_narrowing;
+			combined_numeric_profile =
+			    worse_numeric_profile(
+				combined_numeric_profile,
+				lower
+				    ->numeric_profile);
 			if (!target_set) {
 				array_items.push_back(
 				    lower->value);
@@ -8590,10 +8734,11 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				if (!upper)
 					return std::nullopt;
 				combine(upper->rank);
-				requires_runtime_narrowing =
-				    requires_runtime_narrowing ||
-				    upper
-					->requires_runtime_narrowing;
+				combined_numeric_profile =
+				    worse_numeric_profile(
+					combined_numeric_profile,
+					upper
+					    ->numeric_profile);
 				upper_value =
 				    upper->value;
 			}
@@ -8608,13 +8753,13 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    new SetLiteral(
 				std::move(set_items),
 				target),
-			    requires_runtime_narrowing};
+			    combined_numeric_profile};
 		return ArgumentMatch{
 		    combined,
 		    new ArrayLiteral(
 			std::move(array_items),
 			target),
-		    requires_runtime_narrowing};
+		    combined_numeric_profile};
 	}
 
 	if (auto open =
@@ -8827,7 +8972,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		     conversion->distance},
 		    make_implicit_cast(
 			actual, target),
-		    conversion_requires_runtime_narrowing(
+		    numeric_conversion_profile(
 			source, target)};
 	if (allow_user_conversion)
 		return match_user_conversion(
@@ -8858,6 +9003,8 @@ Parser::match_callable_arguments(
 	CallableMatch result;
 	result.ranks.reserve(args.size());
 	result.arguments.reserve(args.size());
+	result.numeric_profile.reserve(
+	    args.size());
 	for (size_t i = 0; i < args.size(); ++i) {
 		auto match = match_argument(
 		    signature->formals[i], args[i],
@@ -8869,10 +9016,8 @@ Parser::match_callable_arguments(
 		    match->rank);
 		result.arguments.push_back(
 		    match->value);
-		result.requires_runtime_narrowing =
-		    result.requires_runtime_narrowing ||
-		    match
-			->requires_runtime_narrowing;
+		result.numeric_profile.push_back(
+		    match->numeric_profile);
 	}
 	return result;
 }
@@ -8918,7 +9063,8 @@ Parser::match_user_conversion(
 	auto source_is_single_edge =
 	    [&](const Parameter& formal,
 		const ArgumentMatch& match) {
-		    if (match.requires_runtime_narrowing)
+		    if (match.numeric_profile
+			    .requires_range_check)
 			    return false;
 		    if (match.rank.tier ==
 			MatchRank::Tier::Exact)
@@ -8997,7 +9143,8 @@ Parser::match_user_conversion(
 			     CallableMatch{
 				 {source_match->rank},
 				 {source_match->value},
-				 false}});
+				 {source_match
+				      ->numeric_profile}}});
 		if (!best_source ||
 		    rank_less(
 			source_match->rank,
@@ -9044,18 +9191,56 @@ Parser::match_user_conversion(
 	     0, best_source->rank.tier,
 	     best_source->rank.distance},
 	    call,
-	    false};
+	    {}};
+}
+
+static int compare_numeric_profiles(
+    const CallableMatch& a,
+    const CallableMatch& b) {
+	if (a.numeric_profile.size() !=
+	    b.numeric_profile.size())
+		return 0;
+	auto a_profile = a.numeric_profile;
+	auto b_profile = b.numeric_profile;
+	auto worst_first =
+	    [](const NumericConversionProfile& left,
+	       const NumericConversionProfile& right) {
+		    return numeric_profile_less(
+			right, left);
+	    };
+	std::sort(
+	    a_profile.begin(), a_profile.end(),
+	    worst_first);
+	std::sort(
+	    b_profile.begin(), b_profile.end(),
+	    worst_first);
+	for (size_t i = 0;
+	     i < a_profile.size(); ++i) {
+		if (numeric_profile_less(
+			a_profile[i],
+			b_profile[i]))
+			return -1;
+		if (numeric_profile_less(
+			b_profile[i],
+			a_profile[i]))
+			return 1;
+	}
+	return 0;
 }
 
 static bool dominates(
     const CallableMatch& a,
     const CallableMatch& b) {
-	// A declaration which can accept every argument without runtime range
-	// narrowing is categorically better than one which cannot. Only candidates
-	// in the same category reach the pre-existing Pareto comparison below.
-	if (a.requires_runtime_narrowing !=
-	    b.requires_runtime_narrowing)
-		return !a.requires_runtime_narrowing;
+	// Compare the multiset of numeric edge qualities worst-first. This keeps
+	// one especially bad conversion from being hidden by several exact
+	// arguments, while allowing exact-vs-promotion to settle mixed integer
+	// cases after their worst edges tie. Argument positions remain significant
+	// in the ordinary Pareto comparison below when the qualitative profiles
+	// are identical.
+	const int profile_comparison =
+	    compare_numeric_profiles(a, b);
+	if (profile_comparison != 0)
+		return profile_comparison < 0;
 	if (a.ranks.size() != b.ranks.size())
 		return false;
 	bool strict = false;
@@ -9075,7 +9260,7 @@ Node* Parser::make_implicit_cast(
     Node* value, Type* target) {
 	if (value && value->ty &&
 	    directive_state.switch_enabled('r') &&
-	    conversion_requires_runtime_narrowing(
+	    conversion_requires_range_check(
 		value->ty, target))
 		// Preserve the check only when the source type's complete ordinal
 		// domain or real exponent range is not already known to fit. This is a
