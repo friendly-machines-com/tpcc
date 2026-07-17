@@ -1,5 +1,7 @@
 program ImplicitConversionSingleEdge;
 
+{$R+}
+
 type
   TA = record
     Value: Integer;

@@ -20,11 +20,13 @@ enum class OperatorInvocation {
 	Lifecycle,
 };
 
-/** Conditions known at the source syntax before overload selection. */
+/** Conditions known at the source syntax before overload selection. Checked
+ * versus unchecked is deliberately policy-neutral: arithmetic invocations
+ * supply the caller's {$Q} state, while implicit conversions supply {$R}. */
 enum class OperatorSelection {
 	Always,
-	OverflowChecked,
-	OverflowUnchecked,
+	Checked,
+	Unchecked,
 	Logical,
 	Bitwise,
 };
@@ -68,7 +70,7 @@ bool operator_declaration_name_known(
 std::optional<std::string_view> operator_invocation_identifier(
     OperatorInvocation invocation,
     std::string_view spelling, std::size_t arity,
-    bool overflow_checks, bool logical_operands);
+    bool checks_enabled, bool logical_operands);
 
 /** C++ spelling assigned to a declaration. Every semantic row produced by one
  * declaration spelling and arity must agree on this name. */
@@ -78,5 +80,6 @@ std::optional<std::string_view> operator_declaration_cxx_name(
 std::optional<std::string_view> legacy_operator_cxx_name(
     std::string_view declaration_name);
 
-std::string_view implicit_operator_identifier();
+std::string_view implicit_operator_identifier(
+    bool range_checks);
 std::string_view explicit_operator_identifier();

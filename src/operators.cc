@@ -18,23 +18,28 @@ using P = OperatorProvenance;
 // in one row so declarations and expressions cannot acquire different names.
 constexpr OperatorSpec k_operator_catalog[] = {
     // Conversions.
-    {"implicit", ":implicit", 1, I::ImplicitConversion, S::Always,
-     "&op_Implicit", "o_implicit", false, P::Delphi, true},
-    {":=", ":implicit", 1, I::ImplicitConversion, S::Always,
+    {"implicit", ":implicit", 1, I::ImplicitConversion, S::Checked,
+     "&op_CheckedImplicit", "o_implicit", false, P::Delphi, true},
+    {"uncheckedimplicit", ":implicit", 1, I::ImplicitConversion,
+     S::Unchecked, "&op_Implicit", "o_unchecked_implicit", false,
+     P::TpccExtension, true},
+    {":=", ":implicit", 1, I::ImplicitConversion, S::Checked,
+     "&op_CheckedImplicit", "o_implicit", false, P::LegacyFpc, true},
+    {":=", ":implicit", 1, I::ImplicitConversion, S::Unchecked,
      "&op_Implicit", "o_implicit", false, P::LegacyFpc, true},
     {"explicit", ":explicit", 1, I::ExplicitConversion, S::Always,
      "&op_Explicit", "o_explicit", false, P::Delphi, true},
 
     // Unary expression operators.
-    {"negative", "-", 1, I::UnaryToken, S::OverflowChecked,
+    {"negative", "-", 1, I::UnaryToken, S::Checked,
      "&op_CheckedUnaryNegation", "o_negative", false, P::Delphi, true},
-    {"uncheckednegative", "-", 1, I::UnaryToken, S::OverflowUnchecked,
+    {"uncheckednegative", "-", 1, I::UnaryToken, S::Unchecked,
      "&op_UnaryNegation", "o_unchecked_negative", false,
      P::TpccExtension, true},
-    {"-", "-", 1, I::UnaryToken, S::OverflowChecked,
+    {"-", "-", 1, I::UnaryToken, S::Checked,
      "&op_CheckedUnaryNegation", "o_operator_minus", false,
      P::LegacyFpc, true},
-    {"-", "-", 1, I::UnaryToken, S::OverflowUnchecked,
+    {"-", "-", 1, I::UnaryToken, S::Unchecked,
      "&op_UnaryNegation", "o_operator_minus", false,
      P::LegacyFpc, true},
     {"positive", "+", 1, I::UnaryToken, S::Always,
@@ -47,13 +52,13 @@ constexpr OperatorSpec k_operator_catalog[] = {
      "&op_LogicalNot", "o_not", false, P::LegacyFpc, true},
 
     // Unary mutation. The returned value is stored back into the source place.
-    {"inc", "inc", 1, I::MutatingUnary, S::OverflowChecked,
+    {"inc", "inc", 1, I::MutatingUnary, S::Checked,
      "&op_CheckedIncrement", "o_inc", false, P::Delphi, true},
-    {"uncheckedinc", "inc", 1, I::MutatingUnary, S::OverflowUnchecked,
+    {"uncheckedinc", "inc", 1, I::MutatingUnary, S::Unchecked,
      "&op_Increment", "o_unchecked_inc", false, P::TpccExtension, true},
-    {"dec", "dec", 1, I::MutatingUnary, S::OverflowChecked,
+    {"dec", "dec", 1, I::MutatingUnary, S::Checked,
      "&op_CheckedDecrement", "o_dec", false, P::Delphi, true},
-    {"uncheckeddec", "dec", 1, I::MutatingUnary, S::OverflowUnchecked,
+    {"uncheckeddec", "dec", 1, I::MutatingUnary, S::Unchecked,
      "&op_Decrement", "o_unchecked_dec", false, P::TpccExtension, true},
 
     // Named unary syntax. These spellings denote operators, not ordinary
@@ -93,43 +98,43 @@ constexpr OperatorSpec k_operator_catalog[] = {
      P::LegacyFpc, true},
 
     // Checked arithmetic and its legacy symbolic declarations.
-    {"add", "+", 2, I::BinaryToken, S::OverflowChecked,
+    {"add", "+", 2, I::BinaryToken, S::Checked,
      "&op_CheckedAddition", "o_add", false, P::Delphi, true},
-    {"uncheckedadd", "+", 2, I::BinaryToken, S::OverflowUnchecked,
+    {"uncheckedadd", "+", 2, I::BinaryToken, S::Unchecked,
      "&op_Addition", "o_unchecked_add", false, P::TpccExtension, true},
-    {"+", "+", 2, I::BinaryToken, S::OverflowChecked,
+    {"+", "+", 2, I::BinaryToken, S::Checked,
      "&op_CheckedAddition", "o_operator_plus", false, P::LegacyFpc, true},
-    {"+", "+", 2, I::BinaryToken, S::OverflowUnchecked,
+    {"+", "+", 2, I::BinaryToken, S::Unchecked,
      "&op_Addition", "o_operator_plus", false, P::LegacyFpc, true},
-    {"subtract", "-", 2, I::BinaryToken, S::OverflowChecked,
+    {"subtract", "-", 2, I::BinaryToken, S::Checked,
      "&op_CheckedSubtraction", "o_subtract", false, P::Delphi, true},
-    {"uncheckedsubtract", "-", 2, I::BinaryToken, S::OverflowUnchecked,
+    {"uncheckedsubtract", "-", 2, I::BinaryToken, S::Unchecked,
      "&op_Subtraction", "o_unchecked_subtract", false,
      P::TpccExtension, true},
-    {"-", "-", 2, I::BinaryToken, S::OverflowChecked,
+    {"-", "-", 2, I::BinaryToken, S::Checked,
      "&op_CheckedSubtraction", "o_operator_minus", false,
      P::LegacyFpc, true},
-    {"-", "-", 2, I::BinaryToken, S::OverflowUnchecked,
+    {"-", "-", 2, I::BinaryToken, S::Unchecked,
      "&op_Subtraction", "o_operator_minus", false, P::LegacyFpc, true},
-    {"multiply", "*", 2, I::BinaryToken, S::OverflowChecked,
+    {"multiply", "*", 2, I::BinaryToken, S::Checked,
      "&op_CheckedMultiply", "o_multiply", false, P::Delphi, true},
-    {"uncheckedmultiply", "*", 2, I::BinaryToken, S::OverflowUnchecked,
+    {"uncheckedmultiply", "*", 2, I::BinaryToken, S::Unchecked,
      "&op_Multiply", "o_unchecked_multiply", false,
      P::TpccExtension, true},
-    {"*", "*", 2, I::BinaryToken, S::OverflowChecked,
+    {"*", "*", 2, I::BinaryToken, S::Checked,
      "&op_CheckedMultiply", "o_operator_multiply", false,
      P::LegacyFpc, true},
-    {"*", "*", 2, I::BinaryToken, S::OverflowUnchecked,
+    {"*", "*", 2, I::BinaryToken, S::Unchecked,
      "&op_Multiply", "o_operator_multiply", false, P::LegacyFpc, true},
-    {"intdivide", "div", 2, I::BinaryToken, S::OverflowChecked,
+    {"intdivide", "div", 2, I::BinaryToken, S::Checked,
      "&op_CheckedIntDivide", "o_intdivide", false, P::Delphi, true},
     {"uncheckedintdivide", "div", 2, I::BinaryToken,
-     S::OverflowUnchecked, "&op_IntDivide", "o_unchecked_intdivide",
+     S::Unchecked, "&op_IntDivide", "o_unchecked_intdivide",
      false, P::TpccExtension, true},
-    {"div", "div", 2, I::BinaryToken, S::OverflowChecked,
+    {"div", "div", 2, I::BinaryToken, S::Checked,
      "&op_CheckedIntDivide", "o_operator_intdivide", false,
      P::LegacyFpc, true},
-    {"div", "div", 2, I::BinaryToken, S::OverflowUnchecked,
+    {"div", "div", 2, I::BinaryToken, S::Unchecked,
      "&op_IntDivide", "o_operator_intdivide", false, P::LegacyFpc, true},
 
     // Arithmetic with one family in both overflow modes.
@@ -199,15 +204,15 @@ constexpr OperatorSpec k_operator_catalog[] = {
 
 bool selection_matches(
     OperatorSelection selection,
-    bool overflow_checks,
+    bool checks_enabled,
     bool logical_operands) {
 	switch (selection) {
 	case OperatorSelection::Always:
 		return true;
-	case OperatorSelection::OverflowChecked:
-		return overflow_checks;
-	case OperatorSelection::OverflowUnchecked:
-		return !overflow_checks;
+	case OperatorSelection::Checked:
+		return checks_enabled;
+	case OperatorSelection::Unchecked:
+		return !checks_enabled;
 	case OperatorSelection::Logical:
 		return logical_operands;
 	case OperatorSelection::Bitwise:
@@ -243,7 +248,7 @@ bool operator_declaration_name_known(
 std::optional<std::string_view> operator_invocation_identifier(
     OperatorInvocation invocation,
     std::string_view spelling, std::size_t arity,
-    bool overflow_checks, bool logical_operands) {
+    bool checks_enabled, bool logical_operands) {
 	std::optional<std::string_view> result;
 	for (const OperatorSpec& spec : k_operator_catalog) {
 		if (!spec.implemented ||
@@ -251,7 +256,7 @@ std::optional<std::string_view> operator_invocation_identifier(
 		    spec.invocation_spelling != spelling ||
 		    spec.arity != arity ||
 		    !selection_matches(
-			spec.selection, overflow_checks,
+			spec.selection, checks_enabled,
 			logical_operands))
 			continue;
 		if (result)
@@ -292,10 +297,11 @@ std::optional<std::string_view> legacy_operator_cxx_name(
 	return result;
 }
 
-std::string_view implicit_operator_identifier() {
+std::string_view implicit_operator_identifier(
+    bool range_checks) {
 	auto result = operator_invocation_identifier(
 	    OperatorInvocation::ImplicitConversion,
-	    ":implicit", 1, false, false);
+	    ":implicit", 1, range_checks, false);
 	assert(result);
 	return *result;
 }

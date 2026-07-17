@@ -7476,8 +7476,13 @@ Procedure* Parser::match_or_create_procedure(
 		// Implementation matching is exact routine-signature identity.
 		// Assignment conversion, carrier equality, and parameter names/defaults
 		// answer different questions and must not attach a body to another
-		// overload.
-		return rty->same_signature_as(sig);
+		// overload. Operator aliases make the source declaration contract
+		// independently significant: a checked `operator Implicit` body must
+		// not attach to a legacy `operator :=` prototype merely because both
+		// are visible through &op_CheckedImplicit. The legacy declaration also
+		// promises the unchecked family, which that body did not declare.
+		return c->pas_name == pas_name &&
+		       rty->same_signature_as(sig);
 	};
 
 	auto attach_to = [&](Callable* c) -> Procedure* {
@@ -7499,7 +7504,9 @@ Procedure* Parser::match_or_create_procedure(
 		if (!node || target)
 			return;
 		if (auto ec = dynamic_cast<Callable*>(node)) {
-			if ((short_form_implementation || sig_matches(ec)) &&
+			if (ec->pas_name == pas_name &&
+			    (short_form_implementation ||
+			     sig_matches(ec)) &&
 			    !ec->has_body &&
 			    has_every_frame_binding(ec))
 				target = attach_to(ec);
@@ -7507,7 +7514,9 @@ Procedure* Parser::match_or_create_procedure(
 			if (short_form_implementation) {
 				Callable* pick = nullptr;
 				for (auto* m : os->members) {
-					if (!m->has_body &&
+					if (m->pas_name ==
+						pas_name &&
+					    !m->has_body &&
 					    has_every_frame_binding(m)) {
 						if (pick)
 							raise_parse_error("ambiguous short-form impl");
@@ -7732,6 +7741,7 @@ static ParsedOperatorIdentity parsed_operator_identity(
 void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool is_decl_only) {
 	bool has_overload = false;
 	std::string first_name;
+	std::string operator_declaration_name;
 	bool is_operator = false;
 	bool is_destructor = false;
 	bool is_constructor = false;
@@ -7741,14 +7751,23 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			raise_parse_error("custom operator should have a return value");
 		}
 		parse_keyword("operator");
-		// Assumption: there are no method operators.
-		// Delphi names this conversion operator `implicit`; FPC spells the
-		// same source-to-destination operation `:=`. Keep one Pascal family so
-		// either spelling declares and implements the same conversions.
-		first_name =
-		    input_token == "implicit"
-			? ":="
-			: input_token; // TODO: well, parse_operator();
+		// Assumption: there are no method operators. Keep the source spelling
+		// for the catalog, but give conversion Callables reserved internal
+		// names. An ordinary function named Implicit or UncheckedImplicit is
+		// not a conversion and therefore must not receive the destination-tag
+		// ABI or result-type overload rules merely because its source name
+		// resembles an operator declaration.
+		operator_declaration_name = input_token;
+		if (operator_declaration_name ==
+		    "implicit")
+			first_name = ":implicit";
+		else if (operator_declaration_name ==
+			 "uncheckedimplicit")
+			first_name =
+			    ":uncheckedimplicit";
+		else
+			first_name =
+			    operator_declaration_name;
 		consume();
 		has_overload = true; // I think those should be implicitly "overload;"
 	} else if (maybe_parse_keyword("destructor")) {
@@ -7945,15 +7964,15 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		if (is_operator) {
 			operator_identity =
 			    parsed_operator_identity(
-				first_name,
+				operator_declaration_name,
 				sig->formals.size());
 			if (operator_identity
 				.pascal_identifiers.empty()) {
 				if (operator_declaration_name_known(
-					first_name))
+					operator_declaration_name))
 					raise_parse_error(
 					    "operator '" +
-					    first_name +
+					    operator_declaration_name +
 					    "' does not accept " +
 					    std::to_string(
 						sig->formals
@@ -7961,12 +7980,12 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 					    " parameter(s)");
 				raise_parse_error(
 				    "unknown custom operator '" +
-				    first_name + "'");
+				    operator_declaration_name + "'");
 			}
 			if (!operator_identity.implemented)
 				raise_parse_error(
 				    "operator '" +
-				    first_name +
+				    operator_declaration_name +
 				    "' is catalogued but not implemented");
 			if (operator_identity
 				    .boolean_result &&
@@ -7974,7 +7993,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 				boolean_type())
 				raise_parse_error(
 				    "operator '" +
-				    first_name +
+				    operator_declaration_name +
 				    "' must return Boolean");
 		} else
 			operator_identity = {
@@ -7982,7 +8001,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			    cxx_value_name(first_name)};
 		Procedure* target = match_or_create_procedure(
 		    first_name,
-			    operator_identity.pascal_identifiers,
+		    operator_identity.pascal_identifiers,
 		    operator_identity.cxx_name,
 		    sig, had_paren, has_overload,
 		    short_form_implementation);
@@ -8954,7 +8973,21 @@ Parser::match_user_conversion(
     MatchFailure* failure,
     UserConversionFailure*
 	conversion_failure) {
-	Node* family = maybe_resolve_value(":=");
+	const bool range_checks =
+	    directive_state.switch_enabled('r');
+	const std::string conversion_name =
+	    range_checks
+		? "implicit"
+		: "uncheckedimplicit";
+	// The caller's {$R} state chooses the conversion contract before ordinary
+	// frame lookup. Nothing below distinguishes a System declaration, a
+	// user declaration, or a compiler-provided implementation: after this
+	// identity choice, exact-destination filtering and the existing one-edge
+	// source matcher are shared by all conversion declarations.
+	Node* family = maybe_resolve_value(
+	    std::string(
+		implicit_operator_identifier(
+		    range_checks)));
 	if (auto member =
 		dynamic_cast<MemberAccess*>(family)) {
 		// Unit qualification opens a standalone operator environment; an
@@ -9236,8 +9269,14 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 		    "'nil' is only valid in a reference or routine-value context");
 	if (!conversion_failure.candidates.empty()) {
 		std::vector<Node*> args{a};
+		const std::string conversion_name =
+		    directive_state.switch_enabled(
+			'r')
+			? "implicit"
+			: "uncheckedimplicit";
 		raise_overload_resolution_error(
-		    current_location(), ":=", nullptr,
+		    current_location(),
+		    conversion_name, nullptr,
 		    args, target_ty,
 		    conversion_failure.candidates,
 		    conversion_failure.viable,

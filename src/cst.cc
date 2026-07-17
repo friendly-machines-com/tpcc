@@ -229,7 +229,9 @@ Callable::Callable(std::string cxx_name,
 }
 
 bool Callable::is_implicit_conversion() const {
-	return pas_name == ":=";
+	return pas_name == ":implicit" ||
+	       pas_name == ":uncheckedimplicit" ||
+	       pas_name == ":=";
 }
 
 Procedure::Procedure(std::string cxx_name,

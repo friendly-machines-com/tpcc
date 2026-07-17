@@ -193,11 +193,12 @@ static CallableRegistration::Kind callable_pair_result(
 	if (existing->ty
 		->same_overload_signature_as(
 		    incoming->ty)) {
-		// Delphi `operator implicit` and FPC `operator :=` are one conversion
-		// family. Its destination is supplied by value context rather than by
-		// an ordinary source argument, so exact result Type* identity is part
-		// of this family's Pascal overload key. Ordinary routines and every
-		// other operator cannot overload by result.
+		// Checked, unchecked, and legacy implicit-conversion declarations all
+		// receive their destination from value context rather than from an
+		// ordinary source argument. Within whichever {$R}-selected frame
+		// family is being registered, exact result Type* identity is therefore
+		// part of the Pascal overload key. Ordinary routines and every other
+		// operator cannot overload by result.
 		const bool distinct_conversion_results =
 		    existing
 			->is_implicit_conversion() &&

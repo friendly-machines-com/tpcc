@@ -80,12 +80,12 @@ var
 operator :=(const Source: TConversionSource): TConversionResultA; forward;
 operator implicit(const Source: TConversionSource): TConversionResultB; forward;
 
-operator implicit(const Source: TConversionSource): TConversionResultA;
+operator :=(const Source: TConversionSource): TConversionResultA;
 begin
   Result.Value := Source.Value + 10
 end;
 
-operator :=(const Source: TConversionSource): TConversionResultB;
+operator implicit(const Source: TConversionSource): TConversionResultB;
 begin
   Result.Value := Source.Value + 20
 end;
@@ -202,6 +202,7 @@ begin
   if not (7 in WideSet) then
     Halt(11);
 
+  {$R+}
   ConversionSource.Value := 1;
   ConversionResultA := ConversionSource;
   ConversionResultB := ConversionSource;
