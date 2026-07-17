@@ -6,19 +6,20 @@ all: mp
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -o $@ -c $<
 
-mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types.o src/evaluator.o src/builtins.o src/units.o src/emit.o src/diagnostic.o
+mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types.o src/evaluator.o src/builtins.o src/operators.o src/units.o src/emit.o src/diagnostic.o
 	$(CXX) -o $@ $^
 
 src/main.o: src/main.cc src/parser.h src/types.h src/units.h src/emit.h
-src/parser.o: src/parser.cc src/parser.h src/cst.h src/directive_expr.h src/frame.h src/types.h src/evaluator.h src/units.h src/emit.h
+src/parser.o: src/parser.cc src/parser.h src/cst.h src/directive_expr.h src/frame.h src/types.h src/evaluator.h src/operators.h src/units.h src/emit.h
 src/cst.o: src/cst.cc src/cst.h
 src/directive_expr.o: src/directive_expr.cc src/directive_expr.h
 src/frame.o: src/frame.cc src/frame.h src/types.h src/cst.h
 src/types.o: src/types.cc src/types.h src/builtins.h
 src/evaluator.o: src/evaluator.cc src/evaluator.h src/cst.h src/frame.h src/types.h
 src/builtins.o: src/builtins.cc src/builtins.h src/cst.h
+src/operators.o: src/operators.cc src/operators.h
 src/units.o: src/units.cc src/units.h src/frame.h
-src/emit.o: src/emit.cc src/emit.h src/cst.h src/types.h src/builtins.h
+src/emit.o: src/emit.cc src/emit.h src/cst.h src/types.h src/builtins.h src/operators.h
 src/diagnostic.o: src/diagnostic.cc src/diagnostic.h src/types.h src/cst.h src/frame.h src/builtins.h
 
 clean:

@@ -23,6 +23,7 @@ cd "$root"
 	src/types.o \
 	src/evaluator.o \
 	src/builtins.o \
+	src/operators.o \
 	src/units.o \
 	src/emit.o \
 	src/diagnostic.o \

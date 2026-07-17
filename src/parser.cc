@@ -6,6 +6,7 @@
 #include "emit.h"
 #include "evaluator.h"
 #include "frame.h"
+#include "operators.h"
 #include "units.h"
 #include <algorithm>
 #include <cassert>
@@ -3631,74 +3632,33 @@ bool Parser::is_supported_packed_assignment(Node* n) {
 	return false;
 }
 
-// Operator identities live outside the ordinary Pascal identifier namespace:
-// an ordinary function Add must not collide with either arithmetic contract,
-// and these spellings are also suitable as future RTTI operation names.
-static constexpr const char* k_op_addition =
-    "&op_Addition";
-static constexpr const char* k_op_checked_addition =
-    "&op_CheckedAddition";
-static constexpr const char* k_op_subtraction =
-    "&op_Subtraction";
-static constexpr const char* k_op_checked_subtraction =
-    "&op_CheckedSubtraction";
-static constexpr const char* k_op_multiply =
-    "&op_Multiply";
-static constexpr const char* k_op_checked_multiply =
-    "&op_CheckedMultiply";
-static constexpr const char* k_op_unary_negation =
-    "&op_UnaryNegation";
-static constexpr const char* k_op_checked_unary_negation =
-    "&op_CheckedUnaryNegation";
-static constexpr const char* k_op_intdivide =
-    "&op_IntDivide";
-static constexpr const char* k_op_checked_intdivide =
-    "&op_CheckedIntDivide";
-static constexpr const char* k_op_positive =
-    "&op_UnaryPlus";
-static constexpr const char* k_op_divide =
-    "&op_Division";
-static constexpr const char* k_op_modulus =
-    "&op_Modulus";
-
-static std::string operator_expression_frame_name(
+static std::string operator_expression_identifier(
+    OperatorInvocation invocation,
     const std::string& source_token, size_t arity,
-    bool overflow_checks) {
-	if (arity == 2 && source_token == "+")
-		return overflow_checks
-			   ? k_op_checked_addition
-			   : k_op_addition;
-	if (arity == 2 && source_token == "-")
-		return overflow_checks
-			   ? k_op_checked_subtraction
-			   : k_op_subtraction;
-	if (arity == 2 && source_token == "*")
-		return overflow_checks
-			   ? k_op_checked_multiply
-			   : k_op_multiply;
-	if (arity == 1 && source_token == "-")
-		return overflow_checks
-			   ? k_op_checked_unary_negation
-			   : k_op_unary_negation;
-	if (arity == 2 && source_token == "div")
-		return overflow_checks
-			   ? k_op_checked_intdivide
-			   : k_op_intdivide;
-	if (arity == 1 && source_token == "+")
-		return k_op_positive;
-	if (arity == 2 && source_token == "/")
-		return k_op_divide;
-	if (arity == 2 && source_token == "mod")
-		return k_op_modulus;
-	return source_token;
+    bool overflow_checks, bool logical_operands = false) {
+	auto identifier = operator_invocation_identifier(
+	    invocation, source_token, arity,
+	    overflow_checks, logical_operands);
+	if (!identifier) {
+		fprintf(
+		    stderr,
+		    "internal compiler error: operator catalog has no invocation "
+		    "for '%s' with arity %zu\n",
+		    source_token.c_str(), arity);
+		abort();
+	}
+	return std::string(*identifier);
 }
 
 Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
-	const std::string frame_name =
-	    operator_expression_frame_name(
+	const std::string pascal_identifier =
+	    operator_expression_identifier(
+		OperatorInvocation::BinaryToken,
 		id, 2,
-		directive_state.switch_enabled('q'));
-	auto fn = resolve_value(frame_name);
+		directive_state.switch_enabled('q'),
+		(a && a->ty == boolean_type()) ||
+		    (b && b->ty == boolean_type()));
+	auto fn = resolve_value(pascal_identifier);
 	// Operators and named routines share one argument matcher. Preserve the
 	// source operands until a declaration has been selected; choosing a
 	// "common" type first changes which overload is exact and makes operator
@@ -3737,7 +3697,14 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 		return equal;
 	}
 
-	auto fn = resolve_value(id);
+	const std::string pascal_identifier =
+	    operator_expression_identifier(
+		OperatorInvocation::BinaryToken,
+		id, 2,
+		directive_state.switch_enabled('q'),
+		(a && a->ty == boolean_type()) ||
+		    (b && b->ty == boolean_type()));
+	auto fn = resolve_value(pascal_identifier);
 	// Keep comparison operands in source order and source type. `nil` and
 	// ordinary conversions are contextual matches against each candidate,
 	// exactly as for a named call; the selected formal types are applied only
@@ -3778,7 +3745,12 @@ Node* Parser::mk_membership(Node* item, Node* set) {
 	    cast(item, set_type->item_type),
 	    set,
 	};
-	Node* fn = resolve_value("in");
+	const std::string pascal_identifier =
+	    operator_expression_identifier(
+		OperatorInvocation::BinaryToken,
+		"in", 2,
+		directive_state.switch_enabled('q'));
+	Node* fn = resolve_value(pascal_identifier);
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	return make_call(fc, std::move(args));
 }
@@ -3806,11 +3778,12 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 			    integer->negative);
 		}
 	}
-	const std::string frame_name =
-	    operator_expression_frame_name(
+	const std::string pascal_identifier =
+	    operator_expression_identifier(
+		OperatorInvocation::UnaryToken,
 		id, 1,
 		directive_state.switch_enabled('q'));
-	auto fn = resolve_value(frame_name);
+	auto fn = resolve_value(pascal_identifier);
 	std::vector<Node*> args;
 	args.push_back(x);
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
@@ -7719,117 +7692,41 @@ Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
 }
 
 struct ParsedOperatorIdentity {
-	std::vector<std::string> frame_names;
+	std::vector<std::string> pascal_identifiers;
 	std::string cxx_name;
+	bool boolean_result = false;
+	bool implemented = true;
 };
 
 static ParsedOperatorIdentity parsed_operator_identity(
     const std::string& source_name, size_t arity) {
-	auto one = [](const char* frame_name,
-		      const char* cxx_name) {
-		return ParsedOperatorIdentity{
-		    {frame_name}, cxx_name};
-	};
-	auto legacy_pair =
-	    [](const char* regular_name,
-	       const char* checked_name,
-	       const char* cxx_name) {
-		    // A symbolic declaration predates caller-selected checked
-		    // operator families. Binding its one Callable under both names
-		    // preserves that compatibility contract without creating a
-		    // second body or emitted C++ function.
-		    return ParsedOperatorIdentity{
-			{regular_name, checked_name},
-			cxx_name};
-	    };
-
-	if (source_name == "add")
-		return one(k_op_checked_addition, "o_add");
-	if (source_name == "uncheckedadd")
-		return one(k_op_addition, "o_unchecked_add");
-	if (source_name == "subtract")
-		return one(
-		    k_op_checked_subtraction,
-		    "o_subtract");
-	if (source_name == "uncheckedsubtract")
-		return one(
-		    k_op_subtraction,
-		    "o_unchecked_subtract");
-	if (source_name == "multiply")
-		return one(
-		    k_op_checked_multiply,
-		    "o_multiply");
-	if (source_name == "uncheckedmultiply")
-		return one(
-		    k_op_multiply,
-		    "o_unchecked_multiply");
-	if (source_name == "negative")
-		return one(
-		    k_op_checked_unary_negation,
-		    "o_negative");
-	if (source_name == "uncheckednegative")
-		return one(
-		    k_op_unary_negation,
-		    "o_unchecked_negative");
-	if (source_name == "intdivide")
-		return one(
-		    k_op_checked_intdivide,
-		    "o_intdivide");
-	if (source_name == "uncheckedintdivide")
-		return one(
-		    k_op_intdivide,
-		    "o_unchecked_intdivide");
-	if (source_name == "positive")
-		return one(k_op_positive, "o_positive");
-	if (source_name == "divide")
-		return one(k_op_divide, "o_divide");
-	if (source_name == "modulus")
-		return one(k_op_modulus, "o_modulus");
-
-	if (source_name == "+" && arity == 2)
-		return legacy_pair(
-		    k_op_addition,
-		    k_op_checked_addition,
-		    "o_operator_plus");
-	if (source_name == "+" && arity == 1)
-		return one(
-		    k_op_positive,
-		    "o_operator_plus");
-	if (source_name == "-" && arity == 2)
-		return legacy_pair(
-		    k_op_subtraction,
-		    k_op_checked_subtraction,
-		    "o_operator_minus");
-	if (source_name == "-" && arity == 1)
-		return legacy_pair(
-		    k_op_unary_negation,
-		    k_op_checked_unary_negation,
-		    "o_operator_minus");
-	if (source_name == "*" && arity == 2)
-		return legacy_pair(
-		    k_op_multiply,
-		    k_op_checked_multiply,
-		    "o_operator_multiply");
-	if (source_name == "div" && arity == 2)
-		return legacy_pair(
-		    k_op_intdivide,
-		    k_op_checked_intdivide,
-		    "o_operator_intdivide");
-	if (source_name == "/" && arity == 2)
-		return one(
-		    k_op_divide,
-		    "o_operator_divide");
-	if (source_name == "mod" && arity == 2)
-		return one(
-		    k_op_modulus,
-		    "o_operator_modulus");
-
-	std::string cxx_name =
-	    cxx_value_name(source_name);
-	if (cxx_name.starts_with("p_"))
-		cxx_name.replace(0, 2, "o_");
-	return ParsedOperatorIdentity{
-	    {source_name}, std::move(cxx_name)};
+	ParsedOperatorIdentity result;
+	for (const OperatorSpec* spec :
+	     operator_declaration_specs(
+		 source_name, arity)) {
+		if (result.cxx_name.empty())
+			result.cxx_name =
+			    std::string(spec->cxx_name);
+		else
+			assert(result.cxx_name ==
+			       spec->cxx_name);
+		result.boolean_result =
+		    result.boolean_result ||
+		    spec->boolean_result;
+		result.implemented =
+		    result.implemented &&
+		    spec->implemented;
+		std::string identifier(
+		    spec->pascal_identifier);
+		if (std::find(
+			result.pascal_identifiers.begin(),
+			result.pascal_identifiers.end(),
+			identifier) ==
+		    result.pascal_identifiers.end())
+			result.pascal_identifiers.push_back(
+			    std::move(identifier));
+	}
+	return result;
 }
 
 void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool is_decl_only) {
@@ -8045,18 +7942,47 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		const bool short_form_implementation =
 		    !is_decl_only && body_follows && !had_paren;
 		ParsedOperatorIdentity operator_identity;
-		if (is_operator)
+		if (is_operator) {
 			operator_identity =
 			    parsed_operator_identity(
 				first_name,
 				sig->formals.size());
-		else
+			if (operator_identity
+				.pascal_identifiers.empty()) {
+				if (operator_declaration_name_known(
+					first_name))
+					raise_parse_error(
+					    "operator '" +
+					    first_name +
+					    "' does not accept " +
+					    std::to_string(
+						sig->formals
+						    .size()) +
+					    " parameter(s)");
+				raise_parse_error(
+				    "unknown custom operator '" +
+				    first_name + "'");
+			}
+			if (!operator_identity.implemented)
+				raise_parse_error(
+				    "operator '" +
+				    first_name +
+				    "' is catalogued but not implemented");
+			if (operator_identity
+				    .boolean_result &&
+			    sig->return_type !=
+				boolean_type())
+				raise_parse_error(
+				    "operator '" +
+				    first_name +
+				    "' must return Boolean");
+		} else
 			operator_identity = {
 			    {first_name},
 			    cxx_value_name(first_name)};
 		Procedure* target = match_or_create_procedure(
 		    first_name,
-		    operator_identity.frame_names,
+			    operator_identity.pascal_identifiers,
 		    operator_identity.cxx_name,
 		    sig, had_paren, has_overload,
 		    short_form_implementation);

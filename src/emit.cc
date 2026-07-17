@@ -2,6 +2,7 @@
 #include "builtins.h"
 #include "cst.h"
 #include "frame.h"
+#include "operators.h"
 #include "types.h"
 #include "units.h"
 #include <cassert>
@@ -185,31 +186,13 @@ void Emitter::emit_static_member_declaration(
 // receive `o_` because their C++ namespace must remain disjoint from an
 // ordinary Pascal routine whose source name describes the same operation.
 std::string cxx_value_name(std::string pas_name) {
-	static constexpr std::pair<
-	    std::string_view,
-	    std::string_view>
-	    operator_names[] = {
-		{":=", "o_implicit"},
-		{"+", "o_operator_plus"},
-		{"-", "o_operator_minus"},
-		{"*", "o_operator_multiply"},
-		{"/", "o_operator_divide"},
-		{"**", "o_operator_power"},
-		{"=", "o_operator_equal"},
-		{"<", "o_operator_less"},
-		{"<=", "o_operator_less_equal"},
-		{">", "o_operator_greater"},
-		{">=", "o_operator_greater_equal"},
-		{"><", "o_operator_symmetric_difference"},
-	    };
-	for (const auto& [spelling, name] :
-	     operator_names)
-		if (pas_name == spelling)
-			// Pascal operator tokens are ordinary callable-family names, but
-			// punctuation is not a C++ identifier. Give the entire family one
-			// stable readable spelling; overload selection still uses the
-			// original Pascal token and never this backend name.
-			return std::string(name);
+	if (auto operator_name =
+		legacy_operator_cxx_name(
+		    pas_name))
+		// Operator spellings live in the authoritative catalog because their
+		// Pascal identity, metadata identity, and backend name must change
+		// together. Ordinary identifiers alone receive the p_ namespace.
+		return std::string(*operator_name);
 	return "p_" + pas_name;
 }
 
