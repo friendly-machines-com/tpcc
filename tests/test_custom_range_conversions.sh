@@ -86,7 +86,7 @@ do
 		echo "attached a conversion body to a different operator contract: $mode" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'duplicate identifier or overload directive mismatch' \
+	if ! rg -Fq 'callable declaration conflicts with existing declaration' \
 		"$tmp/stderr"
 	then
 		echo "wrong diagnostic for conversion contract mismatch: $mode" >&2

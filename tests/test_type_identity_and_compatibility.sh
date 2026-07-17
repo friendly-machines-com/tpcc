@@ -102,7 +102,7 @@ ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/contextual_values"
 
 if ./mp -Furtl -o"$tmp/class_metaclass.cc" \
-	tests/class_metaclass_carrier_separation.pp \
+	tests/class_instance_overload_category_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then
 	echo "formed one overload set from instance and class methods" >&2

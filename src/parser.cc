@@ -570,8 +570,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	    make_error_let_context_from_scopes(
 		scopes, 4);
 	std::stringstream sst;
-	sst << "duplicate identifier or overload directive mismatch: "
-	    << name;
+	sst << "callable declaration conflicts with existing declaration for '"
+	    << name << "'";
 	sst << "\n  incoming declaration: ";
 	append_callable_source_prefix(
 	    sst, incoming, false);
@@ -9036,10 +9036,6 @@ Parser::match_user_conversion(
 	conversion_failure) {
 	const bool range_checks =
 	    directive_state.switch_enabled('r');
-	const std::string conversion_name =
-	    range_checks
-		? "implicit"
-		: "uncheckedimplicit";
 	// The caller's {$R} state chooses the conversion contract before ordinary
 	// frame lookup. Nothing below distinguishes a System declaration, a
 	// user declaration, or a compiler-provided implementation: after this
