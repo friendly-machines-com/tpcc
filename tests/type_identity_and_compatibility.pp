@@ -15,6 +15,7 @@ type
 
   TRangeA = 1..5;
   TRangeB = 1..5;
+  TRangeAlias = TRangeA;
 
   TArrayA = array[0..1] of Integer;
   TArrayB = array[0..1] of Integer;
@@ -60,6 +61,7 @@ var
   WideSet: TWideSet;
   RangeA: TRangeA;
   RangeB: TRangeB;
+  RangeAlias: TRangeAlias;
   ArrayA: TArrayA;
   ArrayB: TArrayB;
   RoutineA: TRoutineA;
@@ -125,6 +127,18 @@ begin
     Result := 40
 end;
 
+function PickRange(Value: TRangeA): Integer; overload;
+begin
+  if Value = Value then
+    Result := 51
+end;
+
+function PickRange(Value: TRangeB): Integer; overload;
+begin
+  if Value = Value then
+    Result := 52
+end;
+
 begin
   PointerA := PointerB;
   PointerAlias := PointerA;
@@ -138,6 +152,7 @@ begin
 
   RangeB := 3;
   RangeA := RangeB;
+  RangeAlias := RangeA;
 
   ArrayB[0] := 4;
   ArrayB[1] := 5;
@@ -174,6 +189,12 @@ begin
     Halt(7);
   if RangeA <> 3 then
     Halt(8);
+  if PickRange(RangeA) <> 51 then
+    Halt(11);
+  if PickRange(RangeB) <> 52 then
+    Halt(12);
+  if PickRange(RangeAlias) <> 51 then
+    Halt(13);
   if ArrayA[0] + ArrayA[1] <> 9 then
     Halt(9);
   if not Assigned(RoutineA) then

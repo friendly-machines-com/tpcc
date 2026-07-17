@@ -120,16 +120,17 @@ public:
 	virtual bool has_managed_lifetime() const {
 		return false;
 	}
-	/** Whether this type and OTHER erase to the same C++ type spelling.
+	/** Whether this type and OTHER have the same C++ type spelling.
 	 * This backend equivalence never participates in Pascal lookup,
 	 * conversion, var/out matching, or signature identity; it exists to
-	 * diagnose source overloads the current C++ lowering cannot represent. */
+	 * diagnose source overloads the current C++ lowering cannot represent.
+	 * A concrete subrange definition has its own C++ carrier and therefore
+	 * reaches this relation by ordinary Type* identity like a record or enum. */
 	bool same_cxx_carrier_as(
 	    const Type* other) const;
 	/** Constructor-specific half of same_cxx_carrier_as(). The public wrapper
-	 * first removes representation-transparent subranges and handles Type*
-	 * identity; each remaining type constructor describes only its own C++
-	 * carrier. */
+	 * first handles Type* identity; each remaining type constructor describes
+	 * only its own C++ carrier. */
 	virtual bool same_cxx_carrier_definition_as(
 	    const Type* other) const;
 	// True iff a variable of this type is represented in C++ emission as a
@@ -659,11 +660,18 @@ public:
 
 class SubrangeType : public Type {
 public:
+	// Canonical compiler-private C++ tag for this generative Pascal
+	// definition. Pascal aliases retain this tag rather than creating another
+	// carrier, exactly as aliases of named records retain one RecordType.
+	std::string cxx_name;
 	Node* lower_bound; // its type is base_type
 	Node* upper_bound; // its type is base_type
 	Type* base_type; /* NOT a subrange type */
 
-	SubrangeType(SourceLocation source_location, Type* base_type, Node* lower_bound, Node* upper_bound);
+	SubrangeType(
+	    SourceLocation source_location,
+	    std::string cxx_name, Type* base_type,
+	    Node* lower_bound, Node* upper_bound);
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;

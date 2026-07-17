@@ -381,6 +381,8 @@ private:
 	    bool* ambiguous);
 	Node* resolve_routine_code_reference(
 	    RoutineRef* reference);
+	uint64_t next_subrange_type_number = 0;
+	std::string next_subrange_cxx_name();
 	Type* parse_subrange_type(Node* lower_bound, Node* upper_bound);
 	ClassType* lookup_implicit_tobject_superclass();
 	Node* active_function_result_lvalue(Callable* c) const;

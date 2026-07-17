@@ -5183,11 +5183,11 @@ static bool enum_range_has_gaps(
 }
 
 static Type* infer_integer_subrange_host(OrdinalRange::Value lo, OrdinalRange::Value hi, std::string* error) {
-	// Match the BP/FPC-style representation choice: choose the smallest
-	// builtin integer type that can represent the whole range, preferring
-	// signed carriers before same-width unsigned carriers. The backend can
-	// erase SubrangeType to this host type while runtime range checks remain
-	// a later semantic feature.
+	// Match the BP/FPC-style storage choice: choose the smallest builtin
+	// integer type that can represent the whole range, preferring signed
+	// carriers before same-width unsigned carriers. The concrete C++ subrange
+	// struct contains exactly one value of this type; it does not erase the
+	// Pascal definition's overload identity.
 	Type* candidates[] = {
 	    shortint_type(),
 	    byte_type(),
@@ -5222,6 +5222,36 @@ static Node* convert_integer_subrange_bound(const FoldedSubrangeBound& bound, Ty
 	return nullptr;
 }
 
+std::string Parser::next_subrange_cxx_name() {
+	/*
+	 * Every Pascal subrange definition receives a named C++ carrier, including
+	 * a definition used only by one local object. Do not replace that uniform
+	 * rule with an unnamed-struct/decltype special case:
+	 *
+	 * - one TPCC Type* must be re-denotable by the same C++ type in routine
+	 *   declarations and definitions, results, pointers, template arguments,
+	 *   conversions, aggregate fields, and cross-unit references;
+	 * - `auto` cannot spell prototypes or explicit target construction, and an
+	 *   `auto` parameter would instead create a C++ template;
+	 * - repeating an unnamed struct definition creates a different C++ type;
+	 * - an unnamed class has no injected class name with which to denote its
+	 *   own type;
+	 * - `this` denotes an object, not the surrounding class namespace, and is
+	 *   unavailable in static contexts;
+	 * - C++20 forbids static data members in unnamed and local classes; and
+	 * - a local-only representation would create a second lowering path whose
+	 *   behavior depends on incidental use sites, making generated code and
+	 *   reviews less uniform.
+	 *
+	 * Pascal source identifiers lower with t_/p_/o_ prefixes, so the m_
+	 * compiler-private namespace also prevents a source declaration from
+	 * colliding with these generated tags.
+	 */
+	return "m_subrange_" +
+	       std::to_string(
+		   ++next_subrange_type_number);
+}
+
 Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	ConstEvalContext ctx;
 	ConstEvalResult lower_folded = lower_bound->const_eval(ctx);
@@ -5246,6 +5276,23 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	// A subrange expression is generative. Its chosen host type and bounds
 	// determine compatibility and lowering, but never replace this definition
 	// with an earlier subrange of the same shape.
+	auto make_subrange =
+	    [&](Type* base, Node* typed_lower,
+		Node* typed_upper) -> SubrangeType* {
+		    auto result = new SubrangeType(
+			current_location(),
+			next_subrange_cxx_name(), base,
+			typed_lower, typed_upper);
+		    // Top-level and aggregate-contained unit types are declared in
+		    // that unit's generated namespace. Routine-local definitions are
+		    // emitted as C++ local classes and therefore have no unit
+		    // qualifier. Programs likewise emit in the global namespace.
+		    if (!current_routine && current_unit &&
+			!current_unit->is_program)
+			    result->owning_unit =
+				current_unit;
+		    return result;
+	    };
 	switch (lower->kind) {
 	case FoldedSubrangeBound::Kind::Integer: {
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
@@ -5259,18 +5306,23 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 		Node* typed_upper = convert_integer_subrange_bound(*upper, host, &error);
 		if (!typed_upper)
 			return raise_type_parse_error(error);
-		return new SubrangeType(current_location(), host, typed_lower, typed_upper);
+		return make_subrange(
+		    host, typed_lower, typed_upper);
 	}
 	case FoldedSubrangeBound::Kind::Char:
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
 			return raise_type_parse_error("subrange upper bound is lower than lower bound");
-		return new SubrangeType(current_location(), char_type(), lower->node, upper->node);
+		return make_subrange(
+		    char_type(), lower->node,
+		    upper->node);
 	case FoldedSubrangeBound::Kind::Enum:
 		if (lower->ty != upper->ty)
 			return raise_type_mismatch("subrange constructor with bounds from the same enum type", lower->ty, upper->ty);
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
 			return raise_type_parse_error("subrange upper bound is lower than lower bound");
-		return new SubrangeType(current_location(), lower->ty, lower->node, upper->node);
+		return make_subrange(
+		    lower->ty, lower->node,
+		    upper->node);
 	}
 	return raise_type_parse_error("unsupported subrange bound kind");
 }
@@ -5643,7 +5695,11 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		if (compare_ordinal_value(bound->ordinal_value, range.lower_ordinal) < 0 ||
 		    compare_ordinal_value(bound->ordinal_value, range.upper_ordinal) > 0)
 			raise_parse_error("constant initializer out of range for target type");
-		return cast(bound->node, subrange_range_type(s->base_type));
+		// The constant has already been proven inside this exact declaration's
+		// bounds. Retain the SubrangeType on the initializer so the emitter
+		// constructs its concrete carrier instead of initializing that carrier
+		// from an unrelated base-type C++ value.
+		return new Cast(bound->node, s);
 	}
 
 	Node* converted = cast(value, ty);
@@ -6592,6 +6648,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			existing_cxx = o->cxx_name;
 		else if (auto e = dynamic_cast<EnumType*>(rhs))
 			existing_cxx = e->cxx_name;
+		else if (auto s = dynamic_cast<SubrangeType*>(rhs))
+			existing_cxx = s->cxx_name;
 		if (!existing_cxx.empty() && existing_cxx != decl.cxx) {
 			decl.alias = true;
 		} else {
@@ -6605,7 +6663,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			    dynamic_cast<ClassRefType*>(rhs) ||
 			    dynamic_cast<InterfaceType*>(rhs) ||
 			    dynamic_cast<ObjectType*>(rhs) ||
-			    dynamic_cast<EnumType*>(rhs);
+			    dynamic_cast<EnumType*>(rhs) ||
+			    dynamic_cast<SubrangeType*>(rhs);
 			if (has_named_definition &&
 			    !rhs->owning_unit)
 				rhs->owning_unit =
@@ -6624,6 +6683,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 				o->cxx_name = decl.cxx;
 			else if (auto e = dynamic_cast<EnumType*>(rhs))
 				e->cxx_name = decl.cxx;
+			else if (auto s = dynamic_cast<SubrangeType*>(rhs))
+				s->cxx_name = decl.cxx;
 		}
 	}
 	if (!emitter)

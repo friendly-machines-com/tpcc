@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdio>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -7,6 +8,7 @@
 class Node;
 class Type;
 class EnumType;
+class SubrangeType;
 class PackedRecordType;
 struct VariantPart;
 class Callable;
@@ -57,6 +59,8 @@ private:
 	FILE* out_h;       // null for programs
 	FILE* out_cc;
 	FILE* active;      // points at out_h or out_cc; null until a section is set
+	std::string active_unit_namespace;
+	std::set<SubrangeType*> emitted_subranges;
 	void emit_return_transfer_handler(
 	    unsigned try_depth, RoutineType* routine);
 
@@ -230,6 +234,14 @@ public:
 	void emit_type_ref(Type* ty);
 
     private:
+	// Emit every concrete subrange carrier whose spelling is required by TY
+	// before beginning the surrounding C++ declaration. INSPECT_DEFINITION is
+	// true only when that surrounding declaration owns aggregate members;
+	// references to an already-defined named aggregate need only its tag.
+	void emit_type_dependencies(
+	    Type* ty, bool inspect_definition = false);
+	void emit_subrange_definition(
+	    SubrangeType* subrange);
 	// The parameter-type spelling is shared by declarations, routine-value
 	// types, and method-adapter pointer-to-member casts. `with_name` controls
 	// only whether the Pascal formal's generated C++ identifier follows it.

@@ -40,6 +40,8 @@ static std::string type_cxx_name(
 }
 
 static std::string named_type_local_cxx_name(Type* type) {
+	if (auto s = dynamic_cast<SubrangeType*>(type))
+		return s->cxx_name;
 	if (auto r = dynamic_cast<RecordType*>(type))
 		return r->cxx_name;
 	if (auto r = dynamic_cast<PackedRecordType*>(type))
@@ -233,6 +235,7 @@ Emitter::~Emitter() {
 void Emitter::open_for_program(std::string output_path) {
 	out_cc = fopen(output_path.c_str(), "w");
 	active = out_cc;
+	active_unit_namespace.clear();
 }
 
 void Emitter::open_for_unit(std::string unit_name, std::string output_dir) {
@@ -257,6 +260,8 @@ void Emitter::close() {
 		out_cc = nullptr;
 	}
 	active = nullptr;
+	active_unit_namespace.clear();
+	emitted_subranges.clear();
 }
 
 void Emitter::emit_program_prologue(std::vector<std::string> used_unit_h_files) {
@@ -277,6 +282,7 @@ void Emitter::emit_unit_interface_prologue(
     std::vector<std::string> used_unit_h_files) {
 	if (!active)
 		return;
+	active_unit_namespace = unit_namespace;
 	fprintf(active, "#pragma once\n");
 	fprintf(active, "#include \"rtl.h\"\n");
 	fprintf(active, "#include <functional>\n");
@@ -298,6 +304,7 @@ void Emitter::emit_unit_implementation_prologue(
     std::vector<std::string> impl_used_unit_h_files) {
 	if (!active)
 		return;
+	active_unit_namespace = unit_namespace;
 	fprintf(active, "#include \"%s\"\n", this_unit_h_file.c_str());
 	fprintf(active, "#include \"rtl.h\"\n");
 	fprintf(active, "#include <functional>\n");
@@ -345,11 +352,240 @@ void Emitter::emit_class_lifecycle_call(Method* method) {
 		method->cxx_name.c_str());
 }
 
+void Emitter::emit_subrange_definition(
+    SubrangeType* subrange) {
+	if (!active || !subrange ||
+	    emitted_subranges.count(subrange))
+		return;
+	emitted_subranges.insert(subrange);
+
+	// A range owned by another unit was declared in that unit's header. The
+	// current output includes that header and must only qualify the existing
+	// tag; emitting a second local definition would create a different type.
+	if (subrange->owning_unit &&
+	    subrange->owning_unit->cxx_namespace !=
+		active_unit_namespace)
+		return;
+
+	fprintf(active, "struct %s {\n",
+		subrange->cxx_name.c_str());
+	fprintf(active,
+		"\tusing m_tpcc_ordinal_storage_type = ");
+	emit_type_ref(subrange->base_type);
+	fprintf(active, ";\n");
+	fprintf(active,
+		"\tm_tpcc_ordinal_storage_type m_value{};\n");
+	fprintf(active, "};\n");
+	// Pascal layout and packed-record layout continue to use base_type. These
+	// assertions make the one-member C++ representation an enforced contract
+	// rather than relying on an assumed empty-padding optimization.
+	fprintf(active,
+		"static_assert(sizeof(%s) == sizeof(%s::m_tpcc_ordinal_storage_type), \"subrange carrier size mismatch\");\n",
+		subrange->cxx_name.c_str(),
+		subrange->cxx_name.c_str());
+	fprintf(active,
+		"static_assert(alignof(%s) == alignof(%s::m_tpcc_ordinal_storage_type), \"subrange carrier alignment mismatch\");\n",
+		subrange->cxx_name.c_str(),
+		subrange->cxx_name.c_str());
+	fprintf(active,
+		"static_assert(std::is_standard_layout_v<%s>, \"subrange carrier must have standard layout\");\n",
+		subrange->cxx_name.c_str());
+	fprintf(active,
+		"static_assert(std::is_trivially_copyable_v<%s>, \"subrange carrier must be trivially copyable\");\n",
+		subrange->cxx_name.c_str());
+}
+
+void Emitter::emit_type_dependencies(
+    Type* root, bool inspect_definition) {
+	if (!active || !root)
+		return;
+	std::set<std::pair<Type*, bool>> visited;
+	std::function<void(Type*, bool)> visit;
+	std::function<void(VariantPart*)> visit_variant;
+	std::function<void(Frame*)> visit_frame;
+
+	auto inspect_nested_definition =
+	    [](Type* ty) {
+		    return named_type_local_cxx_name(ty).empty();
+	    };
+
+	visit_variant = [&](VariantPart* variant) {
+		if (!variant)
+			return;
+		visit(variant->selector_type,
+		      inspect_nested_definition(
+			  variant->selector_type));
+		for (const auto& arm : variant->arms) {
+			for (const auto& field : arm.fields)
+				visit(field.ty,
+				      inspect_nested_definition(
+					  field.ty));
+			visit_variant(arm.variant);
+		}
+	};
+
+	visit_frame = [&](Frame* frame) {
+		if (!frame)
+			return;
+		for (const auto& declaration :
+		     frame->value_declarations()) {
+			Node* value =
+			    declaration.second.value;
+			if (auto slot =
+				dynamic_cast<StorageSlot*>(
+				    value)) {
+				visit(slot->ty,
+				      inspect_nested_definition(
+					  slot->ty));
+				continue;
+			}
+			if (auto property =
+				dynamic_cast<Property*>(
+				    value)) {
+				visit(property->ty,
+				      inspect_nested_definition(
+					  property->ty));
+				for (Type* index :
+				     property->index_types)
+					visit(index,
+					      inspect_nested_definition(
+						  index));
+				continue;
+			}
+			if (auto callable =
+				dynamic_cast<Callable*>(
+				    value)) {
+				visit(callable->ty, false);
+				continue;
+			}
+			if (auto overloads =
+				dynamic_cast<OverloadSet*>(
+				    value))
+				for (Callable* callable :
+				     overloads->members)
+					visit(callable->ty,
+					      false);
+		}
+	};
+
+	visit = [&](Type* ty, bool inspect) {
+		if (!ty ||
+		    !visited.insert({ty, inspect}).second)
+			return;
+		if (auto incomplete =
+			dynamic_cast<IncompleteType*>(ty)) {
+			visit(incomplete->resolved, inspect);
+			return;
+		}
+		if (auto subrange =
+			dynamic_cast<SubrangeType*>(ty)) {
+			visit(subrange->base_type, false);
+			emit_subrange_definition(subrange);
+			return;
+		}
+		if (auto array =
+			dynamic_cast<FixedArrayType*>(ty)) {
+			visit(array->bounds,
+			      inspect_nested_definition(
+				  array->bounds));
+			visit(array->item_type,
+			      inspect_nested_definition(
+				  array->item_type));
+			return;
+		}
+		if (auto array =
+			dynamic_cast<DynamicArrayType*>(ty)) {
+			visit(array->item_type,
+			      inspect_nested_definition(
+				  array->item_type));
+			return;
+		}
+		if (auto array =
+			dynamic_cast<OpenArrayType*>(ty)) {
+			visit(array->item_type,
+			      inspect_nested_definition(
+				  array->item_type));
+			return;
+		}
+		if (auto set =
+			dynamic_cast<FixedSetType*>(ty)) {
+			visit(set->item_type,
+			      inspect_nested_definition(
+				  set->item_type));
+			return;
+		}
+		if (auto file =
+			dynamic_cast<TypedFileType*>(ty)) {
+			visit(file->item_type,
+			      inspect_nested_definition(
+				  file->item_type));
+			return;
+		}
+		if (auto pointer =
+			dynamic_cast<PointerType*>(ty)) {
+			if (!pointer->is_untyped())
+				visit(
+				    pointer->item_type,
+				    inspect_nested_definition(
+					pointer->item_type));
+			return;
+		}
+		if (auto routine =
+			dynamic_cast<RoutineType*>(ty)) {
+			visit(routine->return_type,
+			      inspect_nested_definition(
+				  routine->return_type));
+			for (const auto& formal :
+			     routine->formals)
+				visit(
+				    formal.ty,
+				    inspect_nested_definition(
+					formal.ty));
+			return;
+		}
+		if (!inspect)
+			return;
+		if (auto record =
+			dynamic_cast<RecordType*>(ty)) {
+			for (const auto& field :
+			     record->fields)
+				visit(
+				    field.ty,
+				    inspect_nested_definition(
+					field.ty));
+			visit_variant(record->variant);
+			visit_frame(record->children);
+			return;
+		}
+		if (auto record =
+			dynamic_cast<PackedRecordType*>(ty)) {
+			visit_variant(record->variant);
+			visit_frame(record->children);
+			return;
+		}
+		if (auto record =
+			dynamic_cast<ClassType*>(ty)) {
+			visit_frame(record->children);
+			return;
+		}
+		if (auto record =
+			dynamic_cast<InterfaceType*>(ty)) {
+			visit_frame(record->children);
+			return;
+		}
+		if (auto record =
+			dynamic_cast<ObjectType*>(ty))
+			visit_frame(record->children);
+	};
+	visit(root, inspect_definition);
+}
+
 void Emitter::emit_var_decl(
     std::string cxx_name, Type* ty,
     Node* initializer) {
 	if (!active)
 		return;
+	emit_type_dependencies(ty);
 	// Pascal permits unused variables. C++'s unused-variable warning cannot
 	// serve as a Pascal semantic check: it would reject a valid source program
 	// whenever the generated C++ is compiled with -Werror.
@@ -373,6 +609,7 @@ void Emitter::emit_initialized_storage_decl(
     Node* initializer, bool routine_local) {
 	if (!active)
 		return;
+	emit_type_dependencies(ty);
 	// `const X: T = value` is Pascal initialized storage, not a true
 	// compile-time constant. At routine scope that storage persists across
 	// calls; at unit/program scope ordinary static storage duration already
@@ -1537,6 +1774,7 @@ void Emitter::emit_callable_signature(Callable* c, Position pos, std::string own
 void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 	if (!active)
 		return;
+	emit_type_dependencies(c ? c->ty : nullptr);
 	fprintf(active, "\n");
 	if (nested_lambda) {
 		fprintf(active, "\tauto %s = [&]", callable_cxx_name(c).c_str());
@@ -1589,6 +1827,7 @@ void Emitter::emit_procedure_close(Callable* target, bool nested_lambda) {
 void Emitter::emit_callable_prototype(Callable* c, std::string owner_qualifier, std::string prefix, std::string suffix) {
 	if (!active)
 		return;
+	emit_type_dependencies(c ? c->ty : nullptr);
 	fprintf(active, "%s", prefix.c_str());
 	emit_callable_signature(c, Position::Declaration, owner_qualifier);
 	fprintf(active, "%s;\n", suffix.c_str());
@@ -2100,6 +2339,7 @@ void Emitter::emit_class_forward_declaration(
 void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	if (!active)
 		return;
+	emit_type_dependencies(ty, true);
 	if (dynamic_cast<RoutineType*>(ty)) {
 		fprintf(active, "using %s = ", cxx_name.c_str());
 		emit_type_ref(ty);
@@ -2278,15 +2518,32 @@ void Emitter::emit_type_alias(
     std::string cxx_name, Type* aliased_type) {
 	if (!active)
 		return;
+	emit_type_dependencies(aliased_type);
 	std::string target =
 	    named_type_local_cxx_name(aliased_type);
 	if (target.empty())
 		unhandled_type(
 		    "named type alias target has no C++ name",
 		    aliased_type);
-	fprintf(active, "using %s = %s;\n",
-		cxx_name.c_str(),
-		type_cxx_name(aliased_type, target).c_str());
+	if (dynamic_cast<SubrangeType*>(
+		aliased_type))
+		// A local Pascal subrange declaration still uses the generated
+		// canonical carrier directly, so its source-facing C++ alias may have
+		// no emitted use. Keep -Werror from rejecting that valid declaration.
+		fprintf(active,
+			"using %s [[maybe_unused]] = %s;\n",
+			cxx_name.c_str(),
+			type_cxx_name(
+			    aliased_type,
+			    target)
+			    .c_str());
+	else
+		fprintf(active, "using %s = %s;\n",
+			cxx_name.c_str(),
+			type_cxx_name(
+			    aliased_type,
+			    target)
+			    .c_str());
 }
 
 void Emitter::emit_routine_reference(
@@ -2723,12 +2980,23 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto c = dynamic_cast<Integer*>(expr)) {
+		if (dynamic_cast<SubrangeType*>(c->ty)) {
+			// A contextual literal already has its selected Pascal subrange
+			// Type*. Construct that exact carrier through the same ordinal
+			// storage operation used by ordinary conversions; there is no
+			// implicit C++ conversion on the wrapper which could reopen
+			// overload selection.
+			fprintf(active,
+				"::u_system::m_ordinal_cast<");
+			emit_type_ref(c->ty);
+			fprintf(active, ">(");
+			emit_integer_literal(
+			    active, c->value,
+			    c->negative);
+			fprintf(active, ")");
+			return;
+		}
 		Type* ordinal_type = c->ty;
-		while (auto range =
-			   dynamic_cast<SubrangeType*>(
-			       ordinal_type))
-			ordinal_type =
-			    range->base_type;
 		const bool wrapped_ordinal =
 		    ordinal_type == char_type() ||
 		    dynamic_cast<EnumType*>(
@@ -3710,8 +3978,15 @@ void Emitter::emit_type_ref(Type* ty) {
 	if (!active)
 		return;
 	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
-		// C++ doesn't support those, so punt for now.
-		return emit_type_ref(s->base_type);
+		if (s->cxx_name.empty())
+			unhandled_type(
+			    "subrange has no generated C++ carrier name",
+			    s);
+		fprintf(active, "%s",
+			type_cxx_name(
+			    s, s->cxx_name)
+			    .c_str());
+		return;
 	}
 	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
 		fprintf(active, "%.*s", (int)it->cxx_name.size(), it->cxx_name.data());

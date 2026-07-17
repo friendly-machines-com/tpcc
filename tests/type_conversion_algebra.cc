@@ -73,17 +73,24 @@ int main() {
 	    10, integer_type());
 	SubrangeType narrow(
 	    SourceLocation::internal(),
+	    "m_test_narrow",
 	    integer_type(), &narrow_low,
 	    &narrow_high);
 	SubrangeType wide(
 	    SourceLocation::internal(),
+	    "m_test_wide",
 	    integer_type(), &wide_low,
 	    &wide_high);
 	SubrangeType equal_narrow(
 	    SourceLocation::internal(),
+	    "m_test_equal_narrow",
 	    integer_type(), &equal_low,
 	    &equal_high);
 	assert(&narrow != &equal_narrow);
+	assert(!narrow.same_cxx_carrier_as(
+	    &equal_narrow));
+	assert(!narrow.same_cxx_carrier_as(
+	    integer_type()));
 	assert(narrow.is_subtype_of(&wide));
 	assert(!wide.is_subtype_of(&narrow));
 	assert(narrow.is_subtype_of(

@@ -34,7 +34,7 @@ cd "$root"
 	tests/type_identity_and_compatibility.pp
 
 for required in \
-	'p_implicit(' \
+	'o_implicit(' \
 	'm_implicit_target<t_tconversionresulta>' \
 	'm_implicit_target<t_tconversionresultb>'
 do
@@ -182,7 +182,7 @@ do
 	fi
 done
 
-for kind in POINTER STRING SET RANGE ARRAY FILE ROUTINE CLASSREF
+for kind in POINTER STRING SET ARRAY FILE ROUTINE CLASSREF
 do
 	if ./mp -Furtl -d"TEST_$kind" \
 		-o"$tmp/carrier_collision.cc" \
@@ -219,6 +219,10 @@ do
 		exit 1
 	fi
 
+done
+
+for kind in POINTER STRING SET RANGE ARRAY FILE ROUTINE CLASSREF
+do
 	if ./mp -Furtl -d"TEST_$kind" \
 		-o"$tmp/var_identity.cc" \
 		tests/type_var_identity_rejected.pp \

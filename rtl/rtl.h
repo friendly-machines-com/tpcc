@@ -457,7 +457,7 @@ static_assert(sizeof(t_char) == 1);
 static_assert(alignof(t_char) == 1);
 static_assert(std::is_trivially_copyable_v<t_char>);
 
-template<typename T, bool IsEnum = std::is_enum_v<T>>
+template<typename T, typename Enable = void>
 struct tpcc_ordinal_storage {
 	using type = T;
 	static constexpr type get(T value) {
@@ -469,7 +469,8 @@ struct tpcc_ordinal_storage {
 };
 
 template<typename T>
-struct tpcc_ordinal_storage<T, true> {
+struct tpcc_ordinal_storage<
+    T, std::enable_if_t<std::is_enum_v<T>>> {
 	using type = std::underlying_type_t<T>;
 	static constexpr type get(T value) {
 		return static_cast<type>(value);
@@ -480,13 +481,41 @@ struct tpcc_ordinal_storage<T, true> {
 };
 
 template<>
-struct tpcc_ordinal_storage<t_char, false> {
+struct tpcc_ordinal_storage<t_char, void> {
 	using type = uint8_t;
 	static constexpr type get(t_char value) {
 		return value.value;
 	}
 	static constexpr t_char make(type value) {
 		return t_char{value};
+	}
+};
+
+template<typename T>
+struct tpcc_ordinal_storage<
+    T, std::void_t<
+	   typename T::
+	       m_tpcc_ordinal_storage_type>> {
+	// Generated subrange structs deliberately do not define an implicit
+	// conversion to their storage member: that would let C++ conversions and
+	// overload ranking run after Pascal has selected a declaration. This
+	// compiler-private nested alias is the explicit bridge used by ordinal
+	// RTL operations, and it also works for C++ local classes for which an
+	// out-of-class trait specialization cannot be declared.
+	using wrapped_type =
+	    typename T::
+		m_tpcc_ordinal_storage_type;
+	using wrapped_traits =
+	    tpcc_ordinal_storage<wrapped_type>;
+	using type =
+	    typename wrapped_traits::type;
+	static constexpr type get(T value) {
+		return wrapped_traits::get(
+		    value.m_value);
+	}
+	static constexpr T make(type value) {
+		return T{
+		    wrapped_traits::make(value)};
 	}
 };
 
@@ -829,10 +858,9 @@ inline t_set<Target> m_set_cast(
 
 template<typename T>
 inline int64_t tpcc_set_key(T value) {
-	if constexpr (std::is_same_v<T, t_char>)
-		return static_cast<int64_t>(value.value);
-	else
-		return static_cast<int64_t>(value);
+	using traits = tpcc_ordinal_storage<T>;
+	return static_cast<int64_t>(
+	    traits::get(value));
 }
 
 template<typename T>
@@ -873,7 +901,8 @@ inline t_boolean o_in(tpcc_typed_const_storage_ref<Value> value,
 template<typename T, typename Value>
 inline void p_include(tpcc_typed_storage_ref<t_set<T>> set,
     tpcc_typed_const_storage_ref<Value> item) {
-	const T converted = static_cast<T>(*item.value);
+	const T converted =
+	    m_ordinal_cast<T>(*item.value);
 	const int64_t key = tpcc_set_key(converted);
 	// t_set membership is the union of its spans; the carrier does not require
 	// canonical or disjoint spans. Appending a singleton is therefore a
@@ -884,7 +913,8 @@ inline void p_include(tpcc_typed_storage_ref<t_set<T>> set,
 template<typename T, typename Value>
 inline void p_exclude(tpcc_typed_storage_ref<t_set<T>> set,
     tpcc_typed_const_storage_ref<Value> item) {
-	const T converted = static_cast<T>(*item.value);
+	const T converted =
+	    m_ordinal_cast<T>(*item.value);
 	const int64_t key = tpcc_set_key(converted);
 	std::vector<tpcc_set_span> remaining;
 	remaining.reserve(set.value->spans.size() + 1);
@@ -3364,7 +3394,11 @@ inline t_boolean o_equal(t_pointer a, t_pointer b) {
 	return tpcc_bool_to_boolean(a == b);
 }
 
-template<typename T> inline t_longword p_ord(T x) { return static_cast<t_longword>(x); }
+template<typename T>
+inline t_longword p_ord(T x) {
+	return static_cast<t_longword>(
+	    tpcc_ordinal_storage<T>::get(x));
+}
 
 template<typename T>
 inline t_longword p_ord(tpcc_typed_const_storage_ref<T> x) {
@@ -3674,10 +3708,8 @@ inline t_extended p_ln(t_extended value) { return ::logl(value); }
 
 template<typename T>
 constexpr auto tpcc_for_ordinal_value(T value) {
-	if constexpr (std::is_enum_v<T>)
-		return static_cast<std::underlying_type_t<T>>(value);
-	else
-		return value;
+	return tpcc_ordinal_storage<T>::get(
+	    value);
 }
 
 template<typename T>
@@ -3697,12 +3729,18 @@ constexpr t_boolean tpcc_for_equal(T a, T b) {
 
 template<typename T>
 constexpr T tpcc_for_succ(T value) {
-	return static_cast<T>(tpcc_for_ordinal_value(value) + 1);
+	using traits = tpcc_ordinal_storage<T>;
+	return traits::make(
+	    static_cast<typename traits::type>(
+		traits::get(value) + 1));
 }
 
 template<typename T>
 constexpr T tpcc_for_pred(T value) {
-	return static_cast<T>(tpcc_for_ordinal_value(value) - 1);
+	using traits = tpcc_ordinal_storage<T>;
+	return traits::make(
+	    static_cast<typename traits::type>(
+		traits::get(value) - 1));
 }
 
 inline t_boolean o_logicalnot(t_boolean a) {
@@ -3748,27 +3786,15 @@ inline t_boolean m_equal(
 	return tpcc_bool_to_boolean(a.p_code == b.p_code);
 }
 
-template<typename T, bool = std::is_enum_v<T>>
-struct tpcc_ordinal_raw {
-	using type = T;
-};
-
-template<typename T>
-struct tpcc_ordinal_raw<T, true> {
-	using type = std::underlying_type_t<T>;
-};
-
-template<>
-struct tpcc_ordinal_raw<t_char, false> {
-	using type = uint8_t;
-};
-
 template<typename T>
 inline T tpcc_ordinal_step(T value, t_integer amount, bool subtract) {
-	using raw_type = typename tpcc_ordinal_raw<T>::type;
+	using traits = tpcc_ordinal_storage<T>;
+	using raw_type = typename traits::type;
 	static_assert(std::is_integral_v<raw_type>, "Inc/Dec require an ordinal carrier");
 	using unsigned_type = std::make_unsigned_t<raw_type>;
-	unsigned_type bits = static_cast<unsigned_type>(static_cast<raw_type>(value));
+	unsigned_type bits =
+	    static_cast<unsigned_type>(
+		traits::get(value));
 	unsigned_type delta = static_cast<unsigned_type>(amount);
 	unsigned_type stepped = subtract ? bits - delta : bits + delta;
 	raw_type raw;
@@ -3776,7 +3802,7 @@ inline T tpcc_ordinal_step(T value, t_integer amount, bool subtract) {
 		raw = std::bit_cast<raw_type>(stepped);
 	else
 		raw = static_cast<raw_type>(stepped);
-	return static_cast<T>(raw);
+	return traits::make(raw);
 }
 
 template<typename T> inline void p_inc(T& x, t_integer n = 1) {
@@ -3925,24 +3951,34 @@ inline unsigned tpcc_val_digit(uint8_t character) {
 }
 
 template<typename T, std::size_t Capacity>
-requires std::is_integral_v<T> && (!std::is_same_v<T, bool>)
+requires std::is_integral_v<
+	     typename tpcc_ordinal_storage<T>::type> &&
+	 (!std::is_same_v<
+	     typename tpcc_ordinal_storage<T>::type,
+	     bool>)
 inline void p_val(
     const t_shortstring<Capacity>& source,
     T& destination, t_integer& code) {
-	destination = 0;
+	using traits = tpcc_ordinal_storage<T>;
+	using storage_type = typename traits::type;
+	destination = traits::make(
+	    storage_type{0});
 	tpcc_val_prefix prefix = tpcc_val_parse_prefix(source, code);
 	const std::size_t length = source.length;
 	std::size_t position = prefix.position;
 	if (position >= length)
 		return;
 
-	using unsigned_type = std::make_unsigned_t<T>;
+	using unsigned_type =
+	    std::make_unsigned_t<storage_type>;
 	constexpr unsigned_type unsigned_max = std::numeric_limits<unsigned_type>::max();
 	unsigned_type limit = unsigned_max;
-	if constexpr (std::is_signed_v<T>) {
+	if constexpr (std::is_signed_v<storage_type>) {
 		if (prefix.base == 10 || prefix.negative) {
 			const unsigned_type signed_max =
-			    static_cast<unsigned_type>(std::numeric_limits<T>::max());
+			    static_cast<unsigned_type>(
+				std::numeric_limits<
+				    storage_type>::max());
 			limit = prefix.negative ? signed_max + 1 : signed_max;
 		}
 	} else if (prefix.negative) {
@@ -3969,22 +4005,39 @@ inline void p_val(
 	if (!saw_digit)
 		return;
 
-	if constexpr (std::is_signed_v<T>) {
+	storage_type parsed{};
+	if constexpr (std::is_signed_v<storage_type>) {
 		if (prefix.negative) {
 			const unsigned_type minimum_magnitude =
-			    static_cast<unsigned_type>(std::numeric_limits<T>::max()) + 1;
+			    static_cast<unsigned_type>(
+				std::numeric_limits<
+				    storage_type>::max()) +
+			    1;
 			if (magnitude == minimum_magnitude)
-				destination = std::numeric_limits<T>::min();
+				parsed =
+				    std::numeric_limits<
+					storage_type>::min();
 			else
-				destination = static_cast<T>(-static_cast<T>(magnitude));
+				parsed =
+				    static_cast<storage_type>(
+					-static_cast<
+					    storage_type>(
+					    magnitude));
 		} else if (prefix.base != 10) {
-			destination = std::bit_cast<T>(magnitude);
+			parsed =
+			    std::bit_cast<storage_type>(
+				magnitude);
 		} else {
-			destination = static_cast<T>(magnitude);
+			parsed =
+			    static_cast<storage_type>(
+				magnitude);
 		}
 	} else {
-		destination = static_cast<T>(magnitude);
+		parsed =
+		    static_cast<storage_type>(
+			magnitude);
 	}
+	destination = traits::make(parsed);
 	code = 0;
 }
 
@@ -4030,7 +4083,11 @@ inline void p_val(
 }
 
 template<typename T, typename Code, std::size_t Capacity>
-requires ((std::is_integral_v<T> && (!std::is_same_v<T, bool>)) ||
+requires ((std::is_integral_v<
+	       typename tpcc_ordinal_storage<T>::type> &&
+	   (!std::is_same_v<
+	       typename tpcc_ordinal_storage<T>::type,
+	       bool>)) ||
 	          std::is_floating_point_v<T>) &&
 	         std::is_integral_v<Code> && (!std::is_same_v<Code, bool>)
 inline void p_val(const t_shortstring<Capacity>& source, T& destination,
@@ -4041,7 +4098,11 @@ inline void p_val(const t_shortstring<Capacity>& source, T& destination,
 }
 
 template<typename T, std::size_t Capacity>
-requires (std::is_integral_v<T> && (!std::is_same_v<T, bool>)) ||
+requires (std::is_integral_v<
+	      typename tpcc_ordinal_storage<T>::type> &&
+	  (!std::is_same_v<
+	      typename tpcc_ordinal_storage<T>::type,
+	      bool>)) ||
 	         std::is_floating_point_v<T>
 inline void p_val(
     const t_shortstring<Capacity>& source, T& destination) {

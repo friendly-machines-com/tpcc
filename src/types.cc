@@ -28,17 +28,9 @@ bool Type::same_formal_contract_as(
 
 bool Type::same_cxx_carrier_as(
     const Type* other) const {
-	const Type* a = this;
-	const Type* b = other;
-	while (auto range =
-		   dynamic_cast<const SubrangeType*>(a))
-		a = range->base_type;
-	while (auto range =
-		   dynamic_cast<const SubrangeType*>(b))
-		b = range->base_type;
-	return a && b &&
-	       (a == b ||
-		a->same_cxx_carrier_definition_as(b));
+	return other &&
+	       (this == other ||
+		same_cxx_carrier_definition_as(other));
 }
 
 bool Type::same_cxx_carrier_definition_as(
@@ -667,6 +659,10 @@ std::optional<TypeLayout> type_layout_impl(
 			   : std::nullopt;
 	}
 	if (auto subrange = dynamic_cast<SubrangeType*>(ty))
+		// The emitted carrier is deliberately one base-type member, with
+		// generated static assertions enforcing identical size and alignment.
+		// Packed-record layout can therefore keep using the Pascal storage
+		// layout without duplicating a C++ ABI calculator here.
 		return type_layout_impl(subrange->base_type, visiting);
 	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
 		auto item = type_layout_impl(array->item_type, visiting);
@@ -1918,7 +1914,13 @@ void RoutineType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream
 	out << "signature: ...";
 }
 
-SubrangeType::SubrangeType(SourceLocation source_location, Type* base_type, Node* lower_bound, Node* upper_bound) : Type(std::move(source_location)) {
+SubrangeType::SubrangeType(
+    SourceLocation source_location,
+    std::string cxx_name, Type* base_type,
+    Node* lower_bound, Node* upper_bound)
+    : Type(std::move(source_location)),
+      cxx_name(std::move(cxx_name)) {
+	assert(!this->cxx_name.empty());
 	this->base_type = base_type;
 	this->lower_bound = lower_bound;
 	this->upper_bound = upper_bound;
