@@ -101,19 +101,30 @@ ASAN_OPTIONS=detect_leaks=1 \
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/contextual_values"
 
-./mp -Furtl -o"$tmp/class_metaclass.cc" \
-	tests/class_metaclass_carrier_separation.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Werror \
-	-Irtl \
-	-I"$tmp" \
-	"$tmp/class_metaclass.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/class_metaclass"
+if ./mp -Furtl -o"$tmp/class_metaclass.cc" \
+	tests/class_metaclass_carrier_separation.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "formed one overload set from instance and class methods" >&2
+	exit 1
+fi
+for required in \
+	'incompatible routine categories' \
+	'incoming declaration:' \
+	'conflicting declaration:' \
+	'existing overload family:' \
+	'kind: method' \
+	'kind: class_method' \
+	'where' \
+	'source:'
+do
+	if ! rg -Fq "$required" "$tmp/stderr"
+	then
+		echo "incomplete mixed-routine-kind diagnostic: $required" >&2
+		sed -n '1,140p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
 
 for source in fixed_array_assignment_rejected set_narrowing_rejected
 do

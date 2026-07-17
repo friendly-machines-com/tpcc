@@ -548,6 +548,63 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	    sst.str());
 }
 
+[[noreturn]] void Parser::raise_callable_registration_error(
+    const std::string& name, Callable* incoming,
+    const CallableRegistration& registration) {
+	if (registration.kind ==
+	    CallableRegistration::Kind::
+		CxxCarrierCollision)
+		raise_cxx_carrier_collision(
+		    name, incoming, registration);
+
+	assert(registration.kind ==
+	       CallableRegistration::Kind::Rejected);
+	assert(incoming && incoming->ty &&
+	       registration.existing_binding);
+
+	// Registration already retained both the complete family and the exact
+	// conflicting declaration. Root those existing CST nodes in the normal
+	// diagnostic graph instead of reconstructing a lossy signature string at
+	// the parser call site.
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+		scopes, 4);
+	std::stringstream sst;
+	sst << "duplicate identifier or overload directive mismatch: "
+	    << name;
+	sst << "\n  incoming declaration: ";
+	append_callable_source_prefix(
+	    sst, incoming, false);
+	sst << ctx.value_ref(incoming) << " : "
+	    << ctx.type_ref(incoming->ty);
+	if (Callable* conflicting =
+		registration.conflicting_callable) {
+		sst << "\n  conflicting declaration: ";
+		append_callable_source_prefix(
+		    sst, conflicting, false);
+		sst << ctx.value_ref(conflicting)
+		    << " : "
+		    << ctx.type_ref(
+			   conflicting->ty);
+		if (!same_callable_overload_category(
+			incoming, conflicting))
+			sst << "\n  reason: the declarations have incompatible "
+			       "routine categories";
+		else if (incoming->ty
+			->same_overload_signature_as(
+			    conflicting->ty))
+			sst << "\n  reason: both declarations have the same "
+			       "Pascal overload signature";
+	}
+	sst << "\n  existing overload family: "
+	    << ctx.value_ref(
+		   registration.existing_binding);
+	sst << ctx.notes();
+	emit_parse_error_at(
+	    callable_source_location(incoming),
+	    sst.str());
+}
+
 bool Parser::is_defined(const std::string& sym) const {
 	return options && options->defines.count(sym) > 0;
 }
@@ -2160,9 +2217,23 @@ Node* Parser::maybe_resolve_value(std::string name) {
 					return as_call; // plain callable, first-hit wins
 				break;			// shadowed by collected overloads above
 			}
+			if (!collected.empty() &&
+			    !same_callable_overload_category(
+				collected.front(),
+				as_call))
+				break;
 			collected.push_back(as_call);
 		} else if (as_set) {
-			// Every member of an OverloadSet already has has_overload_directive.
+			if (as_set->members.empty())
+				continue;
+			if (!collected.empty() &&
+			    !same_callable_overload_category(
+				collected.front(),
+				as_set->members.front()))
+				break;
+			// Same-frame sets are homogeneous by registration. The source
+			// `overload` bit controls whether lookup reaches this lower
+			// environment, not whether its local members coexist.
 			for (auto* m : as_set->members)
 				collected.push_back(m);
 		} else {
@@ -7420,14 +7491,10 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	}
 	auto registration =
 	    body->register_callable(pas_name, m);
-	if (registration.kind ==
-	    CallableRegistration::Kind::
-		CxxCarrierCollision)
-		raise_cxx_carrier_collision(
-		    pas_name, m, registration);
 	if (registration.kind !=
 	    CallableRegistration::Kind::Added) {
-		raise_parse_error("duplicate identifier or overload directive mismatch: " + pas_name);
+		raise_callable_registration_error(
+		    pas_name, m, registration);
 	}
 }
 
@@ -7560,18 +7627,12 @@ Procedure* Parser::match_or_create_procedure(
 			auto registration =
 			    enclosing->register_callable(
 				frame_name, target);
-			if (registration.kind ==
-			    CallableRegistration::Kind::
-				CxxCarrierCollision)
-				raise_cxx_carrier_collision(
-				    pas_name, target,
-				    registration);
 			if (registration.kind !=
 			    CallableRegistration::Kind::
 				Added) {
-				raise_parse_error(
-				    "duplicate identifier or overload directive mismatch: " +
-				    pas_name);
+				raise_callable_registration_error(
+				    pas_name, target,
+				    registration);
 			}
 		}
 	}
@@ -9267,30 +9328,27 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	if (dynamic_cast<NilLiteral*>(a))
 		raise_parse_error(
 		    "'nil' is only valid in a reference or routine-value context");
-	if (!conversion_failure.candidates.empty()) {
-		std::vector<Node*> args{a};
-		const std::string conversion_name =
-		    directive_state.switch_enabled(
-			'r')
-			? "implicit"
-			: "uncheckedimplicit";
-		raise_overload_resolution_error(
-		    current_location(),
-		    conversion_name, nullptr,
-		    args, target_ty,
-		    conversion_failure.candidates,
-		    conversion_failure.viable,
-		    conversion_failure.non_dominated,
-		    conversion_failure.ambiguous,
-		    conversion_failure.ambiguous
-			? "ambiguous implicit conversion"
-			: "no implicit conversion to the required type");
-	}
-	Type* recovered_target =
-	    raise_type_mismatch(
-		"no implicit conversion",
-		target_ty, a ? a->ty : nullptr);
-	return new Cast(a, recovered_target);
+	std::vector<Node*> args{a};
+	const std::string conversion_name =
+	    directive_state.switch_enabled('r')
+		? "implicit"
+		: "uncheckedimplicit";
+	// Every failed contextual conversion went through the same selected
+	// conversion-family search, even when that family contains no declaration
+	// with the required exact result. Preserve its candidate set and the
+	// actual expression as diagnostic roots; falling back to a two-Type*
+	// mismatch discards the callable family and most of the value/type graph.
+	raise_overload_resolution_error(
+	    current_location(),
+	    conversion_name, nullptr,
+	    args, target_ty,
+	    conversion_failure.candidates,
+	    conversion_failure.viable,
+	    conversion_failure.non_dominated,
+	    conversion_failure.ambiguous,
+	    conversion_failure.ambiguous
+		? "ambiguous implicit conversion"
+		: "no implicit conversion to the required type");
 }
 
 static std::vector<Callable*> routine_reference_candidates(

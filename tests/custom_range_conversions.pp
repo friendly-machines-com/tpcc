@@ -19,6 +19,8 @@ var
   Destination: TDestination;
   LegacySource: TLegacySource;
   LegacyDestination: TLegacyDestination;
+  ShortText: ShortString;
+  LongText: AnsiString;
   Selected: Integer;
 
 {$ifndef OMIT_UNCHECKED}
@@ -114,5 +116,17 @@ begin
   if Implicit(3) <> 1003 then
     Halt(13);
   if UncheckedImplicit(4) <> 2004 then
-    Halt(14)
+    Halt(14);
+
+  {$R-}
+  ShortText := 'unchecked';
+  LongText := ShortText;
+  if Length(LongText) <> 9 then
+    Halt(15);
+
+  {$R+}
+  ShortText := 'checked';
+  LongText := ShortText;
+  if Length(LongText) <> 7 then
+    Halt(16)
 end.

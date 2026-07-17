@@ -72,14 +72,14 @@ public:
      *  emit walks from seeing stale IncompleteType pointers. */
     void rebind_value_type(std::string name, Type* ty);
     bool register_variable(std::string name, Node* v, Type* ty); // FIXME: StorageSlot would already have ty
-    /** Register a Callable (Procedure or Method) under NAME, applying Pascal's
-     *  overload rules: a second registration succeeds only if both the
-     *  existing and new declarations have has_overload_directive set (in
-     *  which case the slot promotes from Callable to OverloadSet, or the new
-     *  entry is appended to an existing OverloadSet). The result retains the
-     *  existing binding and exact conflicting callable: discarding them here
-     *  would prevent declaration diagnostics from printing the prior source
-     *  location and the complete overload family. */
+    /** Register a Callable (Procedure or Method) under NAME. Distinct Pascal
+     *  signatures owned by this one Frame form a local OverloadSet regardless
+     *  of the `overload` directive; the retained per-Callable directive bit
+     *  controls whether lookup may extend that completed family into a parent
+     *  Frame or lexical scope. The result retains the existing binding and
+     *  exact conflicting callable: discarding them here would prevent
+     *  declaration diagnostics from printing the prior source location and
+     *  complete overload family. */
     CallableRegistration register_callable(
         std::string name, Callable* c);
     /** Declaration ownership query, not name lookup. This intentionally
@@ -105,6 +105,12 @@ public:
  *  next enclosing environment. Shared by structural Frame lookup and the
  *  parser's lexical scope walk so this rule has one implementation. */
 bool callable_binding_opens_parent(Node* binding);
+
+/** Whether two declarations may be members of one Pascal OverloadSet.
+ * Parameter signatures select members only after this declaration category
+ * agrees; incompatible routine kinds never become candidates of one family. */
+bool same_callable_overload_category(
+    Callable* a, Callable* b);
 
 /** Backend-only collision test for two already-distinct Pascal callables.
  * It compares the emitted member/free-function name and C++ parameter

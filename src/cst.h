@@ -808,11 +808,10 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-/** Overload set: multiple Callables (Procedures or Methods) sharing one Pascal
- *  name, each with `has_overload_directive` set. Produced by Frame's
- *  registration when a second overload-marked callable is registered under
- *  the same name and by resolve_value when it aggregates matches across
- *  scopes. */
+/** Overload set: multiple same-category Callables sharing one Pascal name.
+ * Frame registration forms a local set from distinct signatures whether or
+ * not they write `overload`; the directive controls whether lookup may append
+ * a same-category family from another scope. */
 class OverloadSet: public Node {
 public:
 	std::vector<Callable*> members;

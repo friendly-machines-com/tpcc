@@ -59,6 +59,18 @@ Node* Frame::lookup_value(std::string name) const {
 				return binding;
 			break;
 		}
+		Callable* representative =
+		    callable
+			? callable
+			: overloads->members.front();
+		if (!callables.empty() &&
+		    !same_callable_overload_category(
+			callables.front(),
+			representative))
+			// An identically named but incompatible routine category in
+			// an ancestor is not another candidate of this family. The
+			// already-selected descendant family shadows it.
+			break;
 		if (callable)
 			callables.push_back(callable);
 		else
@@ -133,6 +145,24 @@ static bool same_emitted_callable_name(
 	return a->cxx_name == b->cxx_name;
 }
 
+bool same_callable_overload_category(
+    Callable* a, Callable* b) {
+	if (!a || !b || !a->ty || !b->ty)
+		return false;
+	auto a_method = dynamic_cast<Method*>(a);
+	auto b_method = dynamic_cast<Method*>(b);
+	if (static_cast<bool>(a_method) !=
+	    static_cast<bool>(b_method))
+		return false;
+	if (a->ty->kind != b->ty->kind)
+		return false;
+	if (a_method &&
+	    a_method->is_static !=
+		b_method->is_static)
+		return false;
+	return true;
+}
+
 bool cxx_callable_signatures_collide(
     Callable* a, Callable* b) {
 	if (!a || !b ||
@@ -190,6 +220,9 @@ static bool same_emitted_declaration_scope(
 
 static CallableRegistration::Kind callable_pair_result(
     Callable* existing, Callable* incoming) {
+	if (!same_callable_overload_category(
+		existing, incoming))
+		return CallableRegistration::Kind::Rejected;
 	if (existing->ty
 		->same_overload_signature_as(
 		    incoming->ty)) {
@@ -235,42 +268,38 @@ CallableRegistration Frame::register_callable(
 	}
 	Node* existing = iter->second.value;
 	if (auto ec = dynamic_cast<Callable*>(existing)) {
-		if (ec->has_overload_directive && c->has_overload_directive) {
-			auto result =
-			    callable_pair_result(ec, c);
-			if (result !=
-			    CallableRegistration::Kind::Added)
-				return {result, existing, ec};
-			auto set = new OverloadSet(std::vector<Callable*>{ec, c});
-			iter->second.value = set;
-			iter->second.ty = nullptr;
-			return {
-			    CallableRegistration::Kind::Added};
-		}
+		auto result =
+		    callable_pair_result(ec, c);
+		if (result !=
+		    CallableRegistration::Kind::Added)
+			return {result, existing, ec};
+		// Declarations owned by one frame form their local overload family
+		// from distinct Pascal signatures. `overload` does not create that
+		// family; its retained per-Callable bit controls only whether lookup
+		// may continue into a structural or lexical parent after finding it.
+		auto set = new OverloadSet(
+		    std::vector<Callable*>{
+			ec, c});
+		iter->second.value = set;
+		iter->second.ty = nullptr;
 		return {
-		    CallableRegistration::Kind::Rejected,
-		    existing, ec};
+		    CallableRegistration::Kind::Added};
 	}
 	if (auto os = dynamic_cast<OverloadSet*>(existing)) {
-		if (c->has_overload_directive) {
-			for (Callable* member :
-			     os->members) {
-				auto result =
-				    callable_pair_result(
-					member, c);
-				if (result !=
-				    CallableRegistration::Kind::Added)
-					return {
-					    result, existing,
-					    member};
-			}
-			os->members.push_back(c);
-			return {
-			    CallableRegistration::Kind::Added};
+		for (Callable* member :
+		     os->members) {
+			auto result =
+			    callable_pair_result(
+				member, c);
+			if (result !=
+			    CallableRegistration::Kind::Added)
+				return {
+				    result, existing,
+				    member};
 		}
+		os->members.push_back(c);
 		return {
-		    CallableRegistration::Kind::Rejected,
-		    existing};
+		    CallableRegistration::Kind::Added};
 	}
 	return {
 	    CallableRegistration::Kind::Rejected,

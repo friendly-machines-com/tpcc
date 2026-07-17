@@ -53,6 +53,22 @@ do
 		sed -n '1,100p' "$tmp/stderr" >&2
 		exit 1
 	fi
+	for required in \
+		'expected return type:' \
+		'arg 1:' \
+		'all candidates:' \
+		'where' \
+		'type tsource' \
+		'type tdestination' \
+		'source:'
+	do
+		if ! rg -Fq "$required" "$tmp/stderr"
+		then
+			echo "incomplete implicit-conversion diagnostic: $required" >&2
+			sed -n '1,140p' "$tmp/stderr" >&2
+			exit 1
+		fi
+	done
 done
 
 for mode in normal reverse
@@ -77,6 +93,22 @@ do
 		sed -n '1,100p' "$tmp/stderr" >&2
 		exit 1
 	fi
+	for required in \
+		'incoming declaration:' \
+		'conflicting declaration:' \
+		'existing overload family:' \
+		'where' \
+		'type tsource' \
+		'type tdestination' \
+		'source:'
+	do
+		if ! rg -Fq "$required" "$tmp/stderr"
+		then
+			echo "incomplete conversion-declaration diagnostic: $required" >&2
+			sed -n '1,140p' "$tmp/stderr" >&2
+			exit 1
+		fi
+	done
 done
 
 echo "custom range-conversion tests passed"

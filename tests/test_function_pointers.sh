@@ -52,6 +52,39 @@ fi
 	-o "$tmp/function_pointers"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/function_pointers"
 
+./mp -Furtl -o"$tmp/routine_value_overload_categories.cc" \
+	tests/routine_value_overload_categories.pp
+
+if ! rg -q \
+	'p_foreachcall\(::u_system::m_proc<void\(.*t_pointer.*t_pointer.*\)>' \
+	"$tmp/routine_value_overload_categories.cc"
+then
+	echo "plain callback overload did not retain its m_proc carrier" >&2
+	exit 1
+fi
+if ! rg -q \
+	'p_foreachcall\(::u_system::m_method<void\(.*t_pointer.*t_pointer.*\)>' \
+	"$tmp/routine_value_overload_categories.cc"
+then
+	echo "bound callback overload did not retain its m_method carrier" >&2
+	exit 1
+fi
+
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/routine_value_overload_categories.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/routine_value_overload_categories"
+ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/routine_value_overload_categories"
+
 for source in \
 	tests/function_pointer_explicit_cross_kind_rejected.pp \
 	tests/function_pointer_global_to_method_rejected.pp \

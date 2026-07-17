@@ -692,6 +692,9 @@ protected:
 	[[noreturn]] void raise_cxx_carrier_collision(
 	    const std::string& name, Callable* incoming,
 	    const CallableRegistration& registration);
+	[[noreturn]] void raise_callable_registration_error(
+	    const std::string& name, Callable* incoming,
+	    const CallableRegistration& registration);
 
 public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);
