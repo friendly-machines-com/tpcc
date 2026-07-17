@@ -185,6 +185,11 @@ struct ShortStringType: public Type {
 	Type* sequence_element_type() const override;
 	Type* sequence_index_type() const override;
 	Type* sequence_length_type() const override;
+	bool sequence_is_resizable() const override {
+		// SetLength changes the logical length stored in byte zero; it does
+		// not change this type's compile-time payload capacity.
+		return true;
+	}
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

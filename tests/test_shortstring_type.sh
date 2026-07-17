@@ -19,6 +19,7 @@ for expected in \
 	'::u_system::tpcc_shortstring_from_c<5>' \
 	'::u_system::tpcc_shortstring_cast<2>' \
 	'::u_system::tpcc_shortstring_cast<5>' \
+	'::u_system::p_setlength(' \
 	'sizeof(::u_system::t_shortstring<2>)' \
 	'sizeof(::u_system::t_shortstring<5>)' \
 	'sizeof(::u_system::t_shortstring<255>)'

@@ -9866,7 +9866,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		emit_parse_error_at(
 		    error_location,
 		    name_for_error +
-			" requires a writable AnsiString or dynamic array");
+			" requires a writable ShortString, AnsiString, or dynamic array");
 	return FinalizedCall{
 	    receiver, chosen ? static_cast<Node*>(chosen) : target,
 	    qualifier_effect};

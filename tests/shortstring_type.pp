@@ -47,5 +47,24 @@ begin
   if SizeOf(TName) <> 6 then
     Halt(9);
   if SizeOf(ShortString) <> 256 then
-    Halt(10)
+    Halt(10);
+
+  { SetLength changes the logical length but never the declared capacity. }
+  Name := 'abcde';
+  SetLength(Name, 2);
+  if Name <> 'ab' then
+    Halt(11);
+  SetLength(Name, 4);
+  if Name <> 'abcd' then
+    Halt(12);
+  SetLength(Name, 99);
+  if Length(Name) <> NameCapacity then
+    Halt(13);
+  SetLength(Name, -1);
+  if Length(Name) <> 0 then
+    Halt(14);
+
+  SetLength(Ordinary, 300);
+  if Length(Ordinary) <> 255 then
+    Halt(15)
 end.

@@ -50,9 +50,10 @@ enum class BuiltinGenericKind {
 	// formal is therefore accepted only when the actual semantic Type
 	// supplies the sequence contract used by indexing and iteration.
 	SequenceLength,
-	// SetLength has the narrower omitted-type contract "a writable resizable
-	// sequence". The Type owns that property; this tag merely selects the
-	// question for the otherwise unexpressible generic formal.
+	// SetLength has the narrower omitted-type contract "a writable sequence
+	// whose logical length can change". The Type owns that property; this tag
+	// merely selects the question for the otherwise unexpressible generic
+	// formal. For ShortString, logical resize does not change fixed capacity.
 	SequenceResize,
 };
 

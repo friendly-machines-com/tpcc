@@ -712,6 +712,24 @@ struct t_shortstring {
 		return data;
 	}
 
+	constexpr void m_resize(t_sizeint requested_length) {
+		// A ShortString resize changes only its logical length byte. Payload
+		// storage is inline and fixed by the Pascal type, so growing exposes
+		// the existing bytes just as assigning S[0] does. Clamp instead of
+		// storing a length beyond Capacity: every sequence consumer trusts
+		// this invariant when indexing, iterating, and copying the value.
+		const std::size_t new_length =
+		    requested_length <= 0
+			? 0
+			: std::min<std::size_t>(
+			      static_cast<std::size_t>(
+				  requested_length),
+			      Capacity);
+		length = t_char{
+		    static_cast<uint8_t>(
+			new_length)};
+	}
+
 	std::string m_string() const {
 		std::string result;
 		const std::size_t count =

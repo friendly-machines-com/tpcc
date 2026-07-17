@@ -47,5 +47,25 @@ int main() {
 	    wider.data[1].value != 1)
 		return EXIT_FAILURE;
 
+	wider.data[2] = ::u_system::t_char{'c'};
+	wider.data[3] = ::u_system::t_char{'d'};
+	::u_system::p_setlength(
+	    ::u_system::tpcc_make_storage_ref(wider),
+	    4);
+	if (wider.length.value != 4 ||
+	    wider.data[2].value != 'c' ||
+	    wider.data[3].value != 'd')
+		return EXIT_FAILURE;
+	::u_system::p_setlength(
+	    ::u_system::tpcc_make_storage_ref(wider),
+	    99);
+	if (wider.length.value != 5)
+		return EXIT_FAILURE;
+	::u_system::p_setlength(
+	    ::u_system::tpcc_make_storage_ref(wider),
+	    -1);
+	if (wider.length.value != 0)
+		return EXIT_FAILURE;
+
 	return EXIT_SUCCESS;
 }

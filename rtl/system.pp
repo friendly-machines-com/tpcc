@@ -433,7 +433,9 @@ operator Add(a, b: shortstring): shortstring; external name '::u_system::o_add';
 operator :=(a: shortstring): ansistring; external name '::u_system::o_implicit';
 
 procedure SetLength(var destination: AnsiString; value: SizeInt); overload; external name '::u_system::p_setlength';
-procedure SetLength(var destination; value: SizeInt); overload; external name '::u_system::p_setlength'; // generic resizable-sequence intrinsic
+{ The omitted type covers dynamic arrays and every fixed-capacity ShortString
+  type without weakening ordinary exact-type rules for var parameters. }
+procedure SetLength(var destination; value: SizeInt); overload; external name '::u_system::p_setlength';
 procedure UniqueString(var value: AnsiString); external name '::u_system::p_uniquestring';
 
 implementation
