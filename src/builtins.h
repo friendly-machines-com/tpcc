@@ -82,6 +82,13 @@ enum class BuiltinGenericKind {
 	// intrinsic storage contract, not general var/out covariance: the formal
 	// must be the subrange's exact compiler-selected base carrier.
 	ValOutput,
+	// Abs has the otherwise-unspellable exact numeric relation T -> T. The
+	// root-frame fallback is constrained to predefined integer/real families
+	// and their subranges; a complete user declaration still wins normally.
+	AbsoluteValue,
+	// Succ/Pred have the otherwise-unspellable exact ordinal relation T -> T,
+	// including every enum and subrange definition.
+	OrdinalSuccessorOrPredecessor,
 	// Pascal declarations cannot spell "any sequence type". Length's omitted
 	// formal is therefore accepted only when the actual semantic Type
 	// supplies the sequence contract used by indexing and iteration.
@@ -120,6 +127,12 @@ struct BuiltinDesc {
 	BuiltinSyntaxKind syntax_kind = BuiltinSyntaxKind::None;
 	BuiltinCallConvention call_convention =
 	    BuiltinCallConvention::Function;
+	/** Direct calls to a finite compiler-owned operation may select a second
+	 * implementation when caller {$Q} is disabled even though Pascal lookup
+	 * selected the same ordinary declaration. Empty for ordinary functions
+	 * and operators whose checked/unchecked identities are separate
+	 * declarations. */
+	std::string_view overflow_unchecked_cxx_name = {};
 };
 
 struct IntrinsicTypeDesc {

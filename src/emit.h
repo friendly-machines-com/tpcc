@@ -169,7 +169,10 @@ public:
 	void emit_while_epilogue();
 	void emit_repeat_prologue();
 	void emit_repeat_epilogue(Node* condition);
-	void emit_for_prologue(Node* control, Node* initial, Node* final, bool descending);
+	void emit_for_prologue(
+	    Node* control, Node* initial,
+	    Node* final, bool descending,
+	    bool overflow_checks);
 	void emit_for_epilogue();
 	void emit_for_in_sequence_prologue(
 	    Node* collection, Node* current_assignment);

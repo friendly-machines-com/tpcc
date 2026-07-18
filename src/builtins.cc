@@ -300,6 +300,212 @@ static ConstEvalResult fold_unary_plus(ConstEvalContext&, Type* result_ty, const
 	return fold_integer_result(i->value, i->negative, result_ty);
 }
 
+struct ConstantOrdinalCarrier {
+	unsigned bits;
+	bool signed_type;
+};
+
+static std::optional<ConstantOrdinalCarrier>
+constant_ordinal_carrier(Type* type) {
+	while (auto range =
+		   dynamic_cast<SubrangeType*>(type))
+		type = range->base_type;
+	OrdinalBounds bounds;
+	if (integer_bounds(type, &bounds)) {
+		uint64_t high_bit =
+		    bounds.signed_type
+			? bounds.min_magnitude
+			: bounds.max_positive;
+		unsigned bits = 0;
+		do {
+			++bits;
+			high_bit >>= 1;
+		} while (high_bit != 0);
+		return ConstantOrdinalCarrier{
+		    bits, bounds.signed_type};
+	}
+	if (type == char_type())
+		return ConstantOrdinalCarrier{8, false};
+	if (auto enumeration =
+		dynamic_cast<EnumType*>(type))
+		return ConstantOrdinalCarrier{
+		    enumeration->carrier_bits,
+		    enumeration->carrier_signed};
+	return std::nullopt;
+}
+
+static std::optional<std::pair<bool, uint64_t>>
+constant_ordinal_value(Node* value) {
+	if (auto integer =
+		dynamic_cast<Integer*>(value))
+		return std::pair{
+		    integer->negative,
+		    integer->value};
+	if (auto member =
+		dynamic_cast<EnumMemberRef*>(value)) {
+		const bool negative =
+		    member->value < 0;
+		const uint64_t magnitude =
+		    negative
+			? static_cast<uint64_t>(
+			      -(member->value + 1)) +
+			      1
+			: static_cast<uint64_t>(
+			      member->value);
+		return std::pair{
+		    negative, magnitude};
+	}
+	if (auto character =
+		dynamic_cast<String*>(value);
+	    character &&
+	    character->ty == char_type() &&
+	    character->value.size() == 1)
+		return std::pair{
+		    false,
+		    static_cast<uint64_t>(
+			static_cast<unsigned char>(
+			    character->value.front()))};
+	return std::nullopt;
+}
+
+static uint64_t constant_ordinal_mask(
+    unsigned bits) {
+	return bits == 64
+		   ? UINT64_MAX
+		   : (uint64_t{1} << bits) - 1;
+}
+
+static uint64_t constant_ordinal_bits(
+    bool negative, uint64_t magnitude,
+    unsigned bits) {
+	const uint64_t raw =
+	    negative ? uint64_t{0} - magnitude
+		     : magnitude;
+	return raw & constant_ordinal_mask(bits);
+}
+
+static ConstEvalResult fold_abs_impl(
+    Type* result_ty,
+    const std::vector<Node*>& args,
+    bool checked) {
+	if (args.size() != 1 || !args[0])
+		return ConstEvalResult::not_constant();
+	if (auto real =
+		dynamic_cast<Real*>(args[0]))
+		return ConstEvalResult::success(
+		    new Real(
+			::fabsl(real->value),
+			result_ty));
+	auto value =
+	    constant_ordinal_value(args[0]);
+	auto carrier =
+	    constant_ordinal_carrier(result_ty);
+	if (!value || !carrier)
+		return ConstEvalResult::not_constant();
+	const uint64_t raw =
+	    constant_ordinal_bits(
+		value->first, value->second,
+		carrier->bits);
+	if (checked && value->first &&
+	    carrier->signed_type &&
+	    raw ==
+		(uint64_t{1} <<
+		 (carrier->bits - 1)))
+		return ConstEvalResult::error(
+		    "integer constant overflow");
+	const uint64_t absolute =
+	    value->first
+		? (uint64_t{0} - raw) &
+		      constant_ordinal_mask(
+			  carrier->bits)
+		: raw;
+	return const_explicit_ordinal_cast(
+	    absolute, false, result_ty);
+}
+
+static ConstEvalResult fold_abs(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_abs_impl(
+	    result_ty, args, true);
+}
+
+static ConstEvalResult fold_unchecked_abs(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_abs_impl(
+	    result_ty, args, false);
+}
+
+static ConstEvalResult fold_ordinal_step(
+    Type* result_ty,
+    const std::vector<Node*>& args,
+    bool increment, bool checked) {
+	if (args.size() != 1 || !args[0])
+		return ConstEvalResult::not_constant();
+	auto value =
+	    constant_ordinal_value(args[0]);
+	auto carrier =
+	    constant_ordinal_carrier(result_ty);
+	if (!value || !carrier ||
+	    carrier->bits == 0)
+		return ConstEvalResult::not_constant();
+	const uint64_t mask =
+	    constant_ordinal_mask(carrier->bits);
+	const uint64_t raw =
+	    constant_ordinal_bits(
+		value->first, value->second,
+		carrier->bits);
+	if (checked) {
+		const uint64_t minimum =
+		    carrier->signed_type
+			? uint64_t{1}
+			      << (carrier->bits - 1)
+			: 0;
+		const uint64_t maximum =
+		    carrier->signed_type
+			? minimum - 1
+			: mask;
+		if ((increment && raw == maximum) ||
+		    (!increment && raw == minimum))
+			return ConstEvalResult::error(
+			    "integer constant overflow");
+	}
+	const uint64_t stepped =
+	    increment ? (raw + 1) & mask
+		      : (raw - 1) & mask;
+	return const_explicit_ordinal_cast(
+	    stepped, false, result_ty);
+}
+
+static ConstEvalResult fold_succ(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_ordinal_step(
+	    result_ty, args, true, true);
+}
+
+static ConstEvalResult fold_unchecked_succ(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_ordinal_step(
+	    result_ty, args, true, false);
+}
+
+static ConstEvalResult fold_pred(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_ordinal_step(
+	    result_ty, args, false, true);
+}
+
+static ConstEvalResult fold_unchecked_pred(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_ordinal_step(
+	    result_ty, args, false, false);
+}
+
 static ConstEvalResult fold_logical_not(
     ConstEvalContext&, Type* result_ty,
     const std::vector<Node*>& args) {
@@ -686,6 +892,52 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_comparebyte", nullptr},
     {"::u_system::p_comparechar", nullptr},
     {"::u_system::p_assigned", nullptr, {}, BuiltinGenericKind::Assigned},
+    {
+	.cxx_name = "::u_system::p_abs",
+	.const_fold = fold_abs,
+	.generic_kind =
+	    BuiltinGenericKind::AbsoluteValue,
+	.overflow_unchecked_cxx_name =
+	    "::u_system::m_unchecked_abs",
+    },
+    {
+	.cxx_name = "::u_system::m_unchecked_abs",
+	.const_fold = fold_unchecked_abs,
+	.generic_kind =
+	    BuiltinGenericKind::AbsoluteValue,
+    },
+    {
+	.cxx_name = "::u_system::p_succ",
+	.const_fold = fold_succ,
+	.generic_kind =
+	    BuiltinGenericKind::
+		OrdinalSuccessorOrPredecessor,
+	.overflow_unchecked_cxx_name =
+	    "::u_system::m_unchecked_succ",
+    },
+    {
+	.cxx_name = "::u_system::m_unchecked_succ",
+	.const_fold = fold_unchecked_succ,
+	.generic_kind =
+	    BuiltinGenericKind::
+		OrdinalSuccessorOrPredecessor,
+    },
+    {
+	.cxx_name = "::u_system::p_pred",
+	.const_fold = fold_pred,
+	.generic_kind =
+	    BuiltinGenericKind::
+		OrdinalSuccessorOrPredecessor,
+	.overflow_unchecked_cxx_name =
+	    "::u_system::m_unchecked_pred",
+    },
+    {
+	.cxx_name = "::u_system::m_unchecked_pred",
+	.const_fold = fold_unchecked_pred,
+	.generic_kind =
+	    BuiltinGenericKind::
+		OrdinalSuccessorOrPredecessor,
+    },
     {"::u_system::o_trunc", fold_trunc},
     {"::u_system::o_round", fold_round},
     {"::u_system::p_frac", fold_frac},
@@ -841,6 +1093,61 @@ const Frame& root_frame() {
 		// System. Registering its singleton here also lets type-or-expression
 		// syntax such as SizeOf(File) recognize it as a type.
 		ff.register_type("file", &k_file);
+
+		// Abs, Succ, and Pred are ordinary Pascal function calls, so their
+		// declarations live under their source names and participate in the
+		// existing frame lookup and overload selection. Their exact result
+		// relationships cannot currently be written as Pascal declarations:
+		// Abs is T -> T over predefined numeric types, while Succ/Pred are
+		// T -> T for every intrinsic ordinal, enum, and subrange definition.
+		// An unknown formal/result expresses only that missing quantification.
+		// Generic ranking makes these compiler declarations lose to every
+		// complete user or System overload; no separate intrinsic lookup is
+		// involved.
+		auto register_generic_unary =
+		    [&ff](std::string_view pas_name,
+			  const BuiltinDesc* descriptor) {
+			    std::vector<Parameter> formals;
+			    formals.emplace_back(
+				"value", "p_value",
+				unknown_type(),
+				ParamMode::Value, nullptr);
+			    auto routine_type =
+				new RoutineType(
+				    SourceLocation::builtin(),
+				    std::move(formals),
+				    unknown_type(), ROUTINE);
+			    auto procedure =
+				new Procedure(
+				    std::string(
+					descriptor->cxx_name),
+				    std::string(pas_name),
+				    routine_type, true);
+			    procedure->builtin_desc =
+				descriptor;
+			    procedure->is_external = true;
+			    procedure->has_body = true;
+			    auto registration =
+				ff.register_callable(
+				    std::string(pas_name),
+				    procedure);
+			    assert(
+				registration.kind ==
+				CallableRegistration::Kind::
+				    Added);
+		    };
+		register_generic_unary(
+		    "abs",
+		    lookup_builtin_desc(
+			"::u_system::p_abs"));
+		register_generic_unary(
+		    "succ",
+		    lookup_builtin_desc(
+			"::u_system::p_succ"));
+		register_generic_unary(
+		    "pred",
+		    lookup_builtin_desc(
+			"::u_system::p_pred"));
 
 		// Inc/Dec have one exact operation for every ordinal and pointer type,
 		// and their distance forms need the corresponding otherwise-infinite

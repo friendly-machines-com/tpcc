@@ -351,7 +351,10 @@ ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
 	auto c = dynamic_cast<Callable*>(callee);
 	if (!c)
 		return ConstEvalResult::not_constant();
-	const BuiltinDesc* desc = c->builtin_desc;
+	const BuiltinDesc* desc =
+	    lowering_builtin_desc
+		? lowering_builtin_desc
+		: c->builtin_desc;
 	if (!desc || !desc->const_fold)
 		return ConstEvalResult::not_constant();
 	std::vector<Node*> folded;
@@ -362,7 +365,12 @@ ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
 			return r;
 		folded.push_back(r.node);
 	}
-	return desc->const_fold(ctx, c->ty ? c->ty->return_type : nullptr, folded);
+	// Generic root declarations use an intentionally omitted return type to
+	// express exact T -> T relations which Pascal cannot yet quantify. Call
+	// construction restores that concrete result before evaluation, so the
+	// call node--not the declaration placeholder--is authoritative here.
+	return desc->const_fold(
+	    ctx, ty, folded);
 }
 
 void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {

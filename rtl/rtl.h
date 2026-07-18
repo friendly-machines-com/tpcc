@@ -3956,22 +3956,6 @@ constexpr t_boolean tpcc_for_equal(T a, T b) {
 	return tpcc_bool_to_boolean(tpcc_for_ordinal_value(a) == tpcc_for_ordinal_value(b));
 }
 
-template<typename T>
-constexpr T tpcc_for_succ(T value) {
-	using traits = tpcc_ordinal_storage<T>;
-	return traits::make(
-	    static_cast<typename traits::type>(
-		traits::get(value) + 1));
-}
-
-template<typename T>
-constexpr T tpcc_for_pred(T value) {
-	using traits = tpcc_ordinal_storage<T>;
-	return traits::make(
-	    static_cast<typename traits::type>(
-		traits::get(value) - 1));
-}
-
 inline t_boolean o_logicalnot(t_boolean a) {
 	return tpcc_bool_to_boolean(!a);
 }
@@ -4055,6 +4039,104 @@ inline T m_checked_ordinal_step(
 	if (overflow)
 		m_runtime_error(215);
 	return traits::make(result);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T m_unchecked_abs(T value) {
+	using traits = tpcc_ordinal_storage<T>;
+	using raw_type = typename traits::type;
+	if constexpr (!std::is_signed_v<raw_type>)
+		return value;
+	else {
+		const raw_type raw =
+		    traits::get(value);
+		if (raw >= 0)
+			return value;
+		using unsigned_type =
+		    std::make_unsigned_t<raw_type>;
+		// Negating Low(signed) in its signed carrier is C++ undefined
+		// behavior. Unchecked Pascal Abs instead keeps the carrier's low
+		// bits, so perform the negation modulo the corresponding unsigned
+		// type and state the two's-complement result with bit_cast.
+		const unsigned_type absolute =
+		    unsigned_type{0} -
+		    static_cast<unsigned_type>(raw);
+		return traits::make(
+		    m_integer_from_bits<raw_type>(
+			absolute));
+	}
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T p_abs(T value) {
+	using traits = tpcc_ordinal_storage<T>;
+	using raw_type = typename traits::type;
+	if constexpr (!std::is_signed_v<raw_type>)
+		return value;
+	else {
+		const raw_type raw =
+		    traits::get(value);
+		if (raw ==
+		    std::numeric_limits<
+			raw_type>::min())
+			m_runtime_error(215);
+		return raw < 0
+			   ? traits::make(
+				 static_cast<raw_type>(
+				     -raw))
+			   : value;
+	}
+}
+
+template<typename T>
+requires std::is_floating_point_v<T>
+inline T m_unchecked_abs(T value) {
+	return std::fabs(value);
+}
+
+template<typename T>
+requires std::is_floating_point_v<T>
+inline T p_abs(T value) {
+	// {$Q} is integer overflow checking. Both names remain necessary because
+	// the call-site decision is made before the operand's exact predefined
+	// numeric type is known; floating Abs simply has no overflow case.
+	return std::fabs(value);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T m_unchecked_succ(T value) {
+	return m_unchecked_ordinal_step(
+	    value, 1, false);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T p_succ(T value) {
+	return m_checked_ordinal_step(
+	    value, 1, false);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T m_unchecked_pred(T value) {
+	return m_unchecked_ordinal_step(
+	    value, 1, true);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T p_pred(T value) {
+	return m_checked_ordinal_step(
+	    value, 1, true);
 }
 
 template<typename T>

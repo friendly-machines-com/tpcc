@@ -1491,13 +1491,18 @@ void Emitter::emit_repeat_epilogue(Node* condition) {
 	fprintf(active, "));\n");
 }
 
-void Emitter::emit_for_prologue(Node* control, Node* initial, Node* final, bool descending) {
+void Emitter::emit_for_prologue(
+    Node* control, Node* initial,
+    Node* final, bool descending,
+    bool overflow_checks) {
 	if (!active)
 		return;
-	// Snapshot both bounds once. tpcc_for_done prevents the step after the
-	// terminal iteration from overflowing at High(T)/Low(T); keeping the step
-	// in the C++ for-increment expression also gives Pascal Continue its proper
-	// "perform the loop step, then retest" behavior.
+	// Snapshot both bounds once. tpcc_for_done prevents the artificial step
+	// after the terminal iteration from overflowing at High(T)/Low(T). Any
+	// actual generated step still uses the for-statement's {$Q} state, exactly
+	// like source Succ/Pred; keeping it in the C++ increment expression also
+	// gives Pascal Continue its proper "perform the step, then retest"
+	// behavior.
 	fprintf(active, "\t{ ");
 	emit_type_ref(control->ty);
 	fprintf(active, " tpcc_for_initial = ");
@@ -1520,7 +1525,10 @@ void Emitter::emit_for_prologue(Node* control, Node* initial, Node* final, bool 
 	emit_expression(control);
 	fprintf(active, " = tpcc_for_done ? ");
 	emit_expression(control);
-	fprintf(active, " : ::u_system::tpcc_for_%s(", descending ? "pred" : "succ");
+	fprintf(
+	    active, " : ::u_system::%s%s(",
+	    overflow_checks ? "p_" : "m_unchecked_",
+	    descending ? "pred" : "succ");
 	emit_expression(control);
 	fprintf(active, ")) {\n");
 }
@@ -2871,16 +2879,27 @@ void Emitter::emit_call_arguments(
 			 ParamMode::Value ||
 		     call_ty->formals[i].mode ==
 			 ParamMode::Const) &&
-		    call_ty->formals[i].ty != unknown_type() &&
-		    dynamic_cast<Integer*>(arg)) {
+		    dynamic_cast<Integer*>(arg) &&
+		    (call_ty->formals[i].ty !=
+			 unknown_type() ||
+		     (call_ty->formals[i].mode ==
+			  ParamMode::Value &&
+		      arg->ty &&
+		      arg->ty != unknown_type()))) {
 			Type* formal_ty =
-			    call_ty->formals[i].ty;
+			    call_ty->formals[i].ty !=
+				    unknown_type()
+				? call_ty->formals[i].ty
+				: arg->ty;
 			// Pascal has already selected the declaration. Pin a raw
 			// integer literal to its value/const-parameter carrier so C++
 			// cannot independently select another overload. In particular,
 			// an unqualified custom operator call must not let ADL prefer an
 			// RTL function template merely because the literal would otherwise
-			// be emitted as uint64_t.
+			// be emitted as uint64_t. A generic value formal likewise uses
+			// the actual's already-contextualized Pascal type: unknown is the
+			// declaration's quantified T, not permission for C++ to infer a
+			// different carrier from literal spelling.
 			fprintf(active, "static_cast<");
 			emit_type_ref(formal_ty);
 			fprintf(active, ">(");
@@ -3507,6 +3526,27 @@ void Emitter::emit_expression(Node* expr) {
 	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
 		auto callable =
 		    dynamic_cast<Callable*>(pc->callee);
+		if (pc->lowering_builtin_desc) {
+			if (pc->receiver || !callable)
+				unhandled_node(
+				    "call-site builtin lowering is not a standalone callable",
+				    pc);
+			// Ordinary Pascal lookup and argument conversion have already
+			// selected `callable`. Only its compiler-owned implementation is
+			// different at this {$Q} site, so emit the retained descriptor
+			// with exactly the selected declaration's converted arguments.
+			fprintf(
+			    active, "%.*s(",
+			    static_cast<int>(
+				pc->lowering_builtin_desc
+				    ->cxx_name.size()),
+			    pc->lowering_builtin_desc
+				->cxx_name.data());
+			emit_call_arguments(
+			    callable->ty, pc->args);
+			fprintf(active, ")");
+			return;
+		}
 		if (auto method =
 			dynamic_cast<Method*>(pc->callee);
 		    method && method->is_static) {

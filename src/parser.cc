@@ -1762,7 +1762,10 @@ void Parser::maybe_parse_statement() {
 			if (emitter)
 				emitter->emit_for_prologue(
 				    control, initial, final,
-				    descending);
+				    descending,
+				    directive_state
+					.switch_enabled(
+					    'q'));
 			++loop_depth;
 			loop_try_targets.push_back(
 			    {protected_try_depth,
@@ -8749,13 +8752,19 @@ static bool is_generic_ordinal_operation(
 		       UnaryOrdinalOrPointerStep ||
 	       kind ==
 		   BuiltinGenericKind::
-		       EnumOrPointerStep;
+		       EnumOrPointerStep ||
+	       kind ==
+		   BuiltinGenericKind::
+		       OrdinalSuccessorOrPredecessor;
 }
 
 static bool generic_ordinal_operation_accepts(
     BuiltinGenericKind kind, Type* operand) {
 	if (kind ==
-	    BuiltinGenericKind::OrdinalValue)
+		BuiltinGenericKind::OrdinalValue ||
+	    kind ==
+		BuiltinGenericKind::
+		    OrdinalSuccessorOrPredecessor)
 		return is_ordinal_intrinsic_argument(
 		    operand);
 	if (kind ==
@@ -8789,6 +8798,19 @@ static bool generic_ordinal_operation_accepts(
 			   operand) != nullptr;
 	}
 	return false;
+}
+
+static bool generic_absolute_value_accepts(
+    Type* operand) {
+	while (auto subrange =
+		   dynamic_cast<SubrangeType*>(
+		       operand))
+		operand = subrange->base_type;
+	OrdinalBounds bounds;
+	return integer_bounds(operand, &bounds) ||
+	       operand == single_type() ||
+	       operand == double_type() ||
+	       operand == extended_type();
 }
 
 static bool integer_type_contains_literal(
@@ -9264,6 +9286,29 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    actual};
 
 	if (target == unknown_type()) {
+		if (builtin && parameter_index == 0 &&
+		    (builtin->generic_kind ==
+			 BuiltinGenericKind::
+			     AbsoluteValue ||
+		     builtin->generic_kind ==
+			 BuiltinGenericKind::
+			     OrdinalSuccessorOrPredecessor) &&
+		    untyped_integer) {
+			// An untyped integer literal is not yet a Pascal value of some
+			// carrier type. These exact T -> T declarations need one before
+			// selection can determine their result, so commit the literal to
+			// the same natural carrier used elsewhere by the conversion
+			// algebra. This is contextual literal construction, not an
+			// implicit conversion edge and cannot form a conversion chain.
+			Type* natural =
+			    integer_literal_natural_type(
+				untyped_integer);
+			actual = new Integer(
+			    untyped_integer->value,
+			    natural,
+			    untyped_integer->negative);
+			source = natural;
+		}
 		if (builtin &&
 		    builtin->generic_kind ==
 			BuiltinGenericKind::
@@ -9308,6 +9353,14 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    parameter_index == 0 &&
 		    (!source ||
 		     !source->sequence_is_resizable()))
+			return std::nullopt;
+		if (builtin &&
+		    builtin->generic_kind ==
+			BuiltinGenericKind::
+			    AbsoluteValue &&
+		    parameter_index == 0 &&
+		    !generic_absolute_value_accepts(
+			source))
 			return std::nullopt;
 		const bool constrained_ordinal =
 		    builtin &&
@@ -10921,12 +10974,25 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			emit_parse_error_at(
 			    error_location,
 			    name_for_error +
-				(builtin->generic_kind !=
+				(builtin->generic_kind ==
 					 BuiltinGenericKind::
-					     OrdinalValue
+					     UnaryOrdinalOrPointerStep ||
+				     builtin->generic_kind ==
+					 BuiltinGenericKind::
+					     EnumOrPointerStep
 				     ? " requires an ordinal or pointer argument"
 				     : " requires an ordinal argument"));
 	}
+	if (builtin &&
+	    builtin->generic_kind ==
+		BuiltinGenericKind::AbsoluteValue &&
+	    (args.empty() || !args[0] ||
+	     !generic_absolute_value_accepts(
+		 args[0]->ty)))
+		emit_parse_error_at(
+		    error_location,
+		    name_for_error +
+			" requires a predefined numeric argument");
 	if (builtin &&
 	    builtin->generic_kind == BuiltinGenericKind::SetMutation) {
 		// Until tpcc supports generic routine declarations, system.pp has to
@@ -10998,14 +11064,14 @@ Node* Parser::make_call(
 	    finalized.receiver, finalized.callee,
 	    std::move(args));
 	call->ty = call_result_type(finalized.callee);
+	auto callable =
+	    dynamic_cast<Callable*>(
+		finalized.callee);
+	const BuiltinDesc* descriptor =
+	    callable
+		? callable->builtin_desc
+		: nullptr;
 	if (call->ty == unknown_type()) {
-		auto callable =
-		    dynamic_cast<Callable*>(
-			finalized.callee);
-		const BuiltinDesc* descriptor =
-		    callable
-			? callable->builtin_desc
-			: nullptr;
 		if (descriptor &&
 		    (descriptor->generic_kind ==
 			 BuiltinGenericKind::
@@ -11015,22 +11081,66 @@ Node* Parser::make_call(
 			     EnumOrPointerStep ||
 		     descriptor->generic_kind ==
 			 BuiltinGenericKind::
-			     SetUnionOrDifference) &&
+			     SetUnionOrDifference ||
+		     descriptor->generic_kind ==
+			 BuiltinGenericKind::
+			     AbsoluteValue ||
+		     descriptor->generic_kind ==
+			 BuiltinGenericKind::
+			     OrdinalSuccessorOrPredecessor) &&
 		    !call->args.empty() &&
 		    call->args[0])
 			// These root declarations omit a result type equal to their
-			// converted first argument: T for ordinal/pointer stepping, or
-			// `set of T` for set algebra. Candidate matching has already
-			// established that exact type. Restore the relation immediately
-			// after ordinary selection so direct operator expressions and
-			// Inc/Dec mutation share one result-typing mechanism.
+			// converted first argument: T for Abs and ordinal/pointer
+			// stepping, or `set of T` for set algebra. Candidate matching
+			// has already established that exact type. Restore the relation
+			// immediately after ordinary selection so direct function and
+			// operator expressions plus Inc/Dec mutation share one
+			// result-typing mechanism.
 			call->ty =
 			    call->args[0]->ty;
 	}
+	if (descriptor &&
+	    !directive_state.switch_enabled('q') &&
+	    !descriptor
+		 ->overflow_unchecked_cxx_name
+		 .empty()) {
+		// Pascal lookup has already selected the one compiler declaration.
+		// {$Q} changes only how this direct predefined operation is executed;
+		// it must not rename the source function before lookup (which would
+		// bypass ordinary shadowing and overloads) or change declaration
+		// identity. Retaining the alternate descriptor on this call also
+		// gives constant folding and C++ emission one shared decision.
+		call->lowering_builtin_desc =
+		    lookup_builtin_desc(
+			descriptor
+			    ->overflow_unchecked_cxx_name);
+		assert(
+		    call->lowering_builtin_desc);
+	}
+	Node* result = call;
+	if (descriptor &&
+	    directive_state.switch_enabled('r') &&
+	    (descriptor->generic_kind ==
+		 BuiltinGenericKind::
+		     AbsoluteValue ||
+	     descriptor->generic_kind ==
+		 BuiltinGenericKind::
+		     OrdinalSuccessorOrPredecessor) &&
+	    (dynamic_cast<SubrangeType*>(
+		 call->ty) ||
+	     dynamic_cast<EnumType*>(
+		 call->ty)))
+		// {$Q} protects the operation's finite carrier. {$R} independently
+		// protects the declared enum/subrange domain at the point where the
+		// predefined exact-T result is formed; the carrier can represent
+		// values which the Pascal type cannot.
+		result = new RangeCheckedCast(
+		    call, call->ty);
 	if (!finalized.qualifier_effect)
-		return call;
+		return result;
 	return new EvaluateThen(
-	    finalized.qualifier_effect, call);
+	    finalized.qualifier_effect, result);
 }
 
 Unit* Parser::load_or_get_unit(std::string name) {

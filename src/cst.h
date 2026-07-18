@@ -101,6 +101,11 @@ public:
 	// Any expression that yields a callable at compile time or at runtime.
 	// Compile-time: a Callable*. Runtime: a routine value.
 	Node* callee;
+	// Optional call-site implementation selected after ordinary Pascal lookup.
+	// The callee remains the source declaration for identity and diagnostics;
+	// this descriptor exists only for compiler-owned operations such as Abs
+	// whose one Pascal declaration has caller-{$Q} checked/unchecked lowering.
+	const BuiltinDesc* lowering_builtin_desc = nullptr;
 	std::vector<Node*> args;
 	ProcCall(Node* receiver, Node* callee, std::vector<Node*> args);
 	const char* diagnostic_kind() const override;
