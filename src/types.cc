@@ -1376,22 +1376,45 @@ PointerType::value_conversion_from(
     const Type* source) const {
 	auto source_pointer =
 	    dynamic_cast<const PointerType*>(source);
-	if (!source_pointer)
+	if (source_pointer) {
+		if (source_pointer->item_type == item_type)
+			return direct_conversion();
+		if (source_pointer->is_untyped() || is_untyped())
+			return implicit_conversion(20);
+		auto source_object =
+		    dynamic_cast<const ObjectType*>(
+			source_pointer->item_type);
+		auto target_object =
+		    dynamic_cast<const ObjectType*>(
+			item_type);
+		if (source_object && target_object &&
+		    source_object->is_subtype_of(
+			target_object))
+			return implicit_conversion(
+			    object_inheritance_distance(
+				source_object,
+				target_object));
 		return std::nullopt;
-	if (source_pointer->item_type == item_type)
-		return direct_conversion();
-	if (source_pointer->is_untyped() || is_untyped())
-		return implicit_conversion(20);
-	auto source_object =
-	    dynamic_cast<const ObjectType*>(
-		source_pointer->item_type);
-	auto target_object =
-	    dynamic_cast<const ObjectType*>(item_type);
-	if (source_object && target_object &&
-	    source_object->is_subtype_of(target_object))
+	}
+	if (is_untyped() &&
+	    (dynamic_cast<const ClassType*>(source) ||
+	     dynamic_cast<const ClassRefType*>(
+		 source))) {
+		// A Pascal class instance and metaclass are already pointer-valued
+		// references, so an API which explicitly asks for predefined untyped
+		// Pointer may retain that opaque reference without a runtime
+		// operation. Do not extend this to old-style object values,
+		// interfaces, or ^T: those are different semantic/storage contracts.
+		//
+		// Keep this at the worst existing conversion distance so every
+		// related class or class-reference overload wins independently of
+		// inheritance depth. The ordinary matcher consults this destination
+		// directly, rejects var/out before value conversion, and disables
+		// value conversion while matching a user conversion's source formal;
+		// consequently this edge cannot become class -> Pointer -> T.
 		return implicit_conversion(
-		    object_inheritance_distance(
-			source_object, target_object));
+		    std::numeric_limits<unsigned>::max());
+	}
 	return std::nullopt;
 }
 

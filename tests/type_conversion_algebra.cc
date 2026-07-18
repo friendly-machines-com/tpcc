@@ -186,6 +186,17 @@ int main() {
 	ClassType unrelated_class(
 	    SourceLocation::internal(),
 	    &unrelated_members, {}, nullptr);
+	ClassRefType derived_class_ref(
+	    SourceLocation::internal(),
+	    &derived_class);
+	Frame interface_members(nullptr);
+	InterfaceType interface_type(
+	    SourceLocation::internal(),
+	    &interface_members, {});
+	Frame object_members(nullptr);
+	ObjectType old_object(
+	    SourceLocation::internal(),
+	    &object_members, nullptr);
 	assert(derived_class
 	           .predefined_explicit_conversion_from(
 		       &base_class));
@@ -201,6 +212,31 @@ int main() {
 	assert(base_class
 	           .predefined_explicit_conversion_from(
 		       &pointer_a));
+	auto class_to_pointer =
+	    pointer_type()->value_conversion_from(
+		&derived_class);
+	auto classref_to_pointer =
+	    pointer_type()->value_conversion_from(
+		&derived_class_ref);
+	assert(class_to_pointer);
+	assert(classref_to_pointer);
+	assert(class_to_pointer->kind ==
+	       ValueConversionClass::Convert);
+	assert(classref_to_pointer->kind ==
+	       ValueConversionClass::Convert);
+	assert(class_to_pointer->distance >
+	       base_class
+		   .value_conversion_from(
+		       &derived_class)
+		   ->distance);
+	assert(!pointer_a.value_conversion_from(
+	    &derived_class));
+	assert(!pointer_type()
+	            ->value_conversion_from(
+			&interface_type));
+	assert(!pointer_type()
+	            ->value_conversion_from(
+			&old_object));
 
 	Frame packed_members(nullptr);
 	PackedRecordType packed_byte(
