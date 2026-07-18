@@ -617,7 +617,13 @@ static const BuiltinDesc k_builtins[] = {
 	.cxx_name = "::u_system::p_getmem",
 	.const_fold = nullptr,
 	.generic_kind =
-	    BuiltinGenericKind::PointerStorageOut,
+	    BuiltinGenericKind::PointerStorage,
+    },
+    {
+	.cxx_name = "::u_system::p_reallocmem",
+	.const_fold = nullptr,
+	.generic_kind =
+	    BuiltinGenericKind::PointerStorage,
     },
     {"::u_system::p_freemem", nullptr},
     {"::u_system::p_rewrite", nullptr},

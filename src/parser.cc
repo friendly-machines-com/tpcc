@@ -9579,13 +9579,13 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    actual};
 		if (builtin &&
 		    builtin->generic_kind ==
-			BuiltinGenericKind::PointerStorageOut &&
-		    formal.mode == ParamMode::Out &&
+			BuiltinGenericKind::PointerStorage &&
 		    target == pointer_type() &&
 		    dynamic_cast<PointerType*>(source)) {
-			// This is GetMem's explicit raw-storage contract. Keeping it in
-			// builtin metadata prevents an RTL exception from weakening every
-			// typed mutable-reference parameter in the language.
+			// GetMem(out Pointer, ...) and ReAllocMem(var Pointer, ...)
+			// explicitly operate on raw pointer storage. Keeping that contract
+			// in builtin metadata prevents an RTL exception from weakening
+			// every typed mutable-reference parameter in the language.
 			return ArgumentMatch{
 			    {MatchRank::Tier::Direct, 0},
 			    actual};

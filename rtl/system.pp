@@ -383,6 +383,7 @@ procedure New; external name '::u_system::p_new';
 procedure Dispose; external name '::u_system::p_dispose';
 procedure getmem(out destination: Pointer; size: PtrUInt); overload; external name '::u_system::p_getmem';
 function getmem(size: PtrUInt): Pointer; overload; external name '::u_system::p_getmem';
+function reallocmem(var destination: Pointer; size: PtrUInt): Pointer; external name '::u_system::p_reallocmem';
 procedure freemem(value: Pointer; size: PtrUInt); overload; external name '::u_system::p_freemem';
 function freemem(value: Pointer): PtrUInt; overload; external name '::u_system::p_freemem';
 procedure assign(out f: File; const name: ShortString); external name '::u_system::p_assign';

@@ -74,10 +74,10 @@ enum class BuiltinGenericKind {
 	// Assigned accepts object pointers, plain routine values, and method
 	// routine values. system.pp can only spell its Pointer overload.
 	Assigned,
-	// GetMem's `out Pointer` is explicitly raw pointer storage: the RTL
-	// template may write a typed pointer variable without pretending that
-	// ordinary typed var/out parameters are covariant.
-	PointerStorageOut,
+	// GetMem's `out Pointer` and ReAllocMem's `var Pointer` are explicitly raw
+	// pointer storage: their RTL templates may write a typed pointer variable
+	// without pretending that ordinary typed var/out parameters are covariant.
+	PointerStorage,
 	// Val parses directly into the carrier of an ordinal subrange. This is an
 	// intrinsic storage contract, not general var/out covariance: the formal
 	// must be the subrange's exact compiler-selected base carrier.

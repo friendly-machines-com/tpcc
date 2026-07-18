@@ -4520,6 +4520,33 @@ inline t_pointer p_getmem(t_ptruint size) {
 	return result;
 }
 
+template<typename T>
+requires std::is_object_v<T> || std::is_void_v<T>
+inline T* p_reallocmem(
+    T*& destination, t_ptruint size) {
+	const std::size_t requested =
+	    static_cast<std::size_t>(size);
+	if (requested == 0) {
+		// C and C++ leave realloc(p, 0) implementation-dependent. Pascal's
+		// storage operation needs one stable postcondition: release the old
+		// allocation, clear the var parameter, and return that same nil value.
+		std::free(destination);
+		destination = nullptr;
+		return nullptr;
+	}
+
+	// ReAllocMem belongs to the same malloc/free allocation family as GetMem.
+	// Do not overwrite DESTINATION until realloc succeeds: on allocation
+	// failure realloc leaves the old block live, and the runtime-error path may
+	// inspect or unwind past this frame.
+	void* replacement =
+	    std::realloc(destination, requested);
+	if (!replacement)
+		m_runtime_error(203);
+	destination = static_cast<T*>(replacement);
+	return destination;
+}
+
 inline void p_freemem(t_pointer value, t_ptruint size) {
 	(void)size;
 	std::free(value);
