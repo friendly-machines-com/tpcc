@@ -64,4 +64,27 @@ do
 	done
 done
 
+if ./mp -Furtl \
+	-o"$tmp/ambiguous.cc" \
+	tests/custom_in_ambiguous.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted ambiguous typed custom In overloads" >&2
+	exit 1
+fi
+for required in \
+	"ambiguous overload for 'in'" \
+	'viable cost [generic, generic]' \
+	'viable cost [user-convert via exact, exact]' \
+	'tchoicea' \
+	'tchoiceb'
+do
+	if ! rg -Fiq "$required" "$tmp/stderr"
+	then
+		echo "incomplete ambiguous In diagnostic" >&2
+		sed -n '1,220p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
+
 echo "custom In operator tests passed"
