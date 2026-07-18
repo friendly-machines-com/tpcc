@@ -729,6 +729,157 @@ std::optional<RecordLayout> packed_record_layout(
 	return packed_record_layout_impl(record, visiting);
 }
 
+namespace {
+static bool predefined_overlay_byte_copyable(
+    const Type* type, std::set<const Type*>& visiting);
+
+static bool predefined_overlay_variant_byte_copyable(
+    const VariantPart* variant,
+    std::set<const Type*>& visiting) {
+	if (!variant)
+		return true;
+	for (const VariantArm& arm : variant->arms) {
+		for (const AggregateField& field :
+		     arm.fields)
+			if (!field.ty ||
+			    !predefined_overlay_byte_copyable(
+				field.ty, visiting))
+				return false;
+		if (!predefined_overlay_variant_byte_copyable(
+			arm.variant, visiting))
+			return false;
+	}
+	return true;
+}
+
+static bool predefined_overlay_byte_copyable(
+    const Type* type, std::set<const Type*>& visiting) {
+	if (!type)
+		return false;
+	while (auto incomplete =
+		   dynamic_cast<const IncompleteType*>(type)) {
+		if (!incomplete->resolved)
+			return false;
+		type = incomplete->resolved;
+	}
+	if (auto intrinsic =
+		dynamic_cast<const IntrinsicType*>(type)) {
+		if (!intrinsic->carrier)
+			return false;
+		switch (*intrinsic->carrier) {
+		case IntrinsicCarrier::UInt8:
+		case IntrinsicCarrier::Int8:
+		case IntrinsicCarrier::UInt16:
+		case IntrinsicCarrier::Int16:
+		case IntrinsicCarrier::UInt32:
+		case IntrinsicCarrier::Int32:
+		case IntrinsicCarrier::UInt64:
+		case IntrinsicCarrier::Int64:
+		case IntrinsicCarrier::Float:
+		case IntrinsicCarrier::Double:
+		case IntrinsicCarrier::LongDouble:
+		case IntrinsicCarrier::Character:
+			return true;
+		case IntrinsicCarrier::AnsiString:
+		case IntrinsicCarrier::Text:
+		case IntrinsicCarrier::File:
+			return false;
+		}
+	}
+	if (dynamic_cast<const ShortStringType*>(type) ||
+	    dynamic_cast<const EnumType*>(type) ||
+	    dynamic_cast<const PointerType*>(type) ||
+	    dynamic_cast<const ClassType*>(type) ||
+	    dynamic_cast<const InterfaceType*>(type) ||
+	    dynamic_cast<const ClassRefType*>(type) ||
+	    dynamic_cast<const RoutineType*>(type) ||
+	    dynamic_cast<const PackedRecordType*>(
+		type))
+		return true;
+	if (auto range =
+		dynamic_cast<const SubrangeType*>(type))
+		return predefined_overlay_byte_copyable(
+		    range->base_type, visiting);
+	if (!visiting.insert(type).second)
+		// A recursive value carrier cannot be laid out without crossing a
+		// pointer, which was handled above. Do not let a malformed cycle
+		// become an emitted C++ static-assert failure.
+		return false;
+	bool result = false;
+	if (auto array =
+		dynamic_cast<const FixedArrayType*>(
+		    type)) {
+		result =
+		    predefined_overlay_byte_copyable(
+			array->item_type, visiting);
+	} else if (auto record =
+		       dynamic_cast<const RecordType*>(
+			   type)) {
+		result = true;
+		for (const AggregateField& field :
+		     record->fields)
+			if (!field.ty ||
+			    !predefined_overlay_byte_copyable(
+				field.ty, visiting)) {
+				result = false;
+				break;
+			}
+		if (result)
+			result =
+			    predefined_overlay_variant_byte_copyable(
+				record->variant,
+				visiting);
+	}
+	visiting.erase(type);
+	return result;
+}
+
+static bool predefined_overlay_compatible(
+    const Type* target, const Type* source) {
+	if (!target || !source ||
+	    (!dynamic_cast<const PackedRecordType*>(
+		 target) &&
+	     !dynamic_cast<const PackedRecordType*>(
+		 source)))
+		return false;
+	std::set<const Type*> visiting;
+	if (!predefined_overlay_byte_copyable(
+		target, visiting)) {
+		return false;
+	}
+	visiting.clear();
+	if (!predefined_overlay_byte_copyable(
+		source, visiting)) {
+		return false;
+	}
+	auto target_layout =
+	    type_layout(const_cast<Type*>(target));
+	auto source_layout =
+	    type_layout(const_cast<Type*>(source));
+	return target_layout && source_layout &&
+	       target_layout->size ==
+		   source_layout->size;
+}
+} // namespace
+
+bool Type::predefined_explicit_conversion_from(
+    const Type* source) const {
+	// Explicit syntax includes every one-edge predefined implicit conversion.
+	// Calling this virtual destination's existing constructor relation does
+	// not search for an intermediate type or a source-defined operator.
+	if (!source)
+		return false;
+	if (this == source ||
+	    value_conversion_from(source))
+		return true;
+	// Packed records are the language's byte-array overlay carrier. Admit the
+	// operation only when both layouts are known and the other carrier is
+	// recursively byte-copyable, so an invalid Pascal cast is rejected here
+	// rather than escaping as a generated C++ static_assert.
+	return predefined_overlay_compatible(
+	    this, source);
+}
+
 // Integer widening rank; -1 for non-integer types.
 static int integer_widening_rank(
     const Type* ty) {
@@ -742,6 +893,36 @@ static int integer_widening_rank(
 	if (!it->rank)
 		return -1;
 	return *(it->rank);
+}
+
+static bool predefined_ordinal_type(
+    const Type* type) {
+	if (type == &untyped_integer_type())
+		return true;
+	while (auto range =
+		   dynamic_cast<const SubrangeType*>(
+		       type))
+		type = range->base_type;
+	if (dynamic_cast<const EnumType*>(type))
+		return true;
+	auto intrinsic =
+	    dynamic_cast<const IntrinsicType*>(type);
+	return intrinsic &&
+	       intrinsic->ordinal_bounds.has_value();
+}
+
+static bool predefined_integer_family_type(
+    const Type* type) {
+	return type == &untyped_integer_type() ||
+	       integer_widening_rank(type) >= 0;
+}
+
+static bool predefined_object_reference_type(
+    const Type* type) {
+	return dynamic_cast<const ClassType*>(
+		   type) ||
+	       dynamic_cast<const InterfaceType*>(
+		   type);
 }
 
 // Pascal real-family widening order. Keep this independent from the integer
@@ -898,6 +1079,32 @@ IntrinsicType::value_conversion_from(
 	return std::nullopt;
 }
 
+bool IntrinsicType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	if (Type::
+		predefined_explicit_conversion_from(
+		    source))
+		return true;
+	// Explicit ordinal conversion is one direct width/sign operation. It is
+	// intentionally broader than nominal enum/subrange compatibility but
+	// does not make any such pair implicitly viable.
+	if (predefined_ordinal_type(this) &&
+	    predefined_ordinal_type(source))
+		return true;
+	// Only the address-sized integer types are direct pointer destinations.
+	// Requiring an explicit nested cast for another integer width keeps the
+	// address boundary visible and avoids a hidden pointer -> integer ->
+	// integer chain.
+	return (this == ptrint_type() ||
+		this == ptruint_type()) &&
+	       (dynamic_cast<const PointerType*>(
+		    source) ||
+		predefined_object_reference_type(
+		    source) ||
+		source == ansistring_type());
+}
+
 std::optional<ValueConversion>
 ShortStringType::value_conversion_from(
     const Type* source) const {
@@ -939,6 +1146,18 @@ FixedSetType::value_conversion_from(
 	    item_conversion
 		? item_conversion->distance
 		: 0);
+}
+
+bool FixedSetType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	// An explicit set cast preserves stored ordinal membership keys even when
+	// the item domains are not in the implicit subset relation.
+	return Type::
+		   predefined_explicit_conversion_from(
+		       source) ||
+	       dynamic_cast<const FixedSetType*>(
+		   source);
 }
 
 static bool interface_is_or_extends(
@@ -1039,12 +1258,60 @@ ClassType::value_conversion_from(
 	    class_inheritance_distance(source_class, this));
 }
 
+bool ClassType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	if (Type::
+		predefined_explicit_conversion_from(
+		    source))
+		return true;
+	if (auto source_class =
+		dynamic_cast<const ClassType*>(
+		    source))
+		return is_subtype_of(source_class) ||
+		       source_class->is_subtype_of(
+			   this);
+	if (auto source_interface =
+		dynamic_cast<const InterfaceType*>(
+		    source))
+		// A static interface -> class downcast has a defined adjustment only
+		// when this destination class implements that exact interface family.
+		return is_subtype_of(
+		    source_interface);
+	// Raw-pointer recovery is unchecked. The program must satisfy the same
+	// live-object, alignment, and provenance preconditions as the emitted C++
+	// pointer cast; TPCC deliberately does not try to prove them.
+	return dynamic_cast<const PointerType*>(
+		   source) != nullptr;
+}
+
 std::optional<ValueConversion>
 InterfaceType::value_conversion_from(
     const Type* source) const {
 	if (!source || !source->is_subtype_of(this))
 		return std::nullopt;
 	return implicit_conversion(1);
+}
+
+bool InterfaceType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	if (Type::
+		predefined_explicit_conversion_from(
+		    source))
+		return true;
+	if (auto source_interface =
+		dynamic_cast<const InterfaceType*>(
+		    source))
+		return is_subtype_of(
+			   source_interface) ||
+		       source_interface->is_subtype_of(
+			   this);
+	// An unrelated class/interface cross-cast is the checked `as` operation,
+	// not an unchecked predefined T(E) conversion. A raw pointer is different:
+	// it explicitly opts into the C++ object-model precondition.
+	return dynamic_cast<const PointerType*>(
+		   source) != nullptr;
 }
 
 std::optional<ValueConversion>
@@ -1086,6 +1353,24 @@ ClassRefType::value_conversion_from(
 	return std::nullopt;
 }
 
+bool ClassRefType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	if (Type::
+		predefined_explicit_conversion_from(
+		    source))
+		return true;
+	auto source_ref =
+	    dynamic_cast<const ClassRefType*>(
+		source);
+	return source_ref && target &&
+	       source_ref->target &&
+	       (target->is_subtype_of(
+		    source_ref->target) ||
+		source_ref->target->is_subtype_of(
+		    target));
+}
+
 std::optional<ValueConversion>
 PointerType::value_conversion_from(
     const Type* source) const {
@@ -1108,6 +1393,24 @@ PointerType::value_conversion_from(
 		    object_inheritance_distance(
 			source_object, target_object));
 	return std::nullopt;
+}
+
+bool PointerType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	if (Type::
+		predefined_explicit_conversion_from(
+		    source))
+		return true;
+	// These are representation crossings, not subtyping or implicit
+	// conversions. The result is useful only when the source address denotes
+	// a suitably aligned live C++ object of the pointee type; no local check
+	// can reconstruct that provenance.
+	return predefined_integer_family_type(
+		   source) ||
+	       predefined_object_reference_type(
+		   source) ||
+	       source == ansistring_type();
 }
 
 struct FoldedOrdinalValue {
@@ -1318,6 +1621,15 @@ EnumType::value_conversion_from(
 	return std::nullopt;
 }
 
+bool EnumType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	return Type::
+		   predefined_explicit_conversion_from(
+		       source) ||
+	       predefined_ordinal_type(source);
+}
+
 bool IntrinsicType::
     same_cxx_carrier_definition_as(
 	const Type* other) const {
@@ -1360,6 +1672,15 @@ SubrangeType::value_conversion_from(
 	return source->is_subtype_of(this)
 		   ? direct_conversion()
 		   : implicit_conversion();
+}
+
+bool SubrangeType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	return Type::
+		   predefined_explicit_conversion_from(
+		       source) ||
+	       predefined_ordinal_type(source);
 }
 
 std::optional<ValueConversion>

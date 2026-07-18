@@ -85,6 +85,17 @@ public:
 	 * rules. */
 	virtual std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const;
+	/** Whether source syntax `ThisType(value)` has one predefined direct
+	 * conversion edge after source-defined Explicit/Implicit contracts have
+	 * failed. This is deliberately separate from value_conversion_from():
+	 * implicit viability remains the narrower relation used by assignment and
+	 * overload selection, while explicit syntax also admits representation
+	 * operations such as ordinal truncation, related downcasts, pointer
+	 * crossings, and packed overlays. Implementations must inspect only SOURCE
+	 * and this destination; applying another conversion first would turn the
+	 * language into an accidental A -> B -> C conversion search. */
+	virtual bool predefined_explicit_conversion_from(
+	    const Type* source) const;
 	virtual bool is_subtype_of(const Type* target) const;
 	/** Exact contract identity for a type written directly in a routine
 	 * formal. Most Pascal types use definition identity. Open arrays override
@@ -283,6 +294,8 @@ struct FixedSetType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
@@ -365,6 +378,8 @@ struct EnumType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(
+	    const Type* source) const override;
+	bool predefined_explicit_conversion_from(
 	    const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -460,6 +475,8 @@ struct InterfaceType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -493,6 +510,8 @@ struct ClassType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -513,6 +532,8 @@ struct ClassRefType : public Type // metaclass
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -549,6 +570,8 @@ struct PointerType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -683,6 +706,8 @@ public:
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

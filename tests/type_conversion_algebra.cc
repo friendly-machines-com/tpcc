@@ -145,6 +145,78 @@ int main() {
 	    &record_b));
 	assert(!record_a.same_cxx_carrier_as(
 	    &record_b));
+	assert(record_a
+	           .predefined_explicit_conversion_from(
+		       &record_a));
+	assert(!record_a
+	            .predefined_explicit_conversion_from(
+			&record_b));
+
+	EnumType enumeration(
+	    SourceLocation::internal(),
+	    "m_test_enum", "zero", "one");
+	assert(byte_type()
+	           ->predefined_explicit_conversion_from(
+		       &enumeration));
+	assert(enumeration
+	           .predefined_explicit_conversion_from(
+		       integer_type()));
+	assert(!integer_type()
+	            ->predefined_explicit_conversion_from(
+			double_type()));
+	assert(narrow_set
+	           .predefined_explicit_conversion_from(
+		       &wide_set));
+
+	Frame base_members(nullptr);
+	Frame derived_members(nullptr);
+	Frame unrelated_members(nullptr);
+	ClassType base_class(
+	    SourceLocation::internal(),
+	    &base_members, {}, nullptr);
+	ClassType derived_class(
+	    SourceLocation::internal(),
+	    &derived_members, {}, &base_class);
+	ClassType unrelated_class(
+	    SourceLocation::internal(),
+	    &unrelated_members, {}, nullptr);
+	assert(derived_class
+	           .predefined_explicit_conversion_from(
+		       &base_class));
+	assert(base_class
+	           .predefined_explicit_conversion_from(
+		       &derived_class));
+	assert(!unrelated_class
+	            .predefined_explicit_conversion_from(
+			&base_class));
+	assert(pointer_a
+	           .predefined_explicit_conversion_from(
+		       &base_class));
+	assert(base_class
+	           .predefined_explicit_conversion_from(
+		       &pointer_a));
+
+	Frame packed_members(nullptr);
+	PackedRecordType packed_byte(
+	    SourceLocation::internal(),
+	    &packed_members);
+	StorageSlot packed_byte_field(
+	    "p_value", byte_type(),
+	    StorageSlot::Kind::AggregateMember,
+	    &packed_byte);
+	packed_byte.fields.push_back(
+	    AggregateField{
+		"value", &packed_byte_field,
+		byte_type()});
+	assert(packed_byte
+	           .predefined_explicit_conversion_from(
+		       byte_type()));
+	assert(byte_type()
+	           ->predefined_explicit_conversion_from(
+		       &packed_byte));
+	assert(!packed_byte
+	            .predefined_explicit_conversion_from(
+			word_type()));
 
 	assert(integer_type() != longint_type());
 	assert(integer_type()

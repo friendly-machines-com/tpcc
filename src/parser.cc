@@ -2955,6 +2955,15 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 					return resolve_routine_code_reference(
 					    reference);
 			}
+			if (dynamic_cast<NilLiteral*>(value) &&
+			    target_ty->is_reference_type()) {
+				// Nil has no source Type to query below. Give it the exact
+				// requested reference type directly; this is the same
+				// predefined null construction used by argument matching,
+				// not a user-conversion edge.
+				value->ty = target_ty;
+				return value;
+			}
 			if (auto target_routine =
 				dynamic_cast<RoutineType*>(target_ty)) {
 				if (auto reference =
@@ -2989,6 +2998,9 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 				    "reference");
 			}
 			if (target_ty == tmethod_type()) {
+				if (value->ty == target_ty)
+					return new ExplicitCast(
+					    value, target_ty);
 				auto source_routine =
 				    dynamic_cast<RoutineType*>(value->ty);
 				if (!source_routine ||
@@ -2996,7 +3008,15 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 					raise_parse_error(
 					    "TMethod can only view an of-object "
 					    "routine value");
+				return new ExplicitCast(
+				    value, target_ty);
 			}
+			if (!target_ty
+				 ->predefined_explicit_conversion_from(
+				     value->ty))
+				raise_type_mismatch(
+				    "invalid predefined explicit conversion",
+				    target_ty, value->ty);
 			return new ExplicitCast(
 			    value, target_ty);
 		}

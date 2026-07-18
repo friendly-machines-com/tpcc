@@ -3828,24 +3828,67 @@ void Emitter::emit_expression(Node* expr) {
 		auto source_pointer =
 		    dynamic_cast<PointerType*>(
 			ca->a ? ca->a->ty : nullptr);
+		const bool source_object_reference =
+		    ca->a &&
+		    (dynamic_cast<ClassType*>(
+			 ca->a->ty) ||
+		     dynamic_cast<InterfaceType*>(
+			 ca->a->ty));
+		const bool target_object_reference =
+		    dynamic_cast<ClassType*>(
+			ca->ty) ||
+		    dynamic_cast<InterfaceType*>(
+			ca->ty);
 		OrdinalBounds source_integer_bounds;
+		Type* source_integer_type =
+		    ca->a ? ca->a->ty : nullptr;
+		const bool source_integer_wrapper =
+		    dynamic_cast<SubrangeType*>(
+			source_integer_type) != nullptr;
+		while (auto range =
+			   dynamic_cast<SubrangeType*>(
+			       source_integer_type))
+			source_integer_type =
+			    range->base_type;
 		const bool source_integer =
 		    ca->a &&
-		    integer_bounds(
-			ca->a->ty,
-			&source_integer_bounds);
+		    (source_integer_type ==
+			 &untyped_integer_type() ||
+		     integer_bounds(
+			 source_integer_type,
+			 &source_integer_bounds));
 		if ((source_pointer &&
+		     (target_pointer ||
+		      target_pointer_integer ||
+		      target_object_reference)) ||
+		    (source_object_reference &&
 		     (target_pointer ||
 		      target_pointer_integer)) ||
 		    (source_integer &&
 		     target_pointer)) {
 			// Pascal explicit casts expose the pointer representation.
-			// C++ static_cast cannot express integer/pointer crossings or
-			// arbitrary typed-pointer reinterpretation.
+			// C++ static_cast cannot express integer/pointer crossings,
+			// arbitrary typed-pointer reinterpretation, or recovery of a
+			// class/interface reference from raw Pointer. This emits the C++
+			// representation operation only: Pascal code inherits C++'s
+			// provenance, lifetime, alignment, and aliasing preconditions, and
+			// TPCC deliberately does not synthesize weaker runtime checks.
 			fprintf(active, "reinterpret_cast<");
 			emit_type_ref(ca->ty);
 			fprintf(active, ">(");
-			emit_expression(ca->a);
+			if (source_integer_wrapper &&
+			    target_pointer) {
+				// Subranges have a nominal wrapper carrier rather than a
+				// C++ integral type. Expose its ordinal value through PtrUInt
+				// for this one direct integer -> pointer lowering; this is not
+				// a Pascal conversion edge visible to overload selection.
+				fprintf(active,
+					"::u_system::m_ordinal_cast<::u_system::t_ptruint>(");
+				emit_expression(ca->a);
+				fprintf(active, ")");
+			} else {
+				emit_expression(ca->a);
+			}
 			fprintf(active, ")");
 			return;
 		}
