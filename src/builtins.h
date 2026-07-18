@@ -119,6 +119,19 @@ enum class BuiltinCallConvention {
 	ReceiverFirst,
 };
 
+/** Which caller-local directive selects a compiler-owned builtin's alternate
+ * implementation after ordinary Pascal lookup and argument conversion.
+ *
+ * One declaration can have only one owning directive: overflow checking and
+ * old-style I/O checking describe different semantic operations. Keeping the
+ * selector explicit prevents a descriptor from accidentally acquiring two
+ * independent backend substitutions. */
+enum class BuiltinCallSiteSwitch {
+	None,
+	Overflow,
+	Io,
+};
+
 struct BuiltinDesc {
 	std::string_view cxx_name;    // e.g. "::u_system::p_ord"
 	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
@@ -128,11 +141,13 @@ struct BuiltinDesc {
 	BuiltinCallConvention call_convention =
 	    BuiltinCallConvention::Function;
 	/** Direct calls to a finite compiler-owned operation may select a second
-	 * implementation when caller {$Q} is disabled even though Pascal lookup
-	 * selected the same ordinary declaration. Empty for ordinary functions
-	 * and operators whose checked/unchecked identities are separate
-	 * declarations. */
-	std::string_view overflow_unchecked_cxx_name = {};
+	 * implementation when CALL_SITE_SWITCH is disabled even though Pascal
+	 * lookup selected the same ordinary declaration. Empty for ordinary
+	 * functions and operators whose checked/unchecked identities are
+	 * separate declarations. */
+	BuiltinCallSiteSwitch call_site_switch =
+	    BuiltinCallSiteSwitch::None;
+	std::string_view disabled_cxx_name = {};
 };
 
 struct IntrinsicTypeDesc {

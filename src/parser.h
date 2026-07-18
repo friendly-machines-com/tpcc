@@ -204,6 +204,18 @@ enum class InterfaceModel {
 	CORBA,
 };
 
+/** Local directive state captured at the source token which owns a construct.
+ *
+ *  The scanner remains preprocessing-like, so directives encountered while
+ *  parsing child expressions persist afterward. They must not, however,
+ *  retroactively change the already-started parent construct. Keeping the
+ *  relevant switches together prevents each new caller-sensitive directive
+ *  from growing a parallel set of designator-parser parameters. */
+struct LeadingTokenDirectives {
+	bool overflow_checks;
+	bool io_checks;
+};
+
 /** Source-visible compiler-directive state.
  *
  *  The category split is semantic: local and representation settings are
@@ -225,6 +237,11 @@ class DirectiveState {
 public:
 	bool switch_enabled(char letter) const;
 	void set_switch(char letter, bool enabled);
+	LeadingTokenDirectives leading_token_directives() const {
+		return LeadingTokenDirectives{
+		    switch_enabled('q'),
+		    switch_enabled('i')};
+	}
 	InterfaceModel get_interface_model() const {
 		return interface_model;
 	}
@@ -392,16 +409,16 @@ private:
 	 * state after receiving their operands. */
 	Node* mk_arith(
 	    std::string id, Node* a, Node* b,
-	    bool overflow_checks);
+	    LeadingTokenDirectives directives);
 	Node* mk_compare(
 	    std::string id, Node* a, Node* b,
-	    bool overflow_checks);
+	    LeadingTokenDirectives directives);
 	Node* mk_membership(
 	    Node* item, Node* set,
-	    bool overflow_checks);
+	    LeadingTokenDirectives directives);
 	Node* mk_unary_same(
 	    std::string id, Node* x,
-	    bool overflow_checks);
+	    LeadingTokenDirectives directives);
 	Node* mk_assign(Node* a, Node* b);
 	std::optional<ArgumentMatch> match_argument(
 	    const Parameter& formal, Node* actual,
@@ -460,7 +477,7 @@ protected:
 	Mutation* parse_mutation_statement(
 	    std::string spelling,
 	    SourceLocation call_location,
-	    bool overflow_checks);
+	    LeadingTokenDirectives directives);
 	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
@@ -477,11 +494,11 @@ protected:
 	void parse_directive(std::string s);
 	void parse_operator(std::string s);
 	Node* parse_value(
-	    bool* leading_overflow_checks);
+	    LeadingTokenDirectives* leading_directives);
 	Node* parse_value_from_identifier(
 	    std::string id,
-	    bool identifier_overflow_checks,
-	    bool* leading_overflow_checks);
+	    LeadingTokenDirectives identifier_directives,
+	    LeadingTokenDirectives* leading_directives);
 	Node* parse_new_or_dispose(bool is_new);
 	// Parse `inherited Name[(args)]` or anonymous `inherited;`. Returns an
 	// InheritedCall node. The enclosing routine must be a Method on a
@@ -503,13 +520,13 @@ protected:
 	 *  auto-call is the caller's decision (value context yes, lvalue no)
 	 *  via maybe_auto_call. */
 	Node* parse_designator(
-	    bool* leading_overflow_checks = nullptr);
+	    LeadingTokenDirectives* leading_directives = nullptr);
 	Node* parse_designator_tail(
 	    Node* result,
-	    bool& leading_overflow_checks);
+	    LeadingTokenDirectives& leading_directives);
 	Node* parse_member_selection(
 	    Node* base,
-	    bool* leading_overflow_checks);
+	    LeadingTokenDirectives* leading_directives);
 	/** Resolve NAME in RECEIVER's ordinary structural member environment and
 	 * bind the result to RECEIVER. This is the non-token-consuming half of
 	 * parse_member_selection, used by compiler-defined protocols which must
@@ -536,7 +553,7 @@ protected:
 	 *  no-arg ProcCall via finalize_call and return that. Otherwise return
 	 *  NODE unchanged. */
 	Node* maybe_auto_call(
-	    Node* n, bool overflow_checks);
+	    Node* n, LeadingTokenDirectives directives);
 	/** True when NODE is a syntactic form assignable to via `:=`: a bare
 	 *  StorageSlot, a MemberAccess whose member is a StorageSlot, a
 	 *  Dereference, or an Index. Everything else (constants, calls,
@@ -560,19 +577,19 @@ protected:
 	    std::string not_assignable_message);
 	Node* parse_expression_after_identifier(
 	    std::string id,
-	    bool identifier_overflow_checks);
+	    LeadingTokenDirectives identifier_directives);
 	Node* parse_comparison();
 	Node* parse_comparison_tail(Node* result);
 	Node* parse_power();
 	Node* parse_power_tail(
 	    Node* result,
-	    bool leading_overflow_checks);
+	    LeadingTokenDirectives leading_directives);
 	Node* parse_product();
 	Node* parse_product_tail(Node* result);
 	Node* parse_subrange_bound_expression();
 	Node* parse_subrange_bound_expression_after_identifier(
 	    std::string id,
-	    bool identifier_overflow_checks);
+	    LeadingTokenDirectives identifier_directives);
 	Node* parse_sum();
 	Node* parse_sum_tail(Node* result);
 	Type* parse_array_type(
@@ -668,7 +685,7 @@ protected:
 	Node* make_call(
 	    FinalizedCall finalized,
 	    std::vector<Node*> args,
-	    bool overflow_checks);
+	    LeadingTokenDirectives directives);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();
