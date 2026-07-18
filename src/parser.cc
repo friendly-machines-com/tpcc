@@ -278,20 +278,12 @@ SourceLocation Parser::current_location() const {
 	emit_diagnostic_at(loc, "fatal", message);
 }
 
-std::string Parser::enclosing_diagnostic_context(
+std::string Parser::enclosing_diagnostic_references(
     ErrorLetContext& ctx) const {
 	std::stringstream sst;
-	bool has_context = false;
-	auto begin_context = [&]() {
-		if (has_context)
-			return;
-		sst << "\n  context:";
-		has_context = true;
-	};
 
 	if (current_unit && current_unit->reference) {
-		begin_context();
-		sst << "\n    "
+		sst << "\n  "
 		    << (current_unit->is_program
 			    ? "program"
 			    : "unit")
@@ -300,16 +292,27 @@ std::string Parser::enclosing_diagnostic_context(
 			   current_unit->reference);
 	}
 	if (current_routine) {
-		begin_context();
-		sst << "\n    routine: "
+		// A Method's ordinary diagnostic definition already references its
+		// owner type. Repeating that type in the primary message would add no
+		// context; the routine reference makes the owner reachable in `where`.
+		sst << "\n  routine: "
 		    << ctx.value_ref(current_routine);
-		if (auto method =
-			dynamic_cast<Method*>(
-			    current_routine);
-		    method && method->owner_class)
-			sst << "\n    owner type: "
-			    << ctx.type_ref(
-				   method->owner_class);
+	} else if (!current_type_declaration_name.empty()) {
+		// While a named type RHS is open, its completed Type may not have been
+		// published yet. The surrounding declaration frame nevertheless holds
+		// the named placeholder. Use that existing graph node as the owner
+		// reference; do not invent a second diagnostic-only type identity.
+		Type* owner = nullptr;
+		for (auto it = scopes.rbegin();
+		     it != scopes.rend(); ++it) {
+			owner = it->frame->lookup_type(
+			    current_type_declaration_name);
+			if (owner)
+				break;
+		}
+		if (owner)
+			sst << "\n  owner type: "
+			    << ctx.type_ref(owner);
 	}
 	return sst.str();
 }
@@ -326,11 +329,12 @@ std::string Parser::enclosing_diagnostic_context(
 std::string Parser::complete_diagnostic_message(
     std::string message,
     ErrorLetContext& ctx) const {
-	// The primary diagnostic, its enclosing source context, and all detailed
-	// definitions must share one graph. Appending notes anywhere else would
-	// permit duplicate `where` blocks or references whose definitions live in
-	// a different ErrorLetContext.
-	message += enclosing_diagnostic_context(ctx);
+	// The primary message contains ordinary references to its enclosing unit,
+	// routine, or owner type. Their definitions and all other details live in
+	// this same graph's single `where` block. Appending notes anywhere else
+	// would permit duplicate blocks or references whose definitions live in a
+	// different ErrorLetContext.
+	message += enclosing_diagnostic_references(ctx);
 	message += ctx.notes();
 	return message;
 }

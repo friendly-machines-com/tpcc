@@ -19,10 +19,8 @@ fi
 
 for required in \
 	"unresolved value identifier: missingname" \
-	"  context:" \
-	"    program: diagnosticcontextrejected" \
-	"    routine: \\tcontext.trigger\\" \
-	"    owner type: tcontext" \
+	"  program: diagnosticcontextrejected" \
+	"  routine: \\tcontext.trigger\\" \
 	"  value diagnosticcontextrejected =" \
 	"    unit_reference" \
 	"      unit: 'diagnosticcontextrejected'" \
@@ -48,6 +46,8 @@ fi
 
 for forbidden in \
 	"<unregistered" \
+	"  context:" \
+	"  owner type:" \
 	"value unit_reference =" \
 	"value system =" \
 	"unrelated:"
@@ -71,10 +71,8 @@ fi
 
 for required in \
 	"no implicit conversion" \
-	"  context:" \
-	"    program: diagnosticcontextrichrejected" \
-	"    routine: \\tcontext.trigger\\" \
-	"    owner type: tcontext"
+	"  program: diagnosticcontextrichrejected" \
+	"  routine: \\tcontext.trigger\\"
 do
 	if ! rg -Fq "$required" "$tmp/rich.stderr"
 	then
@@ -97,5 +95,55 @@ then
 	sed -n '1,180p' "$tmp/rich.stderr" >&2
 	exit 1
 fi
+if rg -Fq "  context:" "$tmp/rich.stderr" ||
+   rg -Fq "  owner type:" "$tmp/rich.stderr"
+then
+	echo "rich diagnostic emitted a redundant context section or owner reference" >&2
+	sed -n '1,180p' "$tmp/rich.stderr" >&2
+	exit 1
+fi
+
+if ./mp -Furtl \
+	-o"$tmp/diagnostic_owner_context_rejected.cc" \
+	tests/diagnostic_owner_context_rejected.pp \
+	>"$tmp/owner.stdout" 2>"$tmp/owner.stderr"
+then
+	echo "accepted an unresolved field type" >&2
+	exit 1
+fi
+
+for required in \
+	"unresolved type identifier: missingtype" \
+	"  program: diagnosticownercontextrejected" \
+	"  owner type: tcontext" \
+	"  type tcontext ="
+do
+	if ! rg -Fq "$required" "$tmp/owner.stderr"
+	then
+		echo "incomplete owner-type diagnostic context: $required" >&2
+		sed -n '1,180p' "$tmp/owner.stderr" >&2
+		exit 1
+	fi
+done
+
+owner_where_count=$(rg -c '^  where$' "$tmp/owner.stderr")
+if test "$owner_where_count" -ne 1
+then
+	echo "owner diagnostic emitted $owner_where_count where blocks instead of one" >&2
+	sed -n '1,180p' "$tmp/owner.stderr" >&2
+	exit 1
+fi
+for forbidden in \
+	"<unregistered" \
+	"  context:" \
+	"  routine:"
+do
+	if rg -Fq "$forbidden" "$tmp/owner.stderr"
+	then
+		echo "owner diagnostic emitted forbidden text: $forbidden" >&2
+		sed -n '1,180p' "$tmp/owner.stderr" >&2
+		exit 1
+	fi
+done
 
 echo "diagnostic context tests passed"

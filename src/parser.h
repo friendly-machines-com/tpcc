@@ -716,7 +716,7 @@ protected:
 	std::string complete_diagnostic_message(
 	    std::string message,
 	    ErrorLetContext& ctx) const;
-	std::string enclosing_diagnostic_context(
+	std::string enclosing_diagnostic_references(
 	    ErrorLetContext& ctx) const;
 	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
