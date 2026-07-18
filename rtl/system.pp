@@ -24,6 +24,7 @@ type
   // share the same pointer representation. The distinct Pascal name remains
   // useful in the public stack-inspection signatures.
   CodePointer = Pointer;
+  PPointer = ^Pointer;
   TMethod = external name '::u_system::t_tmethod';
   PtrInt = external name '::u_system::t_ptrint';
   PtrUInt = external name '::u_system::t_ptruint';
