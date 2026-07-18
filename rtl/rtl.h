@@ -967,6 +967,93 @@ inline t_set<T> tpcc_make_set(std::initializer_list<tpcc_set_span> spans) {
 	return t_set<T>{std::vector<tpcc_set_span>(spans)};
 }
 
+template<typename T>
+inline t_set<T> m_set_union(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	t_set<T> result = first;
+	// A t_set is the union of its spans and deliberately does not require
+	// canonical, sorted, or disjoint storage. Concatenation is therefore the
+	// complete mathematical union and preserves the inexpensive literal and
+	// Include representation already used by the RTL.
+	result.spans.insert(
+	    result.spans.end(),
+	    second.spans.begin(),
+	    second.spans.end());
+	return result;
+}
+
+template<typename T>
+inline t_set<T> m_set_difference(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	t_set<T> result = first;
+	for (const tpcc_set_span& removed :
+	     second.spans) {
+		if (removed.upper <
+		    removed.lower)
+			continue;
+		std::vector<tpcc_set_span> remaining;
+		remaining.reserve(
+		    result.spans.size() + 1);
+		for (const tpcc_set_span& span :
+		     result.spans) {
+			if (span.upper < span.lower)
+				continue;
+			if (removed.upper < span.lower ||
+			    span.upper < removed.lower) {
+				remaining.push_back(span);
+				continue;
+			}
+			// The strict comparisons prove these endpoint adjustments
+			// cannot overflow even at INT64_MIN/INT64_MAX.
+			if (span.lower < removed.lower)
+				remaining.push_back(
+				    tpcc_set_span{
+					span.lower,
+					removed.lower - 1});
+			if (removed.upper < span.upper)
+				remaining.push_back(
+				    tpcc_set_span{
+					removed.upper + 1,
+					span.upper});
+		}
+		result.spans =
+		    std::move(remaining);
+	}
+	return result;
+}
+
+template<typename T>
+inline t_set<T> o_unchecked_add(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return m_set_union(first, second);
+}
+
+template<typename T>
+inline t_set<T> o_add(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return m_set_union(first, second);
+}
+
+template<typename T>
+inline t_set<T> o_unchecked_subtract(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return m_set_difference(
+	    first, second);
+}
+
+template<typename T>
+inline t_set<T> o_subtract(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return m_set_difference(
+	    first, second);
+}
+
 template<typename Value, typename T>
 inline t_boolean o_in(Value value, const t_set<T>& set) {
 	const int64_t key = tpcc_set_key(value);

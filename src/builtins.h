@@ -62,6 +62,15 @@ enum class BuiltinGenericKind {
 	// In` declarations remain ordinary candidates; this category constrains
 	// only System's omitted-type fallback and keeps it at Generic rank.
 	SetMembership,
+	// Set union and difference have the generic relation
+	//
+	//   (a, b: set of T) -> set of T
+	//
+	// which current Pascal declarations cannot quantify. The root candidates
+	// carry `set of unknown` formals only to form an ordinary overload;
+	// candidate matching chooses one real set type and restores it as the
+	// omitted result after selection.
+	SetUnionOrDifference,
 	// Assigned accepts object pointers, plain routine values, and method
 	// routine values. system.pp can only spell its Pointer overload.
 	Assigned,

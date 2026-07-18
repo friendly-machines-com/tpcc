@@ -750,6 +750,14 @@ static const BuiltinDesc k_checked_pointer_difference_fallback{
     "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
 static const BuiltinDesc k_unchecked_pointer_difference_fallback{
     "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
+static const BuiltinDesc k_checked_set_union_fallback{
+    "::u_system::o_add", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
+static const BuiltinDesc k_unchecked_set_union_fallback{
+    "::u_system::o_unchecked_add", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
+static const BuiltinDesc k_checked_set_difference_fallback{
+    "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
+static const BuiltinDesc k_unchecked_set_difference_fallback{
+    "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
 
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name ==
@@ -908,6 +916,76 @@ const Frame& root_frame() {
 		    OperatorInvocation::BinaryToken,
 		    "-", 2, false,
 		    &k_unchecked_subtract_fallback);
+
+		// Pascal cannot declare `(set of T, set of T) -> set of T` without
+		// generic routine syntax. A set-of-unknown placeholder gives these
+		// candidates distinct ordinary overload signatures; their descriptor
+		// later contextualizes bracket literals and restores one concrete set
+		// type without adding another lookup path.
+		auto generic_set =
+		    new FixedSetType(
+			SourceLocation::builtin(),
+			unknown_type());
+		struct SetOperation {
+			std::string_view spelling;
+			bool checked;
+			const BuiltinDesc* descriptor;
+		};
+		for (const SetOperation& operation :
+		     std::array{
+			 SetOperation{
+			     "+", true,
+			     &k_checked_set_union_fallback},
+			 SetOperation{
+			     "+", false,
+			     &k_unchecked_set_union_fallback},
+			 SetOperation{
+			     "-", true,
+			     &k_checked_set_difference_fallback},
+			 SetOperation{
+			     "-", false,
+			     &k_unchecked_set_difference_fallback},
+		     }) {
+			auto identifier =
+			    operator_invocation_identifier(
+				OperatorInvocation::BinaryToken,
+				operation.spelling, 2,
+				operation.checked, false);
+			assert(identifier);
+			std::vector<Parameter> formals;
+			formals.emplace_back(
+			    "first", "p_first",
+			    generic_set,
+			    ParamMode::Const, nullptr);
+			formals.emplace_back(
+			    "second", "p_second",
+			    generic_set,
+			    ParamMode::Const, nullptr);
+			auto routine_type =
+			    new RoutineType(
+				SourceLocation::builtin(),
+				std::move(formals),
+				unknown_type(), ROUTINE);
+			auto procedure =
+			    new Procedure(
+				std::string(
+				    operation.descriptor
+					->cxx_name),
+				std::string(*identifier),
+				routine_type, true);
+			procedure->builtin_desc =
+			    operation.descriptor;
+			procedure->is_external = true;
+			procedure->has_body = true;
+			auto registration =
+			    ff.register_callable(
+				std::string(*identifier),
+				procedure);
+			assert(
+			    registration.kind ==
+			    CallableRegistration::Kind::
+				Added);
+		}
 
 		// Pointer subtraction is a second ordinary overload, not the
 		// pointer-minus-integer step above. Pascal cannot quantify one pointee

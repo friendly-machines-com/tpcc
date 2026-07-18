@@ -9658,6 +9658,125 @@ Parser::match_callable_arguments(
 		      callable->cxx_name);
 	if (builtin &&
 	    builtin->generic_kind ==
+		BuiltinGenericKind::
+		    SetUnionOrDifference) {
+		// This is one ordinary root-frame candidate whose Pascal declaration
+		// cannot spell `(set of T, set of T) -> set of T`. Determine T only
+		// for this candidate, then use the existing argument matcher to
+		// construct bracket literals and perform admitted set widening.
+		if (args.size() != 2 ||
+		    !args[0] || !args[1])
+			return std::nullopt;
+		auto first_literal =
+		    dynamic_cast<BracketLiteral*>(
+			args[0]);
+		auto second_literal =
+		    dynamic_cast<BracketLiteral*>(
+			args[1]);
+		auto first_set =
+		    dynamic_cast<FixedSetType*>(
+			args[0]->ty);
+		auto second_set =
+		    dynamic_cast<FixedSetType*>(
+			args[1]->ty);
+		if (!first_literal && !first_set)
+			return std::nullopt;
+		if (!second_literal && !second_set)
+			return std::nullopt;
+
+		FixedSetType* common_set = nullptr;
+		if (first_set && second_set) {
+			auto first_accepts_second =
+			    first_set
+				->value_conversion_from(
+				    second_set);
+			auto second_accepts_first =
+			    second_set
+				->value_conversion_from(
+				    first_set);
+			if (!first_accepts_second &&
+			    !second_accepts_first)
+				return std::nullopt;
+			if (first_accepts_second &&
+			    (!second_accepts_first ||
+			     conversion_is_better(
+				 *first_accepts_second,
+				 *second_accepts_first)))
+				common_set = first_set;
+			else if (second_accepts_first &&
+				 (!first_accepts_second ||
+				  conversion_is_better(
+				      *second_accepts_first,
+				      *first_accepts_second)))
+				common_set = second_set;
+			else
+				// Equal conversions mean structurally equivalent set
+				// domains. Retaining the left type makes the result
+				// deterministic without introducing a preference into
+				// overload ranking.
+				common_set = first_set;
+		} else if (first_set) {
+			common_set = first_set;
+		} else if (second_set) {
+			common_set = second_set;
+		} else {
+			Type* first_item =
+			    first_literal
+				->default_set_item_type;
+			Type* second_item =
+			    second_literal
+				->default_set_item_type;
+			Type* common_item = nullptr;
+			if (first_item == unknown_type())
+				common_item = second_item;
+			else if (second_item ==
+				 unknown_type())
+				common_item = first_item;
+			else
+				common_item =
+				    infer_set_item_type(
+					first_item,
+					second_item);
+			if (!common_item ||
+			    common_item == unknown_type())
+				return std::nullopt;
+			common_set =
+			    new FixedSetType(
+				current_location(),
+				common_item);
+		}
+
+		Parameter set_formal(
+		    "set", "", common_set,
+		    ParamMode::Const, nullptr);
+		auto first_match =
+		    match_argument(
+			set_formal, args[0],
+			nullptr, 0, false);
+		auto second_match =
+		    match_argument(
+			set_formal, args[1],
+			nullptr, 1, false);
+		if (!first_match || !second_match)
+			return std::nullopt;
+
+		// The declaration omits the complete set type, so this fallback stays
+		// below every viable typed custom operator. Candidate-local literal
+		// construction is not a reason to raise its overload rank.
+		return CallableMatch{
+		    {
+			{MatchRank::Tier::Generic, 0},
+			{MatchRank::Tier::Generic, 0},
+		    },
+		    {
+			first_match->value,
+			second_match->value,
+		    },
+		    {{}, {}},
+		};
+	}
+	if (builtin &&
+	    builtin->generic_kind ==
 		BuiltinGenericKind::PointerDifference) {
 		// The root declaration's Pointer formals distinguish this overload
 		// from `(T, Integer) -> T`; they must not erase typed operands before
@@ -10818,14 +10937,19 @@ Node* Parser::make_call(
 			     UnaryOrdinalOrPointerStep ||
 		     descriptor->generic_kind ==
 			 BuiltinGenericKind::
-			     EnumOrPointerStep) &&
+			     EnumOrPointerStep ||
+		     descriptor->generic_kind ==
+			 BuiltinGenericKind::
+			     SetUnionOrDifference) &&
 		    !call->args.empty() &&
 		    call->args[0])
 			// These root declarations omit the one generic T which is
-			// both their first formal and their result. Restore that
-			// relation immediately after ordinary selection so direct
-			// `pointer +/- integer` expressions and Inc/Dec mutation share
-			// one result-typing mechanism.
+			// their result and either their first formal or the item type
+			// shared by both set formals. Candidate matching has already
+			// converted argument one to that exact T. Restore the relation
+			// immediately after ordinary selection so direct operator
+			// expressions and Inc/Dec mutation share one result-typing
+			// mechanism.
 			call->ty =
 			    call->args[0]->ty;
 	}
