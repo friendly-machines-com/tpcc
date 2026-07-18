@@ -278,8 +278,81 @@ SourceLocation Parser::current_location() const {
 	emit_diagnostic_at(loc, "fatal", message);
 }
 
+std::string Parser::enclosing_diagnostic_context(
+    ErrorLetContext& ctx) const {
+	std::stringstream sst;
+	bool has_context = false;
+	auto begin_context = [&]() {
+		if (has_context)
+			return;
+		sst << "\n  context:";
+		has_context = true;
+	};
+
+	if (current_unit && current_unit->reference) {
+		begin_context();
+		sst << "\n    "
+		    << (current_unit->is_program
+			    ? "program"
+			    : "unit")
+		    << ": "
+		    << ctx.value_ref(
+			   current_unit->reference);
+	}
+	if (current_routine) {
+		begin_context();
+		sst << "\n    routine: "
+		    << ctx.value_ref(current_routine);
+		if (auto method =
+			dynamic_cast<Method*>(
+			    current_routine);
+		    method && method->owner_class)
+			sst << "\n    owner type: "
+			    << ctx.type_ref(
+				   method->owner_class);
+	}
+	return sst.str();
+}
+
+[[noreturn]] void Parser::emit_parse_error_at(
+    SourceLocation loc, std::string message,
+    ErrorLetContext& ctx) {
+	::emit_parse_error_at(
+	    loc,
+	    complete_diagnostic_message(
+		std::move(message), ctx));
+}
+
+std::string Parser::complete_diagnostic_message(
+    std::string message,
+    ErrorLetContext& ctx) const {
+	// The primary diagnostic, its enclosing source context, and all detailed
+	// definitions must share one graph. Appending notes anywhere else would
+	// permit duplicate `where` blocks or references whose definitions live in
+	// a different ErrorLetContext.
+	message += enclosing_diagnostic_context(ctx);
+	message += ctx.notes();
+	return message;
+}
+
 [[noreturn]] void Parser::emit_parse_error_at(SourceLocation loc, std::string message) {
-	::emit_parse_error_at(loc, message);
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+		scopes, 4);
+	emit_parse_error_at(
+	    std::move(loc), std::move(message),
+	    ctx);
+}
+
+[[noreturn]] void Parser::emit_fatal_error_at(
+    SourceLocation loc, std::string message) {
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+		scopes, 4);
+	::emit_fatal_error_at(
+	    loc,
+	    complete_diagnostic_message(
+		std::move(message), ctx));
 }
 
 [[noreturn]] void Parser::raise_parse_error(std::string message) {
@@ -296,8 +369,8 @@ Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got
 	std::string got_ref = ctx.type_ref(got);
 	std::stringstream sst;
 	sst << message << ": expected type " << expected_ref << " but got type " << got_ref;
-	sst << ctx.notes();
-	emit_parse_error_at(current_location(), sst.str());
+	emit_parse_error_at(
+	    current_location(), sst.str(), ctx);
 	return expected; // future non-fatal diagnostics can continue with the expected type
 }
 
@@ -306,8 +379,8 @@ Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected
 	std::string got_ref = ctx.type_ref(got);
 	std::stringstream sst;
 	sst << message << ": expected " << expected_kind << " type but got " << got_ref;
-	sst << ctx.notes();
-	emit_parse_error_at(current_location(), sst.str());
+	emit_parse_error_at(
+	    current_location(), sst.str(), ctx);
 	return got; // future non-fatal diagnostics can continue with the parsed type
 }
 
@@ -435,8 +508,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 		}
 	}
 
-	sst << ctx.notes();
-	emit_parse_error_at(error_location, sst.str());
+	emit_parse_error_at(
+	    error_location, sst.str(), ctx);
 }
 
 [[noreturn]] void Parser::raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args) {
@@ -449,8 +522,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	for (size_t i = 0; i < args.size(); ++i) {
 		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
-	sst << ctx.notes();
-	emit_parse_error_at(current_location(), sst.str());
+	emit_parse_error_at(
+	    current_location(), sst.str(), ctx);
 }
 
 [[noreturn]] void Parser::raise_cxx_carrier_collision(
@@ -542,10 +615,9 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 			    << ctx.type_ref(incoming_formal);
 		}
 	}
-	sst << ctx.notes();
 	emit_parse_error_at(
 	    callable_source_location(incoming),
-	    sst.str());
+	    sst.str(), ctx);
 }
 
 [[noreturn]] void Parser::raise_callable_registration_error(
@@ -599,10 +671,9 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	sst << "\n  existing overload family: "
 	    << ctx.value_ref(
 		   registration.existing_binding);
-	sst << ctx.notes();
 	emit_parse_error_at(
 	    callable_source_location(incoming),
-	    sst.str());
+	    sst.str(), ctx);
 }
 
 bool Parser::is_defined(const std::string& sym) const {
@@ -863,11 +934,11 @@ void Parser::handle_directive(
 	if (!current_active())
 		return;
 	if (name == "error")
-		::emit_parse_error_at(
+		emit_parse_error_at(
 		    directive_location,
 		    "user-defined: " + rest);
 	if (name == "fatal")
-		::emit_fatal_error_at(
+		emit_fatal_error_at(
 		    directive_location,
 		    "user-defined: " + rest);
 	if (name == "push") {
@@ -898,7 +969,7 @@ void Parser::handle_directive(
 			directive_state.set_interface_model(
 			    InterfaceModel::COM);
 		} else {
-			::emit_parse_error_at(
+			emit_parse_error_at(
 			    directive_location,
 			    "$interfaces expects COM, CORBA, or DEFAULT");
 		}

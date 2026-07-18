@@ -33,6 +33,7 @@ class Builtin;
 struct BuiltinDesc;
 class RoutineRef;
 class UnitRef;
+class ErrorLetContext;
 struct CallableRegistration;
 
 /** Shared compiler-wide options set from the command line and consulted by
@@ -704,6 +705,19 @@ protected:
 	std::vector<Parameter> parse_proc_formal_parameters();
 
 	[[noreturn]] void emit_parse_error_at(SourceLocation loc, std::string message);
+	/** Finish a parser diagnostic with its enclosing source context and the
+	 * one diagnostic graph shared by the primary message, context references,
+	 * and exactly one trailing `where` block. */
+	[[noreturn]] void emit_parse_error_at(
+	    SourceLocation loc, std::string message,
+	    ErrorLetContext& ctx);
+	[[noreturn]] void emit_fatal_error_at(
+	    SourceLocation loc, std::string message);
+	std::string complete_diagnostic_message(
+	    std::string message,
+	    ErrorLetContext& ctx) const;
+	std::string enclosing_diagnostic_context(
+	    ErrorLetContext& ctx) const;
 	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 	Type* raise_type_mismatch(std::string message, Type* expected, Type* got);

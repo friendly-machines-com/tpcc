@@ -21,6 +21,10 @@ enum class TypeBoundKind { Low, High };
 
 class Node {
 public:
+	/** Diagnostic graph invariant: every Type* or Node* rendered by
+	 * print_diagnostic_definition() through known_*_ref() must be contributed
+	 * by collect_diagnostic_edges(). Frames and parser scopes provide names
+	 * only; they never make an otherwise unrelated value printable. */
 	virtual const char* diagnostic_kind() const;
 	virtual void collect_diagnostic_edges(ErrorLetContext* ctx) const;
 	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;

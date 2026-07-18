@@ -54,6 +54,11 @@ public:
 	std::string known_type_ref(const Type* ty) const;
 	std::string known_value_ref(const Node* node) const;
 	std::string known_type_display(const Type* ty) const;
+	// Aggregate frames are name evidence, not graph roots. Their printers use
+	// this query to omit declarations whose values were not reached through an
+	// explicit diagnostic edge; printing known_value_ref() for such a value
+	// would create an identifier with no corresponding definition.
+	bool has_known_value_ref(const Node* node) const;
 	void indent(std::ostringstream& out, unsigned level) const;
 	void print_frame_members(std::ostringstream& out, const Frame* frame, unsigned indent_level) const;
 

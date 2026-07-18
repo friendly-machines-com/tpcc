@@ -3,6 +3,7 @@
 #include "cst.h"
 #include "frame.h"
 #include "types.h"
+#include "units.h"
 
 #include <algorithm>
 #include <cctype>
@@ -90,7 +91,12 @@ ErrorLetContext::ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned m
 	// preference.
 	for (auto it = naming_scopes.rbegin(); it != naming_scopes.rend(); ++it) {
 		if (it->qualifier) {
-			add_value_edge(it->qualifier);
+			// A visible qualifier is only part of the naming environment. A
+			// MemberAccess/PropertyAccess which actually uses it contributes the
+			// real graph edge; enclosing parser context likewise roots only the
+			// current unit. Rooting every qualifier here emitted irrelevant used
+			// units in every diagnostic and contradicted index_frame's
+			// name-evidence-only invariant.
 			index_frame(it->frame, DiagnosticFrameUse::AggregateMembers);
 		} else {
 			index_frame(it->frame, DiagnosticFrameUse::NamingScope);
@@ -283,6 +289,18 @@ ErrorLetContext::NameBase ErrorLetContext::choose_type_base(const TypeNode& n) {
 }
 
 ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n) const {
+	// A UnitRef is the diagnostic value named by the Pascal unit identifier.
+	// The Unit is not a second Node which could define a bare RHS identifier;
+	// naming this existing node directly keeps every printed reference inside
+	// the ordinary definition-before-use graph.
+	if (auto unit = dynamic_cast<const UnitRef*>(n.node);
+	    unit && unit->unit && !unit->unit->name.empty())
+		return NameBase{
+		    name_component(
+			unit->unit->name,
+			n.kind.c_str()),
+		    ""};
+
 	if (!n.value_names.empty())
 		return NameBase{name_component(n.value_names.front(), n.kind.c_str()), ""};
 
@@ -367,6 +385,27 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 		}
 	}
 no_proc_call_name:
+
+	if (auto method =
+		dynamic_cast<const Method*>(n.node)) {
+		auto owner_it =
+		    type_nodes.find(method->owner_class);
+		if (owner_it != type_nodes.end() &&
+		    owner_it->second.name.assigned &&
+		    !method->pas_name.empty()) {
+			// Method declarations do not have receiver expressions from which
+			// the generic MemberAccess naming rule could form Owner.Method.
+			// Their existing owner edge supplies the missing source context.
+			return NameBase{
+			    name_component(
+				render_name_display(
+				    owner_it->second.name) +
+				    "." +
+				    method->pas_name,
+				n.kind.c_str()),
+			    ""};
+		}
+	}
 
 	if (!n.member_names.empty())
 		return NameBase{name_component("member_" + n.member_names.front(), n.kind.c_str()), ""};
@@ -514,6 +553,16 @@ std::string ErrorLetContext::known_value_ref(const Node* node) const {
 	return render_name(it->second.name);
 }
 
+bool ErrorLetContext::has_known_value_ref(
+    const Node* node) const {
+	if (!node)
+		return false;
+	auto it = value_nodes.find(node);
+	return it != value_nodes.end() &&
+	       it->second.referenced &&
+	       it->second.name.assigned;
+}
+
 void ErrorLetContext::indent(std::ostringstream& out, unsigned level) const {
 	for (unsigned i = 0; i < level; i++)
 		out << "  ";
@@ -542,12 +591,16 @@ void ErrorLetContext::print_frame_members(std::ostringstream& out, const Frame* 
 	     frame->value_declarations()) {
 		const std::string& name = item.first;
 		const FrameValueEntry& entry = item.second;
-		indent(out, indent_level);
 		if (dynamic_cast<StorageSlot*>(entry.value)) {
+			indent(out, indent_level);
 			out << name << ": " << known_type_ref(entry.ty) << ";\n";
-		} else if (dynamic_cast<Callable*>(entry.value) || dynamic_cast<OverloadSet*>(entry.value)) {
-			out << name << ": " << known_value_ref(entry.value) << ";\n";
-		} else if (entry.value) {
+		} else if (entry.value &&
+			   has_known_value_ref(
+			       entry.value)) {
+			// Aggregate collection deliberately discovers member types but not
+			// every member value. Only an independently reached value may be
+			// referenced here; all other entries remain name evidence.
+			indent(out, indent_level);
 			out << name << ": " << known_value_ref(entry.value) << ";\n";
 		}
 	}

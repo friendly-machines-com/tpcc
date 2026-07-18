@@ -65,6 +65,9 @@ public:
 
 	explicit Type(SourceLocation source_location);
 	virtual ~Type() = default;
+	/** Diagnostic graph invariant: every Type* or Node* rendered by
+	 * print_diagnostic_definition() through known_*_ref() must be contributed
+	 * by collect_diagnostic_edges(). Frame traversal is only naming evidence. */
 	virtual const char* diagnostic_kind() const = 0;
 	virtual void collect_diagnostic_edges(ErrorLetContext* ctx) const = 0;
 	// ErrorLetContext prints diagnostic_kind() as the type-definition head.

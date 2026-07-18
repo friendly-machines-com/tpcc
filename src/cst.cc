@@ -403,8 +403,17 @@ const char* UnitRef::diagnostic_kind() const {
 	return "unit_reference";
 }
 void UnitRef::print_diagnostic_definition(
-    ErrorLetContext*, std::ostringstream& out, unsigned) const {
-	out << " " << (unit ? unit->name : "<null>");
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	// ErrorLetContext binds this node under Unit::name, while the quoted field
+	// records which semantic unit the node designates. The quotes matter: a
+	// bare unit name here would look like a graph reference and would require a
+	// second value definition.
+	out << diagnostic_kind() << "\n";
+	ctx->indent(out, indent + 1);
+	out << "unit: "
+	    << diagnostic_string_literal(
+		   unit ? unit->name : "<null>");
 }
 void ClassRefValue::collect_diagnostic_edges(
     ErrorLetContext* ctx) const {
