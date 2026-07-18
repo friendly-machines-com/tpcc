@@ -2312,6 +2312,17 @@ Node* Parser::resolve_lvalue(std::string name) {
 	return nullptr;
 }
 
+/** Resolve a type name for a fresh parser consumer. Once an earlier
+ * declaration in the active type block has been published, this peels its
+ * resolved IncompleteType chain so inheritance and later declaration syntax
+ * can inspect the real Type immediately.
+ *
+ * This is intentionally not graph normalization: Type* fields stored before
+ * publication still point at their old placeholders until TypeBlockResolver
+ * rewrites the complete block. Therefore no caller in the open-block phase
+ * may compare a fresh result from here with a previously stored edge to decide
+ * type identity, overload signatures, property compatibility, C++ carriers,
+ * or overriding. Those decisions belong to the post-normalization phase. */
 Type* Parser::maybe_resolve_type(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		Type* hit = it->frame->lookup_type(name);
@@ -6057,6 +6068,15 @@ void Parser::maybe_parse_const_block() {
 	}
 }
 
+/** Canonicalize the temporary graph built by one Pascal type block.
+ *
+ * normalize_type() mutates every stored Type* edge it visits, including edges
+ * reached through aggregate frames, overload collections, properties, and
+ * mutually recursive type constructors. Its successful completion is the
+ * boundary after which raw Type* identity and backend-carrier relations are
+ * semantic. It does not make the graph canonical incrementally while parsing;
+ * code which needs those relations must be scheduled after this resolver, not
+ * taught to unwrap one convenient edge on demand. */
 struct TypeBlockResolver {
 	std::unordered_set<Type*> visiting_types;
 	std::unordered_set<Type*> done_types;
