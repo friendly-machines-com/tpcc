@@ -26,10 +26,8 @@ operator In(
   const Values: TIntegerSet): Boolean;
 begin
   Selected := 2;
-  { The second conjunct keeps both formals live for warning-clean C++ while
-    remaining unreachable for the positive test values. }
-  Result := (Item = -1) and
-            (Item in Values)
+  IntegerValues := Values;
+  Result := Item = -1
 end;
 
 begin

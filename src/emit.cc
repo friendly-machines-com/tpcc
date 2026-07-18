@@ -2867,14 +2867,20 @@ void Emitter::emit_call_arguments(
 		// placeholder would emit an invalid cast to void* and let the backend
 		// representation contradict the generic Pascal call already selected.
 		if (call_ty && i < call_ty->formals.size() &&
-		    call_ty->formals[i].mode == ParamMode::Value &&
+		    (call_ty->formals[i].mode ==
+			 ParamMode::Value ||
+		     call_ty->formals[i].mode ==
+			 ParamMode::Const) &&
 		    call_ty->formals[i].ty != unknown_type() &&
 		    dynamic_cast<Integer*>(arg)) {
 			Type* formal_ty =
 			    call_ty->formals[i].ty;
 			// Pascal has already selected the declaration. Pin a raw
-			// integer literal to its value-parameter carrier so C++
-			// cannot independently select another overload.
+			// integer literal to its value/const-parameter carrier so C++
+			// cannot independently select another overload. In particular,
+			// an unqualified custom operator call must not let ADL prefer an
+			// RTL function template merely because the literal would otherwise
+			// be emitted as uint64_t.
 			fprintf(active, "static_cast<");
 			emit_type_ref(formal_ty);
 			fprintf(active, ">(");
@@ -2903,8 +2909,6 @@ void Emitter::emit_call_arguments(
 }
 
 static const char* cxx_unary_operator(UnaryOperation* op) {
-	if (dynamic_cast<AddrOf*>(op))
-		return "&";
 	if (dynamic_cast<Dereference*>(op))
 		return "*";
 	return nullptr;
@@ -3334,8 +3338,12 @@ void Emitter::emit_expression(Node* expr) {
 		return;
 	}
 	if (auto o = dynamic_cast<ShortCircuitOperation*>(expr)) {
-		// TODO: support overloads, if any.
-		fprintf(active, "((");
+		// C++ &&/|| supply the required left-to-right short circuit, but their
+		// result type is C++ bool. The CST result is Pascal Boolean, whose enum
+		// carrier deliberately does not accept an implicit bool conversion.
+		// Convert only the final result so the right operand remains lazy.
+		fprintf(active,
+			"::u_system::tpcc_bool_to_boolean(((");
 		emit_expression(o->a);
 		switch (o->kind) {
 		case AND:
@@ -3348,7 +3356,7 @@ void Emitter::emit_expression(Node* expr) {
 			abort();
 		}
 		emit_expression(o->b);
-		fprintf(active, "))");
+		fprintf(active, ")))");
 		return;
 	}
 	if (auto equal = dynamic_cast<RoutineEqual*>(expr)) {
@@ -4026,6 +4034,20 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, ") != nullptr)");
 		return;
 	}
+	if (auto address =
+		dynamic_cast<AddrOf*>(expr)) {
+		// Pascal has no const-qualified pointer type: @Place has semantic type
+		// ^T even when Place is currently viewed through a const formal. Spell
+		// that cv removal explicitly instead of relying on an ill-formed C++
+		// reinterpret_cast later. Writing through the result is valid only
+		// when the underlying C++ object is not actually const.
+		fprintf(active, "const_cast<");
+		emit_type_ref(address->ty);
+		fprintf(active, ">(std::addressof(");
+		emit_writable_expression(address->a);
+		fprintf(active, "))");
+		return;
+	}
 	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
 		if (const char* op = cxx_unary_operator(u)) {
 			if (auto dereference =
@@ -4036,10 +4058,7 @@ void Emitter::emit_expression(Node* expr) {
 				    "untyped pointer dereference used as a value",
 				    dereference);
 			fprintf(active, "%s", op);
-			if (dynamic_cast<AddrOf*>(u))
-				emit_writable_expression(u->a);
-			else
-				emit_expression(u->a);
+			emit_expression(u->a);
 			return;
 		}
 	}
