@@ -194,6 +194,13 @@ operator >=(a, b: Char): Boolean; external name '::u_system::o_greaterthanorequa
 // No operand is pre-cast merely to choose an operator overload.
 operator =(a, b: Pointer): Boolean; external name '::u_system::o_equal';
 
+// Class values are references, but they do not implicitly become raw Pointer:
+// doing that would erase the distinction throughout the conversion algebra.
+// TObject instead gives every class reference an ordinary common ancestor for
+// identity comparison with another class reference or contextual nil. A more
+// specific custom Equal overload remains preferable by normal ranking.
+operator =(a, b: TObject): Boolean; external name '::u_system::o_equal';
+
 operator <(a, b: Byte): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: ShortInt): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Word): Boolean; external name '::u_system::o_lessthan';
