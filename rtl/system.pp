@@ -54,6 +54,7 @@ type
   end;
   TExceptProc = procedure(ExceptObject: TObject;
     Address, Frame: Pointer);
+  TSysCharSet = set of Char;
 
 const
   MaxLongint = $7fffffff;
