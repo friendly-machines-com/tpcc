@@ -24,6 +24,7 @@ struct Parameter;
 class RoutineType;
 class Procedure;
 class Callable;
+class Method;
 class Property;
 class PropertyAccess;
 class Builtin;
@@ -267,6 +268,15 @@ private:
 	// A stack, rather than a boolean, preserves that ownership when an
 	// aggregate contains a nested `type` section of its own.
 	std::vector<Frame*> type_block_frames;
+	// Aggregate bodies parsed inside each active type block cannot finalize
+	// overload, property-accessor, override, or C++-carrier semantics when
+	// their stored signatures may still contain IncompleteType edges. Record
+	// each ordinary aggregate declaration frame here; parse_type_block drains
+	// exactly its own innermost worklist after recursive normalization and
+	// before emission.
+	// This is phase-local parser work, not source metadata on a Type or Frame.
+	std::vector<std::vector<Frame*>>
+	    type_block_deferred_aggregates;
 	// LHS name whose type expression is currently being parsed. Class parsing
 	// uses this to distinguish the one root declaration `System.TObject =
 	// class ... end` from every other bare class, which implicitly inherits
@@ -539,14 +549,20 @@ protected:
 	void parse_statement();
 	Frame* parse_aggregate_type_body(Type* owner_class);
 	void parse_property_declaration(Frame* body, Type* owner_type);
+	void validate_property_declaration(Property* property);
+	void validate_method_ancestor_semantics(
+	    Method* method, Frame* owner_body);
+	void validate_aggregate_declaration_semantics(
+	    Frame* owner_body);
 	Property* default_property_for_type(Type* ty);
 	PropertyAccess* apply_property(Node* receiver, Property* property, std::vector<Node*> indexes);
 	bool property_read_is_place(PropertyAccess* access);
 	bool is_referenceable(Node* n);
 	VariantPart* parse_record_variant(Type* owner, Frame* body);
-	/** Parse a method prototype inside a class/record/object body. Registers
-	 *  the Method in BODY under its Pascal name (via register_callable, so
-	 *  overload directives interact the same way as for standalone callables). */
+	/** Parse a method prototype inside a class/record/object body. It only
+	 *  collects the Method in BODY. The completed aggregate validates its
+	 *  local overload family and ancestor relationship after any enclosing
+	 *  type block has recursively normalized every signature edge. */
 	void parse_method_prototype(Frame* body, Type* owner_class, bool is_function, bool is_destructor, bool is_constructor, bool is_class);
 	bool maybe_parse_semicolon();
 	bool maybe_parse_opening_paren();

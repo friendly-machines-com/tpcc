@@ -218,7 +218,7 @@ static bool same_emitted_declaration_scope(
 	return true;
 }
 
-static CallableRegistration::Kind callable_pair_result(
+CallableRegistration::Kind validate_callable_pair(
     Callable* existing, Callable* incoming) {
 	if (!same_callable_overload_category(
 		existing, incoming))
@@ -258,7 +258,7 @@ static CallableRegistration::Kind callable_pair_result(
 	return CallableRegistration::Kind::Added;
 }
 
-CallableRegistration Frame::register_callable(
+CallableRegistration Frame::collect_callable(
     std::string name, Callable* c) {
 	auto iter = value_items.find(name);
 	if (iter == value_items.end()) {
@@ -268,15 +268,11 @@ CallableRegistration Frame::register_callable(
 	}
 	Node* existing = iter->second.value;
 	if (auto ec = dynamic_cast<Callable*>(existing)) {
-		auto result =
-		    callable_pair_result(ec, c);
-		if (result !=
-		    CallableRegistration::Kind::Added)
-			return {result, existing, ec};
-		// Declarations owned by one frame form their local overload family
-		// from distinct Pascal signatures. `overload` does not create that
-		// family; its retained per-Callable bit controls only whether lookup
-		// may continue into a structural or lexical parent after finding it.
+		// This is only a declaration collection step. In particular, EC and C
+		// may temporarily have incompatible categories or duplicate signatures:
+		// deciding that requires canonical Type* identity, which an open type
+		// block does not yet provide. Post-normalization aggregate validation
+		// establishes the public OverloadSet invariant before emission.
 		auto set = new OverloadSet(
 		    std::vector<Callable*>{
 			ec, c});
@@ -286,17 +282,6 @@ CallableRegistration Frame::register_callable(
 		    CallableRegistration::Kind::Added};
 	}
 	if (auto os = dynamic_cast<OverloadSet*>(existing)) {
-		for (Callable* member :
-		     os->members) {
-			auto result =
-			    callable_pair_result(
-				member, c);
-			if (result !=
-			    CallableRegistration::Kind::Added)
-				return {
-				    result, existing,
-				    member};
-		}
 		os->members.push_back(c);
 		return {
 		    CallableRegistration::Kind::Added};
@@ -304,4 +289,40 @@ CallableRegistration Frame::register_callable(
 	return {
 	    CallableRegistration::Kind::Rejected,
 	    existing};
+}
+
+CallableRegistration Frame::register_callable(
+    std::string name, Callable* c) {
+	auto iter = value_items.find(name);
+	if (iter == value_items.end())
+		return collect_callable(
+		    std::move(name), c);
+
+	Node* existing = iter->second.value;
+	if (auto ec = dynamic_cast<Callable*>(existing)) {
+		auto result =
+		    validate_callable_pair(ec, c);
+		if (result !=
+		    CallableRegistration::Kind::Added)
+			return {result, existing, ec};
+	} else if (auto os =
+		       dynamic_cast<OverloadSet*>(existing)) {
+		for (Callable* member :
+		     os->members) {
+			auto result =
+			    validate_callable_pair(
+				member, c);
+			if (result !=
+			    CallableRegistration::Kind::Added)
+				return {
+				    result, existing,
+				    member};
+		}
+	} else {
+		return {
+		    CallableRegistration::Kind::Rejected,
+		    existing};
+	}
+	return collect_callable(
+	    std::move(name), c);
 }

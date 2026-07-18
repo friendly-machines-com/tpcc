@@ -72,14 +72,28 @@ public:
      *  emit walks from seeing stale IncompleteType pointers. */
     void rebind_value_type(std::string name, Type* ty);
     bool register_variable(std::string name, Node* v, Type* ty); // FIXME: StorageSlot would already have ty
-    /** Register a Callable (Procedure or Method) under NAME. Distinct Pascal
-     *  signatures owned by this one Frame form a local OverloadSet regardless
-     *  of the `overload` directive; the retained per-Callable directive bit
-     *  controls whether lookup may extend that completed family into a parent
-     *  Frame or lexical scope. The result retains the existing binding and
-     *  exact conflicting callable: discarding them here would prevent
-     *  declaration diagnostics from printing the prior source location and
-     *  complete overload family. */
+    /** Collect a Callable while an aggregate declaration is still being
+     *  constructed inside an open Pascal type block. This operation performs
+     *  no signature, type-identity, or C++-carrier comparisons: previously
+     *  stored signature edges may still be IncompleteType placeholders even
+     *  when a fresh lookup of the same Pascal name already returns its
+     *  resolved Type. The owning aggregate must validate the resulting local
+     *  family after TypeBlockResolver has recursively normalized the block and
+     *  before any emission or statement lookup can observe it. */
+    CallableRegistration collect_callable(
+        std::string name, Callable* c);
+    /** Register an already-normalized Callable (Procedure or Method) under
+     *  NAME. Distinct Pascal signatures owned by this one Frame form a local
+     *  OverloadSet regardless of the `overload` directive; the retained
+     *  per-Callable directive bit controls whether lookup may extend that
+     *  completed family into a parent Frame or lexical scope. The result
+     *  retains the existing binding and exact conflicting callable:
+     *  discarding them here would prevent declaration diagnostics from
+     *  printing the prior source location and complete overload family.
+     *
+     *  Do not call this on signatures stored in an open type block. Use
+     *  collect_callable(), normalize the complete block, and then apply
+     *  validate_callable_pair() to the collected family. */
     CallableRegistration register_callable(
         std::string name, Callable* c);
     /** Declaration ownership query, not name lookup. This intentionally
@@ -112,9 +126,18 @@ bool callable_binding_opens_parent(Node* binding);
 bool same_callable_overload_category(
     Callable* a, Callable* b);
 
+/** Validate one pair of declarations which have already been collected under
+ * one Pascal name. Every Type* edge reachable from either signature must have
+ * passed type-block normalization first; raw pointer identity and C++ carrier
+ * equivalence are deliberately final semantic decisions, not operations on
+ * the parser's temporary IncompleteType graph. */
+CallableRegistration::Kind validate_callable_pair(
+    Callable* existing, Callable* incoming);
+
 /** Backend-only collision test for two already-distinct Pascal callables.
  * It compares the emitted member/free-function name and C++ parameter
  * carriers; callers use it to reject an unrepresentable overload or an
- * accidental C++ virtual override, never to perform Pascal lookup. */
+ * accidental C++ virtual override, never to perform Pascal lookup. Both
+ * signatures must already have been recursively normalized. */
 bool cxx_callable_signatures_collide(
     Callable* a, Callable* b);

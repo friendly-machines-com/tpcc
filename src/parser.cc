@@ -4159,6 +4159,78 @@ PropertyAccess* Parser::apply_property(Node* receiver, Property* property, std::
 	return new PropertyAccess(receiver, property, std::move(indexes));
 }
 
+void Parser::validate_property_declaration(
+    Property* property) {
+	assert(property);
+	const std::string& property_name =
+	    property->pas_name;
+	const std::vector<Type*>& index_types =
+	    property->index_types;
+	Type* property_type = property->ty;
+
+	// This routine is deliberately separate from property parsing. A property
+	// in a type block can mention an accessor whose signature still stores the
+	// block's old IncompleteType placeholder while the property spelling,
+	// parsed later, receives the resolved Type*. Arity and syntax can be
+	// collected earlier, but raw Type* identity is meaningful only after the
+	// complete block has been recursively normalized.
+	auto validate_index_formals =
+	    [&](RoutineType* routine, size_t count,
+		const char* which) {
+		if (routine->formals.size() != count)
+			raise_parse_error(std::string(which) + " accessor for property '" + property_name +
+					  "' has the wrong number of parameters");
+		for (size_t i = 0; i < index_types.size(); ++i)
+			if (routine->formals[i].ty != index_types[i])
+				raise_type_mismatch(std::string(which) + " property index parameter",
+						    index_types[i], routine->formals[i].ty);
+	};
+	if (property->read_accessor) {
+		if (auto field =
+			dynamic_cast<StorageSlot*>(
+			    property->read_accessor)) {
+			if (!index_types.empty())
+				raise_parse_error("indexed property read accessor must be a method");
+			if (field->ty != property_type)
+				raise_type_mismatch("property read field", property_type, field->ty);
+		} else if (auto getter =
+			       dynamic_cast<Callable*>(
+				   property->read_accessor)) {
+			auto routine = static_cast<RoutineType*>(getter->ty);
+			validate_index_formals(routine, index_types.size(), "read");
+			if (routine->return_type != property_type)
+				raise_type_mismatch("property getter return type", property_type, routine->return_type);
+		} else {
+			raise_parse_error("property read accessor must be a field or method");
+		}
+	}
+	if (property->write_accessor) {
+		if (auto field =
+			dynamic_cast<StorageSlot*>(
+			    property->write_accessor)) {
+			if (!index_types.empty())
+				raise_parse_error("indexed property write accessor must be a method");
+			if (field->ty != property_type)
+				raise_type_mismatch("property write field", property_type, field->ty);
+		} else if (auto setter =
+			       dynamic_cast<Callable*>(
+				   property->write_accessor)) {
+			auto routine = static_cast<RoutineType*>(setter->ty);
+			validate_index_formals(routine, index_types.size() + 1, "write");
+			if (routine->return_type != &unit_type())
+				raise_parse_error("property setter must be a procedure");
+			if (routine->formals.back().ty != property_type)
+				raise_type_mismatch("property setter value parameter",
+						    property_type, routine->formals.back().ty);
+			auto mode = routine->formals.back().mode;
+			if (mode != ParamMode::Value && mode != ParamMode::Const)
+				raise_parse_error("property setter value parameter must be a value or const parameter");
+		} else {
+			raise_parse_error("property write accessor must be a field or method");
+		}
+	}
+}
+
 void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	parse_keyword("property");
 	std::string property_name = parse_identifier();
@@ -4168,7 +4240,8 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 			raise_parse_error("property index parameter list cannot be empty");
 		do {
 			// FPC accepts normal value and const index parameters. Their mode is
-			// checked against the accessor signature later; property resolution
+			// checked against the accessor signature after the containing
+			// aggregate's type graph has been normalized; property resolution
 			// itself needs only the declared index types.
 			maybe_parse_keyword("const");
 			std::vector<std::string> names;
@@ -4205,51 +4278,6 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	if (!read_accessor && !write_accessor)
 		raise_parse_error("property '" + property_name + "' has no accessor");
 
-	auto validate_index_formals = [&](RoutineType* routine, size_t count, const char* which) {
-		if (routine->formals.size() != count)
-			raise_parse_error(std::string(which) + " accessor for property '" + property_name +
-					  "' has the wrong number of parameters");
-		for (size_t i = 0; i < index_types.size(); ++i)
-			if (routine->formals[i].ty != index_types[i])
-				raise_type_mismatch(std::string(which) + " property index parameter",
-						    index_types[i], routine->formals[i].ty);
-	};
-	if (read_accessor) {
-		if (auto field = dynamic_cast<StorageSlot*>(read_accessor)) {
-			if (!index_types.empty())
-				raise_parse_error("indexed property read accessor must be a method");
-			if (field->ty != property_type)
-				raise_type_mismatch("property read field", property_type, field->ty);
-		} else if (auto getter = dynamic_cast<Callable*>(read_accessor)) {
-			auto routine = static_cast<RoutineType*>(getter->ty);
-			validate_index_formals(routine, index_types.size(), "read");
-			if (routine->return_type != property_type)
-				raise_type_mismatch("property getter return type", property_type, routine->return_type);
-		} else {
-			raise_parse_error("property read accessor must be a field or method");
-		}
-	}
-	if (write_accessor) {
-		if (auto field = dynamic_cast<StorageSlot*>(write_accessor)) {
-			if (!index_types.empty())
-				raise_parse_error("indexed property write accessor must be a method");
-			if (field->ty != property_type)
-				raise_type_mismatch("property write field", property_type, field->ty);
-		} else if (auto setter = dynamic_cast<Callable*>(write_accessor)) {
-			auto routine = static_cast<RoutineType*>(setter->ty);
-			validate_index_formals(routine, index_types.size() + 1, "write");
-			if (routine->return_type != &unit_type())
-				raise_parse_error("property setter must be a procedure");
-			if (routine->formals.back().ty != property_type)
-				raise_type_mismatch("property setter value parameter",
-						    property_type, routine->formals.back().ty);
-			auto mode = routine->formals.back().mode;
-			if (mode != ParamMode::Value && mode != ParamMode::Const)
-				raise_parse_error("property setter value parameter must be a value or const parameter");
-		} else {
-			raise_parse_error("property write accessor must be a field or method");
-		}
-	}
 	parse_semicolon();
 
 	bool is_default = false;
@@ -4269,6 +4297,191 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 		raise_parse_error("duplicate property '" + property_name + "'");
 	if (is_default)
 		owner_type->default_property = property;
+}
+
+void Parser::validate_method_ancestor_semantics(
+    Method* method, Frame* owner_body) {
+	assert(method && method->ty && owner_body);
+	if (method->ty->kind != METHOD &&
+	    method->ty->kind != CLASS_METHOD &&
+	    !method->is_static)
+		return;
+
+	const std::string& pas_name =
+	    method->pas_name;
+	const bool old_object_method =
+	    dynamic_cast<ObjectType*>(
+		method->owner_class) != nullptr;
+	bool override_target_found = false;
+	auto inspect_ancestor_binding =
+	    [&](Node* binding) {
+		    auto inspect =
+			[&](Callable* callable) {
+				auto ancestor =
+				    dynamic_cast<Method*>(
+					callable);
+				if (!ancestor ||
+				    (ancestor->virtual_kind ==
+					 Method::VirtualKind::None &&
+				     !ancestor->is_final))
+					return;
+				bool exact_signature =
+				    method->ty->same_signature_as(
+					ancestor->ty) &&
+				    method->is_static ==
+					ancestor->is_static;
+				if (exact_signature &&
+				    !method->is_static) {
+					override_target_found = true;
+					if (ancestor->is_final)
+						emit_parse_error_at(
+						    callable_source_location(
+							method),
+						    "method '" + pas_name +
+						    "' overrides a final method");
+				}
+				if (!cxx_callable_signatures_collide(
+					method, ancestor))
+					return;
+				bool intended_override =
+				    exact_signature &&
+				    ((old_object_method &&
+				      method->virtual_kind !=
+					  Method::VirtualKind::None) ||
+				     (!old_object_method &&
+				      method->virtual_kind ==
+					  Method::VirtualKind::Override));
+				if (intended_override)
+					return;
+				// C++ virtual overriding is based on the emitted name and
+				// carrier signature even when Pascal selected a distinct
+				// signature or requested a fresh virtual slot. This check
+				// runs only after recursive type-block normalization:
+				// otherwise an old self/forward placeholder and its resolved
+				// Type* would manufacture the very distinction diagnosed
+				// here. Old-style objects are the exception to the spelling
+				// rule: repeating `virtual` on the exact declaration is their
+				// normal override syntax.
+				emit_parse_error_at(
+				    callable_source_location(
+					method),
+				    "method '" + pas_name +
+				    "' would accidentally override an "
+				    "ancestor after C++ carrier erasure");
+			};
+		    if (auto callable =
+			    dynamic_cast<Callable*>(
+				binding))
+			    inspect(callable);
+		    else if (auto overloads =
+				 dynamic_cast<OverloadSet*>(
+				     binding))
+			    for (Callable* callable :
+				 overloads->members)
+				    inspect(callable);
+	    };
+
+	// Override compatibility is independent of Pascal name hiding. A C++
+	// virtual can be overridden through any depth of the base chain, so
+	// inspect each ancestor's own declarations rather than performing one
+	// structural name lookup that could stop at an intermediate class.
+	for (Frame* ancestor = owner_body->parent;
+	     ancestor; ancestor = ancestor->parent)
+		for (const auto& declaration :
+		     ancestor->value_declarations())
+			if (declaration.first == pas_name)
+				inspect_ancestor_binding(
+				    declaration.second.value);
+	if (method->virtual_kind ==
+		Method::VirtualKind::Override &&
+	    !override_target_found)
+		emit_parse_error_at(
+		    callable_source_location(method),
+		    "method '" + pas_name +
+		    "' has no exact virtual ancestor to override");
+}
+
+void Parser::validate_aggregate_declaration_semantics(
+    Frame* owner_body) {
+	assert(owner_body);
+
+	// A Frame is useful during aggregate parsing as a declaration collection
+	// and lookup structure, but an open Pascal type block does not yet provide
+	// canonical Type* identity. Establish all local callable-family invariants
+	// here, after TypeBlockResolver has rewritten every stored edge and before
+	// statements or C++ emission can consume the aggregate.
+	for (const auto& declaration :
+	     owner_body->value_declarations()) {
+		auto overloads =
+		    dynamic_cast<OverloadSet*>(
+			declaration.second.value);
+		if (!overloads)
+			continue;
+		for (std::size_t i = 1;
+		     i < overloads->members.size(); ++i) {
+			Callable* incoming =
+			    overloads->members[i];
+			std::vector<Callable*> prior_members(
+			    overloads->members.begin(),
+			    overloads->members.begin() + i);
+			Node* prior_binding =
+			    prior_members.size() == 1
+				? static_cast<Node*>(
+				      prior_members.front())
+				: static_cast<Node*>(
+				      new OverloadSet(
+					  std::move(
+					      prior_members)));
+			for (std::size_t j = 0; j < i;
+			     ++j) {
+				Callable* conflicting =
+				    overloads->members[j];
+				auto kind =
+				    validate_callable_pair(
+					conflicting,
+					incoming);
+				if (kind ==
+				    CallableRegistration::Kind::
+					Added)
+					continue;
+				raise_callable_registration_error(
+				    declaration.first,
+				    incoming,
+				    CallableRegistration{
+					kind,
+					prior_binding,
+					conflicting});
+			}
+		}
+	}
+
+	for (const auto& declaration :
+	     owner_body->value_declarations()) {
+		Node* binding =
+		    declaration.second.value;
+		auto inspect =
+		    [&](Callable* callable) {
+			    if (auto method =
+				    dynamic_cast<Method*>(
+					callable))
+				    validate_method_ancestor_semantics(
+					method, owner_body);
+		    };
+		if (auto callable =
+			dynamic_cast<Callable*>(binding))
+			inspect(callable);
+		else if (auto overloads =
+			     dynamic_cast<OverloadSet*>(
+				 binding))
+			for (Callable* callable :
+			     overloads->members)
+				inspect(callable);
+
+		if (auto property =
+			dynamic_cast<Property*>(binding))
+			validate_property_declaration(
+			    property);
+	}
 }
 
 /** Parse the body of a class/record/object. When `owner_class` is non-null,
@@ -4478,6 +4691,20 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	pop_scope();
 	if (is_class) {
 		raise_parse_error("internal error: someone forgot to consume 'class'");
+	}
+	if (type_block_frames.empty()) {
+		// An anonymous aggregate parsed outside a named type block cannot
+		// contain an implicit forward reference, so its graph is already
+		// canonical when its body closes.
+		validate_aggregate_declaration_semantics(
+		    body);
+	} else {
+		assert(!type_block_deferred_aggregates.empty());
+		// Do not validate signatures merely because this aggregate's own body
+		// is complete. Earlier declarations in the surrounding type block can
+		// still hold placeholders for types published later in that block.
+		type_block_deferred_aggregates.back()
+		    .push_back(body);
 	}
 	return body;
 }
@@ -6548,6 +6775,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	};
 	std::vector<PendingTypeDecl> pending;
 	type_block_frames.push_back(scope);
+	type_block_deferred_aggregates.emplace_back();
 	do {
 		auto name_optional = maybe_parse_identifier();
 		if (!name_optional)
@@ -6632,11 +6860,26 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		}
 		parse_semicolon();
 	} while (true);
+	std::vector<Frame*>
+	    deferred_aggregates =
+		std::move(
+		    type_block_deferred_aggregates.back());
+	type_block_deferred_aggregates.pop_back();
 	type_block_frames.pop_back();
 
-	// Every completed declaration was published during the parse loop. Resolve
-	// the forward references carried inside their RHS types now that the whole
-	// block has been seen, and reject missing or cyclic definitions.
+	// PHASE INVARIANT:
+	//
+	// While the parse loop above is open, the graph intentionally has mixed
+	// representation: an earlier stored edge can still be
+	// IncompleteType(T), while a fresh lookup peels its now-published
+	// resolution and returns T. That phase may collect declarations and apply
+	// syntax/arity rules, but it must not decide raw Type* identity, overload
+	// signatures, property contracts, C++ carriers, or overriding.
+	//
+	// Normalize every reachable edge first. Only then validate definitions and
+	// the deferred aggregate semantics. Emission is last. Keeping these three
+	// phases explicit prevents a new parser consumer from treating the
+	// temporary graph as the final Pascal type algebra.
 	TypeBlockResolver resolver;
 	for (auto& decl : pending) {
 		if (decl.kind ==
@@ -6662,6 +6905,11 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		    PendingTypeDecl::Kind::Definition)
 			scope->rebind_type(
 			    decl.name, decl.rhs);
+
+	for (Frame* aggregate :
+	     deferred_aggregates)
+		validate_aggregate_declaration_semantics(
+		    aggregate);
 
 	for (auto& decl : pending) {
 		if (decl.kind ==
@@ -7389,91 +7637,6 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	m->is_static = is_static;
 	m->is_final = is_final;
 	m->ty = sig; // The node's type IS the prototype.
-	if (sig->kind == METHOD ||
-	    sig->kind == CLASS_METHOD ||
-	    is_static) {
-		const bool old_object_method =
-		    dynamic_cast<ObjectType*>(
-			owner_class) != nullptr;
-		bool override_target_found = false;
-		auto inspect_ancestor_binding =
-		    [&](Node* binding) {
-			    auto inspect =
-				[&](Callable* callable) {
-					auto ancestor =
-					    dynamic_cast<Method*>(
-						callable);
-					if (!ancestor ||
-					    (ancestor->virtual_kind ==
-						 Method::VirtualKind::None &&
-					     !ancestor->is_final))
-						return;
-					bool exact_signature =
-					    m->ty->same_signature_as(
-						ancestor->ty) &&
-					    m->is_static ==
-						ancestor->is_static;
-					if (exact_signature &&
-					    !m->is_static) {
-						override_target_found = true;
-						if (ancestor->is_final)
-							raise_parse_error(
-							    "method '" + pas_name +
-							    "' overrides a final method");
-					}
-					if (!cxx_callable_signatures_collide(
-						m, ancestor))
-						return;
-					bool intended_override =
-					    exact_signature &&
-					    ((old_object_method &&
-					      vk != Method::
-							VirtualKind::None) ||
-					     (!old_object_method &&
-					      vk == Method::
-							VirtualKind::Override));
-					if (intended_override)
-						return;
-					// C++ virtual overriding is based on the emitted name
-					// and carrier signature even when Pascal selected a
-					// distinct signature or requested a fresh virtual
-					// slot. Old-style objects are the exception: repeating
-					// `virtual` on the exact derived declaration is their
-					// normal override spelling. Reject every other
-					// lowering instead of silently changing Pascal dispatch.
-					raise_parse_error(
-					    "method '" + pas_name +
-					    "' would accidentally override an "
-					    "ancestor after C++ carrier erasure");
-				};
-			    if (auto callable =
-				    dynamic_cast<Callable*>(
-					binding))
-				    inspect(callable);
-			    else if (auto overloads =
-					 dynamic_cast<OverloadSet*>(
-					     binding))
-				    for (Callable* callable :
-					 overloads->members)
-					    inspect(callable);
-		    };
-		// Override compatibility is independent of Pascal name hiding. A C++
-		// virtual can be overridden through any depth of the base chain, so
-		// inspect each ancestor's own declarations rather than performing one
-		// structural name lookup that could stop at an intermediate class.
-		for (Frame* ancestor = body->parent;
-		     ancestor; ancestor = ancestor->parent)
-			for (const auto& declaration :
-			     ancestor->value_declarations())
-				if (declaration.first == pas_name)
-					inspect_ancestor_binding(
-					    declaration.second.value);
-		if (vk == Method::VirtualKind::Override &&
-		    !override_target_found)
-			raise_parse_error(
-			    "method '" + pas_name +
-			    "' has no exact virtual ancestor to override");
-	}
 	// Install an AbstractError VMT stub.
 	// The emitter supplies that body, so a source implementation would be
 	// a second implementation of the same method.
@@ -7489,8 +7652,14 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 		// recognizing a Pascal method name.
 		m->builtin_desc = lookup_builtin_desc(cxx_name);
 	}
+	// Aggregate parsing is a declaration-collection phase. In a named type
+	// block, an earlier method signature may still store an IncompleteType
+	// edge even though a fresh lookup now returns the resolved declaration.
+	// collect_callable therefore performs no identity/carrier comparisons;
+	// parse_aggregate_type_body arranges validation after recursive
+	// normalization and before emission.
 	auto registration =
-	    body->register_callable(pas_name, m);
+	    body->collect_callable(pas_name, m);
 	if (registration.kind !=
 	    CallableRegistration::Kind::Added) {
 		raise_callable_registration_error(

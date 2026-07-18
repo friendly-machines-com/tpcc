@@ -811,7 +811,14 @@ public:
 /** Overload set: multiple same-category Callables sharing one Pascal name.
  * Frame registration forms a local set from distinct signatures whether or
  * not they write `overload`; the directive controls whether lookup may append
- * a same-category family from another scope. */
+ * a same-category family from another scope.
+ *
+ * During construction of an aggregate in an open type block, this node is
+ * also the temporary declaration collection for that name. Its members are
+ * intentionally not compared while their signatures can contain
+ * IncompleteType edges. Recursive type-block normalization followed by
+ * aggregate declaration validation establishes the same-category/distinct-
+ * signature invariant before emission or statement semantics can use it. */
 class OverloadSet: public Node {
 public:
 	std::vector<Callable*> members;

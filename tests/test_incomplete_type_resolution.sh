@@ -52,6 +52,30 @@ fi
 	-o "$tmp/incomplete_type_resolution"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/incomplete_type_resolution"
 
+./mp -Furtl \
+	-o"$tmp/incomplete_type_callable_normalization.cc" \
+	tests/incomplete_type_callable_normalization.pp
+
+if ! rg -Fq 'p_getcopy() override;' \
+	"$tmp/incomplete_type_callable_normalization.cc"
+then
+	echo "same-block self-result override was not retained after normalization" >&2
+	exit 1
+fi
+
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/incomplete_type_callable_normalization.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/incomplete_type_callable_normalization"
+"$tmp/incomplete_type_callable_normalization"
+
 if ./mp -Furtl \
 	-o"$tmp/rejected.cc" \
 	tests/aggregate_true_constant_address_rejected.pp \
