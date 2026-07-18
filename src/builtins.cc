@@ -731,29 +731,21 @@ static const BuiltinDesc k_builtins[] = {
 // declarations use the same C++ operation names but have complete Pascal
 // signatures and must not be mistaken for omitted-type generic declarations.
 static const BuiltinDesc k_checked_inc_fallback{
-    "::u_system::o_inc", nullptr, {},
-    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+    "::u_system::o_inc", nullptr, {}, BuiltinGenericKind::UnaryOrdinalOrPointerStep};
 static const BuiltinDesc k_unchecked_inc_fallback{
-    "::u_system::o_unchecked_inc", nullptr, {},
-    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+    "::u_system::o_unchecked_inc", nullptr, {}, BuiltinGenericKind::UnaryOrdinalOrPointerStep};
 static const BuiltinDesc k_checked_dec_fallback{
-    "::u_system::o_dec", nullptr, {},
-    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+    "::u_system::o_dec", nullptr, {}, BuiltinGenericKind::UnaryOrdinalOrPointerStep};
 static const BuiltinDesc k_unchecked_dec_fallback{
-    "::u_system::o_unchecked_dec", nullptr, {},
-    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+    "::u_system::o_unchecked_dec", nullptr, {}, BuiltinGenericKind::UnaryOrdinalOrPointerStep};
 static const BuiltinDesc k_checked_add_fallback{
-    "::u_system::o_add", nullptr, {},
-    BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_add", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
 static const BuiltinDesc k_unchecked_add_fallback{
-    "::u_system::o_unchecked_add", nullptr, {},
-    BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_unchecked_add", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
 static const BuiltinDesc k_checked_subtract_fallback{
-    "::u_system::o_subtract", nullptr, {},
-    BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
 static const BuiltinDesc k_unchecked_subtract_fallback{
-    "::u_system::o_unchecked_subtract", nullptr, {},
-    BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
 
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name ==

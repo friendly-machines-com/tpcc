@@ -591,8 +591,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 			sst << "\n  reason: the declarations have incompatible "
 			       "routine categories";
 		else if (incoming->ty
-			->same_overload_signature_as(
-			    conflicting->ty))
+			     ->same_overload_signature_as(
+				 conflicting->ty))
 			sst << "\n  reason: both declarations have the same "
 			       "Pascal overload signature";
 	}
@@ -3854,130 +3854,130 @@ Mutation* Parser::parse_mutation_statement(
 	// source designator component is still evaluated exactly once.
 	std::function<Node*(Node*)> stabilize =
 	    [&](Node* target) -> Node* {
-		    if (dynamic_cast<StorageSlot*>(
-			    target) ||
-			dynamic_cast<UnitRef*>(target))
-			    return target;
-		    if (auto dereference =
-			    dynamic_cast<Dereference*>(
-				target)) {
-			    auto result =
-				new Dereference(
-				    bind_once(
-					dereference->a));
-			    result->ty = dereference->ty;
-			    return result;
-		    }
-		    if (auto index =
-			    dynamic_cast<Index*>(
-				target)) {
-			    Node* base =
-				contains_packed_projection(
-				    index->a)
-				    ? stabilize(index->a)
-				    : static_cast<Node*>(
-					  bind_once(
-					      index->a));
-			    auto result =
-				new Index(
-				    base,
-				    bind_once(index->b));
-			    result->ty = index->ty;
-			    return result;
-		    }
-		    if (auto property =
-			    dynamic_cast<PropertyAccess*>(
-				target)) {
-			    Node* receiver =
-				contains_packed_projection(
-				    property->receiver)
-				    ? stabilize(
+		if (dynamic_cast<StorageSlot*>(
+			target) ||
+		    dynamic_cast<UnitRef*>(target))
+			return target;
+		if (auto dereference =
+			dynamic_cast<Dereference*>(
+			    target)) {
+			auto result =
+			    new Dereference(
+				bind_once(
+				    dereference->a));
+			result->ty = dereference->ty;
+			return result;
+		}
+		if (auto index =
+			dynamic_cast<Index*>(
+			    target)) {
+			Node* base =
+			    contains_packed_projection(
+				index->a)
+				? stabilize(index->a)
+				: static_cast<Node*>(
+				      bind_once(
+					  index->a));
+			auto result =
+			    new Index(
+				base,
+				bind_once(index->b));
+			result->ty = index->ty;
+			return result;
+		}
+		if (auto property =
+			dynamic_cast<PropertyAccess*>(
+			    target)) {
+			Node* receiver =
+			    contains_packed_projection(
+				property->receiver)
+				? stabilize(
+				      property
+					  ->receiver)
+				: static_cast<Node*>(
+				      bind_once(
 					  property
-					      ->receiver)
-				    : static_cast<Node*>(
-					  bind_once(
-					      property
-						  ->receiver));
-			    std::vector<Node*> indexes;
-			    indexes.reserve(
-				property->indexes
-				    .size());
-			    for (Node* index :
-				 property->indexes)
-				    indexes.push_back(
-					bind_once(index));
-			    return new PropertyAccess(
-				receiver,
-				property->property,
-				std::move(indexes));
-		    }
-		    if (auto member =
-			    dynamic_cast<MemberAccess*>(
-				target)) {
-			    if (dynamic_cast<UnitRef*>(
-				    member->a))
-				    return member;
-			    Node* receiver = nullptr;
-			    auto method_view =
-				dynamic_cast<Cast*>(
-				    member->a);
-			    auto method_field =
-				dynamic_cast<StorageSlot*>(
-				    member->b);
-			    if (method_view &&
-				method_view->ty ==
-				    tmethod_type() &&
-				(method_field ==
-				     tmethod_code_field() ||
-				 method_field ==
-				     tmethod_data_field()))
-				    // TMethod fields are writable views of a method-routine
-				    // value. Preserve that Cast shape so the existing
-				    // assignment emitter stores the selected word back into
-				    // the original method value instead of mutating a copied
-				    // public TMethod snapshot.
-				    receiver =
-					new Cast(
-					    bind_once(
-						method_view
-						    ->a),
-					    method_view->ty);
-			    else if (dynamic_cast<
-				    PackedRecordType*>(
-				    member->a->ty)) {
-				    if (auto overlay =
-					    dynamic_cast<Cast*>(
-						member->a))
-					    receiver =
-						new Cast(
-						    bind_once(
-							overlay
-							    ->a),
-						    overlay->ty);
-				    else
-					    receiver =
-						bind_once(
-						    member->a);
-			    } else
-				    receiver =
-					bind_once(
-					    member->a);
-			    auto result =
-				new MemberAccess(
-				    receiver, member->b);
-			    result->ty = member->ty;
-			    return result;
-		    }
-		    if (auto view =
+					      ->receiver));
+			std::vector<Node*> indexes;
+			indexes.reserve(
+			    property->indexes
+				.size());
+			for (Node* index :
+			     property->indexes)
+				indexes.push_back(
+				    bind_once(index));
+			return new PropertyAccess(
+			    receiver,
+			    property->property,
+			    std::move(indexes));
+		}
+		if (auto member =
+			dynamic_cast<MemberAccess*>(
+			    target)) {
+			if (dynamic_cast<UnitRef*>(
+				member->a))
+				return member;
+			Node* receiver = nullptr;
+			auto method_view =
 			    dynamic_cast<Cast*>(
-				target))
-			    return new Cast(
-				bind_once(view->a),
-				view->ty);
-		    emit_parse_error_at(
-			call_location,
-			"internal error: assignable mutation destination has no stabilization rule");
-	    };
+				member->a);
+			auto method_field =
+			    dynamic_cast<StorageSlot*>(
+				member->b);
+			if (method_view &&
+			    method_view->ty ==
+				tmethod_type() &&
+			    (method_field ==
+				 tmethod_code_field() ||
+			     method_field ==
+				 tmethod_data_field()))
+				// TMethod fields are writable views of a method-routine
+				// value. Preserve that Cast shape so the existing
+				// assignment emitter stores the selected word back into
+				// the original method value instead of mutating a copied
+				// public TMethod snapshot.
+				receiver =
+				    new Cast(
+					bind_once(
+					    method_view
+						->a),
+					method_view->ty);
+			else if (dynamic_cast<
+				     PackedRecordType*>(
+				     member->a->ty)) {
+				if (auto overlay =
+					dynamic_cast<Cast*>(
+					    member->a))
+					receiver =
+					    new Cast(
+						bind_once(
+						    overlay
+							->a),
+						overlay->ty);
+				else
+					receiver =
+					    bind_once(
+						member->a);
+			} else
+				receiver =
+				    bind_once(
+					member->a);
+			auto result =
+			    new MemberAccess(
+				receiver, member->b);
+			result->ty = member->ty;
+			return result;
+		}
+		if (auto view =
+			dynamic_cast<Cast*>(
+			    target))
+			return new Cast(
+			    bind_once(view->a),
+			    view->ty);
+		emit_parse_error_at(
+		    call_location,
+		    "internal error: assignable mutation destination has no stabilization rule");
+	};
 
 	Node* target = stabilize(source_target);
 	auto current =
@@ -4548,14 +4548,14 @@ void Parser::validate_property_declaration(
 	auto validate_index_formals =
 	    [&](RoutineType* routine, size_t count,
 		const char* which) {
-		if (routine->formals.size() != count)
-			raise_parse_error(std::string(which) + " accessor for property '" + property_name +
-					  "' has the wrong number of parameters");
-		for (size_t i = 0; i < index_types.size(); ++i)
-			if (routine->formals[i].ty != index_types[i])
-				raise_type_mismatch(std::string(which) + " property index parameter",
-						    index_types[i], routine->formals[i].ty);
-	};
+		    if (routine->formals.size() != count)
+			    raise_parse_error(std::string(which) + " accessor for property '" + property_name +
+					      "' has the wrong number of parameters");
+		    for (size_t i = 0; i < index_types.size(); ++i)
+			    if (routine->formals[i].ty != index_types[i])
+				    raise_type_mismatch(std::string(which) + " property index parameter",
+							index_types[i], routine->formals[i].ty);
+	    };
 	if (property->read_accessor) {
 		if (auto field =
 			dynamic_cast<StorageSlot*>(
@@ -4709,7 +4709,7 @@ void Parser::validate_method_ancestor_semantics(
 						    callable_source_location(
 							method),
 						    "method '" + pas_name +
-						    "' overrides a final method");
+							"' overrides a final method");
 				}
 				if (!cxx_callable_signatures_collide(
 					method, ancestor))
@@ -4737,8 +4737,8 @@ void Parser::validate_method_ancestor_semantics(
 				    callable_source_location(
 					method),
 				    "method '" + pas_name +
-				    "' would accidentally override an "
-				    "ancestor after C++ carrier erasure");
+					"' would accidentally override an "
+					"ancestor after C++ carrier erasure");
 			};
 		    if (auto callable =
 			    dynamic_cast<Callable*>(
@@ -4769,7 +4769,7 @@ void Parser::validate_method_ancestor_semantics(
 		emit_parse_error_at(
 		    callable_source_location(method),
 		    "method '" + pas_name +
-		    "' has no exact virtual ancestor to override");
+			"' has no exact virtual ancestor to override");
 }
 
 void Parser::validate_aggregate_declaration_semantics(
@@ -5921,20 +5921,20 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	auto make_subrange =
 	    [&](Type* base, Node* typed_lower,
 		Node* typed_upper) -> SubrangeType* {
-		    auto result = new SubrangeType(
-			current_location(),
-			next_subrange_cxx_name(), base,
-			typed_lower, typed_upper);
-		    // Top-level and aggregate-contained unit types are declared in
-		    // that unit's generated namespace. Routine-local definitions are
-		    // emitted as C++ local classes and therefore have no unit
-		    // qualifier. Programs likewise emit in the global namespace.
-		    if (!current_routine && current_unit &&
-			!current_unit->is_program)
-			    result->owning_unit =
-				current_unit;
-		    return result;
-	    };
+		auto result = new SubrangeType(
+		    current_location(),
+		    next_subrange_cxx_name(), base,
+		    typed_lower, typed_upper);
+		// Top-level and aggregate-contained unit types are declared in
+		// that unit's generated namespace. Routine-local definitions are
+		// emitted as C++ local classes and therefore have no unit
+		// qualifier. Programs likewise emit in the global namespace.
+		if (!current_routine && current_unit &&
+		    !current_unit->is_program)
+			result->owning_unit =
+			    current_unit;
+		return result;
+	};
 	switch (lower->kind) {
 	case FoldedSubrangeBound::Kind::Integer: {
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
@@ -8626,7 +8626,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 				    operator_declaration_name +
 				    "' is recognized but not supported");
 			if (operator_identity
-				    .boolean_result &&
+				.boolean_result &&
 			    sig->return_type !=
 				boolean_type())
 				raise_parse_error(
@@ -9834,8 +9834,8 @@ Parser::match_user_conversion(
 			best_source = *source_match;
 			best_candidates = {candidate};
 		} else if (!rank_less(
-			best_source->rank,
-			source_match->rank)) {
+			       best_source->rank,
+			       source_match->rank)) {
 			best_candidates.push_back(
 			    candidate);
 		}

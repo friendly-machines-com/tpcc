@@ -814,10 +814,10 @@ ConstEvalResult RangeCheckedCast::const_eval(
 	    const_eval_type_bound(
 		TypeBoundKind::High, ty);
 	if (lower.kind !=
-		ConstEvalResult::Kind::Success)
+	    ConstEvalResult::Kind::Success)
 		return lower;
 	if (upper.kind !=
-		ConstEvalResult::Kind::Success)
+	    ConstEvalResult::Kind::Success)
 		return upper;
 	auto lower_ordinal =
 	    constant_ordinal(lower.node);
