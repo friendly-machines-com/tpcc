@@ -10943,13 +10943,12 @@ Node* Parser::make_call(
 			     SetUnionOrDifference) &&
 		    !call->args.empty() &&
 		    call->args[0])
-			// These root declarations omit the one generic T which is
-			// their result and either their first formal or the item type
-			// shared by both set formals. Candidate matching has already
-			// converted argument one to that exact T. Restore the relation
-			// immediately after ordinary selection so direct operator
-			// expressions and Inc/Dec mutation share one result-typing
-			// mechanism.
+			// These root declarations omit a result type equal to their
+			// converted first argument: T for ordinal/pointer stepping, or
+			// `set of T` for set algebra. Candidate matching has already
+			// established that exact type. Restore the relation immediately
+			// after ordinary selection so direct operator expressions and
+			// Inc/Dec mutation share one result-typing mechanism.
 			call->ty =
 			    call->args[0]->ty;
 	}
