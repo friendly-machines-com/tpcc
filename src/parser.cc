@@ -1662,13 +1662,19 @@ void Parser::maybe_parse_statement() {
 				if (maybe_parse_period_period()) {
 					Node* upper = parse_subrange_bound_expression();
 					upper = cast(upper, selector->ty);
-					auto lower_test = mk_compare(">=", selector_slot, lower);
-					auto upper_test = mk_compare("<=", selector_slot, upper);
+					auto lower_test = mk_compare(
+					    ">=", selector_slot, lower,
+					    directive_state.switch_enabled('q'));
+					auto upper_test = mk_compare(
+					    "<=", selector_slot, upper,
+					    directive_state.switch_enabled('q'));
 					auto both = new ShortCircuitOperation(AND, lower_test, upper_test);
 					both->ty = boolean_type();
 					label_condition = both;
 				} else {
-					label_condition = mk_compare("=", selector_slot, lower);
+					label_condition = mk_compare(
+					    "=", selector_slot, lower,
+					    directive_state.switch_enabled('q'));
 				}
 				if (arm_condition) {
 					auto either = new ShortCircuitOperation(OR, arm_condition, label_condition);
@@ -1726,6 +1732,12 @@ void Parser::maybe_parse_statement() {
 		if (emitter)
 			emitter->emit_while_epilogue();
 	} else if (peek_keyword("for")) {
+		// A directive encountered in a bound belongs to that bound's subtree;
+		// it must not retroactively change the generated step of the enclosing
+		// for statement. Capture the statement policy before consuming its
+		// leading token.
+		const bool for_overflow_checks =
+		    directive_state.switch_enabled('q');
 		parse_keyword("for");
 		std::string control_name = parse_identifier();
 		Node* control = resolve_lvalue(control_name);
@@ -1763,9 +1775,7 @@ void Parser::maybe_parse_statement() {
 				emitter->emit_for_prologue(
 				    control, initial, final,
 				    descending,
-				    directive_state
-					.switch_enabled(
-					    'q'));
+				    for_overflow_checks);
 			++loop_depth;
 			loop_try_targets.push_back(
 			    {protected_try_depth,
@@ -2041,7 +2051,11 @@ void Parser::maybe_parse_statement() {
 		Node* lhs = nullptr;
 		SourceLocation designator_location =
 		    current_location();
+		bool designator_overflow_checks =
+		    directive_state.switch_enabled('q');
 		if (!input_token.empty() && keywords.find(input_token) == keywords.end()) {
+			const bool identifier_overflow_checks =
+			    designator_overflow_checks;
 			std::string first = parse_identifier();
 			if (maybe_parse_colon()) {
 				record_label_definition(
@@ -2056,13 +2070,13 @@ void Parser::maybe_parse_statement() {
 				OperatorInvocation::
 				    MutatingUnary,
 				first, 1,
-				directive_state
-				    .switch_enabled('q'),
+				identifier_overflow_checks,
 				false)) {
 				Mutation* mutation =
 				    parse_mutation_statement(
 					first,
-					designator_location);
+					designator_location,
+					identifier_overflow_checks);
 				if (emitter)
 					emitter
 					    ->emit_statement(
@@ -2071,10 +2085,19 @@ void Parser::maybe_parse_statement() {
 			}
 			if (input_token == ":=")
 				lhs = resolve_lvalue(first);
-			else
-				lhs = parse_designator_tail(parse_value_from_identifier(first));
+			else {
+				Node* first_value =
+				    parse_value_from_identifier(
+					first,
+					identifier_overflow_checks,
+					&designator_overflow_checks);
+				lhs = parse_designator_tail(
+				    first_value,
+				    designator_overflow_checks);
+			}
 		} else {
-			lhs = parse_designator();
+			lhs = parse_designator(
+			    &designator_overflow_checks);
 		}
 		// A statement here is either an assignment (designator := expression)
 		// or a call (designator, possibly with auto-call). Parse the LHS as
@@ -2093,7 +2116,8 @@ void Parser::maybe_parse_statement() {
 		// parse_designator already built the ProcCall for explicit `foo(x)`;
 		// for bare `foo`, maybe_auto_call wraps it; an InheritedCall or other
 		// expression flows through unchanged.
-		Node* call = maybe_auto_call(lhs);
+		Node* call = maybe_auto_call(
+		    lhs, designator_overflow_checks);
 		if (emitter)
 			emitter->emit_statement(call);
 	}
@@ -2731,7 +2755,13 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 	    lifecycle_method);
 }
 
-Node* Parser::parse_value() {
+Node* Parser::parse_value(
+    bool* leading_overflow_checks) {
+	const bool primary_overflow_checks =
+	    directive_state.switch_enabled('q');
+	if (leading_overflow_checks)
+		*leading_overflow_checks =
+		    primary_overflow_checks;
 	if (peek_keyword("inherited"))
 		return parse_inherited();
 	if (input_token == "[")
@@ -2781,10 +2811,21 @@ Node* Parser::parse_value() {
 		return new String(std::move(s), literal_type);
 	}
 	// FIXME: bool literals also belong here (need enum-member support).
-	return parse_value_from_identifier(parse_identifier());
+	const bool identifier_overflow_checks =
+	    directive_state.switch_enabled('q');
+	return parse_value_from_identifier(
+	    parse_identifier(),
+	    identifier_overflow_checks,
+	    leading_overflow_checks);
 }
 
-Node* Parser::parse_value_from_identifier(std::string id) {
+Node* Parser::parse_value_from_identifier(
+    std::string id,
+    bool identifier_overflow_checks,
+    bool* leading_overflow_checks) {
+	if (leading_overflow_checks)
+		*leading_overflow_checks =
+		    identifier_overflow_checks;
 	if (maybe_parse_period()) {
 		Node* base = maybe_resolve_value(id);
 		if (!base) {
@@ -2807,7 +2848,8 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			raise_parse_error(
 			    "unresolved member qualifier: " +
 			    id);
-		return parse_member_selection(base);
+		return parse_member_selection(
+		    base, leading_overflow_checks);
 	}
 	if (input_token == "(") {
 		auto operator_identifier =
@@ -2842,7 +2884,8 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			    call_location);
 			return make_call(
 			    finalized,
-			    std::move(args));
+			    std::move(args),
+			    identifier_overflow_checks);
 		}
 	}
 	if (Node* value = maybe_resolve_value(id)) {
@@ -3347,7 +3390,8 @@ static bool node_is_bare_callable(Node* n) {
 	return false;
 }
 
-Node* Parser::maybe_auto_call(Node* n) {
+Node* Parser::maybe_auto_call(
+    Node* n, bool overflow_checks) {
 	if (auto property = dynamic_cast<PropertyAccess*>(n)) {
 		if (!property->property->index_types.empty() && property->indexes.empty())
 			raise_parse_error("indexed property '" + property->property->pas_name +
@@ -3365,7 +3409,9 @@ Node* Parser::maybe_auto_call(Node* n) {
 	// A candidate that requires args will fail there with a clear error.
 	std::vector<Node*> args;
 	auto fc = finalize_call(n, args, /*name for error*/ "", current_location());
-	return make_call(fc, std::move(args));
+	return make_call(
+	    fc, std::move(args),
+	    overflow_checks);
 }
 
 static Frame* body_frame_of(Type* ty) {
@@ -3390,14 +3436,37 @@ static Frame* body_frame_of(Node* value) {
 	return body_frame_of(value ? value->ty : nullptr);
 }
 
-Node* Parser::parse_designator() {
-	return parse_designator_tail(parse_value());
+Node* Parser::parse_designator(
+    bool* leading_overflow_checks) {
+	bool primary_overflow_checks =
+	    directive_state.switch_enabled('q');
+	Node* primary =
+	    parse_value(
+		&primary_overflow_checks);
+	Node* result = parse_designator_tail(
+	    primary, primary_overflow_checks);
+	if (leading_overflow_checks)
+		*leading_overflow_checks =
+		    primary_overflow_checks;
+	return result;
 }
 
-Node* Parser::parse_member_selection(Node* base) {
+Node* Parser::parse_member_selection(
+    Node* base,
+    bool* leading_overflow_checks) {
 	// A callable base is invoked before selecting a member from its result.
-	base = maybe_auto_call(base);
+	base = maybe_auto_call(
+	    base,
+	    leading_overflow_checks
+		? *leading_overflow_checks
+		: directive_state
+		      .switch_enabled('q'));
+	const bool member_overflow_checks =
+	    directive_state.switch_enabled('q');
 	std::string member_name = parse_identifier();
+	if (leading_overflow_checks)
+		*leading_overflow_checks =
+		    member_overflow_checks;
 	if (!body_frame_of(base))
 		raise_parse_error(
 		    "member access on non-composite type");
@@ -3514,7 +3583,9 @@ Parser::maybe_resolve_custom_for_in(
 				"' must be a function or procedure");
 		    return make_call(
 			finalized,
-			std::move(arguments));
+			std::move(arguments),
+			directive_state
+			    .switch_enabled('q'));
 	    };
 
 	Node* get_call =
@@ -3566,7 +3637,9 @@ Parser::maybe_resolve_custom_for_in(
 	// maybe_auto_call performs the existing indexed/write-only property
 	// validation; PropertyAccess emission later selects its already-resolved
 	// field or getter without repeating member lookup.
-	current = maybe_auto_call(current);
+	current = maybe_auto_call(
+	    current,
+	    directive_state.switch_enabled('q'));
 	Node* current_assignment =
 	    mk_assign(control, current);
 
@@ -3624,11 +3697,20 @@ Parser::maybe_resolve_custom_for_in(
 	    nullable};
 }
 
-Node* Parser::parse_designator_tail(Node* result) {
+Node* Parser::parse_designator_tail(
+    Node* result,
+    bool& leading_overflow_checks) {
 	while (true) {
 		if (maybe_parse_period()) {
-			result = parse_member_selection(result);
+			result = parse_member_selection(
+			    result,
+			    &leading_overflow_checks);
 		} else if (input_token == "(") {
+			// The callable designator is the leading subtree of this call.
+			// Directives in its argument list belong to those argument
+			// subtrees and cannot change this saved call-site policy.
+			const bool call_overflow_checks =
+			    leading_overflow_checks;
 			SourceLocation call_location = current_location();
 			parse_opening_paren();
 			// Bracketed n-ary: RHS is a comma-separated list of expressions.
@@ -3641,7 +3723,15 @@ Node* Parser::parse_designator_tail(Node* result) {
 			}
 			parse_closing_paren();
 			auto fc = finalize_call(result, args, /*name_for_error*/ "", call_location);
-			result = make_call(fc, std::move(args));
+			result = make_call(
+			    fc, std::move(args),
+			    call_overflow_checks);
+			// If the result itself is subsequently invoked, that postfix
+			// call begins at the next token rather than at the completed
+			// inner call's original designator.
+			leading_overflow_checks =
+			    directive_state
+				.switch_enabled('q');
 			continue;
 		} else if (maybe_parse_opening_bracket()) {
 			// Parse the complete bracket argument list before resolving it.
@@ -3652,12 +3742,20 @@ Node* Parser::parse_designator_tail(Node* result) {
 			if (!(pending_property &&
 			      !pending_property->property->index_types.empty() &&
 			      pending_property->indexes.empty()))
-				result = maybe_auto_call(result);
+				result = maybe_auto_call(
+				    result,
+				    leading_overflow_checks);
 			std::vector<Node*> indexes;
 			indexes.push_back(parse_expression());
 			while (maybe_parse_comma())
 				indexes.push_back(parse_expression());
 			parse_closing_bracket();
+			// A later postfix call begins after this completed index
+			// expression; directives inside the indexes therefore may affect
+			// that later call, but never the callable which preceded them.
+			leading_overflow_checks =
+			    directive_state
+				.switch_enabled('q');
 
 			if (auto pending = dynamic_cast<PropertyAccess*>(result);
 			    pending && !pending->property->index_types.empty() && pending->indexes.empty()) {
@@ -3682,7 +3780,9 @@ Node* Parser::parse_designator_tail(Node* result) {
 		} else if (maybe_parse_circumflex()) {
 			// Postfix: no RHS. Auto-call bare callable LHS first (deref of a
 			// callable reference is nonsense).
-			result = maybe_auto_call(result);
+			result = maybe_auto_call(
+			    result,
+			    leading_overflow_checks);
 			Type* ct = result->ty;
 			auto p = dynamic_cast<PointerType*>(ct);
 			if (!p)
@@ -3696,6 +3796,9 @@ Node* Parser::parse_designator_tail(Node* result) {
 				    ? unknown_type()
 				    : p->item_type;
 			result = d;
+			leading_overflow_checks =
+			    directive_state
+				.switch_enabled('q');
 		} else {
 			break;
 		}
@@ -3909,7 +4012,11 @@ void Parser::validate_writable_destination(
 
 Mutation* Parser::parse_mutation_statement(
     std::string spelling,
-    SourceLocation call_location) {
+    SourceLocation call_location,
+    bool overflow_checks) {
+	// overflow_checks belongs to the Inc/Dec identifier already consumed by
+	// the caller. Parsing the destination or distance may change scanner
+	// directives for those child expressions, but never this mutation node.
 	const bool increment = spelling == "inc";
 	assert(increment || spelling == "dec");
 	parse_opening_paren();
@@ -4089,15 +4196,15 @@ Mutation* Parser::parse_mutation_statement(
 		// the same store; it must not silently call unary Inc/Dec repeatedly.
 		operation = mk_arith(
 		    increment ? "+" : "-",
-		    current, amount);
+		    current, amount,
+		    overflow_checks);
 	} else {
 		auto catalog_identifier =
 		    operator_invocation_identifier(
 			OperatorInvocation::
 			    MutatingUnary,
 			spelling, 1,
-			directive_state
-			    .switch_enabled('q'),
+			overflow_checks,
 			false);
 		assert(catalog_identifier);
 		const std::string identifier(
@@ -4113,7 +4220,8 @@ Mutation* Parser::parse_mutation_statement(
 			call_location);
 		operation = make_call(
 		    finalized,
-		    std::move(arguments));
+		    std::move(arguments),
+		    overflow_checks);
 	}
 
 	if (operation &&
@@ -4164,12 +4272,14 @@ static std::string operator_expression_identifier(
 	return std::string(*identifier);
 }
 
-Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
+Node* Parser::mk_arith(
+    std::string id, Node* a, Node* b,
+    bool overflow_checks) {
 	const std::string pascal_identifier =
 	    operator_expression_identifier(
 		OperatorInvocation::BinaryToken,
 		id, 2,
-		directive_state.switch_enabled('q'),
+		overflow_checks,
 		(a && a->ty == boolean_type()) ||
 		    (b && b->ty == boolean_type()));
 	auto fn = resolve_value(pascal_identifier);
@@ -4179,14 +4289,18 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b) {
 	// calls obey a different language from ordinary calls.
 	std::vector<Node*> args{a, b};
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	return make_call(fc, std::move(args));
+	return make_call(
+	    fc, std::move(args),
+	    overflow_checks);
 }
 
 Node* Parser::mk_assign(Node* a, Node* b) {
 	return new Assign(a, cast(b, a->ty));
 }
 
-Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
+Node* Parser::mk_compare(
+    std::string id, Node* a, Node* b,
+    bool overflow_checks) {
 	RoutineType* a_routine =
 	    a ? dynamic_cast<RoutineType*>(a->ty) : nullptr;
 	RoutineType* b_routine =
@@ -4215,7 +4329,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	    operator_expression_identifier(
 		OperatorInvocation::BinaryToken,
 		id, 2,
-		directive_state.switch_enabled('q'),
+		overflow_checks,
 		(a && a->ty == boolean_type()) ||
 		    (b && b->ty == boolean_type()));
 	auto fn = resolve_value(pascal_identifier);
@@ -4225,19 +4339,23 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 	// after overload resolution.
 	std::vector<Node*> args{a, b};
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	Node* call = make_call(fc, std::move(args));
+	Node* call = make_call(
+	    fc, std::move(args),
+	    overflow_checks);
 	/*	if (call->ty->return_type != boolean_type()) {
 			raise_type_mismatch("custom comparison operator '" + id + "' has wrong return type", boolean_type(), call->ty);
 		} FIXME */
 	return call;
 }
 
-Node* Parser::mk_membership(Node* item, Node* set) {
+Node* Parser::mk_membership(
+    Node* item, Node* set,
+    bool overflow_checks) {
 	const std::string pascal_identifier =
 	    operator_expression_identifier(
 		OperatorInvocation::BinaryToken,
 		"in", 2,
-		directive_state.switch_enabled('q'));
+		overflow_checks);
 	Node* fn = resolve_value(pascal_identifier);
 	// Preserve both source operands until the ordinary operator family has
 	// selected a declaration. A typed custom `operator In(T, TContainer)`
@@ -4247,10 +4365,14 @@ Node* Parser::mk_membership(Node* item, Node* set) {
 	// SetMembership BuiltinDesc in match_callable_arguments().
 	std::vector<Node*> args{item, set};
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	return make_call(fc, std::move(args));
+	return make_call(
+	    fc, std::move(args),
+	    overflow_checks);
 }
 
-Node* Parser::mk_unary_same(std::string id, Node* x) {
+Node* Parser::mk_unary_same(
+    std::string id, Node* x,
+    bool overflow_checks) {
 	if (auto integer =
 		untyped_integer_constant(x)) {
 		if (id == "-")
@@ -4277,29 +4399,44 @@ Node* Parser::mk_unary_same(std::string id, Node* x) {
 	    operator_expression_identifier(
 		OperatorInvocation::UnaryToken,
 		id, 1,
-		directive_state.switch_enabled('q'));
+		overflow_checks);
 	auto fn = resolve_value(pascal_identifier);
 	std::vector<Node*> args;
 	args.push_back(x);
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
-	Node* call = make_call(fc, std::move(args));
+	Node* call = make_call(
+	    fc, std::move(args),
+	    overflow_checks);
 	/*	if (call->ty->return_type != x->ty) {
 			raise_type_mismatch("custom unary operator '" + id + "' has wrong return type", x->ty, call->ty);
 		} FIXME */
 	return call;
 }
 
-Node* Parser::parse_power_tail(Node* result) {
-	result = maybe_auto_call(result);
-	while (maybe_parse_star_star()) {
-		result = mk_arith("**", result, parse_power());
+Node* Parser::parse_power_tail(
+    Node* result,
+    bool leading_overflow_checks) {
+	result = maybe_auto_call(
+	    result, leading_overflow_checks);
+	while (true) {
+		const bool operation_overflow_checks =
+		    directive_state.switch_enabled('q');
+		if (!maybe_parse_star_star())
+			break;
+		result = mk_arith(
+		    "**", result, parse_power(),
+		    operation_overflow_checks);
 	}
 	return result;
 }
 
 Node* Parser::parse_power() {
+	const bool operation_overflow_checks =
+	    directive_state.switch_enabled('q');
 	if (maybe_parse_keyword("not")) {
-		return mk_unary_same("not", parse_power());
+		return mk_unary_same(
+		    "not", parse_power(),
+		    operation_overflow_checks);
 	} else if (maybe_parse_at()) {
 		// Do not let parse_power_tail turn a routine designator into an
 		// implicit no-argument call. A routine address is contextual: its
@@ -4326,7 +4463,8 @@ Node* Parser::parse_power() {
 					receiver = member->a;
 			}
 			return parse_power_tail(
-			    new RoutineRef(receiver, candidates));
+			    new RoutineRef(receiver, candidates),
+			    operation_overflow_checks);
 		}
 		if (contains_packed_projection(x))
 			raise_parse_error("address of a packed-record field is not available");
@@ -4334,28 +4472,50 @@ Node* Parser::parse_power() {
 			raise_parse_error("address requires a storage-backed expression");
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(current_location(), x->ty)) : nullptr;
-		return parse_power_tail(n);
+		return parse_power_tail(
+		    n, operation_overflow_checks);
 	} else if (maybe_parse_minus()) {
-		return mk_unary_same("-", parse_power());
+		return mk_unary_same(
+		    "-", parse_power(),
+		    operation_overflow_checks);
 	} else if (maybe_parse_plus()) {
-		return mk_unary_same("+", parse_power());
+		return mk_unary_same(
+		    "+", parse_power(),
+		    operation_overflow_checks);
 	}
 
 	// Mirror FPC's quirk. `-1 ** 4` parses as `-(1 ** 4)`, not `(-1) ** 4`.
 	// FIXME: Fix it later.
-	return parse_power_tail(parse_designator());
+	bool designator_overflow_checks =
+	    operation_overflow_checks;
+	Node* designator =
+	    parse_designator(
+		&designator_overflow_checks);
+	return parse_power_tail(
+	    designator,
+	    designator_overflow_checks);
 }
 
 Node* Parser::parse_product_tail(Node* result) {
 	while (true) {
+		const bool operation_overflow_checks =
+		    directive_state.switch_enabled('q');
 		if (maybe_parse_star()) {
-			result = mk_arith("*", result, parse_power());
+			result = mk_arith(
+			    "*", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_slash()) {
-			result = mk_arith("/", result, parse_power());
+			result = mk_arith(
+			    "/", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_keyword("div")) {
-			result = mk_arith("div", result, parse_power());
+			result = mk_arith(
+			    "div", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_keyword("mod")) {
-			result = mk_arith("mod", result, parse_power());
+			result = mk_arith(
+			    "mod", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_keyword("and") || maybe_parse_ampersand()) {
 			auto b = parse_power();
 			if (result->ty == boolean_type() && b->ty == boolean_type()) {
@@ -4363,12 +4523,18 @@ Node* Parser::parse_product_tail(Node* result) {
 				n->ty = boolean_type();
 				result = n;
 			} else {
-				result = mk_arith("and", result, b);
+				result = mk_arith(
+				    "and", result, b,
+				    operation_overflow_checks);
 			}
 		} else if (maybe_parse_keyword("shl")) {
-			result = mk_arith("shl", result, parse_power());
+			result = mk_arith(
+			    "shl", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_keyword("shr")) {
-			result = mk_arith("shr", result, parse_power());
+			result = mk_arith(
+			    "shr", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_keyword("as")) {
 			Type* target = parse_type_expression(false);
 			bool numeric =
@@ -4403,11 +4569,17 @@ Node* Parser::parse_product_tail(Node* result) {
 			n->ty = boolean_type();
 			result = n;
 		} else if (maybe_parse_less_less()) {
-			result = mk_arith("shl", result, parse_power());
+			result = mk_arith(
+			    "shl", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_greater_greater()) {
-			result = mk_arith("shr", result, parse_power());
+			result = mk_arith(
+			    "shr", result, parse_power(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_symdiff()) {
-			result = mk_arith("><", result, parse_power());
+			result = mk_arith(
+			    "><", result, parse_power(),
+			    operation_overflow_checks);
 		} else {
 			break;
 		}
@@ -4421,10 +4593,16 @@ Node* Parser::parse_product() {
 
 Node* Parser::parse_sum_tail(Node* result) {
 	while (true) {
+		const bool operation_overflow_checks =
+		    directive_state.switch_enabled('q');
 		if (maybe_parse_plus()) {
-			result = mk_arith("+", result, parse_product());
+			result = mk_arith(
+			    "+", result, parse_product(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_minus()) {
-			result = mk_arith("-", result, parse_product());
+			result = mk_arith(
+			    "-", result, parse_product(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_keyword("or") || maybe_parse_pipe()) {
 			auto b = parse_product();
 			if (result->ty == boolean_type() && b->ty == boolean_type()) {
@@ -4432,12 +4610,16 @@ Node* Parser::parse_sum_tail(Node* result) {
 				n->ty = boolean_type();
 				result = n;
 			} else {
-				result = mk_arith("or", result, b);
+				result = mk_arith(
+				    "or", result, b,
+				    operation_overflow_checks);
 			}
 		} else if (maybe_parse_keyword("xor")) {
 			auto b = parse_product();
 			// FIXME: constant fold; check result type; if bool: emit LogicalOperation(XOR, ...) instead;
-			result = mk_arith("xor", result, b);
+			result = mk_arith(
+			    "xor", result, b,
+			    operation_overflow_checks);
 		} else {
 			break;
 		}
@@ -4449,9 +4631,23 @@ Node* Parser::parse_sum() {
 	return parse_sum_tail(parse_product());
 }
 
-Node* Parser::parse_subrange_bound_expression_after_identifier(std::string id) {
-	Node* result = parse_designator_tail(parse_value_from_identifier(std::move(id)));
-	return parse_sum_tail(parse_product_tail(parse_power_tail(result)));
+Node* Parser::parse_subrange_bound_expression_after_identifier(
+    std::string id,
+    bool identifier_overflow_checks) {
+	bool leading_overflow_checks =
+	    identifier_overflow_checks;
+	Node* result =
+	    parse_value_from_identifier(
+		std::move(id),
+		identifier_overflow_checks,
+		&leading_overflow_checks);
+	result = parse_designator_tail(
+	    result, leading_overflow_checks);
+	return parse_sum_tail(
+	    parse_product_tail(
+		parse_power_tail(
+		    result,
+		    leading_overflow_checks)));
 }
 
 Node* Parser::parse_subrange_bound_expression() {
@@ -4460,23 +4656,43 @@ Node* Parser::parse_subrange_bound_expression() {
 
 Node* Parser::parse_comparison_tail(Node* result) {
 	while (true) {
+		const bool operation_overflow_checks =
+		    directive_state.switch_enabled('q');
 		if (maybe_parse_equal()) {
-			result = mk_compare("=", result, parse_sum());
+			result = mk_compare(
+			    "=", result, parse_sum(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_less_greater()) {
 			// Pascal <> is inequality. Do not require or expose a separate custom
 			// operator<> declaration; derive it from equality and boolean not so user
 			// equality overloads participate consistently.
-			result = mk_unary_same("not", mk_compare("=", result, parse_sum()));
+			Node* right = parse_sum();
+			result = mk_unary_same(
+			    "not",
+			    mk_compare(
+				"=", result, right,
+				operation_overflow_checks),
+			    operation_overflow_checks);
 		} else if (maybe_parse_less()) {
-			result = mk_compare("<", result, parse_sum());
+			result = mk_compare(
+			    "<", result, parse_sum(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_greater()) {
-			result = mk_compare(">", result, parse_sum());
+			result = mk_compare(
+			    ">", result, parse_sum(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_less_equal()) {
-			result = mk_compare("<=", result, parse_sum());
+			result = mk_compare(
+			    "<=", result, parse_sum(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_greater_equal()) {
-			result = mk_compare(">=", result, parse_sum());
+			result = mk_compare(
+			    ">=", result, parse_sum(),
+			    operation_overflow_checks);
 		} else if (maybe_parse_keyword("in")) {
-			result = mk_membership(result, parse_sum());
+			result = mk_membership(
+			    result, parse_sum(),
+			    operation_overflow_checks);
 		} else {
 			break;
 		}
@@ -4488,9 +4704,24 @@ Node* Parser::parse_comparison() {
 	return parse_comparison_tail(parse_sum());
 }
 
-Node* Parser::parse_expression_after_identifier(std::string id) {
-	Node* result = parse_designator_tail(parse_value_from_identifier(std::move(id)));
-	return parse_comparison_tail(parse_sum_tail(parse_product_tail(parse_power_tail(result))));
+Node* Parser::parse_expression_after_identifier(
+    std::string id,
+    bool identifier_overflow_checks) {
+	bool leading_overflow_checks =
+	    identifier_overflow_checks;
+	Node* result =
+	    parse_value_from_identifier(
+		std::move(id),
+		identifier_overflow_checks,
+		&leading_overflow_checks);
+	result = parse_designator_tail(
+	    result, leading_overflow_checks);
+	return parse_comparison_tail(
+	    parse_sum_tail(
+		parse_product_tail(
+		    parse_power_tail(
+			result,
+			leading_overflow_checks))));
 }
 
 Node* Parser::parse_expression() {
@@ -6132,9 +6363,19 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		// `..`. Subrange-bound parsing deliberately stops before comparison
 		// operators so an enclosing `=` in `const X: T = ...` remains visible.
 		if (token_is_identifier_start(input_token)) {
+			const bool identifier_overflow_checks =
+			    directive_state.switch_enabled('q');
 			std::string id = parse_identifier();
-			if (maybe_parse_period_period())
-				return parse_subrange_type(parse_value_from_identifier(id), parse_subrange_bound_expression());
+			if (maybe_parse_period_period()) {
+				bool leading_overflow_checks =
+				    identifier_overflow_checks;
+				return parse_subrange_type(
+				    parse_value_from_identifier(
+					id,
+					identifier_overflow_checks,
+					&leading_overflow_checks),
+				    parse_subrange_bound_expression());
+			}
 			if (maybe_parse_period()) {
 				UnitRef* unit =
 				    resolve_unit_type_qualifier(id);
@@ -6151,7 +6392,10 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 				return result;
 			}
 			if (token_continues_subrange_bound_after_primary(input_token)) {
-				Node* lower_bound = parse_subrange_bound_expression_after_identifier(id);
+				Node* lower_bound =
+				    parse_subrange_bound_expression_after_identifier(
+					id,
+					identifier_overflow_checks);
 				parse_period_period();
 				return parse_subrange_type(lower_bound, parse_subrange_bound_expression());
 			}
@@ -11040,7 +11284,9 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 }
 
 Node* Parser::make_call(
-    FinalizedCall finalized, std::vector<Node*> args) {
+    FinalizedCall finalized,
+    std::vector<Node*> args,
+    bool overflow_checks) {
 	if (auto initializer =
 		dynamic_cast<Method*>(finalized.callee);
 	    initializer &&
@@ -11101,16 +11347,18 @@ Node* Parser::make_call(
 			    call->args[0]->ty;
 	}
 	if (descriptor &&
-	    !directive_state.switch_enabled('q') &&
+	    !overflow_checks &&
 	    !descriptor
 		 ->overflow_unchecked_cxx_name
 		 .empty()) {
 		// Pascal lookup has already selected the one compiler declaration.
-		// {$Q} changes only how this direct predefined operation is executed;
-		// it must not rename the source function before lookup (which would
-		// bypass ordinary shadowing and overloads) or change declaration
-		// identity. Retaining the alternate descriptor on this call also
-		// gives constant folding and C++ emission one shared decision.
+		// overflow_checks was captured at this call construct's leading
+		// token, before its argument subtrees were parsed. {$Q} changes only
+		// how this direct predefined operation is executed; it must not
+		// rename the source function before lookup (which would bypass
+		// ordinary shadowing and overloads) or change declaration identity.
+		// Retaining the alternate descriptor on this call also gives constant
+		// folding and C++ emission one shared decision.
 		call->lowering_builtin_desc =
 		    lookup_builtin_desc(
 			descriptor

@@ -386,10 +386,22 @@ private:
 	bool eval_directive_expr(const std::string& expr);
 	Builtin* lookup_external_value(const char* lib, std::string cxx_name);
 	Type* lookup_external_type(const char* lib, std::string cxx_name);
-	Node* mk_arith(std::string id, Node* a, Node* b);
-	Node* mk_compare(std::string id, Node* a, Node* b);
-	Node* mk_membership(Node* item, Node* set);
-	Node* mk_unary_same(std::string id, Node* x);
+	/** OVERFLOW_CHECKS is the directive state captured at the operator's
+	 * leading source token. Operand parsing may encounter directives for
+	 * nested subtrees, so these builders must never reread mutable scanner
+	 * state after receiving their operands. */
+	Node* mk_arith(
+	    std::string id, Node* a, Node* b,
+	    bool overflow_checks);
+	Node* mk_compare(
+	    std::string id, Node* a, Node* b,
+	    bool overflow_checks);
+	Node* mk_membership(
+	    Node* item, Node* set,
+	    bool overflow_checks);
+	Node* mk_unary_same(
+	    std::string id, Node* x,
+	    bool overflow_checks);
 	Node* mk_assign(Node* a, Node* b);
 	std::optional<ArgumentMatch> match_argument(
 	    const Parameter& formal, Node* actual,
@@ -447,7 +459,8 @@ protected:
 	void maybe_parse_statement();
 	Mutation* parse_mutation_statement(
 	    std::string spelling,
-	    SourceLocation call_location);
+	    SourceLocation call_location,
+	    bool overflow_checks);
 	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
@@ -463,8 +476,12 @@ protected:
     bool maybe_parse_directive(std::string directive);
 	void parse_directive(std::string s);
 	void parse_operator(std::string s);
-	Node* parse_value();
-	Node* parse_value_from_identifier(std::string id);
+	Node* parse_value(
+	    bool* leading_overflow_checks);
+	Node* parse_value_from_identifier(
+	    std::string id,
+	    bool identifier_overflow_checks,
+	    bool* leading_overflow_checks);
 	Node* parse_new_or_dispose(bool is_new);
 	// Parse `inherited Name[(args)]` or anonymous `inherited;`. Returns an
 	// InheritedCall node. The enclosing routine must be a Method on a
@@ -485,9 +502,14 @@ protected:
 	 *  auto-call happens because that `(` IS the call. End-of-designator
 	 *  auto-call is the caller's decision (value context yes, lvalue no)
 	 *  via maybe_auto_call. */
-	Node* parse_designator();
-	Node* parse_designator_tail(Node* result);
-	Node* parse_member_selection(Node* base);
+	Node* parse_designator(
+	    bool* leading_overflow_checks = nullptr);
+	Node* parse_designator_tail(
+	    Node* result,
+	    bool& leading_overflow_checks);
+	Node* parse_member_selection(
+	    Node* base,
+	    bool* leading_overflow_checks);
 	/** Resolve NAME in RECEIVER's ordinary structural member environment and
 	 * bind the result to RECEIVER. This is the non-token-consuming half of
 	 * parse_member_selection, used by compiler-defined protocols which must
@@ -513,7 +535,8 @@ protected:
 	 *  parameterlessly (no formals or all formals defaulted), wrap it in a
 	 *  no-arg ProcCall via finalize_call and return that. Otherwise return
 	 *  NODE unchanged. */
-	Node* maybe_auto_call(Node* n);
+	Node* maybe_auto_call(
+	    Node* n, bool overflow_checks);
 	/** True when NODE is a syntactic form assignable to via `:=`: a bare
 	 *  StorageSlot, a MemberAccess whose member is a StorageSlot, a
 	 *  Dereference, or an Index. Everything else (constants, calls,
@@ -535,15 +558,21 @@ protected:
 	    Node* target,
 	    SourceLocation error_location,
 	    std::string not_assignable_message);
-	Node* parse_expression_after_identifier(std::string id);
+	Node* parse_expression_after_identifier(
+	    std::string id,
+	    bool identifier_overflow_checks);
 	Node* parse_comparison();
 	Node* parse_comparison_tail(Node* result);
 	Node* parse_power();
-	Node* parse_power_tail(Node* result);
+	Node* parse_power_tail(
+	    Node* result,
+	    bool leading_overflow_checks);
 	Node* parse_product();
 	Node* parse_product_tail(Node* result);
 	Node* parse_subrange_bound_expression();
-	Node* parse_subrange_bound_expression_after_identifier(std::string id);
+	Node* parse_subrange_bound_expression_after_identifier(
+	    std::string id,
+	    bool identifier_overflow_checks);
 	Node* parse_sum();
 	Node* parse_sum_tail(Node* result);
 	Type* parse_array_type(
@@ -633,9 +662,13 @@ protected:
 	                           Type* expected_return_type = nullptr);
 	/** Form the semantic application after overload selection. Constructor
 	 *  selection through a class reference becomes Construct; every other
-	 *  selected callable remains ProcCall. */
+	 *  selected callable remains ProcCall. OVERFLOW_CHECKS was captured at
+	 *  the call construct's leading designator token, before arguments were
+	 *  parsed; only compiler-owned direct operations consume it. */
 	Node* make_call(
-	    FinalizedCall finalized, std::vector<Node*> args);
+	    FinalizedCall finalized,
+	    std::vector<Node*> args,
+	    bool overflow_checks);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();
