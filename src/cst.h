@@ -103,8 +103,8 @@ public:
 	Node* callee;
 	// Optional call-site implementation selected after ordinary Pascal lookup.
 	// The callee remains the source declaration for identity and diagnostics;
-	// this descriptor exists only for compiler-owned operations such as Abs
-	// whose one Pascal declaration has caller-{$Q} checked/unchecked lowering.
+	// this descriptor exists only for finite compiler-owned operations whose
+	// one Pascal declaration has caller-directive checked/unchecked lowering.
 	const BuiltinDesc* lowering_builtin_desc = nullptr;
 	std::vector<Node*> args;
 	ProcCall(Node* receiver, Node* callee, std::vector<Node*> args);
@@ -232,9 +232,16 @@ public:
 
 	bool newline;
 	Node* file;
+	// Write has special grammar rather than a RoutineType, but its one source
+	// declaration still selects one complete checked or unchecked RTL entry
+	// point at the leading token just like an ordinary direct builtin call.
+	const BuiltinDesc* lowering_builtin_desc;
 	std::vector<Item> items;
 
-	WriteCall(bool newline, Node* file, std::vector<Item> items);
+	WriteCall(
+	    bool newline, Node* file,
+	    const BuiltinDesc* lowering_builtin_desc,
+	    std::vector<Item> items);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(

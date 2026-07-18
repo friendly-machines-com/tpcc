@@ -68,8 +68,12 @@ ConstructorFail::ConstructorFail() {
 }
 UnitRef::UnitRef(Unit* unit) : unit(unit) {}
 WriteCall::WriteCall(
-    bool newline, Node* file, std::vector<Item> items)
-    : newline(newline), file(file), items(std::move(items)) {}
+    bool newline, Node* file,
+    const BuiltinDesc* lowering_builtin_desc,
+    std::vector<Item> items)
+    : newline(newline), file(file),
+      lowering_builtin_desc(lowering_builtin_desc),
+      items(std::move(items)) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 Mutation::Mutation(
     Node* source_target,

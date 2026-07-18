@@ -832,17 +832,67 @@ static const BuiltinDesc k_builtins[] = {
 	    BuiltinGenericKind::PointerStorage,
     },
     {"::u_system::p_freemem", nullptr},
-    {"::u_system::p_rewrite", nullptr},
-    {"::u_system::p_reset", nullptr},
-    {"::u_system::p_close", nullptr},
-    {"::u_system::p_seek", nullptr},
-    {"::u_system::p_filepos", nullptr},
-    {"::u_system::p_filesize", nullptr},
-    {"::u_system::p_eof", nullptr},
-    {"::u_system::p_truncate", nullptr},
+    {
+	.cxx_name = "::u_system::p_rewrite",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_rewrite",
+    },
+    {"::u_system::m_unchecked_rewrite", nullptr},
+    {
+	.cxx_name = "::u_system::p_reset",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_reset",
+    },
+    {"::u_system::m_unchecked_reset", nullptr},
+    {
+	.cxx_name = "::u_system::p_close",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_close",
+    },
+    {"::u_system::m_unchecked_close", nullptr},
+    {
+	.cxx_name = "::u_system::p_seek",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_seek",
+    },
+    {"::u_system::m_unchecked_seek", nullptr},
+    {
+	.cxx_name = "::u_system::p_filepos",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_filepos",
+    },
+    {"::u_system::m_unchecked_filepos", nullptr},
+    {
+	.cxx_name = "::u_system::p_filesize",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_filesize",
+    },
+    {"::u_system::m_unchecked_filesize", nullptr},
+    {
+	.cxx_name = "::u_system::p_eof",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_eof",
+    },
+    {"::u_system::m_unchecked_eof", nullptr},
+    {
+	.cxx_name = "::u_system::p_truncate",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_truncate",
+    },
+    {"::u_system::m_unchecked_truncate", nullptr},
     {"::u_system::p_ioresult", nullptr},
-    {"::u_system::p_blockread", nullptr},
-    {"::u_system::p_blockwrite", nullptr},
+    {
+	.cxx_name = "::u_system::p_blockread",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_blockread",
+    },
+    {"::u_system::m_unchecked_blockread", nullptr},
+    {
+	.cxx_name = "::u_system::p_blockwrite",
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_blockwrite",
+    },
+    {"::u_system::m_unchecked_blockwrite", nullptr},
     {"::u_system::p_halt", nullptr},
     {"::u_system::p_runerror", nullptr},
     // Unqualified because these `m_` names are internal call-site macros, not
@@ -863,12 +913,18 @@ static const BuiltinDesc k_builtins[] = {
 	.cxx_name = "::u_system::p_write",
 	.const_fold = nullptr,
 	.syntax_kind = BuiltinSyntaxKind::Write,
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_write",
     },
+    {"::u_system::m_unchecked_write", nullptr},
     {
 	.cxx_name = "::u_system::p_writeln",
 	.const_fold = nullptr,
 	.syntax_kind = BuiltinSyntaxKind::WriteLn,
+	.call_site_switch = BuiltinCallSiteSwitch::Io,
+	.disabled_cxx_name = "::u_system::m_unchecked_writeln",
     },
+    {"::u_system::m_unchecked_writeln", nullptr},
     {"::u_system::p_setlength", nullptr, {}, BuiltinGenericKind::SequenceResize},
     {"::u_system::p_uniquestring", nullptr},
     {"::u_system::m_new_instance", nullptr},
@@ -897,7 +953,9 @@ static const BuiltinDesc k_builtins[] = {
 	.const_fold = fold_abs,
 	.generic_kind =
 	    BuiltinGenericKind::AbsoluteValue,
-	.overflow_unchecked_cxx_name =
+	.call_site_switch =
+	    BuiltinCallSiteSwitch::Overflow,
+	.disabled_cxx_name =
 	    "::u_system::m_unchecked_abs",
     },
     {
@@ -912,7 +970,9 @@ static const BuiltinDesc k_builtins[] = {
 	.generic_kind =
 	    BuiltinGenericKind::
 		OrdinalSuccessorOrPredecessor,
-	.overflow_unchecked_cxx_name =
+	.call_site_switch =
+	    BuiltinCallSiteSwitch::Overflow,
+	.disabled_cxx_name =
 	    "::u_system::m_unchecked_succ",
     },
     {
@@ -928,7 +988,9 @@ static const BuiltinDesc k_builtins[] = {
 	.generic_kind =
 	    BuiltinGenericKind::
 		OrdinalSuccessorOrPredecessor,
-	.overflow_unchecked_cxx_name =
+	.call_site_switch =
+	    BuiltinCallSiteSwitch::Overflow,
+	.disabled_cxx_name =
 	    "::u_system::m_unchecked_pred",
     },
     {

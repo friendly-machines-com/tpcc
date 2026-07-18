@@ -766,6 +766,16 @@ directive_switch_index(char letter) {
 	return static_cast<size_t>(ch - 'a');
 }
 
+DirectiveState::DirectiveState() {
+	// I/O checking is the safety-default Pascal switch. Unlike arithmetic
+	// overflow and range checks, a failed checked I/O operation has no useful
+	// result to continue with; source which deliberately uses IOResult opts
+	// out locally with {$I-}.
+	local_switches[
+	    static_cast<size_t>('i' - 'a')] =
+	    true;
+}
+
 bool DirectiveState::switch_enabled(
     char letter) const {
 	auto index = directive_switch_index(letter);
@@ -977,6 +987,21 @@ void Parser::handle_directive(
 			    directive_location,
 			    "$interfaces expects COM, CORBA, or DEFAULT");
 		}
+		return;
+	}
+	if (name == "iochecks") {
+		const std::string setting =
+		    compact_directive_argument(rest);
+		if (setting == "on")
+			directive_state.set_switch(
+			    'i', true);
+		else if (setting == "off")
+			directive_state.set_switch(
+			    'i', false);
+		else
+			emit_parse_error_at(
+			    directive_location,
+			    "$iochecks expects ON or OFF");
 		return;
 	}
 	if (name == "define") {
@@ -2465,6 +2490,43 @@ static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
 	return desc ? desc->syntax_kind : BuiltinSyntaxKind::None;
 }
 
+/** Select only the backend implementation of an already-resolved builtin.
+ *
+ *  Pascal lookup, overload ranking, and argument conversion run before this
+ *  helper. The declaration therefore remains the source-visible identity;
+ *  the finite compiler-owned operation merely chooses its complete checked
+ *  or unchecked RTL entry point from the directive state captured at the
+ *  construct's leading token. */
+static const BuiltinDesc* builtin_implementation_at_call_site(
+    const BuiltinDesc* descriptor,
+    LeadingTokenDirectives directives) {
+	if (!descriptor)
+		return nullptr;
+	bool enabled = true;
+	switch (descriptor->call_site_switch) {
+	case BuiltinCallSiteSwitch::None:
+		assert(descriptor->disabled_cxx_name.empty());
+		return descriptor;
+	case BuiltinCallSiteSwitch::Overflow:
+		enabled = directives.overflow_checks;
+		break;
+	case BuiltinCallSiteSwitch::Io:
+		enabled = directives.io_checks;
+		break;
+	}
+	if (enabled)
+		return descriptor;
+	assert(!descriptor->disabled_cxx_name.empty());
+	const BuiltinDesc* alternate =
+	    lookup_builtin_desc(
+		descriptor->disabled_cxx_name);
+	assert(alternate);
+	assert(
+	    alternate->call_site_switch ==
+	    BuiltinCallSiteSwitch::None);
+	return alternate;
+}
+
 /** Same as resolve_value but for type-position names.
  *  If allow_forward is true and NAME isn't in scope, register a fresh
  *  IncompleteType in the active type block's owning frame and return it. That
@@ -3029,9 +3091,15 @@ Node* Parser::parse_value_from_identifier(
 					    "must be storage-backed");
 				items.erase(items.begin());
 			}
+			const BuiltinDesc* implementation =
+			    builtin_implementation_at_call_site(
+				builtin_desc_for_node(value),
+				identifier_directives);
+			assert(implementation);
 			return new WriteCall(
 			    syntax_kind == BuiltinSyntaxKind::WriteLn,
-			    file, std::move(items));
+			    file, implementation,
+			    std::move(items));
 		}
 		if (syntax_kind_for_builtin(value) == BuiltinSyntaxKind::SizeOf &&
 		    input_token == "(") {
@@ -11348,26 +11416,15 @@ Node* Parser::make_call(
 			call->ty =
 			    call->args[0]->ty;
 	}
-	if (descriptor &&
-	    !directives.overflow_checks &&
-	    !descriptor
-		 ->overflow_unchecked_cxx_name
-		 .empty()) {
-		// Pascal lookup has already selected the one compiler declaration.
-		// directives was captured at this call construct's leading
-		// token, before its argument subtrees were parsed. {$Q} changes only
-		// how this direct predefined operation is executed; it must not
-		// rename the source function before lookup (which would bypass
-		// ordinary shadowing and overloads) or change declaration identity.
-		// Retaining the alternate descriptor on this call also gives constant
-		// folding and C++ emission one shared decision.
+	const BuiltinDesc* implementation =
+	    builtin_implementation_at_call_site(
+		descriptor, directives);
+	if (implementation != descriptor)
+		// Retain only an alternate implementation here. The original
+		// Callable remains the declaration used by diagnostics, result
+		// typing, and argument emission.
 		call->lowering_builtin_desc =
-		    lookup_builtin_desc(
-			descriptor
-			    ->overflow_unchecked_cxx_name);
-		assert(
-		    call->lowering_builtin_desc);
-	}
+		    implementation;
 	Node* result = call;
 	if (descriptor &&
 	    directive_state.switch_enabled('r') &&

@@ -235,6 +235,7 @@ class DirectiveState {
 	InterfaceModel interface_model = InterfaceModel::COM;
 
 public:
+	DirectiveState();
 	bool switch_enabled(char letter) const;
 	void set_switch(char letter, bool enabled);
 	LeadingTokenDirectives leading_token_directives() const {

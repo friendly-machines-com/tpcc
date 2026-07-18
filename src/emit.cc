@@ -1299,8 +1299,17 @@ void Emitter::emit_statement(Node* stmt) {
 		return;
 	}
 	if (auto write = dynamic_cast<WriteCall*>(stmt)) {
-		fprintf(active, "\t::u_system::%s(",
-			write->newline ? "p_writeln" : "p_write");
+		if (!write->lowering_builtin_desc)
+			unhandled_node(
+			    "Write/WriteLn has no selected RTL implementation",
+			    write);
+		fprintf(
+		    active, "\t%.*s(",
+		    static_cast<int>(
+			write->lowering_builtin_desc
+			    ->cxx_name.size()),
+		    write->lowering_builtin_desc
+			->cxx_name.data());
 		bool need_comma = false;
 		if (write->file) {
 			emit_writable_expression(write->file);
@@ -3533,8 +3542,9 @@ void Emitter::emit_expression(Node* expr) {
 				    pc);
 			// Ordinary Pascal lookup and argument conversion have already
 			// selected `callable`. Only its compiler-owned implementation is
-			// different at this {$Q} site, so emit the retained descriptor
-			// with exactly the selected declaration's converted arguments.
+			// different at this caller-directive site, so emit the retained
+			// descriptor with exactly the selected declaration's converted
+			// arguments.
 			fprintf(
 			    active, "%.*s(",
 			    static_cast<int>(

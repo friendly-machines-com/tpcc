@@ -43,7 +43,7 @@ begin
     203: E := EOutOfMemory.Create('Out of memory');
     211: E := EAbstractError.Create('Abstract method called');
     216: E := EAccessViolation.Create('Access violation');
-    2, 3, 4, 5, 6, 15, 100, 101, 102, 103, 104, 105, 106:
+    2, 3, 4, 5, 6, 12, 15, 100, 101, 102, 103, 104, 105, 106, 156:
       begin
         E := EInOutError.Create('I/O error');
         EInOutError(E).ErrorCode := ErrorCode

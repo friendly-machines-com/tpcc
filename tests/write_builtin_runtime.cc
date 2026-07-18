@@ -21,5 +21,38 @@ int main() {
 		return 2;
 	if (file_output.str() != "file=-7:2.50\n")
 		return 3;
+
+	// An opened Text whose C++ stream has failed is an old-style I/O error,
+	// not a successful Write merely because no exception was configured.
+	std::ostringstream failed_output;
+	failed_output.setstate(std::ios::badbit);
+	::u_system::t_text failed_text{
+	    &failed_output};
+	::u_system::m_unchecked_write(
+	    failed_text,
+	    ::u_system::tpcc_make_write_arg(
+		static_cast<::u_system::t_integer>(7)));
+	if (::u_system::p_ioresult() != 101)
+		return 4;
+
+	// Streams may also be configured to throw on failure. The unchecked
+	// operation must translate that implementation mechanism into the same
+	// Pascal IOResult channel rather than leaking a C++ exception.
+	std::ostringstream throwing_output;
+	throwing_output.setstate(
+	    std::ios::badbit);
+	try {
+		throwing_output.exceptions(
+		    std::ios::badbit);
+	} catch (const std::ios_base::failure&) {
+	}
+	::u_system::t_text throwing_text{
+	    &throwing_output};
+	::u_system::m_unchecked_writeln(
+	    throwing_text,
+	    ::u_system::tpcc_make_write_arg(
+		static_cast<::u_system::t_integer>(8)));
+	if (::u_system::p_ioresult() != 101)
+		return 5;
 	return 0;
 }

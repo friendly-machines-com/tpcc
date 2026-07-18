@@ -2655,7 +2655,7 @@ inline t_word m_inoutres = 0;
 inline t_byte p_filemode = 2;
 
 inline void m_set_io_error(t_word error) {
-	if (m_inoutres == 0)
+	if (error != 0 && m_inoutres == 0)
 		m_inoutres = error;
 }
 
@@ -2683,16 +2683,61 @@ inline t_word p_ioresult() {
 	return result;
 }
 
-inline void m_close_binary_handle(
+// Checked old-style I/O consumes a pending unchecked error before invoking
+// ErrorProc. That lets an exception handler perform further I/O and ensures a
+// caught EInOutError does not leave IOResult poisoned. Unchecked entry points,
+// by contrast, preserve the first pending error and skip the operation.
+inline void m_raise_pending_io_error() {
+	const t_word error = p_ioresult();
+	if (error != 0)
+		m_runtime_error(error);
+}
+
+inline void m_finish_checked_io(t_word error) {
+	if (error != 0)
+		m_runtime_error(error);
+}
+
+inline void m_finish_unchecked_io(t_word error) {
+	m_set_io_error(error);
+}
+
+template<typename T>
+struct m_io_result {
+	T value;
+	t_word error;
+};
+
+template<typename T>
+inline T m_finish_checked_io(
+    m_io_result<T> result) {
+	m_finish_checked_io(result.error);
+	return result.value;
+}
+
+template<typename T>
+inline T m_finish_unchecked_io(
+    m_io_result<T> result) {
+	m_finish_unchecked_io(result.error);
+	return result.value;
+}
+
+inline t_word m_do_close_binary_handle(
     binary_file_state& state) {
 	if (!state.handle)
-		return;
-	if (std::fclose(state.handle) != 0)
-		m_set_io_error(
-		    m_file_error_from_errno(errno, 101));
+		return 0;
+	errno = 0;
+	const int result =
+	    std::fclose(state.handle);
+	const t_word error =
+	    result == 0
+		? 0
+		: m_file_error_from_errno(
+		      errno, 101);
 	state.handle = nullptr;
 	state.readable = false;
 	state.writable = false;
+	return error;
 }
 
 template<typename PascalString>
@@ -2700,8 +2745,17 @@ inline void p_assign(
     t_file& file, const PascalString& name) {
 	if (m_inoutres != 0)
 		return;
+	// Assign associates a name; it is not an I/O operation and therefore has
+	// no caller-{$I} alternate. Silently closing an already-open handle here
+	// would both perform hidden I/O and create an error which no Assign call
+	// site could handle. Treat that invalid file state as an unconditional
+	// runtime error instead.
 	if (file.state && file.state->handle)
-		m_close_binary_handle(*file.state);
+		m_runtime_error(102);
+	if (file.state) {
+		file.state->name = name.m_string();
+		return;
+	}
 	auto state =
 	    std::make_unique<binary_file_state>();
 	state->name = name.m_string();
@@ -2710,51 +2764,66 @@ inline void p_assign(
 	    std::move(state));
 }
 
-inline bool m_prepare_binary_open(
+inline t_word m_prepare_binary_open(
     t_file& file, t_longint record_size) {
-	if (m_inoutres != 0)
-		return false;
-	if (!file.state) {
-		m_set_io_error(102);
-		return false;
+	if (!file.state)
+		return 102;
+	if (record_size <= 0)
+		return 12;
+	if (file.state->handle) {
+		const t_word error =
+		    m_do_close_binary_handle(
+			*file.state);
+		if (error != 0)
+			return error;
 	}
-	if (record_size <= 0) {
-		m_set_io_error(12);
-		return false;
-	}
-	if (file.state->handle)
-		m_close_binary_handle(*file.state);
-	if (m_inoutres != 0)
-		return false;
 	file.state->record_size = record_size;
-	return true;
+	return 0;
 }
 
-inline void p_rewrite(
+inline t_word m_do_rewrite(
     t_file& file, t_longint record_size) {
-	if (!m_prepare_binary_open(
-	        file, record_size))
-		return;
+	const t_word prepare_error =
+	    m_prepare_binary_open(
+		file, record_size);
+	if (prepare_error != 0)
+		return prepare_error;
 	errno = 0;
 	file.state->handle =
 	    std::fopen(file.state->name.c_str(), "w+b");
-	if (!file.state->handle) {
-		m_set_io_error(
-		    m_file_error_from_errno(errno, 101));
-		return;
-	}
+	if (!file.state->handle)
+		return m_file_error_from_errno(
+		    errno, 101);
 	// FPC opens an untyped Rewrite file for writing. The C handle is
 	// read/write so a later Reset can reuse ordinary host file semantics;
 	// Pascal access checks still use these explicit mode flags.
 	file.state->readable = false;
 	file.state->writable = true;
+	return 0;
 }
 
-inline void p_reset(
+inline void p_rewrite(
     t_file& file, t_longint record_size) {
-	if (!m_prepare_binary_open(
-	        file, record_size))
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_rewrite(file, record_size));
+}
+
+inline void m_unchecked_rewrite(
+    t_file& file, t_longint record_size) {
+	if (m_inoutres != 0)
 		return;
+	m_finish_unchecked_io(
+	    m_do_rewrite(file, record_size));
+}
+
+inline t_word m_do_reset(
+    t_file& file, t_longint record_size) {
+	const t_word prepare_error =
+	    m_prepare_binary_open(
+		file, record_size);
+	if (prepare_error != 0)
+		return prepare_error;
 	const t_byte access =
 	    static_cast<t_byte>(p_filemode & 3);
 	const char* mode = nullptr;
@@ -2767,53 +2836,76 @@ inline void p_reset(
 		mode = "r+b";
 		break;
 	default:
-		m_set_io_error(12);
-		return;
+		return 12;
 	}
 	errno = 0;
 	file.state->handle =
 	    std::fopen(file.state->name.c_str(), mode);
-	if (!file.state->handle) {
-		m_set_io_error(
-		    m_file_error_from_errno(errno, 100));
-		return;
-	}
+	if (!file.state->handle)
+		return m_file_error_from_errno(
+		    errno, 100);
 	file.state->readable = access != 1;
 	file.state->writable = access != 0;
+	return 0;
 }
 
-inline bool m_require_open_binary_file(
-    t_file& file) {
+inline void p_reset(
+    t_file& file, t_longint record_size) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_reset(file, record_size));
+}
+
+inline void m_unchecked_reset(
+    t_file& file, t_longint record_size) {
 	if (m_inoutres != 0)
-		return false;
-	if (!file.state) {
-		m_set_io_error(102);
-		return false;
-	}
-	if (!file.state->handle) {
-		m_set_io_error(103);
-		return false;
-	}
-	return true;
+		return;
+	m_finish_unchecked_io(
+	    m_do_reset(file, record_size));
+}
+
+inline t_word m_require_open_binary_file(
+    t_file& file) {
+	if (!file.state)
+		return 102;
+	if (!file.state->handle)
+		return 103;
+	return 0;
+}
+
+inline t_word m_do_close(t_file& file) {
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return open_error;
+	return m_do_close_binary_handle(
+	    *file.state);
 }
 
 inline void p_close(t_file& file) {
-	if (!m_require_open_binary_file(file))
-		return;
-	m_close_binary_handle(*file.state);
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_close(file));
 }
 
-inline void p_seek(
-    t_file& file, t_int64 record_position) {
-	if (!m_require_open_binary_file(file))
+inline void m_unchecked_close(t_file& file) {
+	if (m_inoutres != 0)
 		return;
+	m_finish_unchecked_io(
+	    m_do_close(file));
+}
+
+inline t_word m_do_seek(
+    t_file& file, t_int64 record_position) {
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return open_error;
 	if (record_position < 0 ||
 	    record_position >
 	        std::numeric_limits<long>::max() /
-	            file.state->record_size) {
-		m_set_io_error(156);
-		return;
-	}
+	            file.state->record_size)
+		return 156;
 	const long byte_position =
 	    static_cast<long>(
 	        record_position *
@@ -2821,159 +2913,225 @@ inline void p_seek(
 	if (std::fseek(
 	        file.state->handle,
 	        byte_position, SEEK_SET) != 0)
-		m_set_io_error(156);
+		return 156;
+	return 0;
+}
+
+inline void p_seek(
+    t_file& file, t_int64 record_position) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_seek(file, record_position));
+}
+
+inline void m_unchecked_seek(
+    t_file& file, t_int64 record_position) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_seek(file, record_position));
+}
+
+inline m_io_result<t_int64>
+m_do_filepos(t_file& file) {
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return {-1, open_error};
+	const long position =
+	    std::ftell(file.state->handle);
+	if (position < 0)
+		return {-1, 156};
+	return {
+	    static_cast<t_int64>(
+		position /
+		file.state->record_size),
+	    0};
 }
 
 inline t_int64 p_filepos(t_file& file) {
-	if (!m_require_open_binary_file(file))
-		return -1;
-	const long position =
-	    std::ftell(file.state->handle);
-	if (position < 0) {
-		m_set_io_error(156);
-		return -1;
-	}
-	return static_cast<t_int64>(
-	    position / file.state->record_size);
+	m_raise_pending_io_error();
+	return m_finish_checked_io(
+	    m_do_filepos(file));
 }
 
-inline t_int64 p_filesize(t_file& file) {
-	if (!m_require_open_binary_file(file))
+inline t_int64 m_unchecked_filepos(
+    t_file& file) {
+	if (m_inoutres != 0)
 		return -1;
+	return m_finish_unchecked_io(
+	    m_do_filepos(file));
+}
+
+inline m_io_result<t_int64>
+m_do_filesize(t_file& file) {
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return {-1, open_error};
 	const long original =
 	    std::ftell(file.state->handle);
 	if (original < 0 ||
 	    std::fseek(
-	        file.state->handle, 0, SEEK_END) != 0) {
-		m_set_io_error(156);
-		return -1;
-	}
+	        file.state->handle, 0, SEEK_END) != 0)
+		return {-1, 156};
 	const long end =
 	    std::ftell(file.state->handle);
 	if (std::fseek(
 	        file.state->handle,
-	        original, SEEK_SET) != 0) {
-		m_set_io_error(156);
-		return -1;
-	}
-	if (end < 0) {
-		m_set_io_error(156);
-		return -1;
-	}
-	return static_cast<t_int64>(
-	    end / file.state->record_size);
+	        original, SEEK_SET) != 0)
+		return {-1, 156};
+	if (end < 0)
+		return {-1, 156};
+	return {
+	    static_cast<t_int64>(
+		end /
+		file.state->record_size),
+	    0};
 }
 
-inline t_boolean p_eof(t_file& file) {
-	if (!m_require_open_binary_file(file))
-		return p_true;
-	if (!file.state->readable) {
-		m_set_io_error(104);
-		return p_true;
-	}
+inline t_int64 p_filesize(t_file& file) {
+	m_raise_pending_io_error();
+	return m_finish_checked_io(
+	    m_do_filesize(file));
+}
+
+inline t_int64 m_unchecked_filesize(
+    t_file& file) {
+	if (m_inoutres != 0)
+		return -1;
+	return m_finish_unchecked_io(
+	    m_do_filesize(file));
+}
+
+inline m_io_result<t_boolean>
+m_do_eof(t_file& file) {
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return {p_true, open_error};
+	if (!file.state->readable)
+		return {p_true, 104};
 	const long original =
 	    std::ftell(file.state->handle);
 	if (original < 0 ||
 	    std::fseek(
-	        file.state->handle, 0, SEEK_END) != 0) {
-		m_set_io_error(156);
-		return p_true;
-	}
+	        file.state->handle, 0, SEEK_END) != 0)
+		return {p_true, 156};
 	const long end =
 	    std::ftell(file.state->handle);
 	if (std::fseek(
 	        file.state->handle,
 	        original, SEEK_SET) != 0 ||
-	    end < 0) {
-		m_set_io_error(156);
-		return p_true;
-	}
-	return tpcc_bool_to_boolean(
-	    original >= end);
+	    end < 0)
+		return {p_true, 156};
+	return {
+	    tpcc_bool_to_boolean(
+		original >= end),
+	    0};
 }
 
-inline void p_truncate(t_file& file) {
-	if (!m_require_open_binary_file(file))
-		return;
-	if (!file.state->writable) {
-		m_set_io_error(105);
-		return;
-	}
+inline t_boolean p_eof(t_file& file) {
+	m_raise_pending_io_error();
+	return m_finish_checked_io(
+	    m_do_eof(file));
+}
+
+inline t_boolean m_unchecked_eof(
+    t_file& file) {
+	if (m_inoutres != 0)
+		return p_true;
+	return m_finish_unchecked_io(
+	    m_do_eof(file));
+}
+
+inline t_word m_do_truncate(t_file& file) {
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return open_error;
+	if (!file.state->writable)
+		return 105;
 	const long position =
 	    std::ftell(file.state->handle);
 	if (position < 0 ||
-	    std::fflush(file.state->handle) != 0) {
-		m_set_io_error(101);
-		return;
-	}
+	    std::fflush(file.state->handle) != 0)
+		return 101;
 	std::error_code error;
 	std::filesystem::resize_file(
 	    file.state->name,
 	    static_cast<std::uintmax_t>(position),
 	    error);
-	if (error) {
-		m_set_io_error(101);
-		return;
-	}
+	if (error)
+		return 101;
 	std::clearerr(file.state->handle);
 	if (std::fseek(
 	        file.state->handle,
 	        position, SEEK_SET) != 0)
-		m_set_io_error(156);
+		return 156;
+	return 0;
+}
+
+inline void p_truncate(t_file& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_truncate(file));
+}
+
+inline void m_unchecked_truncate(
+    t_file& file) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_truncate(file));
 }
 
 template<typename Count>
-inline bool m_binary_transfer_count(
+inline t_word m_binary_transfer_count(
     Count count, t_longint record_size,
     std::size_t* records,
     std::size_t* bytes) {
 	if constexpr (std::is_signed_v<Count>)
-		if (count < 0) {
-			m_set_io_error(106);
-			return false;
-		}
+		if (count < 0)
+			return 106;
 	const auto unsigned_count =
 	    static_cast<std::make_unsigned_t<Count>>(count);
 	if (unsigned_count >
-	    std::numeric_limits<std::size_t>::max()) {
-		m_set_io_error(106);
-		return false;
-	}
+	    std::numeric_limits<std::size_t>::max())
+		return 106;
 	*records =
 	    static_cast<std::size_t>(unsigned_count);
 	if (*records >
 	    std::numeric_limits<std::size_t>::max() /
-	        static_cast<std::size_t>(record_size)) {
-		m_set_io_error(106);
-		return false;
-	}
+	        static_cast<std::size_t>(record_size))
+		return 106;
 	*bytes =
 	    *records *
 	    static_cast<std::size_t>(record_size);
-	return true;
+	return 0;
 }
 
 template<typename Count, typename Result>
-inline void p_blockread(
+inline t_word m_do_blockread(
     t_file& file, tpcc_storage_ref buffer,
     Count count, Result& result) {
 	result = 0;
-	if (!m_require_open_binary_file(file))
-		return;
-	if (!file.state->readable) {
-		m_set_io_error(104);
-		return;
-	}
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return open_error;
+	if (!file.state->readable)
+		return 104;
 	std::size_t records;
 	std::size_t bytes;
-	if (!m_binary_transfer_count(
-	        count, file.state->record_size,
-	        &records, &bytes))
-		return;
-	if (bytes > buffer.size) {
-		m_set_io_error(100);
-		return;
-	}
+	const t_word count_error =
+	    m_binary_transfer_count(
+		count, file.state->record_size,
+		&records, &bytes);
+	if (count_error != 0)
+		return count_error;
+	if (bytes > buffer.size)
+		return 100;
 	const std::size_t transferred =
 	    std::fread(
 	        buffer.data,
@@ -2982,42 +3140,90 @@ inline void p_blockread(
 	        records, file.state->handle);
 	result = static_cast<Result>(transferred);
 	if (std::ferror(file.state->handle))
-		m_set_io_error(100);
+		return 100;
+	return 0;
+}
+
+template<typename Count, typename Result>
+inline void p_blockread(
+    t_file& file, tpcc_storage_ref buffer,
+    Count count, Result& result) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_blockread(
+		file, buffer, count, result));
+}
+
+template<typename Count, typename Result>
+inline void m_unchecked_blockread(
+    t_file& file, tpcc_storage_ref buffer,
+    Count count, Result& result) {
+	result = 0;
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_blockread(
+		file, buffer, count, result));
+}
+
+template<typename Count>
+inline t_word m_do_blockread(
+    t_file& file, tpcc_storage_ref buffer,
+    Count count) {
+	Count transferred = 0;
+	const t_word error =
+	    m_do_blockread(
+		file, buffer, count,
+		transferred);
+	if (error != 0)
+		return error;
+	return transferred == count
+		   ? 0
+		   : 100;
 }
 
 template<typename Count>
 inline void p_blockread(
     t_file& file, tpcc_storage_ref buffer,
     Count count) {
-	Count transferred = 0;
-	p_blockread(
-	    file, buffer, count, transferred);
-	if (m_inoutres == 0 &&
-	    transferred != count)
-		m_set_io_error(100);
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_blockread(
+		file, buffer, count));
+}
+
+template<typename Count>
+inline void m_unchecked_blockread(
+    t_file& file, tpcc_storage_ref buffer,
+    Count count) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_blockread(
+		file, buffer, count));
 }
 
 template<typename Count, typename Result>
-inline void p_blockwrite(
+inline t_word m_do_blockwrite(
     t_file& file, tpcc_const_storage_ref buffer,
     Count count, Result& result) {
 	result = 0;
-	if (!m_require_open_binary_file(file))
-		return;
-	if (!file.state->writable) {
-		m_set_io_error(105);
-		return;
-	}
+	const t_word open_error =
+	    m_require_open_binary_file(file);
+	if (open_error != 0)
+		return open_error;
+	if (!file.state->writable)
+		return 105;
 	std::size_t records;
 	std::size_t bytes;
-	if (!m_binary_transfer_count(
-	        count, file.state->record_size,
-	        &records, &bytes))
-		return;
-	if (bytes > buffer.size) {
-		m_set_io_error(101);
-		return;
-	}
+	const t_word count_error =
+	    m_binary_transfer_count(
+		count, file.state->record_size,
+		&records, &bytes);
+	if (count_error != 0)
+		return count_error;
+	if (bytes > buffer.size)
+		return 101;
 	const std::size_t transferred =
 	    std::fwrite(
 	        buffer.data,
@@ -3027,19 +3233,67 @@ inline void p_blockwrite(
 	result = static_cast<Result>(transferred);
 	if (transferred != records ||
 	    std::ferror(file.state->handle))
-		m_set_io_error(101);
+		return 101;
+	return 0;
+}
+
+template<typename Count, typename Result>
+inline void p_blockwrite(
+    t_file& file, tpcc_const_storage_ref buffer,
+    Count count, Result& result) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_blockwrite(
+		file, buffer, count, result));
+}
+
+template<typename Count, typename Result>
+inline void m_unchecked_blockwrite(
+    t_file& file, tpcc_const_storage_ref buffer,
+    Count count, Result& result) {
+	result = 0;
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_blockwrite(
+		file, buffer, count, result));
+}
+
+template<typename Count>
+inline t_word m_do_blockwrite(
+    t_file& file, tpcc_const_storage_ref buffer,
+    Count count) {
+	Count transferred = 0;
+	const t_word error =
+	    m_do_blockwrite(
+		file, buffer, count,
+		transferred);
+	if (error != 0)
+		return error;
+	return transferred == count
+		   ? 0
+		   : 101;
 }
 
 template<typename Count>
 inline void p_blockwrite(
     t_file& file, tpcc_const_storage_ref buffer,
     Count count) {
-	Count transferred = 0;
-	p_blockwrite(
-	    file, buffer, count, transferred);
-	if (m_inoutres == 0 &&
-	    transferred != count)
-		m_set_io_error(101);
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_blockwrite(
+		file, buffer, count));
+}
+
+template<typename Count>
+inline void m_unchecked_blockwrite(
+    t_file& file, tpcc_const_storage_ref buffer,
+    Count count) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_blockwrite(
+		file, buffer, count));
 }
 
 template<typename T>
@@ -3131,45 +3385,159 @@ inline void tpcc_write_one(
 }
 
 template<typename... Values>
-inline void tpcc_write_many(
+inline t_word tpcc_write_many(
     std::ostream& out,
     const tpcc_write_arg<Values>&... arguments) {
-	(tpcc_write_one(out, arguments), ...);
+	t_word error = 0;
+	try {
+		if constexpr (sizeof...(Values) > 0) {
+			auto write_one =
+			    [&out, &error](const auto& argument) {
+				    if (error != 0)
+					    return;
+				    tpcc_write_one(
+					out, argument);
+				    if (!out)
+					    error = 101;
+			    };
+			(write_one(arguments), ...);
+		}
+	} catch (const std::ios_base::failure&) {
+		return 101;
+	}
+	return error;
 }
 
-inline std::ostream& tpcc_text_stream(t_text& file) {
+inline m_io_result<std::ostream*>
+tpcc_text_stream(t_text& file) {
 	if (!file.stream)
-		m_runtime_error(103);
-	return *file.stream;
+		return {nullptr, 103};
+	return {file.stream, 0};
+}
+
+template<typename... Values>
+inline t_word m_do_write(
+    std::ostream& out,
+    const tpcc_write_arg<Values>&... arguments) {
+	return tpcc_write_many(
+	    out, arguments...);
+}
+
+template<typename... Values>
+inline t_word m_do_writeln(
+    std::ostream& out,
+    const tpcc_write_arg<Values>&... arguments) {
+	const t_word write_error =
+	    tpcc_write_many(
+		out, arguments...);
+	if (write_error != 0)
+		return write_error;
+	try {
+		out.put('\n');
+	} catch (const std::ios_base::failure&) {
+		return 101;
+	}
+	return out ? 0 : 101;
 }
 
 template<typename... Values>
 inline void p_write(
     const tpcc_write_arg<Values>&... arguments) {
-	tpcc_write_many(std::cout, arguments...);
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_write(
+		std::cout, arguments...));
 }
 
 template<typename... Values>
 inline void p_write(
     t_text& file,
     const tpcc_write_arg<Values>&... arguments) {
-	tpcc_write_many(tpcc_text_stream(file), arguments...);
+	m_raise_pending_io_error();
+	const auto stream =
+	    tpcc_text_stream(file);
+	m_finish_checked_io(stream.error);
+	m_finish_checked_io(
+	    m_do_write(
+		*stream.value, arguments...));
+}
+
+template<typename... Values>
+inline void m_unchecked_write(
+    const tpcc_write_arg<Values>&... arguments) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_write(
+		std::cout, arguments...));
+}
+
+template<typename... Values>
+inline void m_unchecked_write(
+    t_text& file,
+    const tpcc_write_arg<Values>&... arguments) {
+	if (m_inoutres != 0)
+		return;
+	const auto stream =
+	    tpcc_text_stream(file);
+	if (stream.error != 0) {
+		m_finish_unchecked_io(
+		    stream.error);
+		return;
+	}
+	m_finish_unchecked_io(
+	    m_do_write(
+		*stream.value, arguments...));
 }
 
 template<typename... Values>
 inline void p_writeln(
     const tpcc_write_arg<Values>&... arguments) {
-	tpcc_write_many(std::cout, arguments...);
-	std::cout.put('\n');
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_writeln(
+		std::cout, arguments...));
 }
 
 template<typename... Values>
 inline void p_writeln(
     t_text& file,
     const tpcc_write_arg<Values>&... arguments) {
-	std::ostream& out = tpcc_text_stream(file);
-	tpcc_write_many(out, arguments...);
-	out.put('\n');
+	m_raise_pending_io_error();
+	const auto stream =
+	    tpcc_text_stream(file);
+	m_finish_checked_io(stream.error);
+	m_finish_checked_io(
+	    m_do_writeln(
+		*stream.value, arguments...));
+}
+
+template<typename... Values>
+inline void m_unchecked_writeln(
+    const tpcc_write_arg<Values>&... arguments) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_writeln(
+		std::cout, arguments...));
+}
+
+template<typename... Values>
+inline void m_unchecked_writeln(
+    t_text& file,
+    const tpcc_write_arg<Values>&... arguments) {
+	if (m_inoutres != 0)
+		return;
+	const auto stream =
+	    tpcc_text_stream(file);
+	if (stream.error != 0) {
+		m_finish_unchecked_io(
+		    stream.error);
+		return;
+	}
+	m_finish_unchecked_io(
+	    m_do_writeln(
+		*stream.value, arguments...));
 }
 
 inline void p_uniquestring(t_ansistring& value) {

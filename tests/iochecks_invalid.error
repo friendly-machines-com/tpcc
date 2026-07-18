@@ -1,0 +1,1 @@
+tests/iochecks_invalid.pp(2): error: $iochecks expects ON or OFF
