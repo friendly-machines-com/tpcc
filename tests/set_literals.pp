@@ -19,6 +19,8 @@ var
   CharacterMiss: Boolean;
   EnumHit: Boolean;
   EnumMiss: Boolean;
+  DirectHit: Boolean;
+  DirectEmptyMiss: Boolean;
 
 begin
   Integers := [1, 3..5];
@@ -35,5 +37,8 @@ begin
 
   Colours := [Red, Blue];
   EnumHit := Blue in Colours;
-  EnumMiss := Green in Colours
+  EnumMiss := Green in Colours;
+
+  DirectHit := 5 in [4, 5];
+  DirectEmptyMiss := 1 in []
 end.

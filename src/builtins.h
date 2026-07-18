@@ -44,6 +44,14 @@ enum class BuiltinGenericKind {
 	// while this semantic category tells call checking that argument one
 	// must be a set and argument two must convert to that set's item type.
 	SetMutation,
+	// System's membership declaration has the equally unspellable relation
+	//
+	//   item: T; values: set of T
+	//
+	// but in source order rather than mutation order. Typed custom `operator
+	// In` declarations remain ordinary candidates; this category constrains
+	// only System's omitted-type fallback and keeps it at Generic rank.
+	SetMembership,
 	// Assigned accepts object pointers, plain routine values, and method
 	// routine values. system.pp can only spell its Pointer overload.
 	Assigned,

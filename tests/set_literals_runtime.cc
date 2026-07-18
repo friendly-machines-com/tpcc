@@ -17,5 +17,9 @@ int main() {
 	if (p_enumhit != ::u_system::p_true ||
 	    p_enummiss != ::u_system::p_false)
 		return 4;
+	if (p_directhit != ::u_system::p_true ||
+	    p_directemptymiss !=
+		::u_system::p_false)
+		return 5;
 	return 0;
 }

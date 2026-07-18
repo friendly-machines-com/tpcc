@@ -4181,38 +4181,19 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b) {
 }
 
 Node* Parser::mk_membership(Node* item, Node* set) {
-	if (auto bracket =
-		dynamic_cast<BracketLiteral*>(set)) {
-		Type* item_type =
-		    bracket->default_set_item_type;
-		if (item_type == unknown_type())
-			item_type = item->ty;
-		set = cast(
-		    set,
-		    new FixedSetType(
-			current_location(),
-			item_type));
-	}
-	auto set_type = dynamic_cast<FixedSetType*>(set ? set->ty : nullptr);
-	if (!set_type)
-		raise_parse_error("right operand of 'in' is not a set");
-	if (set_type->item_type == unknown_type()) {
-		if (!is_set_item_type(item->ty))
-			raise_parse_error("left operand of 'in' is not ordinal");
-		set = cast(set, new FixedSetType(current_location(), item->ty));
-		set_type = static_cast<FixedSetType*>(set->ty);
-	}
-
-	std::vector<Node*> args{
-	    cast(item, set_type->item_type),
-	    set,
-	};
 	const std::string pascal_identifier =
 	    operator_expression_identifier(
 		OperatorInvocation::BinaryToken,
 		"in", 2,
 		directive_state.switch_enabled('q'));
 	Node* fn = resolve_value(pascal_identifier);
+	// Preserve both source operands until the ordinary operator family has
+	// selected a declaration. A typed custom `operator In(T, TContainer)`
+	// must see TContainer rather than being rejected or coerced by the
+	// predefined set interpretation. System's otherwise-unspellable
+	// `(T, set of T)` fallback is recovered candidate-locally by its
+	// SetMembership BuiltinDesc in match_callable_arguments().
+	std::vector<Node*> args{item, set};
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location());
 	return make_call(fc, std::move(args));
 }
@@ -9692,6 +9673,88 @@ Parser::match_callable_arguments(
 		? callable->builtin_desc
 		: lookup_builtin_desc(
 		      callable->cxx_name);
+	if (builtin &&
+	    builtin->generic_kind ==
+		BuiltinGenericKind::SetMembership) {
+		// Only System's omitted-type declaration enters here. Custom In
+		// declarations have complete Pascal formals and use the ordinary loop
+		// below. Build this candidate's missing `(T, set of T)` relationship
+		// without changing either source node or introducing a lookup path.
+		if (args.size() != 2 ||
+		    !args[0] || !args[1])
+			return std::nullopt;
+
+		Type* item_type = nullptr;
+		Node* values = args[1];
+		if (auto literal =
+			dynamic_cast<BracketLiteral*>(
+			    values)) {
+			item_type =
+			    literal->default_set_item_type;
+			if (item_type == unknown_type()) {
+				if (auto integer =
+					untyped_integer_constant(
+					    args[0]))
+					item_type =
+					    integer_literal_natural_type(
+						integer);
+				else
+					item_type =
+					    args[0]->ty;
+			}
+			if (!is_set_item_type(
+				item_type))
+				return std::nullopt;
+			auto contextual_set =
+			    new FixedSetType(
+				current_location(),
+				item_type);
+			Parameter values_formal(
+			    "values", "", contextual_set,
+			    ParamMode::Const, nullptr);
+			auto values_match =
+			    match_argument(
+				values_formal, values,
+				nullptr, 1, false);
+			if (!values_match)
+				return std::nullopt;
+			values = values_match->value;
+		} else {
+			auto set_type =
+			    dynamic_cast<FixedSetType*>(
+				values->ty);
+			if (!set_type)
+				return std::nullopt;
+			item_type =
+			    set_type->item_type;
+		}
+		if (!is_set_item_type(item_type))
+			return std::nullopt;
+
+		Parameter item_formal(
+		    "item", "", item_type,
+		    ParamMode::Const, nullptr);
+		auto item_match =
+		    match_argument(
+			item_formal, args[0],
+			nullptr, 0,
+			allow_user_conversion);
+		if (!item_match)
+			return std::nullopt;
+
+		// Both declared formals are omitted, so both retain Generic rank
+		// regardless of the candidate-local contextual construction. The
+		// existing dominance rule therefore makes every viable typed custom
+		// declaration win; no preference is hard-coded for System or users.
+		return CallableMatch{
+		    {
+			{MatchRank::Tier::Generic, 0},
+			{MatchRank::Tier::Generic, 0},
+		    },
+		    {item_match->value, values},
+		    {{}, {}},
+		};
+	}
 	CallableMatch result;
 	result.ranks.reserve(args.size());
 	result.arguments.reserve(args.size());

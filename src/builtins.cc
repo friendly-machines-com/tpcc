@@ -719,7 +719,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::o_equal", nullptr},
     {"::u_system::o_greaterthan", nullptr},
     {"::u_system::o_greaterthanorequal", nullptr},
-    {"::u_system::o_in", nullptr},
+    {"::u_system::o_in", nullptr, {}, BuiltinGenericKind::SetMembership},
     {"::u_system::p_supports", nullptr},
 
     {"::u_system::t_boolean::p_true", nullptr},
