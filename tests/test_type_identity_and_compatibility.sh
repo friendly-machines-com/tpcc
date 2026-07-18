@@ -36,8 +36,8 @@ cd "$root"
 
 for required in \
 	'o_implicit(' \
-	'm_implicit_target<t_tconversionresulta>' \
-	'm_implicit_target<t_tconversionresultb>'
+	'm_conversion_target<t_tconversionresulta>' \
+	'm_conversion_target<t_tconversionresultb>'
 do
 	if ! rg -Fq "$required" "$tmp/type_identity.cc"
 	then
@@ -242,7 +242,7 @@ for required in \
 	'incoming declaration:' \
 	'conflicting declaration:' \
 	'existing overload family:' \
-	'Pascal distinguishes these implicit conversions by destination type' \
+	'Pascal distinguishes these conversion operators by destination type' \
 	'hidden destination tags still have the same C++ carrier' \
 	'type tconversionsource' \
 	'type tstringa' \
@@ -258,6 +258,39 @@ done
 if rg -Fq '<unregistered' "$tmp/stderr"
 then
 	echo "unresolved reference in conversion-carrier diagnostic" >&2
+	sed -n '1,120p' "$tmp/stderr" >&2
+	exit 1
+fi
+
+if ./mp -Furtl \
+	-dTEST_EXPLICIT_CONVERSION \
+	-o"$tmp/explicit_conversion_erased_target.cc" \
+	tests/type_carrier_collision_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted indistinguishable explicit-conversion target tags" >&2
+	exit 1
+fi
+for required in \
+	'incoming declaration:' \
+	'conflicting declaration:' \
+	'existing overload family:' \
+	'Pascal distinguishes these conversion operators by destination type' \
+	'hidden destination tags still have the same C++ carrier' \
+	'type tconversionsource' \
+	'type tstringa' \
+	'type tstringb'
+do
+	if ! rg -Fq "$required" "$tmp/stderr"
+	then
+		echo "incomplete explicit-conversion carrier diagnostic: $required" >&2
+		sed -n '1,120p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
+if rg -Fq '<unregistered' "$tmp/stderr"
+then
+	echo "unresolved reference in explicit conversion-carrier diagnostic" >&2
 	sed -n '1,120p' "$tmp/stderr" >&2
 	exit 1
 fi

@@ -9,6 +9,7 @@
 #include <vector>
 #include <map>
 #include <optional>
+#include <string_view>
 #include "ci_less.h"
 #include "types.h"
 
@@ -405,9 +406,12 @@ private:
 	std::optional<ArgumentMatch>
 	match_user_conversion(
 	    Node* actual, Type* target,
+	    std::string_view operator_identifier,
 	    MatchFailure* failure,
 	    UserConversionFailure*
 	        conversion_failure);
+	Node* match_explicit_conversion(
+	    Node* actual, Type* target);
 	Node* make_implicit_cast(
 	    Node* value, Type* target);
 	Node* cast(Node* a, Type* target_ty);

@@ -169,14 +169,15 @@ bool cxx_callable_signatures_collide(
 	    !same_emitted_callable_name(a, b))
 		return false;
 	const bool a_conversion =
-	    a->is_implicit_conversion();
+	    a->is_conversion_operator();
 	const bool b_conversion =
-	    b->is_implicit_conversion();
-	// An implicit conversion has one extra C++ parameter carrying the
+	    b->is_conversion_operator();
+	// A contextual conversion has one extra C++ parameter carrying the
 	// compiler-selected destination. A non-conversion with the same emitted
 	// name therefore has a different C++ arity. Between two conversions, the
 	// destination tag distinguishes results exactly when their emitted target
-	// carriers are distinct.
+	// carriers are distinct. This applies equally to Explicit: Pascal typecast
+	// syntax supplies its result context before selecting the declaration.
 	if (a_conversion != b_conversion)
 		return false;
 	if (a_conversion &&
@@ -226,17 +227,17 @@ CallableRegistration::Kind validate_callable_pair(
 	if (existing->ty
 		->same_overload_signature_as(
 		    incoming->ty)) {
-		// Checked, unchecked, and legacy implicit-conversion declarations all
+		// Explicit, checked, unchecked, and legacy conversion declarations all
 		// receive their destination from value context rather than from an
-		// ordinary source argument. Within whichever {$R}-selected frame
-		// family is being registered, exact result Type* identity is therefore
-		// part of the Pascal overload key. Ordinary routines and every other
-		// operator cannot overload by result.
+		// ordinary source argument. Within one canonical operator family,
+		// exact result Type* identity is therefore part of the Pascal overload
+		// key. Ordinary routines and every other operator cannot overload by
+		// result.
 		const bool distinct_conversion_results =
 		    existing
-			->is_implicit_conversion() &&
+			->is_conversion_operator() &&
 		    incoming
-			->is_implicit_conversion() &&
+			->is_conversion_operator() &&
 		    existing->ty->return_type !=
 			incoming->ty->return_type;
 		if (!distinct_conversion_results)

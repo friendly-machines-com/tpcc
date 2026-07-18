@@ -59,6 +59,10 @@ function Clash(Value: TClassRefB): Integer; overload; forward;
 operator :=(const Source: TConversionSource): TStringA; forward;
 operator implicit(const Source: TConversionSource): TStringB; forward;
 {$endif}
+{$ifdef TEST_EXPLICIT_CONVERSION}
+operator explicit(const Source: TConversionSource): TStringA; forward;
+operator explicit(const Source: TConversionSource): TStringB; forward;
+{$endif}
 
 begin
 end.

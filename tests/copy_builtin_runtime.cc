@@ -40,7 +40,7 @@ int main() {
 	auto assigned = ::u_system::o_implicit(
 	    ::u_system::tpcc_shortstring_from_c(
 	        "abc", strlen("abc")),
-	    ::u_system::m_implicit_target<
+	    ::u_system::m_conversion_target<
 	        ::u_system::t_ansistring>{});
 	if (!equals(assigned, "abc", 3))
 		return 8;

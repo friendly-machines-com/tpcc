@@ -196,10 +196,10 @@ std::string cxx_value_name(std::string pas_name) {
 	return "p_" + pas_name;
 }
 
-static Type* implicit_conversion_target(
+static Type* conversion_operator_target(
     const Callable* callable) {
 	return callable &&
-		       callable->is_implicit_conversion()
+		       callable->is_conversion_operator()
 		   ? callable->ty->return_type
 		   : nullptr;
 }
@@ -1740,7 +1740,7 @@ void Emitter::emit_formal_parameters(
 		if (!ty->formals.empty())
 			fprintf(active, ", ");
 		fprintf(active,
-			"::u_system::m_implicit_target<");
+			"::u_system::m_conversion_target<");
 		emit_type_ref(conversion_target);
 		fprintf(active, ">");
 	}
@@ -1781,7 +1781,7 @@ void Emitter::emit_callable_signature(Callable* c, Position pos, std::string own
 	    c->ty, callable_cxx_name(c), pos,
 	    owner_qualifier,
 	    callable_is_cxx_destructor(c),
-	    implicit_conversion_target(c));
+	    conversion_operator_target(c));
 }
 
 void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
@@ -1795,7 +1795,7 @@ void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 		    c->ty, "",
 		    Position::DeclarationFormalsOnly,
 		    "", false,
-		    implicit_conversion_target(c));
+		    conversion_operator_target(c));
 		if (c->ty->return_type != &unit_type()) {
 			fprintf(active, " -> ");
 			emit_type_ref(c->ty->return_type);
@@ -3620,11 +3620,11 @@ void Emitter::emit_expression(Node* expr) {
 				pc->callee->ty);
 		emit_call_arguments(call_ty, pc->args);
 		if (callable &&
-		    callable->is_implicit_conversion()) {
+		    callable->is_conversion_operator()) {
 			if (!pc->args.empty())
 				fprintf(active, ", ");
 			fprintf(active,
-				"::u_system::m_implicit_target<");
+				"::u_system::m_conversion_target<");
 			emit_type_ref(
 			    callable->ty->return_type);
 			fprintf(active, ">{}");

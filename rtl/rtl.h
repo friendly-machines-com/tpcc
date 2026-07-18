@@ -47,12 +47,16 @@
 namespace u_system {
 
 // C++ does not include a function result in overload identity. Pascal
-// implicit-conversion selection does include the context-requested
-// destination, so generated o_implicit declarations and calls carry this
-// otherwise-empty backend parameter. It is not a Pascal formal and the
-// conversion remains an ordinary value-returning operation.
+// conversion-operator selection does include the context-requested
+// destination, so generated Explicit, Implicit, and UncheckedImplicit
+// declarations and calls carry this otherwise-empty backend parameter. The
+// tag deliberately does not encode which conversion family was selected:
+// that identity is already in the emitted callable name, while this
+// parameter exists only to preserve result-type overloading. It is not a
+// Pascal formal and the conversion remains an ordinary value-returning
+// operation.
 template<typename Destination>
-struct m_implicit_target {};
+struct m_conversion_target {};
 
 // `Fail` is constructor control flow, not a Pascal exception. Pascal except
 // handlers catch only tpcc_pascal_exception, so this marker passes through
@@ -3156,7 +3160,7 @@ inline t_shortstring<Capacity> tpcc_shortstring_from_c(
 
 inline t_shortstring<255> o_implicit(
     t_char value,
-    m_implicit_target<t_shortstring<255>>) {
+    m_conversion_target<t_shortstring<255>>) {
 	t_shortstring<255> result{};
 	result.length = 1;
 	result.data[0] = value;
@@ -3454,13 +3458,13 @@ inline t_boolean o_greaterthanorequal(
 
 inline t_char o_implicit(
     t_char value,
-    m_implicit_target<t_char>) {
+    m_conversion_target<t_char>) {
 	return value;
 }
 template<std::size_t Capacity>
 inline t_ansistring o_implicit(
     t_shortstring<Capacity> value,
-    m_implicit_target<t_ansistring>) {
+    m_conversion_target<t_ansistring>) {
 	t_ansistring result{};
 	result.assign(value);
 	return result;
@@ -3623,7 +3627,7 @@ m_arithmetic_operand_bits(Operand value) {
 		return result; \
 	} \
 	inline DIV_RESULT o_divide(T a, T b) { return static_cast<DIV_RESULT>(a) / static_cast<DIV_RESULT>(b); } \
-	inline T o_implicit(T source, m_implicit_target<T>) { T target = source; return target; } \
+	inline T o_implicit(T source, m_conversion_target<T>) { T target = source; return target; } \
 	inline t_boolean o_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
 	inline t_boolean o_lessthanorequal(T a, T b) { return tpcc_bool_to_boolean(a <= b); } \
 	inline t_boolean o_equal(T a, T b) { return tpcc_bool_to_boolean(a == b); } \
@@ -3641,7 +3645,7 @@ m_arithmetic_operand_bits(Operand value) {
 	inline T o_unchecked_multiply(T a, T b) { return a * b; } \
 	inline T o_multiply(T a, T b) { return a * b; } \
 	inline T o_divide(T a, T b) { return a / b; } \
-	inline T o_implicit(T source, m_implicit_target<T>) { T target = source; return target; } \
+	inline T o_implicit(T source, m_conversion_target<T>) { T target = source; return target; } \
 	inline t_boolean o_lessthan(T a, T b) { return tpcc_bool_to_boolean(a < b); } \
 	inline t_boolean o_lessthanorequal(T a, T b) { return tpcc_bool_to_boolean(a <= b); } \
 	inline t_boolean o_equal(T a, T b) { return tpcc_bool_to_boolean(a == b); } \
@@ -3837,7 +3841,7 @@ inline t_boolean o_logicalxor(t_boolean a, t_boolean b) {
 
 inline t_boolean o_implicit(
     t_boolean b,
-    m_implicit_target<t_boolean>) {
+    m_conversion_target<t_boolean>) {
 	return b;
 }
 

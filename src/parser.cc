@@ -505,8 +505,8 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 		conflicting_type) &&
 	    incoming_type->return_type !=
 		conflicting_type->return_type) {
-		sst << "\n  Pascal distinguishes these implicit "
-		       "conversions by destination type: "
+		sst << "\n  Pascal distinguishes these conversion "
+		       "operators by destination type: "
 		    << conflicting_type_ref << " returns "
 		    << ctx.type_ref(
 			   conflicting_type->return_type)
@@ -2935,9 +2935,20 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			Node* value = parse_expression();
 			parse_closing_paren();
 
-			// Pascal typecast syntax is `Type(expr)`. This is an explicit cast,
-			// not a value call and not the implicit-conversion helper `cast()`, so
-			// it must be parsed from the type namespace and represented directly.
+			// Pascal typecast syntax is `Type(expr)`, so the requested result
+			// type is available before conversion lookup. Conversion operators
+			// may overload by that result even though ordinary routines cannot.
+			// Try the ordered direct operator contracts before the predefined
+			// cast: otherwise a user-defined Explicit conversion could never
+			// replace the built-in boundary in the same way Implicit can.
+			if (Node* converted =
+				match_explicit_conversion(
+				    value, target_ty))
+				return converted;
+
+			// No declared conversion contract applies. Preserve the existing
+			// predefined explicit casts, which include routine, pointer,
+			// ordinal, set, packed-overlay, and class-reference operations.
 			if (target_ty == pointer_type()) {
 				if (auto reference =
 					dynamic_cast<RoutineRef*>(value))
@@ -8352,10 +8363,10 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		parse_keyword("operator");
 		// Assumption: there are no method operators. Keep the source spelling
 		// for the catalog, but give conversion Callables reserved internal
-		// names. An ordinary function named Implicit or UncheckedImplicit is
-		// not a conversion and therefore must not receive the destination-tag
-		// ABI or result-type overload rules merely because its source name
-		// resembles an operator declaration.
+		// names. An ordinary function named Explicit, Implicit, or
+		// UncheckedImplicit is not a conversion and therefore must not receive
+		// the destination-tag ABI or result-type overload rules merely because
+		// its source name resembles an operator declaration.
 		operator_declaration_name = input_token;
 		// Known-but-unsupported lifecycle operators are resultless. Reject
 		// them at their declaration identity, before the currently supported
@@ -8388,6 +8399,9 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			 "uncheckedimplicit")
 			first_name =
 			    ":uncheckedimplicit";
+		else if (operator_declaration_name ==
+			 "explicit")
+			first_name = ":explicit";
 		else
 			first_name =
 			    operator_declaration_name;
@@ -9302,7 +9316,11 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			// therefore cannot form an A -> B -> C chain.
 			if (allow_user_conversion)
 				return match_user_conversion(
-				    actual, target, failure,
+				    actual, target,
+				    implicit_operator_identifier(
+					directive_state
+					    .switch_enabled('r')),
+				    failure,
 				    conversion_failure);
 			return std::nullopt;
 		}
@@ -9626,7 +9644,11 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			source, target)};
 	if (allow_user_conversion)
 		return match_user_conversion(
-		    actual, target, failure,
+		    actual, target,
+		    implicit_operator_identifier(
+			directive_state
+			    .switch_enabled('r')),
+		    failure,
 		    conversion_failure);
 	return std::nullopt;
 }
@@ -9675,20 +9697,19 @@ Parser::match_callable_arguments(
 std::optional<ArgumentMatch>
 Parser::match_user_conversion(
     Node* actual, Type* target,
+    std::string_view operator_identifier,
     MatchFailure* failure,
     UserConversionFailure*
 	conversion_failure) {
-	const bool range_checks =
-	    directive_state.switch_enabled('r');
-	// The caller's {$R} state chooses the conversion contract before ordinary
-	// frame lookup. Nothing below distinguishes a System declaration, a
-	// user declaration, or a compiler-provided implementation: after this
-	// identity choice, exact-destination filtering and the existing one-edge
-	// source matcher are shared by all conversion declarations.
+	// The source construct chooses one canonical conversion identity before
+	// ordinary frame lookup: implicit contexts pass their {$R}-selected
+	// family, while explicit syntax invokes this same function once per
+	// ordered fallback family. Nothing below distinguishes System, user, or
+	// compiler-provided declarations. Keeping that boundary here prevents a
+	// second conversion resolver from giving built-in and source-defined
+	// operations different exact-result or single-edge behavior.
 	Node* family = maybe_resolve_value(
-	    std::string(
-		implicit_operator_identifier(
-		    range_checks)));
+	    std::string(operator_identifier));
 	if (auto member =
 		dynamic_cast<MemberAccess*>(family)) {
 		// Unit qualification opens a standalone operator environment; an
@@ -9852,6 +9873,58 @@ Parser::match_user_conversion(
 	     best_source->rank.distance},
 	    call,
 	    {}};
+}
+
+Node* Parser::match_explicit_conversion(
+    Node* actual, Type* target) {
+	struct Family {
+		std::string_view diagnostic_name;
+		std::string_view identifier;
+	};
+	const std::array<Family, 3> families{{
+	    {"explicit", explicit_operator_identifier()},
+	    {"implicit", implicit_operator_identifier(true)},
+	    {"uncheckedimplicit",
+	     implicit_operator_identifier(false)},
+	}};
+
+	// An explicit cast admits every direct conversion which an implicit
+	// context could use, plus conversions declared only as Explicit. Search
+	// whole operator families in this order instead of merging candidates:
+	// Explicit is an override of the fallback contracts, and checked
+	// Implicit is the deterministic safer choice when both implicit contracts
+	// exist. UncheckedImplicit remains available so T(X) is a superset under
+	// either {$R} state, but the cast itself never consults {$R}. Every family
+	// enters match_user_conversion(), whose source match forbids A -> B -> T
+	// chaining; changing only the family identity must not create another
+	// conversion algebra.
+	for (const Family& family : families) {
+		MatchFailure failure =
+		    MatchFailure::Incompatible;
+		UserConversionFailure
+		    conversion_failure;
+		auto match = match_user_conversion(
+		    actual, target, family.identifier,
+		    &failure, &conversion_failure);
+		if (match)
+			return match->value;
+		if (failure !=
+		    MatchFailure::AmbiguousConversion)
+			continue;
+
+		std::vector<Node*> args{actual};
+		raise_overload_resolution_error(
+		    current_location(),
+		    std::string(
+			family.diagnostic_name),
+		    nullptr, args, target,
+		    conversion_failure.candidates,
+		    conversion_failure.viable,
+		    conversion_failure.non_dominated,
+		    true,
+		    "ambiguous explicit conversion");
+	}
+	return nullptr;
 }
 
 static int compare_numeric_profiles(

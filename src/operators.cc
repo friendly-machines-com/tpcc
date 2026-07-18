@@ -291,3 +291,11 @@ std::string_view implicit_operator_identifier(
 	assert(result);
 	return *result;
 }
+
+std::string_view explicit_operator_identifier() {
+	auto result = operator_invocation_identifier(
+	    OperatorInvocation::ExplicitConversion,
+	    ":explicit", 1, true, false);
+	assert(result);
+	return *result;
+}

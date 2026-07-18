@@ -239,8 +239,9 @@ Callable::Callable(std::string cxx_name,
       body_frame(nullptr) {
 }
 
-bool Callable::is_implicit_conversion() const {
-	return pas_name == ":implicit" ||
+bool Callable::is_conversion_operator() const {
+	return pas_name == ":explicit" ||
+	       pas_name == ":implicit" ||
 	       pas_name == ":uncheckedimplicit" ||
 	       pas_name == ":=";
 }

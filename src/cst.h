@@ -795,11 +795,11 @@ public:
 	         std::string pas_name,
 	         RoutineType* ty,
 	         bool has_overload_directive);
-	/** True for checked `operator Implicit`, unchecked
-	 * `operator UncheckedImplicit`, and legacy FPC `operator :=`. Operator
-	 * parsing gives these declarations reserved internal pas_name values so
-	 * an ordinary routine named Implicit remains an ordinary routine. */
-	bool is_implicit_conversion() const;
+	/** True for contextual conversion operators: `Explicit`, checked and
+	 * unchecked `Implicit`, and legacy FPC `:=`. Their requested destination
+	 * participates in Pascal declaration identity and therefore also needs a
+	 * hidden destination tag in the C++ signature. */
+	bool is_conversion_operator() const;
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
