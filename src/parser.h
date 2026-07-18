@@ -13,6 +13,7 @@
 #include "types.h"
 
 class Node;
+class Mutation;
 class Symbol;
 class Type;
 class RecordType;
@@ -439,6 +440,9 @@ protected:
 	void parse_block();
 	void parse_semicolon();
 	void maybe_parse_statement();
+	Mutation* parse_mutation_statement(
+	    std::string spelling,
+	    SourceLocation call_location);
 	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
@@ -520,6 +524,12 @@ protected:
 	 *  carrier is itself a stable assignable place.  Deeper projections need
 	 *  the future copy-in/copy-back Place machinery. */
 	bool is_supported_packed_assignment(Node* n);
+	/** Enforce the complete place boundary shared by `:=` and read/modify/write
+	 *  mutation before either construct builds its store. */
+	void validate_writable_destination(
+	    Node* target,
+	    SourceLocation error_location,
+	    std::string not_assignable_message);
 	Node* parse_expression_after_identifier(std::string id);
 	Node* parse_comparison();
 	Node* parse_comparison_tail(Node* result);

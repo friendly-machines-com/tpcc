@@ -1961,9 +1961,9 @@ void Parser::maybe_parse_statement() {
 		// lvalue context before value lookup: Pascal function-name assignment
 		// writes the hidden result slot, while expression use stays a call.
 		Node* lhs = nullptr;
+		SourceLocation designator_location =
+		    current_location();
 		if (!input_token.empty() && keywords.find(input_token) == keywords.end()) {
-			SourceLocation designator_location =
-			    current_location();
 			std::string first = parse_identifier();
 			if (maybe_parse_colon()) {
 				record_label_definition(
@@ -1971,6 +1971,24 @@ void Parser::maybe_parse_statement() {
 				if (emitter)
 					emitter->emit_label(cxx_label_name(first));
 				parse_statement();
+				return;
+			}
+			if (input_token == "(" &&
+			    operator_invocation_identifier(
+				OperatorInvocation::
+				    MutatingUnary,
+				first, 1,
+				directive_state
+				    .switch_enabled('q'),
+				false)) {
+				Mutation* mutation =
+				    parse_mutation_statement(
+					first,
+					designator_location);
+				if (emitter)
+					emitter
+					    ->emit_statement(
+						mutation);
 				return;
 			}
 			if (input_token == ":=")
@@ -1984,28 +2002,9 @@ void Parser::maybe_parse_statement() {
 		// or a call (designator, possibly with auto-call). Parse the LHS as
 		// a raw designator so we don't auto-call in the assignment case.
 		if (maybe_parse_colon_equals()) {
-			if (!is_assignable(lhs)) {
-				raise_parse_error("LHS of ':=' is not assignable");
-			}
-			// A packed overlay is writable only when its source is a real
-			// assignable place. In particular, never accept `TPacked(F()).X`
-			// and then silently mutate a copied C++ temporary.
-			Node* overlay_source = nullptr;
-			MemberAccess* overlay_member = dynamic_cast<MemberAccess*>(lhs);
-			if (auto ix = dynamic_cast<Index*>(lhs))
-				overlay_member = dynamic_cast<MemberAccess*>(ix->a);
-			if (auto property = dynamic_cast<PropertyAccess*>(lhs))
-				overlay_member = dynamic_cast<MemberAccess*>(property->receiver);
-			if (overlay_member) {
-				if (auto overlay = dynamic_cast<Cast*>(overlay_member->a))
-					if (dynamic_cast<PackedRecordType*>(overlay->ty))
-						overlay_source = overlay->a;
-			}
-			if (overlay_source && !is_assignable(overlay_source))
-				raise_parse_error("writable packed-record overlay requires an assignable source");
-			if (contains_packed_projection(lhs) && !is_supported_packed_assignment(lhs)) {
-				raise_parse_error("write through a nested or indexed packed-record field is not implemented");
-			}
+			validate_writable_destination(
+			    lhs, designator_location,
+			    "LHS of ':=' is not assignable");
 			Node* rhs = parse_expression();
 			auto assign = mk_assign(lhs, rhs);
 			if (emitter)
@@ -3748,6 +3747,320 @@ bool Parser::is_supported_packed_assignment(Node* n) {
 		       !contains_packed_projection(overlay->a);
 	}
 	return false;
+}
+
+void Parser::validate_writable_destination(
+    Node* target,
+    SourceLocation error_location,
+    std::string not_assignable_message) {
+	if (!is_assignable(target))
+		emit_parse_error_at(
+		    error_location,
+		    std::move(
+			not_assignable_message));
+
+	// A packed overlay is writable only when its source is a real assignable
+	// place. In particular, never accept `TPacked(F()).X` and then silently
+	// mutate a copied C++ temporary. Both plain assignment and mutation must
+	// enter the same synchronous copyback paths admitted here.
+	Node* overlay_source = nullptr;
+	MemberAccess* overlay_member =
+	    dynamic_cast<MemberAccess*>(target);
+	if (auto index =
+		dynamic_cast<Index*>(target))
+		overlay_member =
+		    dynamic_cast<MemberAccess*>(
+			index->a);
+	if (auto property =
+		dynamic_cast<PropertyAccess*>(
+		    target))
+		overlay_member =
+		    dynamic_cast<MemberAccess*>(
+			property->receiver);
+	if (overlay_member)
+		if (auto overlay =
+			dynamic_cast<Cast*>(
+			    overlay_member->a))
+			if (dynamic_cast<PackedRecordType*>(
+				overlay->ty))
+				overlay_source =
+				    overlay->a;
+	if (overlay_source &&
+	    !is_assignable(overlay_source))
+		emit_parse_error_at(
+		    error_location,
+		    "writable packed-record overlay requires an assignable source");
+	if (contains_packed_projection(target) &&
+	    !is_supported_packed_assignment(
+		target))
+		emit_parse_error_at(
+		    error_location,
+		    "write through a nested or indexed packed-record field is not implemented");
+}
+
+Mutation* Parser::parse_mutation_statement(
+    std::string spelling,
+    SourceLocation call_location) {
+	const bool increment = spelling == "inc";
+	assert(increment || spelling == "dec");
+	parse_opening_paren();
+	if (input_token == ")")
+		emit_parse_error_at(
+		    call_location,
+		    spelling +
+			" requires a destination");
+	Node* source_target = parse_expression();
+	Node* amount = nullptr;
+	if (maybe_parse_comma())
+		amount = parse_expression();
+	parse_closing_paren();
+
+	validate_writable_destination(
+	    source_target, call_location,
+	    spelling +
+		" destination is not assignable");
+
+	std::vector<Mutation::Binding> bindings;
+	auto bind_once =
+	    [&bindings](Node* initializer) {
+		    auto alias =
+			new StorageSlot(
+			    "tpcc_mutation_place_" +
+				std::to_string(
+				    bindings.size()),
+			    initializer
+				? initializer->ty
+				: nullptr);
+		    bindings.push_back(
+			{alias, initializer});
+		    return alias;
+	    };
+
+	// Rebuild the destination from stable aliases rather than snapshotting the
+	// destination value itself. Properties and packed fields are get/set
+	// projections, not C++ lvalues; aliasing only their receiver/index/source
+	// lets the existing read and assignment paths run once each while every
+	// source designator component is still evaluated exactly once.
+	std::function<Node*(Node*)> stabilize =
+	    [&](Node* target) -> Node* {
+		    if (dynamic_cast<StorageSlot*>(
+			    target) ||
+			dynamic_cast<UnitRef*>(target))
+			    return target;
+		    if (auto dereference =
+			    dynamic_cast<Dereference*>(
+				target)) {
+			    auto result =
+				new Dereference(
+				    bind_once(
+					dereference->a));
+			    result->ty = dereference->ty;
+			    return result;
+		    }
+		    if (auto index =
+			    dynamic_cast<Index*>(
+				target)) {
+			    Node* base =
+				contains_packed_projection(
+				    index->a)
+				    ? stabilize(index->a)
+				    : static_cast<Node*>(
+					  bind_once(
+					      index->a));
+			    auto result =
+				new Index(
+				    base,
+				    bind_once(index->b));
+			    result->ty = index->ty;
+			    return result;
+		    }
+		    if (auto property =
+			    dynamic_cast<PropertyAccess*>(
+				target)) {
+			    Node* receiver =
+				contains_packed_projection(
+				    property->receiver)
+				    ? stabilize(
+					  property
+					      ->receiver)
+				    : static_cast<Node*>(
+					  bind_once(
+					      property
+						  ->receiver));
+			    std::vector<Node*> indexes;
+			    indexes.reserve(
+				property->indexes
+				    .size());
+			    for (Node* index :
+				 property->indexes)
+				    indexes.push_back(
+					bind_once(index));
+			    return new PropertyAccess(
+				receiver,
+				property->property,
+				std::move(indexes));
+		    }
+		    if (auto member =
+			    dynamic_cast<MemberAccess*>(
+				target)) {
+			    if (dynamic_cast<UnitRef*>(
+				    member->a))
+				    return member;
+			    Node* receiver = nullptr;
+			    auto method_view =
+				dynamic_cast<Cast*>(
+				    member->a);
+			    auto method_field =
+				dynamic_cast<StorageSlot*>(
+				    member->b);
+			    if (method_view &&
+				method_view->ty ==
+				    tmethod_type() &&
+				(method_field ==
+				     tmethod_code_field() ||
+				 method_field ==
+				     tmethod_data_field()))
+				    // TMethod fields are writable views of a method-routine
+				    // value. Preserve that Cast shape so the existing
+				    // assignment emitter stores the selected word back into
+				    // the original method value instead of mutating a copied
+				    // public TMethod snapshot.
+				    receiver =
+					new Cast(
+					    bind_once(
+						method_view
+						    ->a),
+					    method_view->ty);
+			    else if (dynamic_cast<
+				    PackedRecordType*>(
+				    member->a->ty)) {
+				    if (auto overlay =
+					    dynamic_cast<Cast*>(
+						member->a))
+					    receiver =
+						new Cast(
+						    bind_once(
+							overlay
+							    ->a),
+						    overlay->ty);
+				    else
+					    receiver =
+						bind_once(
+						    member->a);
+			    } else
+				    receiver =
+					bind_once(
+					    member->a);
+			    auto result =
+				new MemberAccess(
+				    receiver, member->b);
+			    result->ty = member->ty;
+			    return result;
+		    }
+		    if (auto view =
+			    dynamic_cast<Cast*>(
+				target))
+			    return new Cast(
+				bind_once(view->a),
+				view->ty);
+		    emit_parse_error_at(
+			call_location,
+			"internal error: assignable mutation destination has no stabilization rule");
+	    };
+
+	Node* target = stabilize(source_target);
+	auto current =
+	    new StorageSlot(
+		"tpcc_mutation_value",
+		source_target->ty);
+	Node* operation = nullptr;
+	if (amount) {
+		// Delphi exposes only a unary Inc/Dec custom operator. The distance
+		// form is therefore the ordinary Add/Subtract operation followed by
+		// the same store; it must not silently call unary Inc/Dec repeatedly.
+		operation = mk_arith(
+		    increment ? "+" : "-",
+		    current, amount);
+	} else {
+		auto catalog_identifier =
+		    operator_invocation_identifier(
+			OperatorInvocation::
+			    MutatingUnary,
+			spelling, 1,
+			directive_state
+			    .switch_enabled('q'),
+			false);
+		assert(catalog_identifier);
+		const std::string identifier(
+		    *catalog_identifier);
+		Node* family =
+		    resolve_value(identifier);
+		std::vector<Node*> arguments{
+		    current};
+		FinalizedCall finalized =
+		    finalize_call(
+			family, arguments,
+			spelling,
+			call_location);
+		operation = make_call(
+		    finalized,
+		    std::move(arguments));
+	}
+
+	// The root fallback's omitted result is the same exact T as its first
+	// argument. This is the one relation its Pascal declaration could not
+	// express; after ordinary overload selection has chosen that callable,
+	// restore the result Type* before applying ordinary assignment conversion.
+	if (operation &&
+	    operation->ty == unknown_type()) {
+		auto call =
+		    dynamic_cast<ProcCall*>(
+			operation);
+		auto callable =
+		    call
+			? dynamic_cast<Callable*>(
+			      call->callee)
+			: nullptr;
+		const BuiltinDesc* descriptor =
+		    callable
+			? callable->builtin_desc
+			: nullptr;
+		if (!descriptor ||
+		    (descriptor->generic_kind !=
+			 BuiltinGenericKind::
+			     UnaryOrdinalOrPointerStep &&
+		     descriptor->generic_kind !=
+			 BuiltinGenericKind::
+			     EnumOrPointerDistanceStep))
+			emit_parse_error_at(
+			    call_location,
+			    "internal error: mutation operator has an unknown result type");
+		operation->ty =
+		    source_target->ty;
+	}
+	Node* stored =
+	    cast(operation, source_target->ty);
+	if (directive_state.switch_enabled('r') &&
+	    operation->ty == source_target->ty &&
+	    (dynamic_cast<SubrangeType*>(
+		 source_target->ty) ||
+	     dynamic_cast<EnumType*>(
+		 source_target->ty)) &&
+	    !dynamic_cast<RangeCheckedCast*>(
+		stored))
+		// The operator produces a value before the mutation stores it. Even
+		// an exact enum/subrange carrier can contain a value outside the
+		// destination's declared Pascal bounds (notably after an unchecked
+		// operation), so caller {$R+} checks this assignment boundary.
+		stored = new RangeCheckedCast(
+		    operation,
+		    source_target->ty);
+	auto assignment =
+	    new Assign(target, stored);
+	return new Mutation(
+	    source_target,
+	    std::move(bindings),
+	    target, current, assignment);
 }
 
 static std::string operator_expression_identifier(
@@ -8358,6 +8671,53 @@ static bool is_ordinal_intrinsic_argument(Type* ty) {
 	return intrinsic_ordinal_bounds(ty, &bounds);
 }
 
+// Omitted-type candidate matching and final-call validation must enforce one
+// identical operand domain. Keeping that contract here prevents a root
+// fallback from being ranked as viable and then interpreted under a different
+// enum/pointer rule after selection.
+static bool is_generic_ordinal_operation(
+    BuiltinGenericKind kind) {
+	return kind ==
+		   BuiltinGenericKind::
+		       OrdinalValue ||
+	       kind ==
+		   BuiltinGenericKind::
+		       UnaryOrdinalOrPointerStep ||
+	       kind ==
+		   BuiltinGenericKind::
+		       EnumOrPointerDistanceStep;
+}
+
+static bool generic_ordinal_operation_accepts(
+    BuiltinGenericKind kind, Type* operand) {
+	if (kind ==
+	    BuiltinGenericKind::OrdinalValue)
+		return is_ordinal_intrinsic_argument(
+		    operand);
+	if (kind ==
+	    BuiltinGenericKind::
+		UnaryOrdinalOrPointerStep)
+		return is_ordinal_intrinsic_argument(
+			   operand) ||
+		       dynamic_cast<PointerType*>(
+			   operand);
+	if (kind ==
+	    BuiltinGenericKind::
+		EnumOrPointerDistanceStep) {
+		if (dynamic_cast<PointerType*>(
+			operand))
+			return true;
+		while (auto subrange =
+			   dynamic_cast<SubrangeType*>(
+			       operand))
+			operand =
+			    subrange->base_type;
+		return dynamic_cast<EnumType*>(
+			   operand) != nullptr;
+	}
+	return false;
+}
+
 static bool integer_type_contains_literal(
     Type* target, const Integer* literal) {
 	if (auto range =
@@ -8833,6 +9193,37 @@ std::optional<ArgumentMatch> Parser::match_argument(
 	if (target == unknown_type()) {
 		if (builtin &&
 		    builtin->generic_kind ==
+			BuiltinGenericKind::
+			    EnumOrPointerDistanceStep &&
+		    parameter_index == 1) {
+			// The fallback relation is (T, Integer) -> T, but leaving only
+			// its first formal generic would let a concrete candidate win
+			// one argument while the fallback wins the other under the
+			// existing Pareto matcher. Validate and convert the distance as
+			// Integer here, then deliberately retain Generic rank for this
+			// omitted formal. Thus every complete concrete declaration still
+			// dominates the fallback without changing overload algebra.
+			Parameter distance(
+			    "amount", "p_amount",
+			    integer_type(),
+			    ParamMode::Value, nullptr);
+			auto converted =
+			    match_argument(
+				distance, actual,
+				nullptr, 0,
+				allow_user_conversion,
+				failure,
+				conversion_failure);
+			if (!converted)
+				return std::nullopt;
+			converted->rank = {
+			    MatchRank::Tier::Generic,
+			    0};
+			converted->numeric_profile = {};
+			return converted;
+		}
+		if (builtin &&
+		    builtin->generic_kind ==
 			BuiltinGenericKind::SequenceLength &&
 		    parameter_index == 0 &&
 		    (!source ||
@@ -8845,12 +9236,15 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    (!source ||
 		     !source->sequence_is_resizable()))
 			return std::nullopt;
-		if (builtin &&
-		    (builtin->generic_kind ==
-			 BuiltinGenericKind::OrdinalValue ||
-		     builtin->generic_kind ==
-			 BuiltinGenericKind::OrdinalMutation) &&
-		    !is_ordinal_intrinsic_argument(source)) {
+		const bool constrained_ordinal =
+		    builtin &&
+		    is_generic_ordinal_operation(
+			builtin->generic_kind) &&
+		    parameter_index == 0;
+		if (constrained_ordinal &&
+		    !generic_ordinal_operation_accepts(
+			builtin->generic_kind,
+			source)) {
 			if (failure)
 				*failure =
 				    MatchFailure::
@@ -9497,6 +9891,30 @@ static int compare_numeric_profiles(
 static bool dominates(
     const CallableMatch& a,
     const CallableMatch& b) {
+	const auto has_generic_formal =
+	    [](const CallableMatch& match) {
+		    return std::ranges::any_of(
+			match.ranks,
+			[](const MatchRank& rank) {
+				return rank.tier ==
+				       MatchRank::Tier::
+					   Generic;
+			});
+	    };
+	const bool a_generic =
+	    has_generic_formal(a);
+	const bool b_generic =
+	    has_generic_formal(b);
+	if (a_generic != b_generic)
+		// An omitted-type declaration is the compiler's representation of a
+		// relation Pascal source cannot quantify. Its established Generic
+		// tier is a fallback contract, not one more numeric conversion
+		// quality: every complete viable declaration must win before numeric
+		// profiles compare the remaining ordinary candidates. Otherwise a
+		// neutral profile on the omitted formal can steal the operation from
+		// a typed declaration which performs a legitimate promotion.
+		return !a_generic;
+
 	// Compare the multiset of numeric edge qualities worst-first. This keeps
 	// one especially bad conversion from being hidden by several exact
 	// arguments, while allowing exact-vs-promotion to settle mixed integer
@@ -10088,12 +10506,23 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		args = std::move(converted);
 	}
 	if (builtin &&
-	    (builtin->generic_kind == BuiltinGenericKind::OrdinalValue ||
-	     builtin->generic_kind == BuiltinGenericKind::OrdinalMutation)) {
-		if (args.empty() || !is_ordinal_intrinsic_argument(args[0] ? args[0]->ty : nullptr)) {
-			emit_parse_error_at(error_location,
-					    name_for_error + " requires an ordinal argument");
-		}
+	    is_generic_ordinal_operation(
+		builtin->generic_kind)) {
+		Type* operand_type =
+		    args.empty() || !args[0]
+			? nullptr
+			: args[0]->ty;
+		if (!generic_ordinal_operation_accepts(
+			builtin->generic_kind,
+			operand_type))
+			emit_parse_error_at(
+			    error_location,
+			    name_for_error +
+				(builtin->generic_kind !=
+					 BuiltinGenericKind::
+					     OrdinalValue
+				     ? " requires an ordinal or pointer argument"
+				     : " requires an ordinal argument"));
 	}
 	if (builtin &&
 	    builtin->generic_kind == BuiltinGenericKind::SetMutation) {

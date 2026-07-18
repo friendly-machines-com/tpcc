@@ -9,6 +9,7 @@ class Frame;
 class RoutineType;
 class Callable;
 class Method;
+class StorageSlot;
 class Unit;
 struct ClassType;
 class ErrorLetContext;
@@ -28,7 +29,7 @@ public:
 	// Result type of the value this node produces. Filled by the Parser at
 	// construction time; readers (emit, checker, evaluator) treat it as the
 	// single source of truth. Null on statement nodes (Block, Assign,
-	// Return) -- those don't have a value type.
+	// Mutation, Return) -- those don't have a value type.
 	Type* ty = nullptr;
 	// Non-null only for declarations owned directly by a Pascal unit.
 	// Aggregate members and routine locals are qualified through their
@@ -266,6 +267,42 @@ class Assign: public BinaryOperation {
 public:
 	Assign(Node* a, Node* b);
 	const char* diagnostic_kind() const override;
+};
+
+/** One read/operate/write mutation such as Inc(X).
+ *
+ * `bindings` stabilize the runtime parts of the destination designator
+ * (receiver, pointer, indexes, or packed-overlay source) before either its
+ * read or write occurs. `target` is the equivalent designator rebuilt from
+ * those aliases, `current` names its one snapshotted value, and `assignment`
+ * stores the already-selected operator result through the ordinary Pascal
+ * assignment path. Keeping the store as an Assign is important: properties,
+ * writable casts, packed copyback, and {$R} conversion remain one mechanism
+ * rather than acquiring mutation-only variants. */
+class Mutation: public Node {
+public:
+	struct Binding {
+		StorageSlot* alias;
+		Node* initializer;
+	};
+
+	Node* source_target;
+	std::vector<Binding> bindings;
+	Node* target;
+	StorageSlot* current;
+	Assign* assignment;
+
+	Mutation(Node* source_target,
+	         std::vector<Binding> bindings,
+	         Node* target,
+	         StorageSlot* current,
+	         Assign* assignment);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
 };
 
 enum ShortCircuitOperationKind {

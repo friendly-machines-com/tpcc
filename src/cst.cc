@@ -71,6 +71,17 @@ WriteCall::WriteCall(
     bool newline, Node* file, std::vector<Item> items)
     : newline(newline), file(file), items(std::move(items)) {}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
+Mutation::Mutation(
+    Node* source_target,
+    std::vector<Binding> bindings,
+    Node* target,
+    StorageSlot* current,
+    Assign* assignment)
+    : source_target(source_target),
+      bindings(std::move(bindings)),
+      target(target),
+      current(current),
+      assignment(assignment) {}
 ShortCircuitOperation::ShortCircuitOperation(enum ShortCircuitOperationKind kind, Node* a, Node* b) : BinaryOperation(a, b) {
 	this->kind = kind;
 }
@@ -540,6 +551,44 @@ void InheritedCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 const char* Dereference::diagnostic_kind() const { return "deref"; }
 void Dereference::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "deref " << ctx->known_value_ref(a) << " : " << ctx->known_type_ref(ty); }
 const char* Assign::diagnostic_kind() const { return "assign"; }
+const char* Mutation::diagnostic_kind() const {
+	return "mutation";
+}
+void Mutation::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(source_target);
+	for (const Binding& binding : bindings) {
+		ctx->add_value_edge(binding.alias);
+		ctx->add_value_edge(binding.initializer);
+	}
+	ctx->add_value_edge(target);
+	ctx->add_value_edge(current);
+	ctx->add_value_edge(assignment);
+}
+void Mutation::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "mutate "
+	    << ctx->known_value_ref(source_target);
+	for (const Binding& binding : bindings) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "bind "
+		    << ctx->known_value_ref(binding.alias)
+		    << " = "
+		    << ctx->known_value_ref(
+			   binding.initializer);
+	}
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "current: "
+	    << ctx->known_value_ref(current);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "store: "
+	    << ctx->known_value_ref(assignment);
+}
 const char* ShortCircuitOperation::diagnostic_kind() const { return kind == AND ? "and" : "or"; }
 void ShortCircuitOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { BinaryOperation::print_diagnostic_definition(ctx, out, 0); }
 const char* MemberAccess::diagnostic_kind() const { return "member_access"; }

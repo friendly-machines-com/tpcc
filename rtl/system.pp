@@ -96,6 +96,7 @@ operator UncheckedAdd(a, b: Integer): Integer; external name '::u_system::o_unch
 operator UncheckedAdd(a, b: QWord): QWord; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: Int64): Int64; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: Extended): Extended; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a: Char; b: Integer): Char; external name '::u_system::o_unchecked_add';
 operator Add(a, b: Byte): Integer; external name '::u_system::o_add';
 operator Add(a, b: ShortInt): Integer; external name '::u_system::o_add';
 operator Add(a, b: Word): Integer; external name '::u_system::o_add';
@@ -105,6 +106,7 @@ operator Add(a, b: Integer): Integer; external name '::u_system::o_add';
 operator Add(a, b: QWord): QWord; external name '::u_system::o_add';
 operator Add(a, b: Int64): Int64; external name '::u_system::o_add';
 operator Add(a, b: Extended): Extended; external name '::u_system::o_add';
+operator Add(a: Char; b: Integer): Char; external name '::u_system::o_add';
 
 operator UncheckedNegative(a: Cardinal): Cardinal; external name '::u_system::o_unchecked_negative';
 operator UncheckedNegative(a: Integer): Integer; external name '::u_system::o_unchecked_negative';
@@ -130,6 +132,7 @@ operator UncheckedSubtract(a, b: Integer): Integer; external name '::u_system::o
 operator UncheckedSubtract(a, b: QWord): QWord; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: Int64): Int64; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: Extended): Extended; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a: Char; b: Integer): Char; external name '::u_system::o_unchecked_subtract';
 operator Subtract(a, b: Byte): Integer; external name '::u_system::o_subtract';
 operator Subtract(a, b: ShortInt): Integer; external name '::u_system::o_subtract';
 operator Subtract(a, b: Word): Integer; external name '::u_system::o_subtract';
@@ -139,6 +142,7 @@ operator Subtract(a, b: Integer): Integer; external name '::u_system::o_subtract
 operator Subtract(a, b: QWord): QWord; external name '::u_system::o_subtract';
 operator Subtract(a, b: Int64): Int64; external name '::u_system::o_subtract';
 operator Subtract(a, b: Extended): Extended; external name '::u_system::o_subtract';
+operator Subtract(a: Char; b: Integer): Char; external name '::u_system::o_subtract';
 
 operator UncheckedMultiply(a, b: Byte): Integer; external name '::u_system::o_unchecked_multiply';
 operator UncheckedMultiply(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_multiply';
@@ -332,8 +336,6 @@ function high(const x): Integer; external name '::u_system::p_high'; // generic 
 // whose length result is the signed native-size type.
 function length(const x: ShortString): Byte; overload; external name '::u_system::p_length';
 function length(const x): SizeInt; overload; external name '::u_system::p_length'; // generic intrinsic
-procedure inc(var x; n: Integer = 1); external name '::u_system::p_inc'; // generic intrinsic
-procedure dec(var x; n: Integer = 1); external name '::u_system::p_dec'; // generic intrinsic
 // Omitted types express the part Pascal can declare; SetMutation metadata
 // checks the missing relationship `values: set of T; item: T`.
 procedure include(var values; const item); external name '::u_system::p_include'; // generic set intrinsic

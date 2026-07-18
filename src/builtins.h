@@ -25,7 +25,16 @@ using BuiltinConstFold = ConstEvalResult (*)(ConstEvalContext& ctx, Type* result
 enum class BuiltinGenericKind {
 	None,
 	OrdinalValue,
-	OrdinalMutation,
+	// Unary Inc/Dec preserve the exact operand type for every ordinal and
+	// pointer type. Pascal declarations cannot quantify that T -> T
+	// relationship, so root-frame callables use an omitted formal.
+	UnaryOrdinalOrPointerStep,
+	// Inc/Dec distance syntax uses Add/Subtract. Numeric and Char cases have
+	// ordinary System declarations; only enum and pointer families still need
+	// an otherwise-unspellable (T, Integer) -> T root fallback. Restricting
+	// this family also prevents a generic candidate from participating in
+	// ordinary numeric arithmetic.
+	EnumOrPointerDistanceStep,
 	// tpcc does not yet support generic Pascal routine declarations, so the
 	// ordinary system.pp declaration cannot express the relationship
 	//
@@ -156,7 +165,8 @@ public:
 };
 
 // The single, program-wide root frame. Holds intrinsic types (Integer,
-// Boolean, ...) and builtin procedures/functions (Ord, Inc, Dec, ...).
+// Boolean, ...) and compiler-provided declarations which Pascal source cannot
+// express generically.
 // Function-local static: initialized on first call, no cross-TU static-init
 // order dependency. Every Parser pushes this frame at the bottom of its
 // scope stack, so intrinsic Type* identities are shared across parsers.

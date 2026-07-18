@@ -1051,6 +1051,36 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(active, ");\n");
 		return;
 	}
+	if (auto mutation =
+		dynamic_cast<Mutation*>(stmt)) {
+		// The aliases make every runtime component of the Pascal place stable
+		// before its getter/read runs. The final store remains an ordinary
+		// Assign node on purpose: its existing property setters, packed
+		// copyback, writable-cast storage, and range-checked conversion are
+		// the language's assignment semantics and must not be duplicated by
+		// Inc/Dec.
+		fprintf(active, "\t[&]() {\n");
+		for (const Mutation::Binding& binding :
+		     mutation->bindings) {
+			fprintf(active, "\t\tauto&& %s = ",
+				binding.alias->cxx_name.c_str());
+			emit_expression(
+			    binding.initializer);
+			fprintf(active, ";\n");
+		}
+		fprintf(active,
+			"\t\tauto %s = ",
+			mutation->current
+			    ->cxx_name.c_str());
+		emit_expression(
+		    mutation->target);
+		fprintf(active, ";\n");
+		fprintf(active, "\t");
+		emit_statement(
+		    mutation->assignment);
+		fprintf(active, "\t}();\n");
+		return;
+	}
 	if (auto a = dynamic_cast<Assign*>(stmt)) {
 		if (auto member =
 			dynamic_cast<MemberAccess*>(a->a)) {
@@ -2832,8 +2862,13 @@ void Emitter::emit_call_arguments(
 		if (i > 0)
 			fprintf(active, ", ");
 		Node* arg = args[i];
+		// An omitted value formal is a C++ template-deduction position, not a
+		// real tpcc_unknown_type parameter. Pinning a literal to that
+		// placeholder would emit an invalid cast to void* and let the backend
+		// representation contradict the generic Pascal call already selected.
 		if (call_ty && i < call_ty->formals.size() &&
 		    call_ty->formals[i].mode == ParamMode::Value &&
+		    call_ty->formals[i].ty != unknown_type() &&
 		    dynamic_cast<Integer*>(arg)) {
 			Type* formal_ty =
 			    call_ty->formals[i].ty;

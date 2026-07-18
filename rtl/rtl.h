@@ -3871,10 +3871,12 @@ inline t_boolean m_equal(
 }
 
 template<typename T>
-inline T tpcc_ordinal_step(T value, t_integer amount, bool subtract) {
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T m_unchecked_ordinal_step(
+    T value, t_integer amount, bool subtract) {
 	using traits = tpcc_ordinal_storage<T>;
 	using raw_type = typename traits::type;
-	static_assert(std::is_integral_v<raw_type>, "Inc/Dec require an ordinal carrier");
 	using unsigned_type = std::make_unsigned_t<raw_type>;
 	unsigned_type bits =
 	    static_cast<unsigned_type>(
@@ -3889,22 +3891,233 @@ inline T tpcc_ordinal_step(T value, t_integer amount, bool subtract) {
 	return traits::make(raw);
 }
 
-template<typename T> inline void p_inc(T& x, t_integer n = 1) {
-	x = tpcc_ordinal_step(x, n, false);
-}
-
-template<typename T> inline void p_dec(T& x, t_integer n = 1) {
-	x = tpcc_ordinal_step(x, n, true);
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T m_checked_ordinal_step(
+    T value, t_integer amount, bool subtract) {
+	using traits = tpcc_ordinal_storage<T>;
+	using raw_type = typename traits::type;
+	raw_type result;
+	const bool overflow =
+	    subtract
+		? __builtin_sub_overflow(
+		      traits::get(value),
+		      amount, &result)
+		: __builtin_add_overflow(
+		      traits::get(value),
+		      amount, &result);
+	if (overflow)
+		m_runtime_error(215);
+	return traits::make(result);
 }
 
 template<typename T>
-inline void p_inc(tpcc_typed_storage_ref<T> x, t_integer n = 1) {
-	p_inc(*x.value, n);
+requires (!std::is_void_v<T>)
+inline T* m_pointer_step(
+    T* value, t_integer amount, bool subtract) {
+	// Pascal pointer stepping is address arithmetic: ^T advances by sizeof(T)
+	// bytes. C++ pointer +/- would itself be undefined as soon as the result
+	// leaves the original allocation, yet TPCC has no allocation provenance
+	// from which either directive state could perform a meaningful bounds
+	// check. Compute the raw address modulo uintptr_t instead. The checked and
+	// unchecked operator families intentionally share this operation; neither
+	// invents a process-address or zero-bound check unrelated to the pointed-to
+	// allocation.
+	const uintptr_t address =
+	    reinterpret_cast<uintptr_t>(value);
+	const uintptr_t delta =
+	    static_cast<uintptr_t>(amount) *
+	    static_cast<uintptr_t>(sizeof(T));
+	return reinterpret_cast<T*>(
+	    subtract ? address - delta
+		     : address + delta);
+}
+
+inline t_pointer m_pointer_step(
+    t_pointer value, t_integer amount,
+    bool subtract) {
+	// Untyped Pointer has no element type, so its Pascal step is one byte.
+	const uintptr_t address =
+	    reinterpret_cast<uintptr_t>(value);
+	const uintptr_t delta =
+	    static_cast<uintptr_t>(amount);
+	return reinterpret_cast<t_pointer>(
+	    subtract ? address - delta
+		     : address + delta);
 }
 
 template<typename T>
-inline void p_dec(tpcc_typed_storage_ref<T> x, t_integer n = 1) {
-	p_dec(*x.value, n);
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_unchecked_inc(T value) {
+	return m_unchecked_ordinal_step(
+	    value, 1, false);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_inc(T value) {
+	return m_checked_ordinal_step(
+	    value, 1, false);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_unchecked_dec(T value) {
+	return m_unchecked_ordinal_step(
+	    value, 1, true);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_dec(T value) {
+	return m_checked_ordinal_step(
+	    value, 1, true);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_unchecked_add(
+    T value, t_integer amount) {
+	return m_unchecked_ordinal_step(
+	    value, amount, false);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_add(T value, t_integer amount) {
+	return m_checked_ordinal_step(
+	    value, amount, false);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_unchecked_subtract(
+    T value, t_integer amount) {
+	return m_unchecked_ordinal_step(
+	    value, amount, true);
+}
+
+template<typename T>
+requires std::is_integral_v<
+    typename tpcc_ordinal_storage<T>::type>
+inline T o_subtract(
+    T value, t_integer amount) {
+	return m_checked_ordinal_step(
+	    value, amount, true);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_unchecked_inc(T* value) {
+	return m_pointer_step(
+	    value, 1, false);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_inc(T* value) {
+	return m_pointer_step(
+	    value, 1, false);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_unchecked_dec(T* value) {
+	return m_pointer_step(
+	    value, 1, true);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_dec(T* value) {
+	return m_pointer_step(
+	    value, 1, true);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_unchecked_add(
+    T* value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, false);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_add(
+    T* value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, false);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_unchecked_subtract(
+    T* value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, true);
+}
+
+template<typename T>
+requires (!std::is_void_v<T>)
+inline T* o_subtract(
+    T* value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, true);
+}
+
+inline t_pointer o_unchecked_inc(
+    t_pointer value) {
+	return m_pointer_step(
+	    value, 1, false);
+}
+
+inline t_pointer o_inc(t_pointer value) {
+	return m_pointer_step(
+	    value, 1, false);
+}
+
+inline t_pointer o_unchecked_dec(
+    t_pointer value) {
+	return m_pointer_step(
+	    value, 1, true);
+}
+
+inline t_pointer o_dec(t_pointer value) {
+	return m_pointer_step(
+	    value, 1, true);
+}
+
+inline t_pointer o_unchecked_add(
+    t_pointer value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, false);
+}
+
+inline t_pointer o_add(
+    t_pointer value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, false);
+}
+
+inline t_pointer o_unchecked_subtract(
+    t_pointer value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, true);
+}
+
+inline t_pointer o_subtract(
+    t_pointer value, t_integer amount) {
+	return m_pointer_step(
+	    value, amount, true);
 }
 
 template<typename T, std::size_t Capacity>

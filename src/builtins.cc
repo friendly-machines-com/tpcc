@@ -2,7 +2,9 @@
 #include "cst.h"
 #include "evaluator.h"
 #include "frame.h"
+#include "operators.h"
 #include "types.h"
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -588,8 +590,6 @@ static ConstEvalResult fold_chr(ConstEvalContext&, Type* result_ty, const std::v
 // AND implement `::u_system::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_ord", nullptr, {}, BuiltinGenericKind::OrdinalValue},
-    {"::u_system::p_inc", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
-    {"::u_system::p_dec", nullptr, {}, BuiltinGenericKind::OrdinalMutation},
     // Both operations have the same generic Pascal signature and type
     // relationship; only their ordinary RTL function bodies differ.
     {"::u_system::p_include", nullptr, {}, BuiltinGenericKind::SetMutation},
@@ -726,6 +726,35 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::t_boolean::p_false", nullptr},
 };
 
+// These descriptors belong only to the generic root-frame fallbacks below.
+// They are deliberately not in k_builtins: concrete System arithmetic
+// declarations use the same C++ operation names but have complete Pascal
+// signatures and must not be mistaken for omitted-type generic declarations.
+static const BuiltinDesc k_checked_inc_fallback{
+    "::u_system::o_inc", nullptr, {},
+    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+static const BuiltinDesc k_unchecked_inc_fallback{
+    "::u_system::o_unchecked_inc", nullptr, {},
+    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+static const BuiltinDesc k_checked_dec_fallback{
+    "::u_system::o_dec", nullptr, {},
+    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+static const BuiltinDesc k_unchecked_dec_fallback{
+    "::u_system::o_unchecked_dec", nullptr, {},
+    BuiltinGenericKind::UnaryOrdinalOrPointerStep};
+static const BuiltinDesc k_checked_add_fallback{
+    "::u_system::o_add", nullptr, {},
+    BuiltinGenericKind::EnumOrPointerDistanceStep};
+static const BuiltinDesc k_unchecked_add_fallback{
+    "::u_system::o_unchecked_add", nullptr, {},
+    BuiltinGenericKind::EnumOrPointerDistanceStep};
+static const BuiltinDesc k_checked_subtract_fallback{
+    "::u_system::o_subtract", nullptr, {},
+    BuiltinGenericKind::EnumOrPointerDistanceStep};
+static const BuiltinDesc k_unchecked_subtract_fallback{
+    "::u_system::o_unchecked_subtract", nullptr, {},
+    BuiltinGenericKind::EnumOrPointerDistanceStep};
+
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name ==
 	    "::u_system::t_tmethod")
@@ -795,6 +824,94 @@ const Frame& root_frame() {
 		// System. Registering its singleton here also lets type-or-expression
 		// syntax such as SizeOf(File) recognize it as a type.
 		ff.register_type("file", &k_file);
+
+		// Inc/Dec have one exact operation for every ordinal and pointer type,
+		// and their distance forms need the corresponding otherwise-infinite
+		// Add/Subtract family. Pascal currently has no generic declaration
+		// syntax capable of spelling those T -> T and (T, Integer) -> T
+		// contracts. Represent only that missing declaration relation here:
+		// these are ordinary Procedure values in the ordinary root Frame, and
+		// their omitted first formals use the existing Generic match rank so a
+		// typed System or user declaration always wins without a secondary
+		// resolver.
+		auto register_step =
+		    [&ff](OperatorInvocation invocation,
+			  std::string_view spelling,
+			  std::size_t arity,
+			  bool checked,
+			  const BuiltinDesc* descriptor) {
+			    auto identifier =
+				operator_invocation_identifier(
+				    invocation, spelling, arity,
+				    checked, false);
+			    assert(identifier);
+			    std::vector<Parameter> formals;
+			    formals.emplace_back(
+				"value", "p_value",
+				unknown_type(),
+				ParamMode::Value, nullptr);
+			    if (arity == 2)
+				    formals.emplace_back(
+					"amount", "p_amount",
+					unknown_type(),
+					ParamMode::Value,
+					nullptr);
+			    auto routine_type =
+				new RoutineType(
+				    SourceLocation::builtin(),
+				    std::move(formals),
+				    unknown_type(), ROUTINE);
+			    auto procedure =
+				new Procedure(
+				    std::string(
+					descriptor->cxx_name),
+				    std::string(*identifier),
+				    routine_type, true);
+			    procedure->builtin_desc =
+				descriptor;
+			    procedure->is_external = true;
+			    procedure->has_body = true;
+			    auto registration =
+				ff.register_callable(
+				    std::string(*identifier),
+				    procedure);
+			    assert(
+				registration.kind ==
+				CallableRegistration::Kind::
+				    Added);
+		    };
+		register_step(
+		    OperatorInvocation::MutatingUnary,
+		    "inc", 1, true,
+		    &k_checked_inc_fallback);
+		register_step(
+		    OperatorInvocation::MutatingUnary,
+		    "inc", 1, false,
+		    &k_unchecked_inc_fallback);
+		register_step(
+		    OperatorInvocation::MutatingUnary,
+		    "dec", 1, true,
+		    &k_checked_dec_fallback);
+		register_step(
+		    OperatorInvocation::MutatingUnary,
+		    "dec", 1, false,
+		    &k_unchecked_dec_fallback);
+		register_step(
+		    OperatorInvocation::BinaryToken,
+		    "+", 2, true,
+		    &k_checked_add_fallback);
+		register_step(
+		    OperatorInvocation::BinaryToken,
+		    "+", 2, false,
+		    &k_unchecked_add_fallback);
+		register_step(
+		    OperatorInvocation::BinaryToken,
+		    "-", 2, true,
+		    &k_checked_subtract_fallback);
+		register_step(
+		    OperatorInvocation::BinaryToken,
+		    "-", 2, false,
+		    &k_unchecked_subtract_fallback);
 		return ff;
 	}();
 	return f;
@@ -817,8 +934,9 @@ void IntrinsicType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 
 const char* Builtin::diagnostic_kind() const { return "builtin"; }
 void Builtin::collect_diagnostic_edges(ErrorLetContext*) const {
-	// A Builtin denotes an opaque C++ overload set such as ::u_system::p_dec, not one
-	// Pascal RoutineType. Do not add Node::ty here; it is intentionally null.
+	// A Builtin denotes an opaque C++ overload set such as
+	// ::u_system::p_include, not one Pascal RoutineType. Do not add Node::ty
+	// here; it is intentionally null.
 }
 void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	// Builtin::desc names the C++ implementation hook. Diagnostics describe the
