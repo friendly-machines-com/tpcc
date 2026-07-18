@@ -48,7 +48,11 @@ struct OperatorSpec {
 	std::string_view cxx_name;
 	bool boolean_result;
 	OperatorProvenance provenance;
-	bool implemented;
+	/** Whether TPCC accepts this declaration spelling. This does not claim
+	 * that every source invocation classified by `invocation` is connected;
+	 * declaration grammar and invocation lowering are separate consumers of
+	 * the catalog and must each have their own tests. */
+	bool declaration_supported;
 };
 
 std::span<const OperatorSpec> operator_catalog();
@@ -72,14 +76,8 @@ std::optional<std::string_view> operator_invocation_identifier(
     std::string_view spelling, std::size_t arity,
     bool checks_enabled, bool logical_operands);
 
-/** C++ spelling assigned to a declaration. Every semantic row produced by one
- * declaration spelling and arity must agree on this name. */
-std::optional<std::string_view> operator_declaration_cxx_name(
-    std::string_view declaration_name, std::size_t arity);
-
 std::optional<std::string_view> legacy_operator_cxx_name(
     std::string_view declaration_name);
 
 std::string_view implicit_operator_identifier(
     bool range_checks);
-std::string_view explicit_operator_identifier();

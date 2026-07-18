@@ -1,0 +1,1 @@
+operator_lifecycle_unsupported.pp(8): error: operator 'initialize' is recognized but not supported

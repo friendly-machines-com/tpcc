@@ -7954,7 +7954,7 @@ struct ParsedOperatorIdentity {
 	std::vector<std::string> pascal_identifiers;
 	std::string cxx_name;
 	bool boolean_result = false;
-	bool implemented = true;
+	bool declaration_supported = true;
 };
 
 static ParsedOperatorIdentity parsed_operator_identity(
@@ -7972,9 +7972,9 @@ static ParsedOperatorIdentity parsed_operator_identity(
 		result.boolean_result =
 		    result.boolean_result ||
 		    spec->boolean_result;
-		result.implemented =
-		    result.implemented &&
-		    spec->implemented;
+		result.declaration_supported =
+		    result.declaration_supported &&
+		    spec->declaration_supported;
 		std::string identifier(
 		    spec->pascal_identifier);
 		if (std::find(
@@ -8005,11 +8005,35 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// for the catalog, but give conversion Callables reserved internal
 		// names. An ordinary function named Implicit or UncheckedImplicit is
 		// not a conversion and therefore must not receive the destination-tag
-		// ABI or result-type overload rules merely because its source name
-		// resembles an operator declaration.
-		operator_declaration_name = input_token;
-		if (operator_declaration_name ==
-		    "implicit")
+			// ABI or result-type overload rules merely because its source name
+			// resembles an operator declaration.
+			operator_declaration_name = input_token;
+			// Known-but-unsupported lifecycle operators are resultless. Reject
+			// them at their declaration identity, before the currently supported
+			// expression-operator grammar tries to parse every operator as a
+			// function and emits the misleading "missing colon" diagnostic.
+			// This is only an early diagnostic for catalog rows that are already
+			// unsupported; it does not add lifecycle declaration semantics.
+			bool known_operator = false;
+			bool supported_operator = false;
+			for (const OperatorSpec& spec :
+			     operator_catalog()) {
+				if (spec.declaration_name !=
+				    operator_declaration_name)
+					continue;
+				known_operator = true;
+				supported_operator =
+				    supported_operator ||
+				    spec.declaration_supported;
+			}
+			if (known_operator &&
+			    !supported_operator)
+				raise_parse_error(
+				    "operator '" +
+				    operator_declaration_name +
+				    "' is recognized but not supported");
+			if (operator_declaration_name ==
+			    "implicit")
 			first_name = ":implicit";
 		else if (operator_declaration_name ==
 			 "uncheckedimplicit")
@@ -8232,11 +8256,12 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 				    "unknown custom operator '" +
 				    operator_declaration_name + "'");
 			}
-			if (!operator_identity.implemented)
+			if (!operator_identity
+				 .declaration_supported)
 				raise_parse_error(
 				    "operator '" +
 				    operator_declaration_name +
-				    "' is catalogued but not implemented");
+				    "' is recognized but not supported");
 			if (operator_identity
 				    .boolean_result &&
 			    sig->return_type !=

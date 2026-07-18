@@ -181,11 +181,11 @@ constexpr OperatorSpec k_operator_catalog[] = {
     {"logicalxor", "xor", 2, I::BinaryToken, S::Logical,
      "&op_LogicalXor", "o_logicalxor", false, P::Delphi, true},
     {"bitwisexor", "xor", 2, I::BinaryToken, S::Bitwise,
-     "&op_BitwiseXOR", "o_bitwisexor", false, P::Delphi, true},
+     "&op_BitwiseXor", "o_bitwisexor", false, P::Delphi, true},
     {"xor", "xor", 2, I::BinaryToken, S::Logical,
      "&op_LogicalXor", "o_xor", false, P::LegacyFpc, true},
     {"xor", "xor", 2, I::BinaryToken, S::Bitwise,
-     "&op_BitwiseXOR", "o_xor", false, P::LegacyFpc, true},
+     "&op_BitwiseXor", "o_xor", false, P::LegacyFpc, true},
 
     // Membership.
     {"in", "in", 2, I::BinaryToken, S::Always,
@@ -251,7 +251,7 @@ std::optional<std::string_view> operator_invocation_identifier(
     bool checks_enabled, bool logical_operands) {
 	std::optional<std::string_view> result;
 	for (const OperatorSpec& spec : k_operator_catalog) {
-		if (!spec.implemented ||
+		if (!spec.declaration_supported ||
 		    spec.invocation != invocation ||
 		    spec.invocation_spelling != spelling ||
 		    spec.arity != arity ||
@@ -263,20 +263,6 @@ std::optional<std::string_view> operator_invocation_identifier(
 			assert(*result == spec.pascal_identifier);
 		else
 			result = spec.pascal_identifier;
-	}
-	return result;
-}
-
-std::optional<std::string_view> operator_declaration_cxx_name(
-    std::string_view declaration_name, std::size_t arity) {
-	std::optional<std::string_view> result;
-	for (const OperatorSpec* spec :
-	     operator_declaration_specs(
-		 declaration_name, arity)) {
-		if (result)
-			assert(*result == spec->cxx_name);
-		else
-			result = spec->cxx_name;
 	}
 	return result;
 }
@@ -302,14 +288,6 @@ std::string_view implicit_operator_identifier(
 	auto result = operator_invocation_identifier(
 	    OperatorInvocation::ImplicitConversion,
 	    ":implicit", 1, range_checks, false);
-	assert(result);
-	return *result;
-}
-
-std::string_view explicit_operator_identifier() {
-	auto result = operator_invocation_identifier(
-	    OperatorInvocation::ExplicitConversion,
-	    ":explicit", 1, false, false);
 	assert(result);
 	return *result;
 }
