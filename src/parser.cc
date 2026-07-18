@@ -8674,7 +8674,7 @@ static bool is_generic_ordinal_operation(
 		       UnaryOrdinalOrPointerStep ||
 	       kind ==
 		   BuiltinGenericKind::
-		       EnumOrPointerDistanceStep;
+		       EnumOrPointerStep;
 }
 
 static bool generic_ordinal_operation_accepts(
@@ -8700,7 +8700,7 @@ static bool generic_ordinal_operation_accepts(
 	}
 	if (kind ==
 	    BuiltinGenericKind::
-		EnumOrPointerDistanceStep) {
+		EnumOrPointerStep) {
 		if (auto pointer =
 			dynamic_cast<PointerType*>(
 			    operand))
@@ -9192,7 +9192,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		if (builtin &&
 		    builtin->generic_kind ==
 			BuiltinGenericKind::
-			    EnumOrPointerDistanceStep &&
+			    EnumOrPointerStep &&
 		    parameter_index == 1) {
 			// The fallback relation is (T, Integer) -> T, but leaving only
 			// its first formal generic would let a concrete candidate win
@@ -10535,20 +10535,17 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				if (failure ==
 				    MatchFailure::
 					OrdinalRequired) {
-					const BuiltinDesc*
-					    candidate_builtin =
-						c->builtin_desc
-						    ? c->builtin_desc
-						    : lookup_builtin_desc(
-							  c->cxx_name);
+					auto rejected_pointer =
+					    dynamic_cast<PointerType*>(
+						args[i]
+						    ? args[i]->ty
+						    : nullptr);
 					emit_parse_error_at(
 					    error_location,
 					    name_for_error +
-						(candidate_builtin &&
-							 candidate_builtin
-								 ->generic_kind ==
-							     BuiltinGenericKind::
-								 UnaryOrdinalOrPointerStep
+						(rejected_pointer &&
+							 rejected_pointer
+							     ->is_untyped()
 						     ? " requires an ordinal or typed pointer argument"
 						     : " requires an ordinal argument"));
 				}
@@ -10821,7 +10818,7 @@ Node* Parser::make_call(
 			     UnaryOrdinalOrPointerStep ||
 		     descriptor->generic_kind ==
 			 BuiltinGenericKind::
-			     EnumOrPointerDistanceStep) &&
+			     EnumOrPointerStep) &&
 		    !call->args.empty() &&
 		    call->args[0])
 			// These root declarations omit the one generic T which is

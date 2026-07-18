@@ -34,7 +34,7 @@ enum class BuiltinGenericKind {
 	// an otherwise-unspellable (T, Integer) -> T root fallback. Restricting
 	// this family also prevents a generic candidate from participating in
 	// ordinary numeric arithmetic.
-	EnumOrPointerDistanceStep,
+	EnumOrPointerStep,
 	// Subtracting two compatible pointers is not the step relation above:
 	// it has the otherwise-unspellable generic signature
 	//

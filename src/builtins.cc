@@ -739,13 +739,13 @@ static const BuiltinDesc k_checked_dec_fallback{
 static const BuiltinDesc k_unchecked_dec_fallback{
     "::u_system::o_unchecked_dec", nullptr, {}, BuiltinGenericKind::UnaryOrdinalOrPointerStep};
 static const BuiltinDesc k_checked_add_fallback{
-    "::u_system::o_add", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_add", nullptr, {}, BuiltinGenericKind::EnumOrPointerStep};
 static const BuiltinDesc k_unchecked_add_fallback{
-    "::u_system::o_unchecked_add", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_unchecked_add", nullptr, {}, BuiltinGenericKind::EnumOrPointerStep};
 static const BuiltinDesc k_checked_subtract_fallback{
-    "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerStep};
 static const BuiltinDesc k_unchecked_subtract_fallback{
-    "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
+    "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerStep};
 static const BuiltinDesc k_checked_pointer_difference_fallback{
     "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
 static const BuiltinDesc k_unchecked_pointer_difference_fallback{
