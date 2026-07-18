@@ -59,11 +59,17 @@ int main() {
 	PointerType pointer_b(
 	    SourceLocation::internal(),
 	    integer_type());
+	PointerType pointer_char(
+	    SourceLocation::internal(),
+	    char_type());
 	assert(&pointer_a != &pointer_b);
 	assert(pointer_a.value_conversion_from(
 	    &pointer_b));
 	assert(pointer_a.same_cxx_carrier_as(
 	    &pointer_b));
+	assert(pointer_char
+	           .predefined_explicit_conversion_from(
+		       &pointer_a));
 
 	Integer narrow_low(
 	    1, integer_type());

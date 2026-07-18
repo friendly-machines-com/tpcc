@@ -10,6 +10,7 @@ type
   TByteSet = set of Byte;
   TWordSet = set of Word;
   TAddress = 0..High(PtrUInt);
+  PLocalShortString = ^ShortString;
 
 var
   Base: TBase;
@@ -21,6 +22,9 @@ var
   Address: TAddress;
   Bytes: TByteSet;
   Words: TWordSet;
+  ShortText: ShortString;
+  ShortPointer: PLocalShortString;
+  CharacterPointer: PChar;
 
 begin
   Child := TChild.Create;
@@ -55,6 +59,17 @@ begin
   if not (1 in Bytes) or
      not (255 in Bytes) then
     Halt(4);
+
+  { Typed pointer casts preserve the address. In particular, PChar does not
+    skip ShortString's leading length byte; a caller which wants a C string
+    must first change or copy that representation. }
+  ShortText := 'ABC';
+  ShortPointer := @ShortText;
+  CharacterPointer := PChar(ShortPointer);
+  if (PtrUInt(CharacterPointer) <>
+      PtrUInt(ShortPointer)) or
+     (Ord(CharacterPointer^) <> 3) then
+    Halt(5);
 
   Child.Free
 end.

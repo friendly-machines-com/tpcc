@@ -1406,7 +1406,9 @@ bool PointerType::
 	// conversions. The result is useful only when the source address denotes
 	// a suitably aligned live C++ object of the pointee type; no local check
 	// can reconstruct that provenance.
-	return predefined_integer_family_type(
+	return dynamic_cast<const PointerType*>(
+		   source) ||
+	       predefined_integer_family_type(
 		   source) ||
 	       predefined_object_reference_type(
 		   source) ||
