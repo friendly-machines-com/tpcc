@@ -3771,11 +3771,11 @@ inline t_int64 tpcc_checked_real_to_int64(t_extended value, const char* operatio
 	return static_cast<t_int64>(value);
 }
 
-inline t_int64 p_trunc(t_extended value) {
+inline t_int64 o_trunc(t_extended value) {
 	return tpcc_checked_real_to_int64(::truncl(value), "Trunc result is outside Int64 range");
 }
 
-inline t_int64 p_round(t_extended value) {
+inline t_int64 o_round(t_extended value) {
 	// Pascal Round follows the active floating-point rounding mode. nearbyint
 	// does likewise and therefore gives ties-to-even under the default mode.
 	return tpcc_checked_real_to_int64(::nearbyintl(value), "Round result is outside Int64 range");

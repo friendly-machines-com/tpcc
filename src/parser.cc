@@ -2732,6 +2732,42 @@ Node* Parser::parse_value_from_identifier(std::string id) {
 			    id);
 		return parse_member_selection(base);
 	}
+	if (input_token == "(") {
+		auto operator_identifier =
+		    operator_invocation_identifier(
+			OperatorInvocation::NamedUnary,
+			id, 1, false, false);
+		if (operator_identifier) {
+			// Trunc(...) and Round(...) are operator syntax, not ordinary
+			// calls to routines which happen to have those names. Resolve the
+			// canonical operator declaration identity first, then use the same
+			// argument parser and call matcher as every other callable family.
+			// In particular, do not merge an ordinary function named Trunc or
+			// Round into the operator candidates: source syntax chose the
+			// operator contract before overload selection.
+			SourceLocation call_location =
+			    current_location();
+			parse_opening_paren();
+			std::vector<Node*> args;
+			if (input_token != ")") {
+				args.push_back(
+				    parse_expression());
+				while (maybe_parse_comma())
+					args.push_back(
+					    parse_expression());
+			}
+			parse_closing_paren();
+			Node* family = resolve_value(
+			    std::string(
+				*operator_identifier));
+			auto finalized = finalize_call(
+			    family, args, id,
+			    call_location);
+			return make_call(
+			    finalized,
+			    std::move(args));
+		}
+	}
 	if (Node* value = maybe_resolve_value(id)) {
 		// Within a function body, a bare occurrence of that function's name
 		// denotes its hidden result variable.  Parentheses still mean a call,
@@ -8005,35 +8041,35 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// for the catalog, but give conversion Callables reserved internal
 		// names. An ordinary function named Implicit or UncheckedImplicit is
 		// not a conversion and therefore must not receive the destination-tag
-			// ABI or result-type overload rules merely because its source name
-			// resembles an operator declaration.
-			operator_declaration_name = input_token;
-			// Known-but-unsupported lifecycle operators are resultless. Reject
-			// them at their declaration identity, before the currently supported
-			// expression-operator grammar tries to parse every operator as a
-			// function and emits the misleading "missing colon" diagnostic.
-			// This is only an early diagnostic for catalog rows that are already
-			// unsupported; it does not add lifecycle declaration semantics.
-			bool known_operator = false;
-			bool supported_operator = false;
-			for (const OperatorSpec& spec :
-			     operator_catalog()) {
-				if (spec.declaration_name !=
-				    operator_declaration_name)
-					continue;
-				known_operator = true;
-				supported_operator =
-				    supported_operator ||
-				    spec.declaration_supported;
-			}
-			if (known_operator &&
-			    !supported_operator)
-				raise_parse_error(
-				    "operator '" +
-				    operator_declaration_name +
-				    "' is recognized but not supported");
-			if (operator_declaration_name ==
-			    "implicit")
+		// ABI or result-type overload rules merely because its source name
+		// resembles an operator declaration.
+		operator_declaration_name = input_token;
+		// Known-but-unsupported lifecycle operators are resultless. Reject
+		// them at their declaration identity, before the currently supported
+		// expression-operator grammar tries to parse every operator as a
+		// function and emits the misleading "missing colon" diagnostic.
+		// This is only an early diagnostic for catalog rows that are already
+		// unsupported; it does not add lifecycle declaration semantics.
+		bool known_operator = false;
+		bool supported_operator = false;
+		for (const OperatorSpec& spec :
+		     operator_catalog()) {
+			if (spec.declaration_name !=
+			    operator_declaration_name)
+				continue;
+			known_operator = true;
+			supported_operator =
+			    supported_operator ||
+			    spec.declaration_supported;
+		}
+		if (known_operator &&
+		    !supported_operator)
+			raise_parse_error(
+			    "operator '" +
+			    operator_declaration_name +
+			    "' is recognized but not supported");
+		if (operator_declaration_name ==
+		    "implicit")
 			first_name = ":implicit";
 		else if (operator_declaration_name ==
 			 "uncheckedimplicit")
