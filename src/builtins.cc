@@ -639,6 +639,13 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_blockwrite", nullptr},
     {"::u_system::p_halt", nullptr},
     {"::u_system::p_runerror", nullptr},
+    // Unqualified because these `m_` names are internal call-site macros, not
+    // namespace members or addressable `p_` functions. Their System
+    // declarations remain ordinary calls; preprocessing performs the required
+    // call-site-sensitive lowering in generated C++.
+    {"m_get_frame", nullptr},
+    {"m_get_caller_addr", nullptr},
+    {"m_get_caller_frame", nullptr},
     {"::u_system::p_low", nullptr, TypeBoundKind::Low},
     {"::u_system::p_high", nullptr, TypeBoundKind::High},
     {

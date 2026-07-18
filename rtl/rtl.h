@@ -44,6 +44,27 @@
 #include <utility>
 #include <cstddef> // for std::byte
 
+// These must expand at the generated Pascal call site. Wrapping the compiler
+// builtins in an ordinary C++ function would insert that wrapper's frame and
+// report the wrong routine. Their System declarations therefore use these
+// deliberately unqualified `m_...` external names rather than the usual
+// `::u_system::p_...` convention. The distinct prefix also keeps these global
+// preprocessor names from colliding with `p_...` C++ identifiers generated for
+// ordinary Pascal declarations.
+//
+// Get_Frame uses the compiler builtin at the call site. The caller operations
+// pass that explicit frame to ABI helpers below; unlike level-1 frame builtins,
+// this both honors their Pascal operand and avoids GCC's deliberately fatal
+// -Wframe-address diagnostic under -Werror.
+#define m_get_frame() \
+	(__builtin_frame_address(0))
+#define m_get_caller_addr(framebp, address) \
+	(::u_system::m_caller_addr_from_frame( \
+	    (framebp), (address)))
+#define m_get_caller_frame(framebp, address) \
+	(::u_system::m_caller_frame_from_frame( \
+	    (framebp), (address)))
+
 namespace u_system {
 
 // C++ does not include a function result in overload identity. Pascal
@@ -215,6 +236,39 @@ using t_sizeuint = size_t;
 using t_single = float;
 using t_double = double;
 using t_extended = long double;
+
+inline t_pointer m_frame_word(
+    t_pointer frame, std::size_t index) {
+	if (!frame)
+		return nullptr;
+	t_pointer result;
+	// The supported flat GCC/Clang ABIs store the previous frame pointer and
+	// return address as the first two pointer-sized words of a materialized
+	// frame. memcpy avoids pretending those ABI-maintained bytes are live C++
+	// void* objects for aliasing and lifetime purposes.
+	std::memcpy(
+	    &result,
+	    static_cast<std::byte*>(frame) +
+		index * sizeof(t_pointer),
+	    sizeof(result));
+	return result;
+}
+
+inline t_pointer m_caller_frame_from_frame(
+    t_pointer frame, t_pointer address) {
+	(void)address;
+	return m_frame_word(frame, 0);
+}
+
+inline t_pointer m_caller_addr_from_frame(
+    t_pointer frame, t_pointer address) {
+	(void)address;
+	t_pointer stored = m_frame_word(frame, 1);
+	return stored
+		   ? __builtin_extract_return_addr(
+			 stored)
+		   : nullptr;
+}
 
 // Runtime handle base for Pascal `class of T`. The target is allowed to be
 // incomplete: this empty specialization never inspects T. Every generated

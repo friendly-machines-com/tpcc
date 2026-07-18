@@ -20,6 +20,10 @@ type
   Double = external name '::u_system::t_double';
   Extended = external name '::u_system::t_extended';
   Pointer = external name '::u_system::t_pointer';
+  // TPCC supports only flat 32/64-bit targets, where code and data addresses
+  // share the same pointer representation. The distinct Pascal name remains
+  // useful in the public stack-inspection signatures.
+  CodePointer = Pointer;
   TMethod = external name '::u_system::t_tmethod';
   PtrInt = external name '::u_system::t_ptrint';
   PtrUInt = external name '::u_system::t_ptruint';
@@ -329,6 +333,14 @@ procedure halt(value: LongInt); overload; noreturn; external name '::u_system::p
 procedure halt; overload; noreturn; external name '::u_system::p_halt';
 procedure runerror(value: Word); overload; noreturn; external name '::u_system::p_runerror';
 procedure runerror; overload; noreturn; external name '::u_system::p_runerror';
+// These `m_` external names are intentionally unqualified internal macros, not
+// ordinary addressable `p_` functions. A C++ function would observe its own
+// frame instead of the generated Pascal call site, while a namespace qualifier
+// would remain in front of the preprocessor expansion and make the builtin
+// expression invalid.
+function get_frame: Pointer; external name 'm_get_frame';
+function get_caller_addr(framebp: Pointer; address: CodePointer = nil): CodePointer; external name 'm_get_caller_addr';
+function get_caller_frame(framebp: Pointer; address: CodePointer = nil): Pointer; external name 'm_get_caller_frame';
 function low(const x): Integer; external name '::u_system::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external name '::u_system::p_high'; // generic intrinsic: parser supplies the type operand/result
 // ShortString stores its length in one byte, so Pascal gives this overload a
