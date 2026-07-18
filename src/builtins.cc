@@ -746,6 +746,10 @@ static const BuiltinDesc k_checked_subtract_fallback{
     "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
 static const BuiltinDesc k_unchecked_subtract_fallback{
     "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerDistanceStep};
+static const BuiltinDesc k_checked_pointer_difference_fallback{
+    "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
+static const BuiltinDesc k_unchecked_pointer_difference_fallback{
+    "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
 
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name ==
@@ -904,6 +908,60 @@ const Frame& root_frame() {
 		    OperatorInvocation::BinaryToken,
 		    "-", 2, false,
 		    &k_unchecked_subtract_fallback);
+
+		// Pointer subtraction is a second ordinary overload, not the
+		// pointer-minus-integer step above. Pascal cannot quantify one pointee
+		// type across both operands, while spelling `(Pointer, Pointer)` in
+		// System would erase the element size before the RTL call. Give the
+		// root declaration a distinct ordinary signature and let its
+		// PointerDifference descriptor validate/preserve the actual ^T pair.
+		for (auto [checked, descriptor] :
+		     std::array{
+			 std::pair{
+			     true,
+			     &k_checked_pointer_difference_fallback},
+			 std::pair{
+			     false,
+			     &k_unchecked_pointer_difference_fallback},
+		     }) {
+			auto identifier =
+			    operator_invocation_identifier(
+				OperatorInvocation::BinaryToken,
+				"-", 2, checked, false);
+			assert(identifier);
+			std::vector<Parameter> formals;
+			formals.emplace_back(
+			    "first", "p_first",
+			    pointer_type(),
+			    ParamMode::Value, nullptr);
+			formals.emplace_back(
+			    "second", "p_second",
+			    pointer_type(),
+			    ParamMode::Value, nullptr);
+			auto routine_type =
+			    new RoutineType(
+				SourceLocation::builtin(),
+				std::move(formals),
+				ptrint_type(), ROUTINE);
+			auto procedure =
+			    new Procedure(
+				std::string(
+				    descriptor->cxx_name),
+				std::string(*identifier),
+				routine_type, true);
+			procedure->builtin_desc =
+			    descriptor;
+			procedure->is_external = true;
+			procedure->has_body = true;
+			auto registration =
+			    ff.register_callable(
+				std::string(*identifier),
+				procedure);
+			assert(
+			    registration.kind ==
+			    CallableRegistration::Kind::
+				Added);
+		}
 		return ff;
 	}();
 	return f;

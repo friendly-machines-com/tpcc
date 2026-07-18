@@ -3920,35 +3920,24 @@ template<typename T>
 requires (!std::is_void_v<T>)
 inline T* m_pointer_step(
     T* value, t_integer amount, bool subtract) {
-	// Pascal pointer stepping is address arithmetic: ^T advances by sizeof(T)
-	// bytes. C++ pointer +/- would itself be undefined as soon as the result
-	// leaves the original allocation, yet TPCC has no allocation provenance
-	// from which either directive state could perform a meaningful bounds
-	// check. Compute the raw address modulo uintptr_t instead. The checked and
-	// unchecked operator families intentionally share this operation; neither
-	// invents a process-address or zero-bound check unrelated to the pointed-to
-	// allocation.
-	const uintptr_t address =
-	    reinterpret_cast<uintptr_t>(value);
-	const uintptr_t delta =
-	    static_cast<uintptr_t>(amount) *
-	    static_cast<uintptr_t>(sizeof(T));
-	return reinterpret_cast<T*>(
-	    subtract ? address - delta
-		     : address + delta);
+	// Pascal ^T stepping has the same element unit as C++ T* arithmetic.
+	// Preserve the pointer itself: converting through an address integer would
+	// discard C++ provenance and incorrectly define arithmetic on null or
+	// unrelated storage. The Pascal program therefore inherits the C++ rule
+	// that the result remains within the same array object or one-past it.
+	return subtract ? value - amount
+			: value + amount;
 }
 
-inline t_pointer m_pointer_step(
-    t_pointer value, t_integer amount,
-    bool subtract) {
-	// Untyped Pointer has no element type, so its Pascal step is one byte.
-	const uintptr_t address =
-	    reinterpret_cast<uintptr_t>(value);
-	const uintptr_t delta =
-	    static_cast<uintptr_t>(amount);
-	return reinterpret_cast<t_pointer>(
-	    subtract ? address - delta
-		     : address + delta);
+template<typename T>
+requires (!std::is_void_v<T>)
+inline t_ptrint m_pointer_difference(
+    T* first, T* second) {
+	// C++ defines this only for pointers into the same array object (or
+	// one-past). Its ptrdiff_t result is already measured in T elements,
+	// exactly matching Pascal's typed-pointer subtraction contract.
+	return static_cast<t_ptrint>(
+	    first - second);
 }
 
 template<typename T>
@@ -4078,50 +4067,20 @@ inline T* o_subtract(
 	    value, amount, true);
 }
 
-inline t_pointer o_unchecked_inc(
-    t_pointer value) {
-	return m_pointer_step(
-	    value, 1, false);
+template<typename T>
+requires (!std::is_void_v<T>)
+inline t_ptrint o_unchecked_subtract(
+    T* first, T* second) {
+	return m_pointer_difference(
+	    first, second);
 }
 
-inline t_pointer o_inc(t_pointer value) {
-	return m_pointer_step(
-	    value, 1, false);
-}
-
-inline t_pointer o_unchecked_dec(
-    t_pointer value) {
-	return m_pointer_step(
-	    value, 1, true);
-}
-
-inline t_pointer o_dec(t_pointer value) {
-	return m_pointer_step(
-	    value, 1, true);
-}
-
-inline t_pointer o_unchecked_add(
-    t_pointer value, t_integer amount) {
-	return m_pointer_step(
-	    value, amount, false);
-}
-
-inline t_pointer o_add(
-    t_pointer value, t_integer amount) {
-	return m_pointer_step(
-	    value, amount, false);
-}
-
-inline t_pointer o_unchecked_subtract(
-    t_pointer value, t_integer amount) {
-	return m_pointer_step(
-	    value, amount, true);
-}
-
-inline t_pointer o_subtract(
-    t_pointer value, t_integer amount) {
-	return m_pointer_step(
-	    value, amount, true);
+template<typename T>
+requires (!std::is_void_v<T>)
+inline t_ptrint o_subtract(
+    T* first, T* second) {
+	return m_pointer_difference(
+	    first, second);
 }
 
 template<typename T, std::size_t Capacity>

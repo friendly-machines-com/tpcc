@@ -35,6 +35,16 @@ enum class BuiltinGenericKind {
 	// this family also prevents a generic candidate from participating in
 	// ordinary numeric arithmetic.
 	EnumOrPointerDistanceStep,
+	// Subtracting two compatible pointers is not the step relation above:
+	// it has the otherwise-unspellable generic signature
+	//
+	//   (a, b: ^T) -> PtrInt
+	//
+	// and measures T elements rather than bytes. The root-frame declaration
+	// uses Pointer formals only to give this distinct relation an ordinary
+	// overload signature; candidate matching preserves the common typed
+	// pointer so the C++ operation retains both element size and provenance.
+	PointerDifference,
 	// tpcc does not yet support generic Pascal routine declarations, so the
 	// ordinary system.pp declaration cannot express the relationship
 	//

@@ -220,6 +220,9 @@ test-overflow-checking: mp
 test-inc-dec-operators: mp
 	sh tests/test_inc_dec_operators.sh
 
+test-pointer-arithmetic: mp
+	sh tests/test_pointer_arithmetic.sh
+
 test-custom-checked-operators: mp
 	sh tests/test_custom_checked_operators.sh
 
@@ -256,10 +259,11 @@ test-implicit-conversion-single-edge: mp
 test-implicit-real-narrowing: mp
 	sh tests/test_implicit_real_narrowing.sh
 
-test: test-predefined-explicit-conversions test-custom-in-operator test-emission-semantic-boundaries
+test: test-predefined-explicit-conversions test-custom-in-operator test-emission-semantic-boundaries test-pointer-arithmetic
 test: test-packed-record test-ifopt test-directive-push-pop test-directive-diagnostics test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle test-metaclass-construction test-untyped-pointer-dereference test-ansistring-pointer-cast test-old-file-api test-try-statements test-exception-handlers test-integer-not test-pointer-equality test-sysutils-exception test-old-object-lifecycle test-incomplete-type-resolution test-final-methods test-abstract-methods test-abstract-classes test-class-static-methods test-interface-guid test-interfaces-directive test-type-identity-and-compatibility test-operator-argument-matching test-operator-catalog test-custom-named-unary-operators test-managed-types-and-iteration test-overflow-checking test-inc-dec-operators test-custom-checked-operators test-custom-range-conversions test-custom-explicit-conversions test-overflow-constants test-index-range-checking test-subrange-carriers test-implicit-ordinal-narrowing test-implicit-conversion-single-edge test-implicit-real-narrowing
 
 .PHONY: all clean distclean test test-packed-record test-ifopt test-directive-push-pop test-directive-diagnostics test-case-statement test-math-intrinsics test-loop-control test-empty-statement test-generic-intrinsics test-length-native-types test-pos-builtin test-copy-builtin test-chr-builtin test-str-builtin test-val-builtin test-octstr-builtin test-strlen-builtin test-getmem-builtin test-move-builtin test-comparechar-builtin test-sizeof-layout test-set-literals test-include-exclude-builtin test-writable-cast test-write-builtin test-runerror-halt test-unit-lifecycle test-unit-uses-scope test-delete-builtin test-insert-builtin test-properties test-function-pointers test-single-type test-shortstring-type test-typed-const-aggregates test-explicit-enum-values test-type-block-publication test-file-types test-classtype-emission test-metaclass-lifecycle test-metaclass-construction test-untyped-pointer-dereference test-ansistring-pointer-cast test-old-file-api test-try-statements test-exception-handlers test-integer-not test-pointer-equality test-sysutils-exception test-old-object-lifecycle test-incomplete-type-resolution test-final-methods test-abstract-methods test-abstract-classes test-class-static-methods test-interface-guid test-interfaces-directive test-type-identity-and-compatibility test-operator-argument-matching test-operator-catalog test-custom-named-unary-operators test-managed-types-and-iteration test-overflow-checking test-inc-dec-operators test-custom-checked-operators test-custom-range-conversions test-custom-explicit-conversions test-overflow-constants test-index-range-checking test-subrange-carriers test-implicit-ordinal-narrowing test-implicit-conversion-single-edge test-implicit-real-narrowing
 .PHONY: test-predefined-explicit-conversions
 .PHONY: test-custom-in-operator
 .PHONY: test-emission-semantic-boundaries
+.PHONY: test-pointer-arithmetic

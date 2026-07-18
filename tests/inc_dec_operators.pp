@@ -85,10 +85,6 @@ type
   TOverlayArray = packed record
     Values: array[0..1] of Integer;
   end;
-  TBoundProcedure = procedure of object;
-  TMethodOwner = object
-    procedure Touch;
-  end;
   TWriteOnlyBox = object
   private
     FValue: Integer;
@@ -125,7 +121,6 @@ var
   Character: Char;
   Integers: array[0..3] of Integer;
   IntegerPointer: TIntegerPointer;
-  RawPointer: Pointer;
   Box: TBox;
   BoxLookups: Integer;
   PointerLookups: Integer;
@@ -135,9 +130,6 @@ var
   PackedValue: TPacked;
   OverlayStorage: Integer;
   OverlayArrayStorage: Int64;
-  MethodOwner: TMethodOwner;
-  BoundProcedure: TBoundProcedure;
-  OriginalCode: Pointer;
   WriteOnlyBox: TWriteOnlyBox;
   Caught: Boolean;
 
@@ -151,10 +143,6 @@ procedure TBox.SetItem(Index: Integer; Value: Integer);
 begin
   SetterCalls := SetterCalls + 1;
   FItems[Index] := Value
-end;
-
-procedure TMethodOwner.Touch;
-begin
 end;
 
 procedure TWriteOnlyBox.SetValue(Value: Integer);
@@ -357,19 +345,6 @@ begin
   if IntegerPointer <> @Integers[0] then
     Halt(15);
 
-  IntegerPointer := nil;
-  Inc(IntegerPointer);
-  if PtrUInt(IntegerPointer) <> 4 then
-    Halt(16);
-
-  RawPointer := Pointer(@Integers[0]);
-  Inc(RawPointer);
-  if PtrUInt(RawPointer) <> PtrUInt(@Integers[0]) + 1 then
-    Halt(17);
-  Dec(RawPointer);
-  if RawPointer <> Pointer(@Integers[0]) then
-    Halt(18);
-
   Integers[2] := 39;
   PointerLookups := 0;
   Inc(FindInteger()^);
@@ -430,15 +405,7 @@ begin
   if TOverlayArray(OverlayArrayStorage).Values[1] <> 71 then
     Halt(32);
   if IndexLookups <> 1 then
-    Halt(33);
-
-  BoundProcedure := @MethodOwner.Touch;
-  OriginalCode := TMethod(BoundProcedure).Code;
-  Inc(TMethod(BoundProcedure).Code);
-  if PtrUInt(TMethod(BoundProcedure).Code) <>
-     PtrUInt(OriginalCode) + 1 then
-    Halt(34);
-  TMethod(BoundProcedure).Code := OriginalCode
+    Halt(33)
   {$endif}
   {$endif}
 end.

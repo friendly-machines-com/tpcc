@@ -4038,37 +4038,11 @@ Mutation* Parser::parse_mutation_statement(
 		    std::move(arguments));
 	}
 
-	// The root fallback's omitted result is the same exact T as its first
-	// argument. This is the one relation its Pascal declaration could not
-	// express; after ordinary overload selection has chosen that callable,
-	// restore the result Type* before applying ordinary assignment conversion.
 	if (operation &&
-	    operation->ty == unknown_type()) {
-		auto call =
-		    dynamic_cast<ProcCall*>(
-			operation);
-		auto callable =
-		    call
-			? dynamic_cast<Callable*>(
-			      call->callee)
-			: nullptr;
-		const BuiltinDesc* descriptor =
-		    callable
-			? callable->builtin_desc
-			: nullptr;
-		if (!descriptor ||
-		    (descriptor->generic_kind !=
-			 BuiltinGenericKind::
-			     UnaryOrdinalOrPointerStep &&
-		     descriptor->generic_kind !=
-			 BuiltinGenericKind::
-			     EnumOrPointerDistanceStep))
-			emit_parse_error_at(
-			    call_location,
-			    "internal error: mutation operator has an unknown result type");
-		operation->ty =
-		    source_target->ty;
-	}
+	    operation->ty == unknown_type())
+		emit_parse_error_at(
+		    call_location,
+		    "internal error: mutation operator has an unknown result type");
 	Node* stored =
 	    cast(operation, source_target->ty);
 	if (directive_state.switch_enabled('r') &&
@@ -8711,17 +8685,26 @@ static bool generic_ordinal_operation_accepts(
 		    operand);
 	if (kind ==
 	    BuiltinGenericKind::
-		UnaryOrdinalOrPointerStep)
-		return is_ordinal_intrinsic_argument(
-			   operand) ||
-		       dynamic_cast<PointerType*>(
-			   operand);
+		UnaryOrdinalOrPointerStep) {
+		if (auto pointer =
+			dynamic_cast<PointerType*>(
+			    operand))
+			// `Pointer` is carried as void*. With no element type or
+			// allocation metadata, C++20 cannot step it while preserving
+			// provenance. Do not replace that missing information with an
+			// integer address.
+			return !pointer->is_untyped();
+		else
+			return is_ordinal_intrinsic_argument(
+			    operand);
+	}
 	if (kind ==
 	    BuiltinGenericKind::
 		EnumOrPointerDistanceStep) {
-		if (dynamic_cast<PointerType*>(
-			operand))
-			return true;
+		if (auto pointer =
+			dynamic_cast<PointerType*>(
+			    operand))
+			return !pointer->is_untyped();
 		while (auto subrange =
 			   dynamic_cast<SubrangeType*>(
 			       operand))
@@ -9675,6 +9658,66 @@ Parser::match_callable_arguments(
 		      callable->cxx_name);
 	if (builtin &&
 	    builtin->generic_kind ==
+		BuiltinGenericKind::PointerDifference) {
+		// The root declaration's Pointer formals distinguish this overload
+		// from `(T, Integer) -> T`; they must not erase typed operands before
+		// emission. Recover the unspellable `(^T, ^T) -> PtrInt` relation
+		// candidate-locally, using the same ordinary overload family and
+		// dominance rules as every concrete custom Subtract declaration.
+		if (args.size() != 2 ||
+		    !args[0] || !args[1])
+			return std::nullopt;
+		auto first_type =
+		    dynamic_cast<PointerType*>(
+			args[0]->ty);
+		auto second_type =
+		    dynamic_cast<PointerType*>(
+			args[1]->ty);
+		if (!first_type || !second_type)
+			return std::nullopt;
+
+		if (first_type->is_untyped() ||
+		    second_type->is_untyped() ||
+		    first_type->item_type !=
+			second_type->item_type)
+			// Element distance has no coherent unit for two different
+			// typed pointees. Untyped Pointer supplies no C++ array element
+			// or allocation metadata at all. Do not silently turn either
+			// case into integer-address or byte-pointer arithmetic.
+			return std::nullopt;
+		PointerType* common_type = first_type;
+
+		Parameter pointer_formal(
+		    "pointer", "", common_type,
+		    ParamMode::Value, nullptr);
+		auto first_match =
+		    match_argument(
+			pointer_formal, args[0],
+			nullptr, 0, false);
+		auto second_match =
+		    match_argument(
+			pointer_formal, args[1],
+			nullptr, 1, false);
+		if (!first_match || !second_match)
+			return std::nullopt;
+
+		// The Pascal declaration omits T, so this fallback remains below
+		// every viable fully typed declaration. Converted arguments preserve
+		// T for the selected C++ pointer-difference overload.
+		return CallableMatch{
+		    {
+			{MatchRank::Tier::Generic, 0},
+			{MatchRank::Tier::Generic, 0},
+		    },
+		    {
+			first_match->value,
+			second_match->value,
+		    },
+		    {{}, {}},
+		};
+	}
+	if (builtin &&
+	    builtin->generic_kind ==
 		BuiltinGenericKind::SetMembership) {
 		// Only System's omitted-type declaration enters here. Custom In
 		// declarations have complete Pascal formals and use the ordinary loop
@@ -10491,11 +10534,24 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 						"' is not a storage-backed expression");
 				if (failure ==
 				    MatchFailure::
-					OrdinalRequired)
+					OrdinalRequired) {
+					const BuiltinDesc*
+					    candidate_builtin =
+						c->builtin_desc
+						    ? c->builtin_desc
+						    : lookup_builtin_desc(
+							  c->cxx_name);
 					emit_parse_error_at(
 					    error_location,
 					    name_for_error +
-						" requires an ordinal argument");
+						(candidate_builtin &&
+							 candidate_builtin
+								 ->generic_kind ==
+							     BuiltinGenericKind::
+								 UnaryOrdinalOrPointerStep
+						     ? " requires an ordinal or typed pointer argument"
+						     : " requires an ordinal argument"));
+				}
 			}
 		}
 		if (!match ||
@@ -10751,6 +10807,31 @@ Node* Parser::make_call(
 	    finalized.receiver, finalized.callee,
 	    std::move(args));
 	call->ty = call_result_type(finalized.callee);
+	if (call->ty == unknown_type()) {
+		auto callable =
+		    dynamic_cast<Callable*>(
+			finalized.callee);
+		const BuiltinDesc* descriptor =
+		    callable
+			? callable->builtin_desc
+			: nullptr;
+		if (descriptor &&
+		    (descriptor->generic_kind ==
+			 BuiltinGenericKind::
+			     UnaryOrdinalOrPointerStep ||
+		     descriptor->generic_kind ==
+			 BuiltinGenericKind::
+			     EnumOrPointerDistanceStep) &&
+		    !call->args.empty() &&
+		    call->args[0])
+			// These root declarations omit the one generic T which is
+			// both their first formal and their result. Restore that
+			// relation immediately after ordinary selection so direct
+			// `pointer +/- integer` expressions and Inc/Dec mutation share
+			// one result-typing mechanism.
+			call->ty =
+			    call->args[0]->ty;
+	}
 	if (!finalized.qualifier_effect)
 		return call;
 	return new EvaluateThen(
