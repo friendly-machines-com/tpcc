@@ -14,20 +14,91 @@ Frame::Frame(Frame* parent) {
 	this->parent = parent;
 }
 
-Type* Frame::lookup_type(std::string name) const {
-	auto iter = type_items.find(name);
-	if (iter != type_items.end()) {
-		auto result = iter->second;
-		if (result == nullptr) {
-			fprintf(stderr, "error: %s\n", name.c_str());
+std::optional<Binding> Frame::lookup_type_or_value_local(
+    std::string name) const {
+	auto found = items.find(name);
+	if (found == items.end())
+		return std::nullopt;
+	return found->second;
+}
+
+std::optional<Binding> Frame::lookup_type_or_value(
+    std::string name) const {
+	std::vector<Callable*> callables;
+	for (const Frame* current = this; current;
+	     current = current->parent) {
+		auto found =
+		    current->lookup_type_or_value_local(name);
+		if (!found)
+			continue;
+		if (auto type =
+			std::get_if<Type*>(&*found)) {
+			if (callables.empty())
+				return Binding{
+				    std::in_place_type<Type*>,
+				    *type};
+			break;
 		}
-		assert(result);
-		return result;
-	} else if (parent) {
-		return parent->lookup_type(name);
-	} else {
-		return nullptr;
+
+		Node* binding = std::get<Node*>(*found);
+		auto callable =
+		    dynamic_cast<Callable*>(binding);
+		auto overloads =
+		    dynamic_cast<OverloadSet*>(binding);
+		if (!callable && !overloads) {
+			if (callables.empty())
+				return Binding{
+				    std::in_place_type<Node*>,
+				    binding};
+			break;
+		}
+		Callable* representative =
+		    callable
+			? callable
+			: overloads->members.front();
+		if (!callables.empty() &&
+		    !same_callable_overload_category(
+			callables.front(),
+			representative))
+			break;
+		if (callable)
+			callables.push_back(callable);
+		else
+			callables.insert(
+			    callables.end(),
+			    overloads->members.begin(),
+			    overloads->members.end());
+		if (!callable_binding_opens_parent(binding))
+			break;
 	}
+	if (callables.empty())
+		return std::nullopt;
+	Node* result =
+	    callables.size() == 1
+		? static_cast<Node*>(callables.front())
+		: static_cast<Node*>(
+		      new OverloadSet(
+			  std::move(callables)));
+	return Binding{
+	    std::in_place_type<Node*>, result};
+}
+
+Type* Frame::lookup_type(std::string name) const {
+	for (const Frame* current = this; current;
+	     current = current->parent) {
+		auto found =
+		    current->lookup_type_or_value_local(name);
+		if (!found)
+			continue;
+		if (auto type =
+			std::get_if<Type*>(&*found)) {
+			assert(*type);
+			return *type;
+		}
+		// A value is irrelevant in a required type position. Continue to
+		// the enclosing structural Frame so `field: field` remains legal.
+	}
+	return nullptr;
 }
 bool callable_binding_opens_parent(Node* binding) {
 	if (auto callable = dynamic_cast<Callable*>(binding))
@@ -44,10 +115,15 @@ Node* Frame::lookup_value(std::string name) const {
 	std::vector<Callable*> callables;
 	for (const Frame* current = this; current;
 	     current = current->parent) {
-		auto found = current->value_items.find(name);
-		if (found == current->value_items.end())
+		auto found =
+		    current->lookup_type_or_value_local(name);
+		if (!found)
 			continue;
-		Node* binding = found->second.value;
+		auto value =
+		    std::get_if<Node*>(&*found);
+		if (!value)
+			continue;
+		Node* binding = *value;
 		assert(binding);
 
 		auto callable =
@@ -93,39 +169,69 @@ Node* Frame::lookup_value(std::string name) const {
 }
 
 void Frame::rebind_type(std::string name, Type* ty) {
-	type_items[name] = ty;
+	auto found = items.find(name);
+	assert(found != items.end());
+	assert(std::holds_alternative<Type*>(
+	    found->second));
+	found->second = Binding{
+	    std::in_place_type<Type*>, ty};
 }
 
 void Frame::rebind_value_type(std::string name, Type* ty) {
-	value_items[name].ty = ty;
+	auto found = items.find(name);
+	assert(found != items.end());
+	auto value = std::get_if<Node*>(&found->second);
+	assert(value && *value);
+	Node* node = *value;
+	if (auto callable =
+		dynamic_cast<Callable*>(node)) {
+		assert(!ty ||
+		       (callable->ty &&
+			callable->ty->return_type == ty));
+		return;
+	}
+	if (node->ty)
+		assert(!ty || node->ty == ty);
+	else
+		node->ty = ty;
 }
 
 /** returns whether it was registered anew, with type TY */
 bool Frame::register_type(std::string name, Type* ty) {
-	auto iter = type_items.find(name);
-	if (iter != type_items.end()) {
-		abort(); // duplicate type name
+	auto iter = items.find(name);
+	if (iter != items.end()) {
 		return false;
 	} else {
 		if (parent && parent->lookup_type(name)) {
 			fprintf(stderr, "warning: Type name '%s' shadows another type of the same name\n", name.c_str());
 		}
-		type_items[name] = ty;
+		items.emplace(
+		    std::move(name),
+		    Binding{
+			std::in_place_type<Type*>,
+			ty});
 		return true;
 	}
 }
 
 /** returns whether it was registered anew, with value V of type T */
 bool Frame::register_variable(std::string name, Node* v, Type* ty) {
-	auto iter = value_items.find(name);
-	if (iter != value_items.end()) {
-		abort(); // duplicate type name
+	auto iter = items.find(name);
+	if (iter != items.end()) {
 		return false;
 	} else {
 		if (parent && parent->lookup_value(name)) {
 			fprintf(stderr, "warning: Name '%s' shadows another type of the same name in a super\n", name.c_str());
 		}
-		value_items[name] = FrameValueEntry(v, ty);
+		assert(v);
+		assert(!ty || !v->ty || ty == v->ty);
+		if (!v->ty)
+			v->ty = ty;
+		items.emplace(
+		    std::move(name),
+		    Binding{
+			std::in_place_type<Node*>,
+			v});
 		return true;
 	}
 }
@@ -261,13 +367,22 @@ CallableRegistration::Kind validate_callable_pair(
 
 CallableRegistration Frame::collect_callable(
     std::string name, Callable* c) {
-	auto iter = value_items.find(name);
-	if (iter == value_items.end()) {
-		value_items[name] = FrameValueEntry(c, static_cast<RoutineType*>(c->ty)->return_type);
+	auto iter = items.find(name);
+	if (iter == items.end()) {
+		items.emplace(
+		    std::move(name),
+		    Binding{
+			std::in_place_type<Node*>,
+			c});
 		return {
 		    CallableRegistration::Kind::Added};
 	}
-	Node* existing = iter->second.value;
+	auto existing_value =
+	    std::get_if<Node*>(&iter->second);
+	if (!existing_value)
+		return {
+		    CallableRegistration::Kind::Rejected};
+	Node* existing = *existing_value;
 	if (auto ec = dynamic_cast<Callable*>(existing)) {
 		// This is only a declaration collection step. In particular, EC and C
 		// may temporarily have incompatible categories or duplicate signatures:
@@ -277,8 +392,8 @@ CallableRegistration Frame::collect_callable(
 		auto set = new OverloadSet(
 		    std::vector<Callable*>{
 			ec, c});
-		iter->second.value = set;
-		iter->second.ty = nullptr;
+		iter->second = Binding{
+		    std::in_place_type<Node*>, set};
 		return {
 		    CallableRegistration::Kind::Added};
 	}
@@ -294,12 +409,17 @@ CallableRegistration Frame::collect_callable(
 
 CallableRegistration Frame::register_callable(
     std::string name, Callable* c) {
-	auto iter = value_items.find(name);
-	if (iter == value_items.end())
+	auto iter = items.find(name);
+	if (iter == items.end())
 		return collect_callable(
 		    std::move(name), c);
 
-	Node* existing = iter->second.value;
+	auto existing_value =
+	    std::get_if<Node*>(&iter->second);
+	if (!existing_value)
+		return {
+		    CallableRegistration::Kind::Rejected};
+	Node* existing = *existing_value;
 	if (auto ec = dynamic_cast<Callable*>(existing)) {
 		auto result =
 		    validate_callable_pair(ec, c);
@@ -326,4 +446,51 @@ CallableRegistration Frame::register_callable(
 	}
 	return collect_callable(
 	    std::move(name), c);
+}
+
+static Type* declaration_value_type(Node* value) {
+	if (auto callable =
+		dynamic_cast<Callable*>(value))
+		return callable->ty
+			   ? callable->ty->return_type
+			   : nullptr;
+	return value ? value->ty : nullptr;
+}
+
+std::vector<std::pair<std::string, Type*>>
+Frame::type_declarations() const {
+	std::vector<std::pair<std::string, Type*>>
+	    result;
+	for (const auto& item : items)
+		if (auto type =
+			std::get_if<Type*>(&item.second))
+			result.emplace_back(
+			    item.first, *type);
+	return result;
+}
+
+std::vector<std::pair<std::string, FrameValueEntry>>
+Frame::value_declarations() const {
+	std::vector<
+	    std::pair<std::string, FrameValueEntry>>
+	    result;
+	for (const auto& item : items)
+		if (auto value =
+			std::get_if<Node*>(&item.second))
+			result.emplace_back(
+			    item.first,
+			    FrameValueEntry{
+				*value,
+				declaration_value_type(
+				    *value)});
+	return result;
+}
+
+std::vector<NamedBinding>
+Frame::bindings_local() const {
+	std::vector<NamedBinding> result;
+	result.reserve(items.size());
+	for (const auto& item : items)
+		result.push_back(item);
+	return result;
 }

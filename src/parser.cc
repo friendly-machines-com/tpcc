@@ -635,6 +635,12 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 
 	assert(registration.kind ==
 	       CallableRegistration::Kind::Rejected);
+	if (!registration.existing_binding)
+		emit_parse_error_at(
+		    callable_source_location(
+			incoming),
+		    "duplicate identifier: " +
+			name);
 	assert(incoming && incoming->ty &&
 	       registration.existing_binding);
 
@@ -1547,11 +1553,14 @@ void Parser::maybe_parse_statement() {
 							cxx_value_name(
 							    *variable_name),
 							exception_type);
-						handler_frame
-						    ->register_variable(
-							*variable_name,
-							variable,
-							exception_type);
+						if (!handler_frame
+							 ->register_variable(
+							     *variable_name,
+							     variable,
+							     exception_type))
+							raise_parse_error(
+							    "duplicate identifier: " +
+							    *variable_name);
 					}
 					if (emitter)
 						emitter
@@ -2299,6 +2308,101 @@ Node* Parser::bind_lookup_result(
 	return access;
 }
 
+/** Ordinary expression lookup is lexical before it is categorical. Inspect
+ *  each active environment once and stop at the nearest declaration, whether
+ *  it is a Type or a Node. This retained tag is what lets `High(1)` choose a
+ *  local type High over the farther System.High value while required-type
+ *  lookup can still skip a nearer value for declarations such as `X: X`.
+ *
+ *  Callable overload families retain their existing exception: an
+ *  overload-open value may collect compatible callables from lower
+ *  environments, but a nearer type terminates that collection. */
+std::optional<Binding>
+Parser::maybe_resolve_type_or_value(
+    std::string name) {
+	std::vector<Callable*> collected;
+	for (auto it = scopes.rbegin();
+	     it != scopes.rend(); ++it) {
+		if (auto unit =
+			dynamic_cast<UnitRef*>(
+			    it->qualifier);
+		    unit && unit->unit &&
+		    unit->unit->name == name) {
+			if (collected.empty())
+				return Binding{
+				    std::in_place_type<Node*>,
+				    unit};
+			break;
+		}
+
+		auto binding =
+		    it->frame
+			->lookup_type_or_value(name);
+		if (!binding)
+			continue;
+		if (auto type =
+			std::get_if<Type*>(&*binding)) {
+			if (collected.empty())
+				return Binding{
+				    std::in_place_type<Type*>,
+				    *type};
+			break;
+		}
+
+		Node* hit = std::get<Node*>(*binding);
+		const bool opens_parent =
+		    hit &&
+		    !it->is_receiver_environment() &&
+		    callable_binding_opens_parent(hit);
+		auto as_call =
+		    dynamic_cast<Callable*>(hit);
+		auto as_set =
+		    dynamic_cast<OverloadSet*>(hit);
+		if (!opens_parent) {
+			if (collected.empty())
+				return Binding{
+				    std::in_place_type<Node*>,
+				    bind_lookup_result(
+					it->qualifier,
+					hit)};
+			break;
+		}
+		if (as_call) {
+			if (!collected.empty() &&
+			    !same_callable_overload_category(
+				collected.front(),
+				as_call))
+				break;
+			collected.push_back(as_call);
+		} else if (as_set) {
+			if (as_set->members.empty())
+				continue;
+			if (!collected.empty() &&
+			    !same_callable_overload_category(
+				collected.front(),
+				as_set->members.front()))
+				break;
+			collected.insert(
+			    collected.end(),
+			    as_set->members.begin(),
+			    as_set->members.end());
+		} else {
+			break;
+		}
+	}
+	if (collected.empty())
+		return std::nullopt;
+	Node* result =
+	    collected.size() == 1
+		? static_cast<Node*>(
+		      collected.front())
+		: static_cast<Node*>(
+		      new OverloadSet(
+			  std::move(collected)));
+	return Binding{
+	    std::in_place_type<Node*>, result};
+}
+
 /** Walk the scope stack top-down looking up a value-position name (variable,
  *  constant, procedure, function, builtin). Return null if not found.
  *
@@ -2541,7 +2645,11 @@ Type* Parser::resolve_type(std::string name, bool allow_forward) {
 		return hit;
 	if (allow_forward && !type_block_frames.empty()) {
 		auto inc = new IncompleteType(current_location(), name);
-		type_block_frames.back()->register_type(name, inc);
+		if (!type_block_frames.back()
+			 ->register_type(name, inc))
+			raise_parse_error(
+			    "duplicate identifier: " +
+			    name);
 		return inc;
 	}
 	raise_parse_error("unresolved type identifier: " + name);
@@ -2890,10 +2998,18 @@ Node* Parser::parse_value_from_identifier(
 		*leading_directives =
 		    identifier_directives;
 	if (maybe_parse_period()) {
-		Node* base = maybe_resolve_value(id);
-		if (!base) {
-			Type* qualifier_type =
-			    maybe_resolve_type(id);
+		Node* base = nullptr;
+		auto qualifier_binding =
+		    maybe_resolve_type_or_value(id);
+		if (qualifier_binding) {
+			if (auto value =
+				std::get_if<Node*>(
+				    &*qualifier_binding))
+				base = *value;
+			else {
+				Type* qualifier_type =
+				    std::get<Type*>(
+					*qualifier_binding);
 			if (auto class_type =
 				dynamic_cast<ClassType*>(
 				    qualifier_type))
@@ -2906,6 +3022,7 @@ Node* Parser::parse_value_from_identifier(
 				base =
 				    new TypeMemberQualifier(
 					qualifier_type);
+			}
 		}
 		if (!base)
 			raise_parse_error(
@@ -2951,7 +3068,12 @@ Node* Parser::parse_value_from_identifier(
 			    identifier_directives);
 		}
 	}
-	if (Node* value = maybe_resolve_value(id)) {
+	auto binding =
+	    maybe_resolve_type_or_value(id);
+	if (binding &&
+	    std::holds_alternative<Node*>(*binding)) {
+		Node* value =
+		    std::get<Node*>(*binding);
 		// Within a function body, a bare occurrence of that function's name
 		// denotes its hidden result variable.  Parentheses still mean a call,
 		// which is how recursive calls remain distinguishable.  resolve_lvalue
@@ -3120,7 +3242,15 @@ Node* Parser::parse_value_from_identifier(
 		return value;
 	}
 	if (input_token == "(") {
-		if (Type* target_ty = maybe_resolve_type(id)) {
+		Type* target_ty =
+		    binding
+			? (std::get_if<Type*>(
+			       &*binding)
+			       ? std::get<Type*>(
+				     *binding)
+			       : nullptr)
+			: nullptr;
+		if (target_ty) {
 			parse_opening_paren();
 			Node* value = parse_expression();
 			parse_closing_paren();
@@ -3211,8 +3341,15 @@ Node* Parser::parse_value_from_identifier(
 			    value, target_ty);
 		}
 	}
+	Type* visible_type =
+	    binding
+		? (std::get_if<Type*>(&*binding)
+		       ? std::get<Type*>(*binding)
+		       : nullptr)
+		: nullptr;
 	if (auto class_type =
-		dynamic_cast<ClassType*>(maybe_resolve_type(id))) {
+		dynamic_cast<ClassType*>(
+		    visible_type)) {
 		// Pascal keeps type and value lookup distinct. In value context the
 		// class name denotes the exact class-reference value; it is not the
 		// ClassType object reused as a fake expression. The parenthesized
@@ -5297,7 +5434,12 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 					auto slot = new StorageSlot(
 					    cxx_value_name(member_name), ty, kind,
 					    owner_class);
-					body->register_variable(member_name, slot, ty);
+					if (!body->register_variable(
+						member_name,
+						slot, ty))
+						raise_parse_error(
+						    "duplicate member identifier: " +
+						    member_name);
 					if (auto packed = dynamic_cast<PackedRecordType*>(owner_class))
 						packed->fields.push_back({member_name, slot, ty});
 					else if (auto record = dynamic_cast<RecordType*>(owner_class))
@@ -5396,7 +5538,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				    cxx_value_name(member_name), ty,
 				    StorageSlot::Kind::AggregateMember,
 				    owner_class);
-				body->register_variable(member_name, slot, ty);
+				if (!body->register_variable(
+					member_name, slot, ty))
+					raise_parse_error(
+					    "duplicate member identifier: " +
+					    member_name);
 				if (auto packed = dynamic_cast<PackedRecordType*>(owner_class))
 					packed->fields.push_back({member_name, slot, ty});
 				else if (auto record = dynamic_cast<RecordType*>(owner_class))
@@ -5457,7 +5603,11 @@ VariantPart* Parser::parse_record_variant(
 		auto slot = new StorageSlot(
 		    variant->selector_cxx_name, tag_type,
 		    StorageSlot::Kind::AggregateMember, owner);
-		body->register_variable(first, slot, tag_type);
+		if (!body->register_variable(
+			first, slot, tag_type))
+			raise_parse_error(
+			    "duplicate member identifier: " +
+			    first);
 		variant->selector_slot = slot;
 	} else {
 		tag_type = resolve_type(first, false);
@@ -5502,8 +5652,12 @@ VariantPart* Parser::parse_record_variant(
 					// Every variant field shares the record's one member
 					// namespace. The recursive arm tree exists only for
 					// layout and emission.
-					body->register_variable(
-					    fname, slot, fty);
+					if (!body->register_variable(
+						fname, slot,
+						fty))
+						raise_parse_error(
+						    "duplicate member identifier: " +
+						    fname);
 					arm.fields.push_back(
 					    {fname, slot, fty});
 				}
@@ -6745,13 +6899,21 @@ void Parser::parse_const_block(Type* aggregate_owner) {
 				    folded.node ? folded.node->ty : nullptr,
 				    folded.node,
 				    aggregate_owner);
-				scope->register_variable(
-				    name, constant,
-				    constant->ty);
+				if (!scope->register_variable(
+					name, constant,
+					constant->ty))
+					raise_parse_error(
+					    "duplicate identifier: " +
+					    name);
 			} else {
-				scope->register_variable(
-				    name, folded.node,
-				    folded.node ? folded.node->ty : nullptr);
+				if (!scope->register_variable(
+					name, folded.node,
+					folded.node
+					    ? folded.node->ty
+					    : nullptr))
+					raise_parse_error(
+					    "duplicate identifier: " +
+					    name);
 			}
 			parse_semicolon();
 			continue;
@@ -6769,8 +6931,11 @@ void Parser::parse_const_block(Type* aggregate_owner) {
 			    StorageSlot::Kind::StaticMember,
 			    aggregate_owner);
 			slot->initializer = initializer;
-			scope->register_variable(
-			    name, slot, ty);
+			if (!scope->register_variable(
+				name, slot, ty))
+				raise_parse_error(
+				    "duplicate identifier: " +
+				    name);
 			parse_semicolon();
 			continue;
 		}
@@ -6778,7 +6943,11 @@ void Parser::parse_const_block(Type* aggregate_owner) {
 		    cxx_value_name(name), ty);
 		slot->owning_unit =
 		    declaration_unit(scope);
-		scope->register_variable(name, slot, ty);
+		if (!scope->register_variable(
+			name, slot, ty))
+			raise_parse_error(
+			    "duplicate identifier: " +
+			    name);
 		if (maybe_parse_equal()) {
 			Node* initializer = parse_storage_initializer(ty);
 			if (emitter)
@@ -7529,7 +7698,19 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			break;
 		auto name = *name_optional;
 		parse_equals();
-		Type* existing = scope->lookup_type(name); // FIXME: WTF
+		auto existing_binding =
+		    scope->lookup_type_or_value_local(name);
+		Type* existing = nullptr;
+		if (existing_binding) {
+			auto existing_type =
+			    std::get_if<Type*>(
+				&*existing_binding);
+			if (!existing_type)
+				raise_type_parse_error(
+				    "duplicate identifier: " +
+				    name);
+			existing = *existing_type;
+		}
 		IncompleteType* lhs_placeholder = nullptr;
 		ClassType* completing_forward = nullptr;
 		bool needs_cxx_forward = false;
@@ -7552,7 +7733,11 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			}
 		} else {
 			lhs_placeholder = new IncompleteType(current_location(), name);
-			scope->register_type(name, lhs_placeholder);
+			if (!scope->register_type(
+				name, lhs_placeholder))
+				raise_type_parse_error(
+				    "duplicate identifier: " +
+				    name);
 		}
 		std::string saved_type_declaration_name =
 		    std::move(current_type_declaration_name);
@@ -7819,7 +8004,11 @@ void Parser::parse_var_block() {
 			if (!external_cxx_name)
 				slot->owning_unit =
 				    declaration_unit(scope);
-			scope->register_variable(name, slot, ty);
+			if (!scope->register_variable(
+				name, slot, ty))
+				raise_parse_error(
+				    "duplicate identifier: " +
+				    name);
 			if (emitter && !external_cxx_name)
 				emitter->emit_var_decl(
 				    slot->cxx_name, ty,
@@ -8615,8 +8804,13 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 			// Pascal-visible Self identifier.
 			if (target->ty->kind != CLASS_CONSTRUCTOR &&
 			    target->ty->kind != CLASS_DESTRUCTOR)
-				body_frame->register_variable(
-				    "self", receiver_slot, self_ty);
+				if (!body_frame
+					 ->register_variable(
+					     "self",
+					     receiver_slot,
+					     self_ty))
+					raise_parse_error(
+					    "duplicate identifier: self");
 			push_scope(owner_frame, receiver_slot);
 			pushed_owner_scope = true;
 		}
@@ -8625,11 +8819,22 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	push_declaration_frame(body_frame);
 	if (target->ty->return_type != &unit_type()) { // function
 		auto result_slot = new StorageSlot("p_result", target->ty->return_type);
-		body_frame->register_variable("result", result_slot, target->ty->return_type);
+		if (!body_frame->register_variable(
+			"result", result_slot,
+			target->ty->return_type))
+			raise_parse_error(
+			    "duplicate identifier: result");
 	}
 	auto rty = static_cast<RoutineType*>(target->ty);
 	for (auto& p : rty->formals) {
-		body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty);
+		if (!body_frame->register_variable(
+			p.pas_name,
+			new StorageSlot(
+			    p.cxx_name, p.ty),
+			p.ty))
+			raise_parse_error(
+			    "duplicate parameter identifier: " +
+			    p.pas_name);
 	}
 	if (emitter)
 		emitter->emit_procedure_open(target, nested_lambda);

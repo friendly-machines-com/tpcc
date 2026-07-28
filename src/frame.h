@@ -1,7 +1,10 @@
 #pragma once
-#include <string>
 #include <map>
-#include <ranges>
+#include <optional>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
 #include "types.h"
 
 class Node;
@@ -33,31 +36,38 @@ struct FrameValueEntry {
 	FrameValueEntry(Node* value, Type* ty);
 };
 
+/** One declaration bound to one spelling in one physical Frame. Type and
+ * value objects deliberately remain unrelated C++ hierarchies; the variant
+ * is the type-safe tag saying which kind of declaration the name denotes. */
+using Binding = std::variant<Type*, Node*>;
+using NamedBinding = std::pair<std::string, Binding>;
+
 /** A Frame is the storage for one declaration block (the result of `var x,y,z:
  *  Integer;` or the body of a record/class/object/unit). A frame's optional
  *  `parent` pointer captures STRUCTURAL relationships (nested class,
  *  subclass-to-superclass), not lexical lookup chains; those live in the
  *  Parser's `scopes` stack of frames.
  *
- *  A Frame interleaves TWO independent name namespaces: `type_items` (for
- *  type identifiers like `TFoo`) and `value_items` (for vars, consts, enum
- *  members, callables). They are separate maps ON PURPOSE: Pascal allows
- *  `type Foo = Integer; var Foo: Foo;` in the same scope, where the `Foo`
- *  type and the `Foo` variable share an identifier but refer to unrelated
- *  entities. Merging the maps would break that. Each map enforces its own
- *  duplicate rule (two types with the same name, or two values with the
- *  same name, are duplicates; a type and a value sharing a name is not). */
+ *  Required-type lookup and ordinary expression lookup are distinct:
+ *  lookup_type() skips values while walking outward, whereas
+ *  lookup_type_or_value() stops at the nearest declaration of either kind.
+ *  That distinction permits `X: X` when the field/parameter X is nearer than
+ *  an outer type X, while making a nearer local type High win over a farther
+ *  System.High in the ambiguous expression `High(1)`. */
 class Frame {
 private:
-	std::map<std::string, Type*> type_items;
-	std::map<std::string, FrameValueEntry> value_items;
+	std::map<std::string, Binding> items;
 public:
 	Frame* parent; // NOT invasive from Parser
 public:
     // TODO: kind of frame (unit, record, class, ...); maybe also bool auto_unwrap; for "uses" and "with" blocks
 
     Frame(Frame* parent);
-    Type* lookup_type(std::string name) const; /* TODO: or maybe a lookup with flags whether type and/or value is okay */
+    /** Nearest binding of either kind through this structural Frame chain. */
+    std::optional<Binding> lookup_type_or_value(std::string name) const;
+    /** Local-only form used by Parser while walking lexical scope entries. */
+    std::optional<Binding> lookup_type_or_value_local(std::string name) const;
+    Type* lookup_type(std::string name) const;
     /** Resolve NAME in this structural frame chain. The current frame is
      *  searched first; a callable marked overload may extend its family into
      *  parent frames, while every other hit shadows the remaining parents. */
@@ -66,10 +76,8 @@ public:
     /** Replace an existing type binding (used when patching a placeholder with
      *  its real Type* at type-block-end). No-op-safe for a fresh name. */
     void rebind_type(std::string name, Type* ty);
-    /** Replace the cached type for an existing value binding after a type-block
-     *  forward reference has been resolved. The value node itself remains the
-     *  canonical owner of behavior; this keeps frame-based diagnostics and
-     *  emit walks from seeing stale IncompleteType pointers. */
+    /** Compatibility hook for type-block normalization. A Frame no longer
+     * stores a second value-type cache; the Node owns its normalized type. */
     void rebind_value_type(std::string name, Type* ty);
     bool register_variable(std::string name, Node* v, Type* ty); // FIXME: StorageSlot would already have ty
     /** Collect a Callable while an aggregate declaration is still being
@@ -100,19 +108,17 @@ public:
      *  returns only a boolean: callers that need a value must use
      *  lookup_value(), which applies the structural parent chain. */
     bool declares_value(const std::string& name) const {
-	    return value_items.find(name) != value_items.end();
+	    auto found = items.find(name);
+	    return found != items.end() &&
+		   std::holds_alternative<Node*>(found->second);
     }
-    /** Read-only declaration enumeration for emission, normalization, and
-     *  diagnostics. A subrange has iteration but no associative find(), so it
-     *  cannot be substituted for semantic name lookup. */
-    auto type_declarations() const {
-	    return std::ranges::subrange(
-	        type_items.cbegin(), type_items.cend());
-    }
-    auto value_declarations() const {
-	    return std::ranges::subrange(
-	        value_items.cbegin(), value_items.cend());
-    }
+    /** Read-only snapshots for existing emission/diagnostic walks. The sole
+     * associative table remains private, so these cannot become lookup APIs. */
+    std::vector<std::pair<std::string, Type*>>
+    type_declarations() const;
+    std::vector<std::pair<std::string, FrameValueEntry>>
+    value_declarations() const;
+    std::vector<NamedBinding> bindings_local() const;
 };
 
 /** Whether BINDING's Pascal overload directive opens the family into the

@@ -11,6 +11,7 @@
 #include <optional>
 #include <string_view>
 #include "ci_less.h"
+#include "frame.h"
 #include "types.h"
 
 class Node;
@@ -161,8 +162,6 @@ public:
 	std::unique_ptr<char[]> owned_buffer;
 	size_t owned_buffer_len;
 };
-
-class Frame;
 
 struct ScopeValueLookup {
 	Node* binding;
@@ -486,6 +485,8 @@ protected:
 	Node* parse_bracket_literal();
 	Node* parse_storage_initializer(Type* ty);
 	Node* resolve_lvalue(std::string name);
+	std::optional<Binding>
+	maybe_resolve_type_or_value(std::string name);
 	Node* maybe_resolve_value(std::string name);
 	UnitRef* resolve_unit_type_qualifier(std::string name);
 	Node* resolve_value(std::string name);
