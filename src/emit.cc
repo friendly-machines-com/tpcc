@@ -1987,7 +1987,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				first = false;
 			}
 		} else {
-			// not sure. FIXME: m_iobject ?
+			// not sure. TODO: m_iobject ?
 		}
 	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		bool first = true;
@@ -2072,12 +2072,18 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 					class_name.c_str(), class_name.c_str()); // FIXME: escape
 				fprintf(active, "\t}\n");
 			}
+			if (!body->declares_value("instancesize")) {
+				fprintf(active, "\tpublic: virtual inline ::u_system::t_sizeint p_instancesize() {\n");
+				fprintf(active,
+					"\t\treturn sizeof(%s);\n", class_name.c_str()); // TODO: namespace::super
+				fprintf(active, "\t}\n");
+			}
 			if (!body->declares_value("inheritsfrom")) {
 				fprintf(active, "\tpublic: virtual inline ::u_system::t_boolean p_inheritsfrom(%s s) {\n", classref_api_cxx.c_str());
 				if (parent_class_cxx_name.empty()) {
 					fprintf(active, "\t\treturn ::u_system::tpcc_bool_to_boolean(s == this);\n");
 				} else {
-					fprintf(active, "\t\treturn ::u_system::tpcc_bool_to_boolean(s == this || %s::m_meta::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn ::u_system::tpcc_bool_to_boolean(s == this || %s::m_meta::p_inheritsfrom(s));\n", parent_class_cxx_name.c_str());
 				}
 				fprintf(active, "\t}\n");
 			}
@@ -2086,7 +2092,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				if (parent_class_cxx_name.empty()) {
 					fprintf(active, "\t\treturn nullptr;\n");
 				} else {
-					fprintf(active, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str()); // FIXME: escape
+					fprintf(active, "\t\treturn %s::p_classtype();\n", parent_class_cxx_name.c_str());
 				}
 				fprintf(active, "\t}\n");
 			}
@@ -2227,10 +2233,6 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				emit_callable_signature(
 				    call, Position::Declaration, "");
 				if (method) {
-					// C++ final is the exact enforcement mechanism for a
-					// Pascal virtual slot which may no longer be overridden.
-					// It is independent of override and precedes either the
-					// generated abstract body or an ordinary semicolon.
 					if (method->virtual_kind ==
 					    Method::VirtualKind::Override)
 						fprintf(active, " override");
