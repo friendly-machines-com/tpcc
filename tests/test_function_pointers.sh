@@ -37,6 +37,20 @@ then
 	echo "method binding emitted a capture lambda" >&2
 	exit 1
 fi
+if ! rg -q \
+	'::u_system::m_explicit_routine_cast<void\(::u_system::t_pointer, ::u_system::t_pointer\)>\(p_objectcallback\)' \
+	"$tmp/function_pointers.cc"
+then
+	echo "plain explicit pointer-parameter routine cast was not preserved" >&2
+	exit 1
+fi
+if ! rg -q \
+	'::u_system::m_explicit_routine_cast<void\(::u_system::t_pointer, ::u_system::t_pointer\)>\(p_objectmethodcallback\)' \
+	"$tmp/function_pointers.cc"
+then
+	echo "method explicit pointer-parameter routine cast was not preserved" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \
@@ -87,6 +101,8 @@ ASAN_OPTIONS=detect_leaks=1 \
 
 for source in \
 	tests/function_pointer_explicit_cross_kind_rejected.pp \
+	tests/function_pointer_explicit_nonpointer_rejected.pp \
+	tests/function_pointer_implicit_pointer_mismatch_rejected.pp \
 	tests/function_pointer_global_to_method_rejected.pp \
 	tests/function_pointer_method_to_global_rejected.pp
 do

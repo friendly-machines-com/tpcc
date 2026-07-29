@@ -1753,28 +1753,83 @@ bool RoutineType::same_overload_signature_as(
 	return true;
 }
 
+static RoutineKind routine_value_kind(
+    RoutineKind kind) {
+	// A class method is declared on m_meta, but a bound reference carries
+	// that metaclass receiver in the same two-word representation as every
+	// other `procedure of object`.
+	return kind == CLASS_METHOD
+		   ? METHOD
+		   : kind;
+}
+
 bool RoutineType::accepts_routine_value_from(
     const RoutineType* source) const {
 	if (!source)
 		return false;
-	auto value_kind = [](RoutineKind kind) {
-		// A class method is declared on m_meta, but a bound reference carries
-		// that metaclass receiver in the same two-word representation as every
-		// other `procedure of object`.
-		return kind == CLASS_METHOD
-			   ? METHOD
-			   : kind;
-	};
 	RoutineKind source_kind =
-	    value_kind(source->kind);
+	    routine_value_kind(source->kind);
 	RoutineKind target_kind =
-	    value_kind(kind);
+	    routine_value_kind(kind);
 	if (source_kind != target_kind ||
 	    (target_kind != ROUTINE &&
 	     target_kind != METHOD))
 		return false;
 	return same_parameter_and_result_types_as(
 	    source);
+}
+
+static bool routine_data_pointer_parameter_type(
+    const Type* type) {
+	while (auto incomplete =
+		   dynamic_cast<const IncompleteType*>(type)) {
+		if (!incomplete->resolved)
+			return false;
+		type = incomplete->resolved;
+	}
+	// These are exactly the Pascal types emitted as ordinary C++ data
+	// pointers. Do not use is_reference_type() here: a future managed or
+	// capability reference may be nullable without sharing this ABI.
+	return dynamic_cast<const PointerType*>(type) ||
+	       dynamic_cast<const ClassType*>(type) ||
+	       dynamic_cast<const InterfaceType*>(type) ||
+	       dynamic_cast<const ClassRefType*>(type);
+}
+
+bool RoutineType::accepts_explicit_routine_cast_from(
+    const RoutineType* source) const {
+	if (!source)
+		return false;
+	RoutineKind source_kind =
+	    routine_value_kind(source->kind);
+	RoutineKind target_kind =
+	    routine_value_kind(kind);
+	if (source_kind != target_kind ||
+	    (target_kind != ROUTINE &&
+	     target_kind != METHOD) ||
+	    return_type != source->return_type ||
+	    formals.size() != source->formals.size())
+		return false;
+	for (size_t i = 0; i < formals.size(); ++i) {
+		const Parameter& target = formals[i];
+		const Parameter& from = source->formals[i];
+		if (target.mode != from.mode)
+			return false;
+		if (target.ty->same_formal_contract_as(
+			from.ty))
+			continue;
+		// The GNOME/GObject callback convention relied upon by TPCC covers
+		// data pointers passed by value. A Pascal const/var/out parameter is a
+		// C++ reference to the pointer object and has additional aliasing and
+		// write-back obligations, so it deliberately remains exact.
+		if (target.mode != ParamMode::Value ||
+		    !routine_data_pointer_parameter_type(
+			target.ty) ||
+		    !routine_data_pointer_parameter_type(
+			from.ty))
+			return false;
+	}
+	return true;
 }
 
 bool RoutineType::same_cxx_parameter_list_as(

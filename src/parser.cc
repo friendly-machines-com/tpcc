@@ -3605,13 +3605,18 @@ Node* Parser::parse_value_from_identifier(
 					dynamic_cast<RoutineType*>(
 					    value->ty)) {
 					if (!target_routine
-						 ->accepts_routine_value_from(
+						 ->accepts_explicit_routine_cast_from(
 						     source_routine))
 						raise_type_mismatch(
 						    "explicit cast between "
 						    "incompatible routine types",
 						    target_routine,
 						    source_routine);
+					// Unlike assignment and contextual @Routine resolution,
+					// explicit syntax may retain the routine representation
+					// while retyping by-value data-pointer parameters. The
+					// RoutineType predicate owns that narrow semantic rule;
+					// emission performs the documented ABI reinterpretation.
 					return new ExplicitCast(
 					    value, target_routine);
 				}

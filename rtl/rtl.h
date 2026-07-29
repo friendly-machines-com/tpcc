@@ -292,6 +292,28 @@ struct t_tmethod {
 template<typename Signature>
 using m_proc = Signature*;
 
+// Explicit Pascal casts between routine types may change only by-value data
+// pointer parameter types; the compiler checks that the result, parameter
+// modes, arity, and one-word versus two-word representation remain unchanged.
+//
+// Calling the resulting pointer is not defined by portable ISO C++20 when the
+// function types differ. TPCC deliberately targets the GNOME/GObject-capable
+// data-pointer callback ABI documented in README.md, where object/data pointer
+// parameters have one representation and calling convention. Keep this helper
+// visibly separate from ordinary assignment so that ABI exception can never
+// become an implicit C++ conversion.
+template<typename TargetSignature, typename SourceSignature>
+inline m_proc<TargetSignature> m_explicit_routine_cast(
+    m_proc<SourceSignature> value) noexcept {
+	static_assert(sizeof(m_proc<TargetSignature>) ==
+	    sizeof(m_proc<SourceSignature>));
+	static_assert(std::is_trivially_copyable_v<
+	    m_proc<TargetSignature>>);
+	static_assert(std::is_trivially_copyable_v<
+	    m_proc<SourceSignature>>);
+	return std::bit_cast<m_proc<TargetSignature>>(value);
+}
+
 template<typename FunctionPointer>
 inline t_pointer m_function_to_code_pointer(
     FunctionPointer value) noexcept {
@@ -329,6 +351,20 @@ struct m_method<Result(Args...)> {
 		return invoke(p_data, std::forward<Args>(args)...);
 	}
 };
+
+template<typename TargetSignature, typename SourceSignature>
+inline m_method<TargetSignature> m_explicit_routine_cast(
+    m_method<SourceSignature> value) noexcept {
+	static_assert(sizeof(m_method<TargetSignature>) ==
+	    sizeof(m_method<SourceSignature>));
+	static_assert(alignof(m_method<TargetSignature>) ==
+	    alignof(m_method<SourceSignature>));
+	static_assert(std::is_trivially_copyable_v<
+	    m_method<TargetSignature>>);
+	static_assert(std::is_trivially_copyable_v<
+	    m_method<SourceSignature>>);
+	return std::bit_cast<m_method<TargetSignature>>(value);
+}
 
 template<auto Method>
 struct m_method_adapter;

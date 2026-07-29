@@ -62,6 +62,11 @@ int main() {
 	    p_globalcode == nullptr ||
 	    p_methodcode == nullptr)
 		return 7;
+	if (p_staticpointercastresult !=
+		static_cast<::u_system::t_pointer>(p_receiver) ||
+	    p_methodpointercastresult !=
+		static_cast<::u_system::t_pointer>(p_otherreceiver))
+		return 10;
 
 	delete p_receiver;
 	delete p_otherreceiver;

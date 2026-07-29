@@ -680,6 +680,14 @@ public:
 	 * category is silently reclassified. */
 	bool accepts_routine_value_from(
 	    const RoutineType* source) const;
+	/** Compatibility for a user-written routine-value cast. Ordinary
+	 * assignment remains exact. An explicit cast may additionally replace a
+	 * by-value data-pointer formal with another data-pointer type when the
+	 * result, arity, modes, and plain-versus-bound representation remain exact.
+	 * The backend documents this deliberately ABI-level operation separately
+	 * because calling the retyped code pointer is not portable ISO C++20. */
+	bool accepts_explicit_routine_cast_from(
+	    const RoutineType* source) const;
 	/** C++ overload identity ignores a function result and does include the
 	 * adjusted parameter carriers. Pascal has already selected by its own
 	 * signatures before this backend-only collision check runs. */

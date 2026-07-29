@@ -6,12 +6,19 @@ type
   TMutation = procedure(var Value: Integer; const Delta: Integer);
   TBoundProcedure = procedure(Value: Integer) of object;
   TBoundFunction = function(Value: Integer): Integer of object;
+  TObjectCallback = procedure(Data: TObject; Arg: Pointer);
+  TPointerCallback = procedure(Data, Arg: Pointer);
+  TObjectMethodCallback =
+    procedure(Data: TObject; Arg: Pointer) of object;
+  TPointerMethodCallback =
+    procedure(Data, Arg: Pointer) of object;
 
   TBase = class
     Factor: Integer;
     destructor Destroy; virtual;
     procedure Accumulate(Value: Integer); virtual;
     function Scale(Value: Integer): Integer; virtual;
+    procedure CaptureObject(Data: TObject; Arg: Pointer);
   end;
 
 type
@@ -29,6 +36,10 @@ var
   BoundProcedure: TBoundProcedure;
   BoundProcedureCopy: TBoundProcedure;
   BoundFunction: TBoundFunction;
+  ObjectCallback: TObjectCallback;
+  PointerCallback: TPointerCallback;
+  ObjectMethodCallback: TObjectMethodCallback;
+  PointerMethodCallback: TPointerMethodCallback;
   Receiver: TBase;
   OtherReceiver: TBase;
   RawMethod: TMethod;
@@ -46,6 +57,8 @@ var
   RawData: Pointer;
   GlobalCode: Pointer;
   MethodCode: Pointer;
+  StaticPointerCastResult: Pointer;
+  MethodPointerCastResult: Pointer;
 
 procedure SetResult(Value: Integer); overload;
 begin
@@ -72,6 +85,14 @@ begin
   Value := Value + Delta
 end;
 
+procedure CaptureObject(Data: TObject; Arg: Pointer);
+begin
+  if Arg = nil then
+    StaticPointerCastResult := Pointer(Data)
+  else
+    StaticPointerCastResult := Arg
+end;
+
 destructor TBase.Destroy;
 begin
 end;
@@ -84,6 +105,14 @@ end;
 function TBase.Scale(Value: Integer): Integer;
 begin
   Scale := Factor * Value
+end;
+
+procedure TBase.CaptureObject(Data: TObject; Arg: Pointer);
+begin
+  if Arg = nil then
+    MethodPointerCastResult := Pointer(Data)
+  else
+    MethodPointerCastResult := Arg
 end;
 
 procedure TChild.Accumulate(Value: Integer);
@@ -132,6 +161,16 @@ begin
 
   BoundFunction := @Receiver.Scale;
   MethodFunctionResult := BoundFunction(3);
+
+  ObjectCallback := @CaptureObject;
+  PointerCallback := TPointerCallback(ObjectCallback);
+  PointerCallback(Pointer(Receiver), nil);
+
+  ObjectMethodCallback := @Receiver.CaptureObject;
+  PointerMethodCallback :=
+    TPointerMethodCallback(ObjectMethodCallback);
+  PointerMethodCallback(Pointer(OtherReceiver), nil);
+
   GlobalCode := Pointer(@Mutate);
   MethodCode := Pointer(@Receiver.Scale)
 end.

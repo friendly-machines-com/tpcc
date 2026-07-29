@@ -4008,6 +4008,21 @@ void Emitter::emit_expression(Node* expr) {
 		    ca->a ? ca->a->ty : nullptr);
 		auto target_routine =
 		    dynamic_cast<RoutineType*>(ca->ty);
+		if (source_routine && target_routine) {
+			// The parser has limited this explicit operation to one
+			// unchanged routine-value representation with exact result,
+			// arity, and modes; only by-value data-pointer formal types may
+			// differ. The RTL helper makes the GNOME/GObject-style ABI
+			// dependency explicit instead of pretending static_cast is a
+			// portable C++ function-pointer conversion.
+			fprintf(active,
+				"::u_system::m_explicit_routine_cast<");
+			emit_function_type(target_routine);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+			return;
+		}
 		if (source_routine &&
 		    source_routine->kind == METHOD &&
 		    ca->ty == tmethod_type()) {
