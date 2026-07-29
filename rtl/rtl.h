@@ -5378,6 +5378,15 @@ inline t_pointer p_getmem(t_ptruint size) {
 	return result;
 }
 
+inline t_pointer p_allocmem(t_ptruint size) {
+	t_pointer result =
+	    std::calloc(
+		1, static_cast<std::size_t>(size));
+	if (!result && size != 0)
+		m_runtime_error(203);
+	return result;
+}
+
 template<typename T>
 requires std::is_object_v<T> || std::is_void_v<T>
 inline T* p_reallocmem(

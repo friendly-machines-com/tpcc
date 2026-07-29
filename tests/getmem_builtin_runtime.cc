@@ -3,6 +3,18 @@
 #include <cstdlib>
 
 int main() {
+	::u_system::t_pointer zeroed =
+	    ::u_system::p_allocmem(16);
+	if (!zeroed)
+		return EXIT_FAILURE;
+	auto* bytes =
+	    static_cast<unsigned char*>(zeroed);
+	for (std::size_t i = 0; i < 16; ++i)
+		if (bytes[i] != 0)
+			return EXIT_FAILURE;
+	if (::u_system::p_freemem(zeroed) != 0)
+		return EXIT_FAILURE;
+
 	::u_system::t_char* characters = nullptr;
 	::u_system::p_getmem(characters, 8);
 	if (!characters)
@@ -43,6 +55,9 @@ int main() {
 	if (!raw)
 		return EXIT_FAILURE;
 	::u_system::p_freemem(raw, 8);
+
+	raw = ::u_system::p_allocmem(0);
+	::u_system::p_freemem(raw);
 
 	return EXIT_SUCCESS;
 }

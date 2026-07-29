@@ -32,4 +32,4 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/getmem_builtin_pascal"
 	-o "$tmp/getmem_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/getmem_builtin"
 
-echo "GetMem/ReAllocMem/FreeMem builtin tests passed"
+echo "GetMem/AllocMem/ReAllocMem/FreeMem builtin tests passed"
