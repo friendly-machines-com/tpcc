@@ -19,6 +19,7 @@ var
   Distance: PtrInt;
   RawFirst: Pointer;
   RawLast: Pointer;
+  IndexedAddress: PInteger;
   Selected: Integer;
 
 {$ifndef REJECTION_ONLY}
@@ -71,6 +72,16 @@ begin
   if MiddleWide <> @Values[3] then
     Halt(5);
 
+  { Indexing a typed pointer value denotes its pointed-to element even when
+    the pointer value itself is produced by a cast and has no storage. }
+  Integers[2] := 0;
+  IndexedAddress := @PInteger(Pointer(@Integers[0]))[2];
+  if IndexedAddress <> @Integers[2] then
+    Halt(6);
+  PInteger(Pointer(@Integers[0]))[2] := 73;
+  if Integers[2] <> 73 then
+    Halt(7);
+
   {$ifndef REJECTION_ONLY}
   { A complete typed declaration remains an ordinary overload and dominates
     the root fallback. $Q chooses its checked or unchecked identity. }
@@ -80,12 +91,12 @@ begin
   Selected := 0;
   if (LastInteger - FirstInteger <> 101) or
      (Selected <> 1) then
-    Halt(6);
+    Halt(8);
   {$Q+}
   Selected := 0;
   if (LastInteger - FirstInteger <> 202) or
      (Selected <> 2) then
-    Halt(7);
+    Halt(9);
   {$endif}
 
   {$ifdef REJECT_DIFFERENT_TYPES}
@@ -99,5 +110,8 @@ begin
   RawFirst := Pointer(@Values[0]);
   RawLast := Pointer(@Values[1]);
   Distance := RawLast - RawFirst;
+  {$endif}
+  {$ifdef REJECT_POINTER_CAST_ADDRESS}
+  RawFirst := @PInteger(Pointer(@Integers[0]));
   {$endif}
 end.

@@ -73,4 +73,21 @@ then
 	exit 1
 fi
 
+if ./mp -Furtl -dREJECTION_ONLY -dREJECT_POINTER_CAST_ADDRESS \
+	-o"$tmp/rejected.cc" \
+	tests/pointer_arithmetic.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted address of a pointer-value cast" >&2
+	exit 1
+fi
+if ! rg -Fq \
+	'address requires a storage-backed expression' \
+	"$tmp/stderr"
+then
+	echo "wrong pointer-cast address diagnostic" >&2
+	sed -n '1,180p' "$tmp/stderr" >&2
+	exit 1
+fi
+
 echo "pointer arithmetic tests passed"

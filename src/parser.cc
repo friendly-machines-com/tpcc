@@ -4380,6 +4380,23 @@ Node* Parser::parse_designator_tail(
 	return result;
 }
 
+static bool is_builtin_index_accessor(Builtin* builtin) {
+	return builtin && builtin->desc &&
+	       (builtin->desc->cxx_name == "::u_system::p_index" ||
+		builtin->desc->cxx_name ==
+		    "::u_system::m_unchecked_index");
+}
+
+static bool is_typed_pointer_index(
+    PropertyAccess* access, Builtin* builtin) {
+	if (!access || !access->receiver ||
+	    !is_builtin_index_accessor(builtin))
+		return false;
+	auto pointer =
+	    dynamic_cast<PointerType*>(access->receiver->ty);
+	return pointer && !pointer->is_untyped();
+}
+
 bool Parser::is_assignable(Node* n) {
 	if (!n)
 		return false;
@@ -4393,7 +4410,11 @@ bool Parser::is_assignable(Node* n) {
 		if (!property->property || !property->property->write_accessor)
 			return false;
 		Node* accessor = property->property->write_accessor;
-		if (dynamic_cast<Builtin*>(accessor)) {
+		if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
+			// A typed pointer value need not itself occupy storage for its
+			// indexed element to do so: PType(expr)[i] denotes *(expr + i).
+			if (is_typed_pointer_index(property, builtin))
+				return true;
 			// Reference-backed indexing can write only through a stable base.
 			// Packed projections are admitted here solely so the subsequent
 			// is_supported_packed_assignment check can select or reject their
@@ -4458,12 +4479,9 @@ bool Parser::property_read_is_place(PropertyAccess* access) {
 			   ? true
 			   : is_referenceable(access->receiver);
 	if (auto builtin = dynamic_cast<Builtin*>(accessor))
-		return builtin->desc &&
-		       (builtin->desc->cxx_name ==
-			    "::u_system::p_index" ||
-			builtin->desc->cxx_name ==
-			    "::u_system::m_unchecked_index") &&
-		       is_referenceable(access->receiver);
+		return is_builtin_index_accessor(builtin) &&
+		       (is_typed_pointer_index(access, builtin) ||
+			is_referenceable(access->receiver));
 	return false; // ordinary Pascal getter calls return values
 }
 
