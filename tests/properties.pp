@@ -1,5 +1,7 @@
 program properties;
 
+{$R+}
+
 type
   TBox = object
   private

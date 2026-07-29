@@ -3,6 +3,8 @@ program TryStatements;
 uses
   SysUtils;
 
+{$R+}
+
 var
   State: LongInt;
   I: LongInt;

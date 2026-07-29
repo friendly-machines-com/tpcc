@@ -3,6 +3,8 @@ program ExceptionHandlers;
 uses
   SysUtils;
 
+{$R+}
+
 label
   RetryInsideTry;
 
