@@ -4553,6 +4553,19 @@ inline t_extended p_frac(t_extended value) {
 	return ::modfl(value, &integral);
 }
 
+inline t_integer p_sqr(t_integer value) {
+	return o_unchecked_multiply(value, value);
+}
+inline t_int64 p_sqr(t_int64 value) {
+	return o_unchecked_multiply(value, value);
+}
+inline t_qword p_sqr(t_qword value) {
+	return o_unchecked_multiply(value, value);
+}
+inline t_extended p_sqr(t_extended value) {
+	return o_unchecked_multiply(value, value);
+}
+
 inline t_extended p_sqrt(t_extended value) { return ::sqrtl(value); }
 inline t_extended p_exp(t_extended value) { return ::expl(value); }
 inline t_extended p_ln(t_extended value) { return ::logl(value); }

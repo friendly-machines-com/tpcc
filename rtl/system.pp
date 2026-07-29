@@ -437,6 +437,10 @@ function assigned(const x: Pointer): Boolean; external name '::u_system::p_assig
 operator Trunc(const x: Extended): Int64; external name '::u_system::o_trunc';
 operator Round(const x: Extended): Int64; external name '::u_system::o_round';
 function frac(const x: Extended): Extended; external name '::u_system::p_frac';
+function sqr(x: Integer): Integer; overload; external name '::u_system::p_sqr';
+function sqr(x: Int64): Int64; overload; external name '::u_system::p_sqr';
+function sqr(x: QWord): QWord; overload; external name '::u_system::p_sqr';
+function sqr(x: Extended): Extended; overload; external name '::u_system::p_sqr';
 function sqrt(const x: Extended): Extended; external name '::u_system::p_sqrt';
 function exp(const x: Extended): Extended; external name '::u_system::p_exp';
 function ln(const x: Extended): Extended; external name '::u_system::p_ln';

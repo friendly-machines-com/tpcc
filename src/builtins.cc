@@ -751,6 +751,25 @@ static ConstEvalResult fold_sqrt(ConstEvalContext&, Type* result_ty, const std::
 	return ConstEvalResult::success(new Real(::sqrtl(value), result_ty));
 }
 
+static ConstEvalResult fold_sqr(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 1)
+		return ConstEvalResult::not_constant();
+	if (auto value =
+		const_integer_arg(args[0]))
+		return fold_unchecked_integer_bits(
+		    unchecked_integer_bits(value) *
+			unchecked_integer_bits(value),
+		    result_ty);
+	long double value = 0.0L;
+	if (!const_numeric_as_long_double(
+		args[0], &value))
+		return ConstEvalResult::not_constant();
+	return ConstEvalResult::success(
+	    new Real(value * value, result_ty));
+}
+
 static ConstEvalResult fold_exp(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 1)
 		return ConstEvalResult::not_constant();
@@ -1011,6 +1030,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::o_trunc", fold_trunc},
     {"::u_system::o_round", fold_round},
     {"::u_system::p_frac", fold_frac},
+    {"::u_system::p_sqr", fold_sqr},
     {"::u_system::p_sqrt", fold_sqrt},
     {"::u_system::p_exp", fold_exp},
     {"::u_system::p_ln", fold_ln},
