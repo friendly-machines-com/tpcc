@@ -121,6 +121,7 @@ begin
   C := S[1];
   S[2] := S[1];
   MutateChar(S[1]);
+  LongS := 'x';
   UniqueString(LongS);
   LongS[1] := S[1];
   MutateChar(LongS[1]);
