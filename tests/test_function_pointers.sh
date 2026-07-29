@@ -99,6 +99,33 @@ fi
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/routine_value_overload_categories"
 
+mkdir -p "$tmp/routine-const"
+./mp -Furtl -Futests/routine_const \
+	-o"$tmp/routine-const/program.cc" \
+	tests/routine_const/routine_const_program.pp
+
+if ! rg -Fq \
+	'p_dostatus = &::u_routineconstunit::p_defstatus' \
+	"$tmp/routine-const/routineconstunit.h"
+then
+	echo "typed routine constant did not preserve @Routine" >&2
+	exit 1
+fi
+
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp/routine-const" \
+	"$tmp/routine-const"/*.cc \
+	-o "$tmp/routine-const/program"
+ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/routine-const/program"
+
 for source in \
 	tests/function_pointer_explicit_cross_kind_rejected.pp \
 	tests/function_pointer_explicit_nonpointer_rejected.pp \

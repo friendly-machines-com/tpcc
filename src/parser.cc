@@ -7425,6 +7425,12 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		// bracket syntax to that set before constant evaluation just as
 		// ordinary assignment/argument matching does.
 		expr = cast(expr, ty);
+	if (dynamic_cast<RoutineRef*>(expr))
+		// `@Routine` is contextual: the destination selects an overload and
+		// fixes plain-routine versus method representation. Perform that
+		// operator resolution before asking whether the resulting address is
+		// a constant.
+		expr = cast(expr, ty);
 	ConstEvalContext ctx;
 	ConstEvalResult folded = expr->const_eval(ctx);
 	if (folded.kind == ConstEvalResult::Kind::NotConstant)

@@ -1353,6 +1353,22 @@ const char* AddrOf::diagnostic_kind() const { return "addr_of"; }
 const char* RoutineRef::diagnostic_kind() const {
 	return "routine_ref";
 }
+ConstEvalResult RoutineRef::const_eval(
+    ConstEvalContext&) const {
+	// This node is the semantic application of Pascal `@` to a routine.
+	// Resolution supplies the selected declaration and complete routine
+	// carrier. A receiver would make the value depend on runtime object
+	// state, but a receiverless routine address is a static initializer even
+	// when the declaration's body is supplied later.
+	if (!resolved || receiver)
+		return ConstEvalResult::not_constant();
+	auto result =
+	    new RoutineRef(nullptr, candidates);
+	result->resolved = resolved;
+	result->code_only = code_only;
+	result->ty = ty;
+	return ConstEvalResult::success(result);
+}
 void RoutineRef::collect_diagnostic_edges(
     ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
