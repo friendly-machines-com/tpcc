@@ -44,7 +44,7 @@ ASAN_OPTIONS=detect_leaks=1 \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \
-	tests/filldword_builtin_runtime.cc \
+	tests/filldword_builtin_runtime.cpp \
 	-o "$tmp/filldword_builtin_runtime"
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/filldword_builtin_runtime"

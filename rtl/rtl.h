@@ -3857,6 +3857,21 @@ inline void p_filldword(
 	}
 }
 
+inline void p_prefetch(tpcc_const_storage_ref memory) {
+	// __builtin_prefetch is a GCC/Clang language extension.
+#if defined(__clang__)
+#if __has_builtin(__builtin_prefetch)
+	__builtin_prefetch(memory.data, 0, 0);
+#else
+	(void)memory;
+#endif
+#elif defined(__GNUC__)
+	__builtin_prefetch(memory.data, 0, 0);
+#else
+	(void)memory;
+#endif
+}
+
 inline void p_move(tpcc_const_storage_ref source,
     tpcc_storage_ref destination, t_sizeint count) {
 	if (count <= 0)
