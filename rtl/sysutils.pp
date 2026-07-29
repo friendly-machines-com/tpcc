@@ -29,8 +29,50 @@ type
   end;
 
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_supports';
+function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
 
 implementation
+
+function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
+var
+  I, Count, Count1, Count2: SizeInt;
+  Chr1, Chr2: Byte;
+  P1, P2: PChar;
+begin
+  Count1 := Length(S1);
+  Count2 := Length(S2);
+  if Count1 > Count2 then
+    Count := Count2
+  else
+    Count := Count1;
+  I := 0;
+  if Count > 0 then
+    begin
+      P1 := @S1[1];
+      P2 := @S2[1];
+      while I < Count do
+        begin
+          Chr1 := Byte(P1^);
+          Chr2 := Byte(P2^);
+          if Chr1 <> Chr2 then
+            begin
+              if Chr1 in [97..122] then
+                Dec(Chr1, 32);
+              if Chr2 in [97..122] then
+                Dec(Chr2, 32);
+              if Chr1 <> Chr2 then
+                Break
+            end;
+          Inc(P1);
+          Inc(P2);
+          Inc(I)
+        end
+    end;
+  if I < Count then
+    Result := Chr1 - Chr2
+  else
+    Result := Count1 - Count2
+end;
 
 procedure RunErrorToException(ErrorCode: LongInt;
   Address, Frame: Pointer);

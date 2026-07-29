@@ -11,6 +11,21 @@ var
   Child: EChild;
 
 begin
+  if CompareText('Alpha', 'aLPHa') <> 0 then
+    Halt(1);
+  if CompareText('alpha', 'Beta') >= 0 then
+    Halt(1);
+  if CompareText('Gamma', 'beta') <= 0 then
+    Halt(1);
+  if CompareText('ab', 'ABC') >= 0 then
+    Halt(1);
+  if CompareText('ABC', 'ab') <= 0 then
+    Halt(1);
+  if CompareText('a', 'c') <> -2 then
+    Halt(1);
+  if CompareText('abcde', 'A') <> 4 then
+    Halt(1);
+
   E := Exception.Create('first');
   if E.Message <> 'first' then
     Halt(1);
