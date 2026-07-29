@@ -1312,7 +1312,39 @@ std::string Parser::consume() {
 			sst << (char)input_char;
 			consume_lowlevel();
 		}
-	} else if (input_char != EOF && strchr("=;,[]()@+-^|&", input_char)) {
+	} else if (input_char == '(') {
+		SourceLocation directive_location =
+		    current_location();
+		sst << (char)input_char;
+		consume_lowlevel();
+		if (input_char == '*') {
+			sst << (char)input_char;
+			consume_lowlevel();
+			const bool is_directive =
+			    input_char == '$';
+			if (is_directive)
+				consume_lowlevel(); // skip $
+			std::string body;
+			while (input_char != EOF &&
+			       !(input_char == '*' &&
+				 peek_lowlevel() == ')')) {
+				if (is_directive)
+					body.push_back(
+					    (char)input_char);
+				consume_lowlevel();
+			}
+			if (input_char == EOF)
+				raise_parse_error(
+				    "missing end comment");
+			consume_lowlevel(); // skip *
+			consume_lowlevel(); // skip )
+			if (is_directive)
+				handle_directive(
+				    body,
+				    directive_location);
+			return consume();
+		}
+	} else if (input_char != EOF && strchr("=;,[])@+-^|&", input_char)) {
 		sst << (char)input_char;
 		consume_lowlevel();
 	} else if (input_char == '\'') {
