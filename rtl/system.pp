@@ -58,7 +58,7 @@ type
     class function InheritsFrom(klass: TClass): Boolean; virtual;
     class function ClassParent: TClass; virtual;
     class function NewInstance: TObject; virtual;
-    class function InstanceSize: SizeInt; virtual;
+    class function InstanceSize: SizeInt; virtual; external name 'p_instancesize';
     procedure AfterConstruction; virtual;
   end;
   TExceptProc = procedure(ExceptObject: TObject;

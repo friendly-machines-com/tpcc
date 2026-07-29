@@ -2072,7 +2072,21 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 					class_name.c_str(), class_name.c_str()); // FIXME: escape
 				fprintf(active, "\t}\n");
 			}
-			if (!body->declares_value("instancesize")) {
+			bool emit_intrinsic_instancesize =
+			    !body->declares_value("instancesize");
+			if (!emit_intrinsic_instancesize &&
+			    !c->super) {
+				auto declared =
+				    dynamic_cast<Method*>(
+					body->lookup_value(
+					    "instancesize"));
+				emit_intrinsic_instancesize =
+				    declared &&
+				    declared->is_external &&
+				    declared->cxx_name ==
+					"p_instancesize";
+			}
+			if (emit_intrinsic_instancesize) {
 				fprintf(active, "\tpublic: virtual inline ::u_system::t_sizeint p_instancesize() {\n");
 				fprintf(active,
 					"\t\treturn sizeof(%s);\n", class_name.c_str()); // TODO: namespace::super
