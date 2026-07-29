@@ -3296,8 +3296,12 @@ inline void m_unchecked_blockwrite(
 		file, buffer, count));
 }
 
+/** One already-grouped Pascal `value[:width[:precision]]` item.
+ *
+ * Both Write/WriteLn and Str consume this representation. Formatting is
+ * deliberately independent of the eventual stream or ShortString sink. */
 template<typename T>
-struct tpcc_write_arg {
+struct tpcc_formatted_value {
 	T value;
 	bool has_width;
 	t_sizeint width;
@@ -3306,32 +3310,88 @@ struct tpcc_write_arg {
 };
 
 template<typename T>
-inline auto tpcc_make_write_arg(T&& value) {
+inline auto tpcc_make_formatted_value(T&& value) {
 	using value_type = std::remove_cvref_t<T>;
-	return tpcc_write_arg<value_type>{
+	return tpcc_formatted_value<value_type>{
 	    std::forward<T>(value), false, 0, false, 0};
 }
 
 template<typename T>
-inline auto tpcc_make_write_arg(T&& value, t_sizeint width) {
+inline auto tpcc_make_formatted_value(
+    T&& value, t_sizeint width) {
 	using value_type = std::remove_cvref_t<T>;
-	return tpcc_write_arg<value_type>{
+	return tpcc_formatted_value<value_type>{
 	    std::forward<T>(value), true, width, false, 0};
 }
 
 template<typename T>
-inline auto tpcc_make_write_arg(
+inline auto tpcc_make_formatted_value(
     T&& value, t_sizeint width, t_sizeint precision) {
 	using value_type = std::remove_cvref_t<T>;
-	return tpcc_write_arg<value_type>{
+	return tpcc_formatted_value<value_type>{
 	    std::forward<T>(value), true, width, true, precision};
 }
 
 template<typename>
 inline constexpr bool tpcc_dependent_false = false;
 
+inline std::string tpcc_render_default_extended(
+    t_extended value) {
+	// The default Extended format uses all 21 significant decimal digits of
+	// an 80-bit value and always emits four exponent digits.
+	if (!__builtin_isfinite(value)) {
+		const bool nan =
+		    __builtin_isnan(value);
+		const std::size_t spaces =
+		    nan ? 26 : 25;
+		std::string result(spaces, ' ');
+		if (!nan)
+			result.push_back(
+			    __builtin_signbit(value)
+				? '-'
+				: '+');
+		result.append(nan ? "Nan" : "Inf");
+		return result;
+	}
+
+	char digits[64];
+	auto [end, error] = std::to_chars(
+	    digits, digits + sizeof(digits),
+	    value, std::chars_format::scientific,
+	    20);
+	if (error != std::errc())
+		throw std::runtime_error(
+		    "could not format Extended value");
+
+	std::string result;
+	if (digits[0] != '-')
+		result.push_back(' ');
+	const char* exponent =
+	    std::find(digits, end, 'e');
+	if (exponent == end)
+		throw std::runtime_error(
+		    "formatter produced malformed Extended output");
+	result.append(
+	    digits,
+	    static_cast<std::size_t>(
+		exponent - digits));
+	result.push_back('E');
+	result.push_back(exponent[1]);
+	const std::ptrdiff_t exponent_digits =
+	    end - (exponent + 2);
+	for (std::ptrdiff_t i =
+		 exponent_digits;
+	     i < 4; ++i)
+		result.push_back('0');
+	result.append(
+	    exponent + 2,
+	    static_cast<std::size_t>(
+		exponent_digits));
+	return result;
+}
+
 template<typename T>
-inline std::string tpcc_render_write_value(
+inline std::string tpcc_render_unpadded_value(
     const T& value, bool has_precision, t_sizeint precision) {
 	std::ostringstream out;
 	if constexpr (tpcc_is_shortstring_v<T> ||
@@ -3349,6 +3409,17 @@ inline std::string tpcc_render_write_value(
 			out << static_cast<long long>(value);
 		else
 			out << static_cast<unsigned long long>(value);
+	} else if constexpr (
+	    std::is_same_v<T, t_extended>) {
+		if (!has_precision)
+			return tpcc_render_default_extended(
+			    value);
+		out << std::fixed
+		    << std::setprecision(
+			   static_cast<int>(
+			       std::max<t_sizeint>(
+				   0, precision)))
+		    << value;
 	} else if constexpr (std::is_floating_point_v<T>) {
 		if (has_precision)
 			out << std::fixed << std::setprecision(
@@ -3363,31 +3434,52 @@ inline std::string tpcc_render_write_value(
 	return out.str();
 }
 
+struct tpcc_rendered_formatted_value {
+	std::size_t left_padding;
+	std::string value;
+};
+
 template<typename T>
-inline void tpcc_write_one(
-    std::ostream& out, const tpcc_write_arg<T>& argument) {
-	std::string rendered = tpcc_render_write_value(
+inline tpcc_rendered_formatted_value
+tpcc_render_formatted_value(
+    const tpcc_formatted_value<T>& argument) {
+	std::string rendered =
+	    tpcc_render_unpadded_value(
 	    argument.value, argument.has_precision,
 	    argument.precision);
+	std::size_t left_padding = 0;
 	if (argument.has_width &&
 	    argument.width > 0 &&
 	    static_cast<std::make_unsigned_t<t_sizeint>>(
 	        argument.width) > rendered.size()) {
-		const std::size_t padding =
+		left_padding =
 		    static_cast<std::size_t>(argument.width) -
 		    rendered.size();
-		for (std::size_t i = 0; i < padding; ++i)
-			out.put(' ');
 	}
+	return tpcc_rendered_formatted_value{
+	    left_padding, std::move(rendered)};
+}
+
+template<typename T>
+inline void tpcc_write_one(
+    std::ostream& out,
+    const tpcc_formatted_value<T>& argument) {
+	tpcc_rendered_formatted_value rendered =
+	    tpcc_render_formatted_value(
+		argument);
+	for (std::size_t i = 0;
+	     i < rendered.left_padding; ++i)
+			out.put(' ');
 	out.write(
-	    rendered.data(),
-	    static_cast<std::streamsize>(rendered.size()));
+	    rendered.value.data(),
+	    static_cast<std::streamsize>(
+		rendered.value.size()));
 }
 
 template<typename... Values>
 inline t_word tpcc_write_many(
     std::ostream& out,
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	t_word error = 0;
 	try {
 		if constexpr (sizeof...(Values) > 0) {
@@ -3418,7 +3510,7 @@ tpcc_text_stream(t_text& file) {
 template<typename... Values>
 inline t_word m_do_write(
     std::ostream& out,
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	return tpcc_write_many(
 	    out, arguments...);
 }
@@ -3426,7 +3518,7 @@ inline t_word m_do_write(
 template<typename... Values>
 inline t_word m_do_writeln(
     std::ostream& out,
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	const t_word write_error =
 	    tpcc_write_many(
 		out, arguments...);
@@ -3442,7 +3534,7 @@ inline t_word m_do_writeln(
 
 template<typename... Values>
 inline void p_write(
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(
 	    m_do_write(
@@ -3452,7 +3544,7 @@ inline void p_write(
 template<typename... Values>
 inline void p_write(
     t_text& file,
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	m_raise_pending_io_error();
 	const auto stream =
 	    tpcc_text_stream(file);
@@ -3464,7 +3556,7 @@ inline void p_write(
 
 template<typename... Values>
 inline void m_unchecked_write(
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	if (m_inoutres != 0)
 		return;
 	m_finish_unchecked_io(
@@ -3475,7 +3567,7 @@ inline void m_unchecked_write(
 template<typename... Values>
 inline void m_unchecked_write(
     t_text& file,
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	if (m_inoutres != 0)
 		return;
 	const auto stream =
@@ -3492,7 +3584,7 @@ inline void m_unchecked_write(
 
 template<typename... Values>
 inline void p_writeln(
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(
 	    m_do_writeln(
@@ -3502,7 +3594,7 @@ inline void p_writeln(
 template<typename... Values>
 inline void p_writeln(
     t_text& file,
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	m_raise_pending_io_error();
 	const auto stream =
 	    tpcc_text_stream(file);
@@ -3514,7 +3606,7 @@ inline void p_writeln(
 
 template<typename... Values>
 inline void m_unchecked_writeln(
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	if (m_inoutres != 0)
 		return;
 	m_finish_unchecked_io(
@@ -3525,7 +3617,7 @@ inline void m_unchecked_writeln(
 template<typename... Values>
 inline void m_unchecked_writeln(
     t_text& file,
-    const tpcc_write_arg<Values>&... arguments) {
+    const tpcc_formatted_value<Values>&... arguments) {
 	if (m_inoutres != 0)
 		return;
 	const auto stream =
@@ -4675,66 +4767,61 @@ inline t_ptrint o_subtract(
 }
 
 template<typename T, std::size_t Capacity>
-requires std::is_integral_v<T>
-inline void p_str(T x, t_shortstring<Capacity>& s) {
-	char buf[128];
-	int n;
-	if constexpr (std::is_signed_v<T>)
-		n = std::snprintf(buf, sizeof(buf), "%lld", (long long)x);
-	else
-		n = std::snprintf(buf, sizeof(buf), "%llu", (unsigned long long)x);
-	if (n < 0)
-		n = 0;
-	if (static_cast<std::size_t>(n) > Capacity)
-		n = static_cast<int>(Capacity);
-	s.length = static_cast<uint8_t>(n);
-	memcpy(s.data, buf, s.length);
+inline void p_str(
+    const tpcc_formatted_value<T>& argument,
+    t_shortstring<Capacity>& destination) {
+	// Str and Write differ only here: the former stores the shared formatter's
+	// result in a bounded string, while the latter sends it to an ostream.
+	tpcc_rendered_formatted_value rendered =
+	    tpcc_render_formatted_value(
+		argument);
+	const std::size_t spaces =
+	    std::min<std::size_t>(
+		rendered.left_padding,
+		Capacity);
+	const std::size_t copied =
+	    spaces == Capacity
+		? 0
+		: std::min<std::size_t>(
+		      rendered.value.size(),
+		      Capacity - spaces);
+	memset(
+	    destination.data, ' ',
+	    spaces);
+	if (copied != 0)
+		memcpy(
+		    destination.data + spaces,
+		    rendered.value.data(),
+		    copied);
+	destination.length =
+	    static_cast<uint8_t>(
+		spaces + copied);
 }
 
-template<std::size_t Capacity>
-inline void p_str(t_extended x, t_shortstring<Capacity>& s) {
-	// Str(Extended, ...) uses all 21 significant decimal digits of an 80-bit
-	// Extended and always emits four exponent digits.
-	if (!__builtin_isfinite(x)) {
-		char formatted[29];
-		const bool nan = __builtin_isnan(x);
-		const std::size_t spaces = nan ? 26 : 25;
-		memset(formatted, ' ', spaces);
-		char* output = formatted + spaces;
-		if (!nan)
-			*output++ = __builtin_signbit(x) ? '-' : '+';
-		memcpy(output, nan ? "Nan" : "Inf", 3);
-		s = tpcc_shortstring_from_c<Capacity>(
-		    formatted, sizeof(formatted));
-		return;
-	}
+// Convenience entry points retain the direct RTL surface while delegating
+// every formatting decision to the same representation used by Write.
+template<typename T, std::size_t Capacity>
+requires (std::is_integral_v<T> ||
+	  std::is_floating_point_v<T>)
+inline void p_str(
+    T value,
+    t_shortstring<Capacity>& destination) {
+	p_str(
+	    tpcc_make_formatted_value(
+		value),
+	    destination);
+}
 
-	char digits[64];
-	auto [end, error] = std::to_chars(
-	    digits, digits + sizeof(digits), x, std::chars_format::scientific, 20);
-	if (error != std::errc())
-		throw std::runtime_error("Str could not format Extended value");
-
-	char formatted[64];
-	char* output = formatted;
-	if (digits[0] != '-')
-		*output++ = ' ';
-
-	const char* exponent = std::find(digits, end, 'e');
-	if (exponent == end)
-		throw std::runtime_error("Str produced malformed Extended output");
-	memcpy(output, digits, static_cast<std::size_t>(exponent - digits));
-	output += exponent - digits;
-	*output++ = 'E';
-	*output++ = exponent[1];
-	const std::ptrdiff_t exponent_digits = end - (exponent + 2);
-	for (std::ptrdiff_t i = exponent_digits; i < 4; ++i)
-		*output++ = '0';
-	memcpy(output, exponent + 2, static_cast<std::size_t>(exponent_digits));
-	output += exponent_digits;
-
-	s = tpcc_shortstring_from_c<Capacity>(
-	    formatted, static_cast<std::size_t>(output - formatted));
+template<typename T, std::size_t Capacity>
+requires (std::is_integral_v<T> ||
+	  std::is_floating_point_v<T>)
+inline void p_str(
+    T value, t_sizeint width,
+    t_shortstring<Capacity>& destination) {
+	p_str(
+	    tpcc_make_formatted_value(
+		value, width),
+	    destination);
 }
 
 struct tpcc_val_prefix {
@@ -4940,12 +5027,22 @@ requires ((std::is_integral_v<
 	       typename tpcc_ordinal_storage<T>::type,
 	       bool>)) ||
 	          std::is_floating_point_v<T>) &&
-	         std::is_integral_v<Code> && (!std::is_same_v<Code, bool>)
+	         std::is_integral_v<
+	             typename tpcc_ordinal_storage<Code>::type> &&
+	         (!std::is_same_v<
+	             typename tpcc_ordinal_storage<Code>::type,
+	             bool>)
 inline void p_val(const t_shortstring<Capacity>& source, T& destination,
 	    tpcc_typed_storage_ref<Code> code) {
+	using code_traits =
+	    tpcc_ordinal_storage<Code>;
+	using code_storage =
+	    typename code_traits::type;
 	t_integer parsed_code = 0;
 	p_val(source, destination, parsed_code);
-	*code.value = static_cast<Code>(parsed_code);
+	*code.value = code_traits::make(
+	    static_cast<code_storage>(
+		parsed_code));
 }
 
 template<typename T, std::size_t Capacity>

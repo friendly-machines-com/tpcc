@@ -359,33 +359,26 @@ function length(const x): SizeInt; overload; external name '::u_system::p_length
 // checks the missing relationship `values: set of T; item: T`.
 procedure include(var values; const item); external name '::u_system::p_include'; // generic set intrinsic
 procedure exclude(var values; const item); external name '::u_system::p_exclude'; // generic set intrinsic
-procedure str(const x: Int64; var s: ShortString); overload; external name '::u_system::p_str';
-procedure str(const x: QWord; var s: ShortString); overload; external name '::u_system::p_str';
-procedure str(const x: Extended; var s: ShortString); overload; external name '::u_system::p_str';
-procedure val(const s: ShortString; out value: ShortInt); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: ShortInt; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: SmallInt); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: SmallInt; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: LongInt); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: LongInt; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Int64); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Int64; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Byte); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Byte; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Word); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Word; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: LongWord); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: LongWord; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: QWord); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: QWord; out code); overload; external name '::u_system::p_val';
+// The omitted storage types are intentional compiler contracts, not Pascal
+// var/out covariance. They keep string[N] and the selected integer/subrange
+// destination intact until the Str/Val semantic handlers validate and lower
+// the call. Concrete source/destination families still participate in normal
+// overload ranking; the all-generic declarations are last-resort extension
+// points for compiler-owned families such as enumerations.
+procedure str(const x: Int64; var s); overload; external name '::u_system::p_str';
+procedure str(const x: QWord; var s); overload; external name '::u_system::p_str';
+procedure str(const x: Extended; var s); overload; external name '::u_system::p_str';
+procedure str(const x; var s); overload; external name '::u_system::p_str';
+procedure val(const s; out value); overload; external name '::u_system::p_val';
+procedure val(const s; out value; out code); overload; external name '::u_system::p_val';
 // FIXME: Real is absent because tpcc does not model its target-dependent
 // Pascal carrier yet.
-procedure val(const s: ShortString; out value: Single); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Single; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Double); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Double; out code); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Extended); overload; external name '::u_system::p_val';
-procedure val(const s: ShortString; out value: Extended; out code); overload; external name '::u_system::p_val';
+procedure val(const s; out value: Single); overload; external name '::u_system::p_val';
+procedure val(const s; out value: Single; out code); overload; external name '::u_system::p_val';
+procedure val(const s; out value: Double); overload; external name '::u_system::p_val';
+procedure val(const s; out value: Double; out code); overload; external name '::u_system::p_val';
+procedure val(const s; out value: Extended); overload; external name '::u_system::p_val';
+procedure val(const s; out value: Extended; out code); overload; external name '::u_system::p_val';
 // FIXME: Comp is absent because tpcc has no Pascal Comp type or carrier.
 // FIXME: Currency is absent because tpcc has no Pascal Currency type or
 // fixed-scale representation.

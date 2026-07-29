@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <sstream>
 
 static bool equals(
     const ::u_system::t_shortstring<255>& value,
@@ -29,6 +30,37 @@ int main() {
 
 	::u_system::p_str(std::numeric_limits<::u_system::t_extended>::quiet_NaN(), text);
 	if (!equals(text, "                          Nan"))
+		return EXIT_FAILURE;
+
+	// Write and Str consume the same formatted-value object and therefore
+	// cannot drift in numeric rendering or field-width behavior. Only their
+	// sinks differ.
+	auto integer =
+	    ::u_system::tpcc_make_formatted_value(
+		static_cast<::u_system::t_integer>(42),
+		static_cast<::u_system::t_sizeint>(5));
+	std::ostringstream integer_output;
+	if (::u_system::m_do_write(
+		integer_output, integer) != 0)
+		return EXIT_FAILURE;
+	::u_system::p_str(integer, text);
+	if (!equals(
+		text,
+		integer_output.str().c_str()))
+		return EXIT_FAILURE;
+
+	auto extended =
+	    ::u_system::tpcc_make_formatted_value(
+		static_cast<::u_system::t_extended>(
+		    1.5L));
+	std::ostringstream extended_output;
+	if (::u_system::m_do_write(
+		extended_output, extended) != 0)
+		return EXIT_FAILURE;
+	::u_system::p_str(extended, text);
+	if (!equals(
+		text,
+		extended_output.str().c_str()))
 		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;

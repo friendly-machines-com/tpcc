@@ -3,6 +3,7 @@ program ValBuiltin;
 type
   TSignedRange = -5..5;
   TUnsignedRange = 0..255;
+  TSmallText = string[32];
 
 var
   Code: Integer;
@@ -20,6 +21,7 @@ var
   UR: TUnsignedRange;
   D: Double;
   E: Extended;
+  Input: TSmallText;
 
 begin
   Val('-8', SI8, Code);
@@ -39,5 +41,10 @@ begin
 
   Val('7', SI32);
   Val('8', UI32);
-  Val('3.5', D)
+  Val('3.5', D);
+
+  Input := '1234';
+  Val(Input, SI32, Code);
+  if (SI32 <> 1234) or (Code <> 0) then
+    Halt(1)
 end.

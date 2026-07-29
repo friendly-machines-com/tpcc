@@ -24,6 +24,7 @@ class Unit;
 class UnitRegistry;
 class Emitter;
 struct Parameter;
+struct FormattedValue;
 class RoutineType;
 class Procedure;
 class Callable;
@@ -609,6 +610,15 @@ protected:
 	Type* parse_type_expression(bool allow_forward);
 	Type* parse_formal_type_expression();
 	Node* parse_expression();
+	/** Shared grammar used by Write/WriteLn and Str:
+	 *
+	 *      value [ : width [ : precision ] ]
+	 *
+	 * This parses syntax and gives width/precision their SizeInt context.
+	 * The caller remains responsible for contextualizing and validating the
+	 * value because Write has no formal parameter while Str performs ordinary
+	 * overload resolution. */
+	FormattedValue parse_formatted_value();
 	void parse_statement();
 	Frame* parse_aggregate_type_body(Type* owner_class);
 	void parse_property_declaration(Frame* body, Type* owner_type);

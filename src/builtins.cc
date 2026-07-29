@@ -800,7 +800,13 @@ static const BuiltinDesc k_builtins[] = {
     // relationship; only their ordinary RTL function bodies differ.
     {"::u_system::p_include", nullptr, {}, BuiltinGenericKind::SetMutation},
     {"::u_system::p_exclude", nullptr, {}, BuiltinGenericKind::SetMutation},
-    {"::u_system::p_str", nullptr},
+    {
+	.cxx_name = "::u_system::p_str",
+	.const_fold = nullptr,
+	.generic_kind =
+	    BuiltinGenericKind::StrOutput,
+	.syntax_kind = BuiltinSyntaxKind::Str,
+    },
     {
 	.cxx_name = "::u_system::p_val",
 	.const_fold = nullptr,

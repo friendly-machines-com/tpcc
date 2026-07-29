@@ -17,6 +17,7 @@ class RoutineType;
 class RoutineRef;
 class StorageSlot;
 struct Parameter;
+struct FormattedValue;
 
 struct UnitLifecycleNames {
 	std::string cxx_namespace;
@@ -260,6 +261,8 @@ public:
 	void emit_function_type(RoutineType* ty);
 	void emit_call_arguments(
 	    RoutineType* ty, const std::vector<Node*>& args);
+	void emit_formatted_value(
+	    const FormattedValue& formatted);
 	// Emit a full enum declaration body: `enum [NAME] { a, b, c }` -- no
 	// leading newline, no trailing semicolon. Caller frames those. Used by
 	// emit_type_definition (named, at type-block scope) and emit_type_ref's

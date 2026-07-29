@@ -70,10 +70,23 @@ UnitRef::UnitRef(Unit* unit) : unit(unit) {}
 WriteCall::WriteCall(
     bool newline, Node* file,
     const BuiltinDesc* lowering_builtin_desc,
-    std::vector<Item> items)
+    std::vector<FormattedValue> items)
     : newline(newline), file(file),
       lowering_builtin_desc(lowering_builtin_desc),
       items(std::move(items)) {}
+StrCall::StrCall(
+    FormattedValue formatted,
+    Node* destination)
+    : formatted(formatted),
+      destination(destination) {
+	this->ty = &unit_type();
+}
+ValCall::ValCall(
+    Node* source, Node* destination, Node* code)
+    : source(source), destination(destination),
+      code(code) {
+	this->ty = &unit_type();
+}
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
 Mutation::Mutation(
     Node* source_target,
@@ -526,7 +539,7 @@ const char* WriteCall::diagnostic_kind() const {
 void WriteCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(file);
-	for (const Item& item : items) {
+	for (const FormattedValue& item : items) {
 		ctx->add_value_edge(item.value);
 		ctx->add_value_edge(item.width);
 		ctx->add_value_edge(item.precision);
@@ -541,7 +554,7 @@ void WriteCall::print_diagnostic_definition(
 		ctx->indent(out, indent + 1);
 		out << "file: " << ctx->known_value_ref(file);
 	}
-	for (const Item& item : items) {
+	for (const FormattedValue& item : items) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
 		out << "item: " << ctx->known_value_ref(item.value);
@@ -549,6 +562,72 @@ void WriteCall::print_diagnostic_definition(
 			out << " width " << ctx->known_value_ref(item.width);
 		if (item.precision)
 			out << " precision " << ctx->known_value_ref(item.precision);
+	}
+}
+
+const char* StrCall::diagnostic_kind() const {
+	return "str";
+}
+void StrCall::collect_diagnostic_edges(
+	ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(formatted.value);
+	ctx->add_value_edge(formatted.width);
+	ctx->add_value_edge(formatted.precision);
+	ctx->add_value_edge(destination);
+}
+void StrCall::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+	unsigned indent) const {
+	out << "str\n";
+	ctx->indent(out, indent + 1);
+	out << "value: "
+	    << ctx->known_value_ref(
+		   formatted.value);
+	if (formatted.width) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "width: "
+		    << ctx->known_value_ref(
+			   formatted.width);
+	}
+	if (formatted.precision) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "precision: "
+		    << ctx->known_value_ref(
+			   formatted.precision);
+	}
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "destination: "
+	    << ctx->known_value_ref(destination);
+}
+
+const char* ValCall::diagnostic_kind() const {
+	return "val";
+}
+void ValCall::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(source);
+	ctx->add_value_edge(destination);
+	ctx->add_value_edge(code);
+}
+void ValCall::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "val\n";
+	ctx->indent(out, indent + 1);
+	out << "source: " << ctx->known_value_ref(source);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "destination: "
+	    << ctx->known_value_ref(destination);
+	if (code) {
+		out << "\n";
+		ctx->indent(out, indent + 1);
+		out << "code: " << ctx->known_value_ref(code);
 	}
 }
 

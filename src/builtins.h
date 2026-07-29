@@ -78,9 +78,13 @@ enum class BuiltinGenericKind {
 	// pointer storage: their RTL templates may write a typed pointer variable
 	// without pretending that ordinary typed var/out parameters are covariant.
 	PointerStorage,
+	// Str's source and writable destination retain their exact actual types.
+	// The omitted System declaration is a last-resort candidate; the builtin
+	// handler validates the supported formatting families after selection.
+	StrOutput,
 	// Val parses directly into the carrier of an ordinal subrange. This is an
-	// intrinsic storage contract, not general var/out covariance: the formal
-	// must be the subrange's exact compiler-selected base carrier.
+	// intrinsic storage contract, not general var/out covariance. Its omitted
+	// formals retain the exact source, destination, and optional code storage.
 	ValOutput,
 	// Abs has the otherwise-unspellable exact numeric relation T -> T. The
 	// root-frame fallback is constrained to predefined integer/real families
@@ -105,6 +109,7 @@ enum class BuiltinSyntaxKind {
 	SizeOf,
 	Write,
 	WriteLn,
+	Str,
 	NewValue,
 	DisposeValue,
 };

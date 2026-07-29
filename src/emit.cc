@@ -1023,6 +1023,33 @@ void Emitter::emit_for_in_cleanup_control_epilogue(
 		try_depth);
 }
 
+void Emitter::emit_formatted_value(
+    const FormattedValue& formatted) {
+	fprintf(
+	    active,
+	    "::u_system::tpcc_make_formatted_value("
+	    "static_cast<");
+	emit_type_ref(formatted.value->ty);
+	fprintf(active, ">(");
+	emit_expression(formatted.value);
+	fprintf(active, ")");
+	if (formatted.width) {
+		fprintf(
+		    active,
+		    ", static_cast<::u_system::t_sizeint>(");
+		emit_expression(formatted.width);
+		fprintf(active, ")");
+	}
+	if (formatted.precision) {
+		fprintf(
+		    active,
+		    ", static_cast<::u_system::t_sizeint>(");
+		emit_expression(formatted.precision);
+		fprintf(active, ")");
+	}
+	fprintf(active, ")");
+}
+
 void Emitter::emit_statement(Node* stmt) {
 	if (!active)
 		return;
@@ -1315,27 +1342,54 @@ void Emitter::emit_statement(Node* stmt) {
 			emit_writable_expression(write->file);
 			need_comma = true;
 		}
-		for (const WriteCall::Item& item : write->items) {
+		for (const FormattedValue& item : write->items) {
 			if (need_comma)
 				fprintf(active, ", ");
-			fprintf(active, "::u_system::tpcc_make_write_arg(");
-			fprintf(active, "static_cast<");
-			emit_type_ref(item.value->ty);
-			fprintf(active, ">(");
-			emit_expression(item.value);
-			fprintf(active, ")");
-			if (item.width) {
-				fprintf(active, ", static_cast<::u_system::t_sizeint>(");
-				emit_expression(item.width);
-				fprintf(active, ")");
-			}
-			if (item.precision) {
-				fprintf(active, ", static_cast<::u_system::t_sizeint>(");
-				emit_expression(item.precision);
-				fprintf(active, ")");
-			}
-			fprintf(active, ")");
+			emit_formatted_value(item);
 			need_comma = true;
+		}
+		fprintf(active, ");\n");
+		return;
+	}
+	if (auto str = dynamic_cast<StrCall*>(stmt)) {
+		if (str->formatted.precision)
+			// The parser currently rejects this branch. Keeping the CST edge
+			// and an explicit backend guard makes the future real formatter a
+			// new lowering contract rather than silently accepting an
+			// unsupported source family.
+			unhandled_node(
+			    "Str precision lowering is not implemented",
+			    str);
+		fprintf(active, "\t::u_system::p_str(");
+		emit_formatted_value(
+		    str->formatted);
+		fprintf(active, ", ");
+		emit_writable_expression(
+		    str->destination);
+		fprintf(active, ");\n");
+		return;
+	}
+	if (auto val = dynamic_cast<ValCall*>(stmt)) {
+		fprintf(active, "\t::u_system::p_val(");
+		emit_expression(val->source);
+		fprintf(active, ", ");
+		// Val is compiler-owned specifically so the selected destination
+		// reaches the RTL as its exact C++ carrier. An ordinary ProcCall would
+		// instead emit the omitted Pascal formal as an opaque storage view.
+		emit_writable_expression(
+		    val->destination);
+		if (val->code) {
+			fprintf(active, ", ");
+			if (val->code->ty ==
+			    integer_type())
+				emit_writable_expression(
+				    val->code);
+			else
+				// Non-Integer ordinal carriers use the typed storage-view
+				// overload; the RTL writes the parsed Integer code back
+				// through that carrier without var-parameter covariance.
+				emit_storage_ref(
+				    val->code);
 		}
 		fprintf(active, ");\n");
 		return;

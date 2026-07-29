@@ -2581,6 +2581,24 @@ static const BuiltinDesc* builtin_desc_for_node(Node* n) {
 		return b->desc;
 	if (auto c = dynamic_cast<Callable*>(n))
 		return c->builtin_desc;
+	if (auto overloads = dynamic_cast<OverloadSet*>(n)) {
+		const BuiltinDesc* found = nullptr;
+		for (Callable* member : overloads->members) {
+			const BuiltinDesc* candidate =
+			    member->builtin_desc;
+			if (!candidate ||
+			    candidate->syntax_kind ==
+				BuiltinSyntaxKind::None)
+				continue;
+			if (found && found != candidate)
+				// A collection containing distinct compiler grammars is not
+				// itself one grammar-bearing name. Ordinary call syntax will
+				// diagnose or select its members later.
+				return nullptr;
+			found = candidate;
+		}
+		return found;
+	}
 	return nullptr;
 }
 
@@ -2592,6 +2610,61 @@ static std::optional<TypeBoundKind> type_bound_kind_for_builtin(Node* n) {
 static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
 	const BuiltinDesc* desc = builtin_desc_for_node(n);
 	return desc ? desc->syntax_kind : BuiltinSyntaxKind::None;
+}
+
+static bool is_integer_semantic_type(Type* ty);
+
+enum class StrValueFamily {
+	Integer,
+	ExistingReal,
+	EnumerationTodo,
+	Unsupported,
+};
+
+static StrValueFamily str_value_family(Type* ty) {
+	if (is_integer_semantic_type(ty))
+		return StrValueFamily::Integer;
+	if (ty == single_type() ||
+	    ty == double_type() ||
+	    ty == extended_type())
+		// Preserve the already-modelled concrete real overloads. Width and
+		// precision still have a separate, deliberately unimplemented path.
+		return StrValueFamily::ExistingReal;
+	if (dynamic_cast<EnumType*>(ty))
+		// TODO: select either enum-name or ordinal-number formatting here once
+		// generated enum metadata has an explicit runtime representation.
+		return StrValueFamily::
+		    EnumerationTodo;
+	// TODO: Currency and Comp belong in distinct cases here after their
+	// Pascal types and runtime carriers exist. Do not identify them by C++
+	// representation or accidentally fold them into the integer/real cases.
+	return StrValueFamily::Unsupported;
+}
+
+enum class ValDestinationFamily {
+	Integer,
+	ExistingReal,
+	EnumerationTodo,
+	Unsupported,
+};
+
+static ValDestinationFamily
+val_destination_family(Type* ty) {
+	if (is_integer_semantic_type(ty))
+		return ValDestinationFamily::Integer;
+	if (ty == single_type() ||
+	    ty == double_type() ||
+	    ty == extended_type())
+		return ValDestinationFamily::
+		    ExistingReal;
+	if (dynamic_cast<EnumType*>(ty))
+		// TODO: enum Val needs name-to-ordinal lookup metadata. This explicit
+		// family is also where accepting a numeric spelling could be added.
+		return ValDestinationFamily::
+		    EnumerationTodo;
+	// TODO: add target-dependent Real, Currency, and Comp cases only when
+	// those semantic types and their distinct runtime contracts exist.
+	return ValDestinationFamily::Unsupported;
 }
 
 /** Select only the backend implementation of an already-resolved builtin.
@@ -3160,38 +3233,126 @@ Node* Parser::parse_value_from_identifier(
 			    syntax_kind ==
 			    BuiltinSyntaxKind::NewValue);
 		}
+		if (syntax_kind == BuiltinSyntaxKind::Str &&
+		    input_token == "(") {
+			// Str's colons belong to its first actual:
+			//
+			//     Str(value[:width[:precision]], destination)
+			//
+			// They are not extra routine arguments. Parse that grammar here,
+			// through the same formatted-value helper as Write/WriteLn, then
+			// run the ordinary overload matcher on the two Pascal arguments.
+			// This preserves declaration lookup, shadowing, and overload
+			// ranking while retaining the formatting expressions in a
+			// compiler-owned semantic node.
+			SourceLocation call_location =
+			    current_location();
+			parse_opening_paren();
+			FormattedValue item =
+			    parse_formatted_value();
+			if (!maybe_parse_comma())
+				raise_parse_error(
+				    "Str requires a destination after its formatted value");
+			Node* destination =
+			    parse_expression();
+			parse_closing_paren();
+
+			std::vector<Node*> args{
+			    item.value, destination};
+			FinalizedCall finalized =
+			    finalize_call(
+				value, args, id,
+				call_location);
+			const BuiltinDesc* selected =
+			    builtin_desc_for_node(
+				finalized.callee);
+			if (!selected ||
+			    selected->generic_kind !=
+				BuiltinGenericKind::
+				    StrOutput) {
+				if (item.width ||
+				    item.precision)
+					raise_parse_error(
+					    "colon formatting requires the predefined Str");
+				return make_call(
+				    finalized,
+				    std::move(args),
+				    identifier_directives);
+			}
+
+			item.value = args[0];
+			destination = args[1];
+			if (!dynamic_cast<ShortStringType*>(
+				destination
+				    ? destination->ty
+				    : nullptr))
+				raise_parse_error(
+				    "Str destination must be a ShortString variable");
+			const StrValueFamily family =
+			    str_value_family(
+				item.value
+				    ? item.value->ty
+				    : nullptr);
+			if (family ==
+			    StrValueFamily::
+				EnumerationTodo)
+				raise_parse_error(
+				    "Str enumeration formatting is not implemented");
+			if (family ==
+			    StrValueFamily::Unsupported)
+				raise_parse_error(
+				    "Str currently supports integer and predefined real values");
+			if (item.precision)
+				// TODO: add the real precision formatter as a separate
+				// lowering family rather than teaching integer p_str an
+				// accidental interpretation of the second colon.
+				raise_parse_error(
+				    "Str real precision formatting is not implemented");
+			if (item.width &&
+			    family ==
+				StrValueFamily::
+				    ExistingReal)
+				// Existing unqualified Extended Str remains supported. Its
+				// formatted-width family is deliberately left as an explicit
+				// extension point with Real/Currency/Comp formatting.
+				raise_parse_error(
+				    "Str real width formatting is not implemented");
+
+			Node* result = new StrCall(
+			    item,
+			    destination);
+			if (finalized.qualifier_effect)
+				result = new EvaluateThen(
+				    finalized.qualifier_effect,
+				    result);
+			return result;
+		}
 		if (syntax_kind == BuiltinSyntaxKind::Write ||
 		    syntax_kind == BuiltinSyntaxKind::WriteLn) {
-			std::vector<WriteCall::Item> items;
+			std::vector<FormattedValue> items;
 			if (maybe_parse_opening_paren()) {
 				if (input_token != ")") {
 					do {
-						Node* item = parse_expression();
+						FormattedValue formatted =
+						    parse_formatted_value();
 						// Unlike an ordinary call, Write has no formal
 						// parameter to give an untyped integer literal its
 						// default Pascal carrier.
-						if (item->ty == &untyped_integer_type())
-							item = cast(item, integer_type());
-						Node* width = nullptr;
-						Node* precision = nullptr;
-						if (maybe_parse_colon()) {
-							width = cast(parse_expression(), sizeint_type());
-							if (maybe_parse_colon())
-								precision = cast(
-								    parse_expression(),
-								    sizeint_type());
-						}
-						if (precision &&
-						    item->ty != single_type() &&
-						    item->ty != double_type() &&
-						    item->ty != extended_type()) {
+						if (formatted.value->ty ==
+						    &untyped_integer_type())
+							formatted.value = cast(
+							    formatted.value,
+							    integer_type());
+						if (formatted.precision &&
+						    formatted.value->ty != single_type() &&
+						    formatted.value->ty != double_type() &&
+						    formatted.value->ty != extended_type()) {
 							raise_parse_error(
 							    "a second Write/WriteLn colon qualifier "
 							    "requires a real value");
 						}
 						items.push_back(
-						    WriteCall::Item{
-							item, width, precision});
+						    formatted);
 					} while (maybe_parse_comma());
 				}
 				parse_closing_paren();
@@ -4933,6 +5094,25 @@ Node* Parser::parse_expression_after_identifier(
 
 Node* Parser::parse_expression() {
 	return parse_comparison();
+}
+
+FormattedValue
+Parser::parse_formatted_value() {
+	FormattedValue result{
+	    .value = parse_expression(),
+	    .width = nullptr,
+	    .precision = nullptr,
+	};
+	if (maybe_parse_colon()) {
+		result.width = cast(
+		    parse_expression(),
+		    sizeint_type());
+		if (maybe_parse_colon())
+			result.precision = cast(
+			    parse_expression(),
+			    sizeint_type());
+	}
+	return result;
 }
 
 Property* Parser::default_property_for_type(Type* ty) {
@@ -7209,6 +7389,19 @@ struct TypeBlockResolver {
 				    !normalize_node(item.width) ||
 				    !normalize_node(item.precision))
 					return false;
+		}
+		if (auto n = dynamic_cast<StrCall*>(node)) {
+			if (!normalize_node(n->formatted.value) ||
+			    !normalize_node(n->formatted.width) ||
+			    !normalize_node(n->formatted.precision) ||
+			    !normalize_node(n->destination))
+				return false;
+		}
+		if (auto n = dynamic_cast<ValCall*>(node)) {
+			if (!normalize_node(n->source) ||
+			    !normalize_node(n->destination) ||
+			    !normalize_node(n->code))
+				return false;
 		}
 		if (auto n = dynamic_cast<InheritedCall*>(node)) {
 			if (!normalize_node(n->resolved))
@@ -9805,6 +9998,63 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    actual};
 
 	if (target == unknown_type()) {
+		if (builtin &&
+		    builtin->generic_kind ==
+			BuiltinGenericKind::StrOutput) {
+			if (parameter_index == 0 &&
+			    str_value_family(source) !=
+				StrValueFamily::Integer &&
+			    str_value_family(source) !=
+				StrValueFamily::
+				    EnumerationTodo)
+				// The concrete Extended declaration handles the real family.
+				// The generic source exists only as the future enum
+				// extension point, not as an accept-anything escape hatch.
+				return std::nullopt;
+			if (parameter_index == 1 &&
+			    !dynamic_cast<ShortStringType*>(
+				source))
+				return std::nullopt;
+		}
+		if (builtin &&
+		    builtin->generic_kind ==
+			BuiltinGenericKind::ValOutput) {
+			if (parameter_index == 0 &&
+			    !dynamic_cast<ShortStringType*>(
+				source)) {
+				if (auto literal =
+					dynamic_cast<String*>(
+					    actual)) {
+					// A one-character Pascal literal is initially Char.
+					// Val supplies the ShortString context which turns the
+					// same source spelling into a string value.
+					actual = new String(
+					    literal->value,
+					    shortstring_type());
+					source =
+					    shortstring_type();
+				} else {
+					return std::nullopt;
+				}
+			}
+			if (parameter_index == 1 &&
+			    val_destination_family(
+				source) !=
+				ValDestinationFamily::
+				    Integer &&
+			    val_destination_family(
+				source) !=
+				ValDestinationFamily::
+				    EnumerationTodo)
+				// Concrete Single/Double/Extended overloads are ranked
+				// independently. Enumeration reaches the semantic handler
+				// solely so it can report its deliberate TODO family.
+				return std::nullopt;
+			if (parameter_index == 2 &&
+			    !is_integer_semantic_type(
+				source))
+				return std::nullopt;
+		}
 		if (builtin && parameter_index == 0 &&
 		    (builtin->generic_kind ==
 			 BuiltinGenericKind::
@@ -11581,17 +11831,65 @@ Node* Parser::make_call(
 			    std::move(args), result_type);
 		}
 	}
-	auto call = new ProcCall(
-	    finalized.receiver, finalized.callee,
-	    std::move(args));
-	call->ty = call_result_type(finalized.callee);
 	auto callable =
 	    dynamic_cast<Callable*>(
 		finalized.callee);
 	const BuiltinDesc* descriptor =
 	    callable
-		? callable->builtin_desc
+		? (callable->builtin_desc
+		       ? callable->builtin_desc
+		       : lookup_builtin_desc(
+			     callable->cxx_name))
 		: nullptr;
+	if (descriptor &&
+	    descriptor->generic_kind ==
+		BuiltinGenericKind::ValOutput) {
+		if (args.size() != 2 &&
+		    args.size() != 3)
+			raise_parse_error(
+			    "internal error: selected Val declaration has invalid arity");
+		if (!dynamic_cast<ShortStringType*>(
+			args[0] ? args[0]->ty
+				: nullptr))
+			raise_parse_error(
+			    "Val source must be a ShortString");
+
+		const ValDestinationFamily family =
+		    val_destination_family(
+			args[1] ? args[1]->ty
+				: nullptr);
+		if (family ==
+		    ValDestinationFamily::
+			EnumerationTodo)
+			raise_parse_error(
+			    "Val enumeration destinations are not implemented");
+		if (family ==
+		    ValDestinationFamily::
+			Unsupported)
+			raise_parse_error(
+			    "Val currently supports integer, subrange, and predefined real destinations");
+		if (args.size() == 3 &&
+		    !is_integer_semantic_type(
+			args[2] ? args[2]->ty
+				: nullptr))
+			raise_parse_error(
+			    "Val code destination must be an integer variable");
+
+		Node* result = new ValCall(
+		    args[0], args[1],
+		    args.size() == 3
+			? args[2]
+			: nullptr);
+		if (finalized.qualifier_effect)
+			result = new EvaluateThen(
+			    finalized.qualifier_effect,
+			    result);
+		return result;
+	}
+	auto call = new ProcCall(
+	    finalized.receiver, finalized.callee,
+	    std::move(args));
+	call->ty = call_result_type(finalized.callee);
 	if (call->ty == unknown_type()) {
 		if (descriptor &&
 		    (descriptor->generic_kind ==

@@ -17,7 +17,7 @@ if ! rg -Fq '::u_system::p_writeln(' "$tmp/write_builtin.cc"; then
 	echo "WriteLn did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::tpcc_make_write_arg(' "$tmp/write_builtin.cc"; then
+if ! rg -Fq '::u_system::tpcc_make_formatted_value(' "$tmp/write_builtin.cc"; then
 	echo "formatted output arguments lost their RTL descriptors" >&2
 	exit 1
 fi

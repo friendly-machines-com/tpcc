@@ -219,29 +219,70 @@ public:
 	    unsigned indent) const override;
 };
 
+/** The shared semantic representation of Pascal's formatted-value grammar:
+ *
+ *      value [ : width [ : precision ] ]
+ *
+ * Write/WriteLn accept a sequence of these; Str accepts exactly one before
+ * its destination. */
+struct FormattedValue {
+	Node* value;
+	Node* width;
+	Node* precision;
+};
+
 /** One Pascal Write/WriteLn invocation. These routines have compiler grammar,
  * not an ordinary RoutineType signature: the optional first Text argument and
- * every value's `:width[:precision]` qualifiers must remain grouped. */
+ * every formatted value must remain grouped. */
 class WriteCall: public Node {
 public:
-	struct Item {
-		Node* value;
-		Node* width;
-		Node* precision;
-	};
-
 	bool newline;
 	Node* file;
 	// Write has special grammar rather than a RoutineType, but its one source
 	// declaration still selects one complete checked or unchecked RTL entry
 	// point at the leading token just like an ordinary direct builtin call.
 	const BuiltinDesc* lowering_builtin_desc;
-	std::vector<Item> items;
+	std::vector<FormattedValue> items;
 
 	WriteCall(
 	    bool newline, Node* file,
 	    const BuiltinDesc* lowering_builtin_desc,
-	    std::vector<Item> items);
+	    std::vector<FormattedValue> items);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** Compiler-owned Str invocation. `width` and `precision` are the colon
+ * qualifiers attached to `value`, not ordinary routine arguments.
+ * `destination` retains its exact bounded ShortString type and storage. */
+class StrCall: public Node {
+public:
+	FormattedValue formatted;
+	Node* destination;
+
+	StrCall(
+	    FormattedValue formatted,
+	    Node* destination);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** Compiler-owned Val invocation. The ordinary comma grammar has already
+ * selected a predefined System.Val declaration; these operands retain their
+ * exact Pascal types for destination- and code-directed lowering. */
+class ValCall: public Node {
+public:
+	Node* source;
+	Node* destination;
+	Node* code;
+
+	ValCall(Node* source, Node* destination, Node* code);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(

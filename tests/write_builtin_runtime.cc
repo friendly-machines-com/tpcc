@@ -30,7 +30,7 @@ int main() {
 	    &failed_output};
 	::u_system::m_unchecked_write(
 	    failed_text,
-	    ::u_system::tpcc_make_write_arg(
+	    ::u_system::tpcc_make_formatted_value(
 		static_cast<::u_system::t_integer>(7)));
 	if (::u_system::p_ioresult() != 101)
 		return 4;
@@ -50,7 +50,7 @@ int main() {
 	    &throwing_output};
 	::u_system::m_unchecked_writeln(
 	    throwing_text,
-	    ::u_system::tpcc_make_write_arg(
+	    ::u_system::tpcc_make_formatted_value(
 		static_cast<::u_system::t_integer>(8)));
 	if (::u_system::p_ioresult() != 101)
 		return 5;
