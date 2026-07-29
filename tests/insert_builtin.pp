@@ -78,11 +78,7 @@ begin
   ASource := 'XY';
   ADestination := 'ab';
   Insert(ASource, ADestination, 2);
-  if (Length(ADestination) <> 4) or
-     (ADestination[1] <> 'a') or
-     (ADestination[2] <> 'X') or
-     (ADestination[3] <> 'Y') or
-     (ADestination[4] <> 'b') then
+  if ADestination <> 'aXYb' then
     begin
       N := 0;
       N := 1 div N

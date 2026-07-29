@@ -4039,14 +4039,26 @@ inline t_shortstring<255> o_add(
 	return m_shortstring_add(a, b);
 }
 
-template<std::size_t ACapacity, std::size_t BCapacity>
+template<typename A, typename B>
+requires
+    (tpcc_is_shortstring_v<A> ||
+     std::is_same_v<A, t_ansistring>) &&
+    (tpcc_is_shortstring_v<B> ||
+     std::is_same_v<B, t_ansistring>)
 inline int tpcc_stringcmp(
-    const t_shortstring<ACapacity>& a,
-    const t_shortstring<BCapacity>& b) {
-	int r = memcmp(a.data, b.data, std::min(a.length, b.length));
-	if (r == 0) {
-		return (int) a.length - (int) b.length;
-	}
+    const A& a, const B& b) {
+	const auto a_length = a.m_length();
+	const auto b_length = b.m_length();
+	int r = memcmp(
+	    a.m_data(), b.m_data(),
+	    static_cast<std::size_t>(
+		std::min(a_length, b_length)));
+	if (r == 0)
+		return a_length < b_length
+			   ? -1
+			   : a_length > b_length
+				 ? 1
+				 : 0;
 	return r;
 }
 
@@ -4068,6 +4080,12 @@ template<std::size_t ACapacity, std::size_t BCapacity>
 inline t_boolean o_equal(
     const t_shortstring<ACapacity>& a,
     const t_shortstring<BCapacity>& b) {
+	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) == 0);
+}
+
+inline t_boolean o_equal(
+    const t_ansistring& a,
+    const t_ansistring& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) == 0);
 }
 

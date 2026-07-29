@@ -53,10 +53,7 @@ begin
 
   A := 'abcdef';
   Delete(A, 2, 3);
-  if (Length(A) <> 3) or
-     (A[1] <> 'a') or
-     (A[2] <> 'e') or
-     (A[3] <> 'f') then
+  if A <> 'aef' then
     begin
       N := 0;
       N := 1 div N

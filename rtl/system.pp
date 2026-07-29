@@ -450,6 +450,7 @@ operator xor(a, b: Boolean): Boolean; external name '::u_system::o_logicalxor';
 operator not(a: Boolean): Boolean; external name '::u_system::o_logicalnot';
 
 operator =(a, b: shortstring): Boolean; external name '::u_system::o_equal';
+operator =(a, b: ansistring): Boolean; external name '::u_system::o_equal';
 operator UncheckedAdd(a, b: shortstring): shortstring; external name '::u_system::o_unchecked_add';
 operator Add(a, b: shortstring): shortstring; external name '::u_system::o_add';
 operator :=(a: shortstring): ansistring; external name '::u_system::o_implicit';
