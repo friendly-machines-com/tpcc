@@ -2154,26 +2154,32 @@ void Parser::maybe_parse_statement() {
 		parse_keyword("end");
 	} else if (peek_keyword("with")) {
 		parse_keyword("with");
-		// TODO: complex targets (`p^`, `arr[i]`, `f()`). For now the
-		// target must be a simple variable so we can read Type* off its
-		// StorageSlot; the alias-emission below is already correct for
-		// arbitrary targets when we lift this restriction.
-		auto id = parse_identifier();
-		Node* target = resolve_value(id);
-		auto target_slot = dynamic_cast<StorageSlot*>(target);
-		if (!target_slot)
-			raise_value_error(
-			    "with target must currently be a simple variable",
-			    target);
-		Frame* body_frame = get_type_body_frame(target_slot->ty);
+		// Parse the complete designator before installing its member scope.
+		// In particular, `with p^[index] do` must bind the selected record,
+		// rather than merely the leading pointer variable. The emitter binds
+		// this node once to `auto&&`: places remain references to their
+		// original storage, while record-valued calls get a lifetime-extended
+		// temporary for the duration of the with body.
+		LeadingTokenDirectives target_directives =
+		    directive_state.leading_token_directives();
+		Node* target =
+		    parse_designator(
+			&target_directives);
+		target = maybe_auto_call(
+		    target, target_directives);
+		Frame* body_frame =
+		    get_type_body_frame(target->ty);
 		if (!body_frame)
 			raise_type_kind_mismatch(
 			    "with target", "class, record, or object",
-			    target_slot->ty);
+			    target->ty);
 		parse_keyword("do");
 		// emit_with_prologue introduces a C++ block. As with case selectors,
 		// nested blocks can safely reuse this tpcc-owned spelling.
-		auto alias_slot = new StorageSlot("tpcc_with_target", target_slot->ty);
+		auto alias_slot =
+		    new StorageSlot(
+			"tpcc_with_target",
+			target->ty);
 		if (emitter)
 			emitter->emit_with_prologue(alias_slot->cxx_name, target);
 		push_scope(body_frame, alias_slot);
