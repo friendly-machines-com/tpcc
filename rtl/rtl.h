@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <new>
@@ -4157,6 +4158,31 @@ inline t_boolean o_lessthanorequal(t_char a, t_char b) { return tpcc_bool_to_boo
 inline t_boolean o_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value == b.value); }
 inline t_boolean o_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value > b.value); }
 inline t_boolean o_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
+
+// PChar comparisons are address comparisons, not NUL-terminated string
+// comparisons. std::less supplies the implementation's strict total pointer
+// order even outside one C++ array object; == remains ordinary pointer identity.
+// This is deliberately specific to PChar rather than a generic typed-pointer
+// operator family.
+inline t_boolean o_lessthan(t_char* a, t_char* b) {
+	return tpcc_bool_to_boolean(
+	    std::less<t_char*>{}(a, b));
+}
+inline t_boolean o_lessthanorequal(t_char* a, t_char* b) {
+	return tpcc_bool_to_boolean(
+	    !std::less<t_char*>{}(b, a));
+}
+inline t_boolean o_equal(t_char* a, t_char* b) {
+	return tpcc_bool_to_boolean(a == b);
+}
+inline t_boolean o_greaterthan(t_char* a, t_char* b) {
+	return tpcc_bool_to_boolean(
+	    std::less<t_char*>{}(b, a));
+}
+inline t_boolean o_greaterthanorequal(t_char* a, t_char* b) {
+	return tpcc_bool_to_boolean(
+	    !std::less<t_char*>{}(a, b));
+}
 
 // Pascal Pointer equality compares pointer values; it does not inspect the
 // pointed-to storage. Typed pointers reach this overload through Pascal's

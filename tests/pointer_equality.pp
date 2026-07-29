@@ -2,14 +2,18 @@ program PointerEquality;
 
 type
   PInteger = ^Integer;
+  PAnotherChar = ^Char;
   TBase = class(TObject);
   TFirst = class(TBase);
   TSecond = class(TBase);
 
 var
   ValueA, ValueB: Integer;
+  Chars: array[0..2] of Char;
   Raw, RawCopy: Pointer;
   Typed, TypedCopy: PInteger;
+  FirstChar, SecondChar, FirstCharCopy: PChar;
+  AnotherFirstChar, AnotherSecondChar: PAnotherChar;
   Base: TBase;
   First, FirstCopy: TFirst;
   Second: TSecond;
@@ -52,6 +56,45 @@ begin
     Failed := True;
   TypedCopy := @ValueB;
   if Typed = TypedCopy then
+    Failed := True;
+
+  { FPC treats PChar as a pointer for comparisons. Deliberately put a
+    lexicographically greater character at the lower address: FirstChar <
+    SecondChar must still be true because it compares addresses. }
+  Chars[0] := 'z';
+  Chars[1] := 'a';
+  Chars[2] := #0;
+  FirstChar := @Chars[0];
+  SecondChar := @Chars[1];
+  FirstCharCopy := FirstChar;
+  if not (FirstChar = FirstCharCopy) then
+    Failed := True;
+  if FirstChar <> FirstCharCopy then
+    Failed := True;
+  if FirstChar = SecondChar then
+    Failed := True;
+  if not (FirstChar <> SecondChar) then
+    Failed := True;
+  if not (FirstChar < SecondChar) then
+    Failed := True;
+  if not (FirstChar <= FirstCharCopy) then
+    Failed := True;
+  if not (FirstChar <= SecondChar) then
+    Failed := True;
+  if not (SecondChar > FirstChar) then
+    Failed := True;
+  if not (SecondChar >= SecondChar) then
+    Failed := True;
+  if not (SecondChar >= FirstChar) then
+    Failed := True;
+
+  { A separately declared ^Char type reaches the same PChar operator by its
+    exact pointee contract; this is not limited to the System alias name. }
+  AnotherFirstChar := @Chars[0];
+  AnotherSecondChar := @Chars[1];
+  if not (AnotherFirstChar < AnotherSecondChar) then
+    Failed := True;
+  if AnotherFirstChar = AnotherSecondChar then
     Failed := True;
 
   First := nil;

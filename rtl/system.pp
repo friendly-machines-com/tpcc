@@ -191,6 +191,13 @@ operator =(a, b: Char): Boolean; external name '::u_system::o_equal';
 operator >(a, b: Char): Boolean; external name '::u_system::o_greaterthan';
 operator >=(a, b: Char): Boolean; external name '::u_system::o_greaterthanorequal';
 
+// Compare PChar by address, not by the characters they point to.
+operator <(a, b: PChar): Boolean; external name '::u_system::o_lessthan';
+operator <=(a, b: PChar): Boolean; external name '::u_system::o_lessthanorequal';
+operator =(a, b: PChar): Boolean; external name '::u_system::o_equal';
+operator >(a, b: PChar): Boolean; external name '::u_system::o_greaterthan';
+operator >=(a, b: PChar): Boolean; external name '::u_system::o_greaterthanorequal';
+
 // Typed and untyped pointers share Pascal's ordinary pointer equality. Call
 // matching tests each source operand against this Pointer formal, including
 // contextual nil, then applies the selected formal carrier after selection.
