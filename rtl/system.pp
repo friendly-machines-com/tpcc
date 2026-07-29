@@ -342,6 +342,11 @@ procedure fillchar(var destination; count: SizeInt; value: Byte); external name 
 procedure filldword(var destination; count: SizeInt; value: DWord); external name '::u_system::p_filldword';
 procedure prefetch(const memory); external name '::u_system::p_prefetch';
 procedure move(const source; var destination; count: SizeInt); external name '::u_system::p_move';
+// Initialize/Finalize deliberately expose only FPC's one-value forms. The
+// omitted var type retains the caller's exact managed carrier for the RTL
+// lifecycle operation; the count overload is not declared.
+procedure initialize(var value); external name '::u_system::p_initialize';
+procedure finalize(var value); external name '::u_system::p_finalize';
 function comparebyte(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparebyte';
 function comparechar(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparechar';
 function sizeof(const x): SizeInt; external name '::u_system::p_sizeof';

@@ -972,6 +972,8 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_filldword", nullptr},
     {"::u_system::p_prefetch", nullptr},
     {"::u_system::p_move", nullptr},
+    {"::u_system::p_initialize", nullptr},
+    {"::u_system::p_finalize", nullptr},
     {"::u_system::p_comparebyte", nullptr},
     {"::u_system::p_comparechar", nullptr},
     {"::u_system::p_assigned", nullptr, {}, BuiltinGenericKind::Assigned},

@@ -2471,6 +2471,34 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 			fprintf(active, "}\n");
 		}
 		if (auto record = dynamic_cast<RecordType*>(ty)) {
+			if (record->has_managed_lifetime()) {
+				fprintf(active,
+					"inline void m_pascal_initialize(%s& value) noexcept {\n",
+					cxx_name.c_str());
+				fprintf(active,
+					"\tusing ::u_system::m_pascal_initialize;\n");
+				for (const auto& field : record->fields)
+					if (field.ty &&
+					    field.ty->has_managed_lifetime())
+						fprintf(active,
+							"\tm_pascal_initialize(value.%s);\n",
+							field.slot->cxx_name.c_str());
+				fprintf(active, "}\n");
+
+				fprintf(active,
+					"inline void m_pascal_finalize(%s& value) noexcept {\n",
+					cxx_name.c_str());
+				fprintf(active,
+					"\tusing ::u_system::m_pascal_finalize;\n");
+				for (auto field = record->fields.rbegin();
+				     field != record->fields.rend(); ++field)
+					if (field->ty &&
+					    field->ty->has_managed_lifetime())
+						fprintf(active,
+							"\tm_pascal_finalize(value.%s);\n",
+							field->slot->cxx_name.c_str());
+				fprintf(active, "}\n");
+			}
 			auto layout = record_layout(record);
 			if (!layout)
 				unhandled_type(

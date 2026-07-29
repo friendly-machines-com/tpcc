@@ -2169,6 +2169,88 @@ static_assert(
 static_assert(
     alignof(t_ansistring) == alignof(void*));
 
+// Pascal Initialize starts the lifetime of the managed part of an otherwise
+// uninitialized value. In particular, it must not release a handle which was
+// placed in the destination by a preceding bytewise Move: that handle has not
+// acquired another reference yet. The fallback is a no-op for unmanaged
+// Pascal carriers. Generated aggregate overloads recursively visit only fields
+// whose Pascal types have managed lifetime.
+template<typename T>
+inline void m_pascal_initialize(T&) noexcept {
+}
+
+inline void m_pascal_initialize(
+    t_ansistring& value) noexcept {
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_ansistring;
+}
+
+template<typename T>
+inline void m_pascal_initialize(
+    t_dynamicarray<T>& value) noexcept {
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_dynamicarray<T>;
+}
+
+template<typename T, std::size_t length, auto low>
+inline void m_pascal_initialize(
+    t_fixedarray<T, length, low>& value) noexcept {
+	for (T& item : value.items) {
+		using ::u_system::m_pascal_initialize;
+		m_pascal_initialize(item);
+	}
+}
+
+// Finalize releases the managed part once, then restores an empty live carrier.
+// The reconstruction is backend bookkeeping: Pascal regards the value as
+// finalized, while C++ scope/object teardown may still later invoke the
+// carrier destructor and must therefore see a harmless empty value.
+template<typename T>
+inline void m_pascal_finalize(T&) noexcept {
+}
+
+inline void m_pascal_finalize(
+    t_ansistring& value) noexcept {
+	std::destroy_at(std::addressof(value));
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_ansistring;
+}
+
+template<typename T>
+inline void m_pascal_finalize(
+    t_dynamicarray<T>& value) noexcept {
+	std::destroy_at(std::addressof(value));
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_dynamicarray<T>;
+}
+
+template<typename T, std::size_t length, auto low>
+inline void m_pascal_finalize(
+    t_fixedarray<T, length, low>& value) noexcept {
+	for (std::size_t i = length; i != 0; --i) {
+		using ::u_system::m_pascal_finalize;
+		m_pascal_finalize(value.items[i - 1]);
+	}
+}
+
+template<typename T>
+inline void p_initialize(
+    tpcc_typed_storage_ref<T> value) noexcept {
+	if (value.size < sizeof(T))
+		m_runtime_error(201);
+	using ::u_system::m_pascal_initialize;
+	m_pascal_initialize(*value.value);
+}
+
+template<typename T>
+inline void p_finalize(
+    tpcc_typed_storage_ref<T> value) noexcept {
+	if (value.size < sizeof(T))
+		m_runtime_error(201);
+	using ::u_system::m_pascal_finalize;
+	m_pascal_finalize(*value.value);
+}
+
 template<typename T, typename I>
 inline T& p_index(
     t_dynamicarray<T>& value, I index) {
