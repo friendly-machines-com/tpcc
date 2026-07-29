@@ -2,6 +2,7 @@ unit sysutils;
 interface
 
 type
+  TExecuteFlags = Set of (ExecInheritsHandles);
   Exception = class(TObject)
   private
     FMessage: String;
