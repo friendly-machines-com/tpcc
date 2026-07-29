@@ -294,11 +294,13 @@ public:
  *  at parse time (single-pass compiler -- emit doesn't re-resolve).
  *
  *  No `receiver` field, unlike ProcCall. Pascal `inherited X` carries
- *  implicit Self, but C++ emits this as a qualified-id `ParentClass::X(args)`
- *  -- not member-access `this->X(args)` or `receiver->X(args)`. Qualified-id
- *  member-call syntax in C++ implicitly uses `this`, so there's no receiver
- *  expression to spell. The parent class name is recovered at emit time from
- *  `resolved` (a Method*) -> `owner_class` -> `owner_cxx_name(...)`.
+ *  implicit Self, but C++ emits this as a qualified-id
+ *  `ParentClass::X(args)` (or `ParentClass::m_meta::X(args)` for a class
+ *  method) -- not member-access `this->X(args)` or `receiver->X(args)`.
+ *  Qualified-id member-call syntax in C++ implicitly uses `this`, so there's
+ *  no receiver expression to spell. The parent class name is recovered at
+ *  emit time from `resolved` (a Method*) -> `owner_class` ->
+ *  `owner_cxx_name(...)`.
  *
  *  `dropped` is set only for class destructors: those currently lower to C++
  *  destructors and auto-chain. Old-style object destructors are ordinary

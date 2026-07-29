@@ -756,6 +756,20 @@ static std::string owner_cxx_reference_name(Type* owner) {
 	    owner, owner_cxx_name(owner));
 }
 
+static std::string
+inherited_owner_cxx_reference_name(
+    Method* method) {
+	std::string owner =
+	    owner_cxx_reference_name(
+		method ? method->owner_class
+		       : nullptr);
+	if (method &&
+	    method->ty->kind ==
+		CLASS_METHOD)
+		owner += "::m_meta";
+	return owner;
+}
+
 // Only Pascal class destructors are presently implemented by C++ destructors.
 // An old-style object is a value: its Pascal destructor is an ordinary,
 // optionally virtual method, while Dispose separately tears down its carrier.
@@ -1433,8 +1447,8 @@ void Emitter::emit_statement(Node* stmt) {
 		// Qualified-id `Parent::X(args)` -- C++ implicit-this injection makes
 		// this a member call on `this`. See InheritedCall's docstring in cst.h.
 		fprintf(active, "\t%s::%s(",
-			owner_cxx_reference_name(
-			    m->owner_class)
+			inherited_owner_cxx_reference_name(
+			    m)
 			    .c_str(),
 			callable_cxx_name(ic->resolved).c_str());
 		for (size_t i = 0; i < ic->args.size(); i++) {
@@ -4232,8 +4246,8 @@ void Emitter::emit_expression(Node* expr) {
 		if (!m || !m->owner_class)
 			unhandled_node("inherited target is not a method", expr);
 		fprintf(active, "%s::%s(",
-			owner_cxx_reference_name(
-			    m->owner_class)
+			inherited_owner_cxx_reference_name(
+			    m)
 			    .c_str(),
 			callable_cxx_name(ic->resolved).c_str());
 		for (size_t i = 0; i < ic->args.size(); i++) {

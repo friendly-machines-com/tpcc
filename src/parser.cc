@@ -3716,7 +3716,6 @@ Node* Parser::parse_inherited() {
 	if (!hit)
 		raise_parse_error("inherited: '" + name + "' not found in parent chain");
 
-	Callable* resolved = nullptr;
 	std::vector<Node*> args;
 	if (maybe_parse_opening_paren()) {
 		if (input_token != ")") {
@@ -3725,16 +3724,11 @@ Node* Parser::parse_inherited() {
 				args.push_back(parse_expression());
 		}
 		parse_closing_paren();
-		auto fc = finalize_call(hit, args, name, current_location());
-		// fc.receiver stays unused -- InheritedCall uses qualified-id syntax
-		// (Parent::X(args)), not member-access.
-		resolved = dynamic_cast<Callable*>(fc.callee);
-		if (!resolved)
-			raise_parse_error("inherited: overload resolution failed");
 	} else {
 		// No-parens form: must be a single Callable, not a multi-member
 		// overload set.
-		resolved = dynamic_cast<Callable*>(hit);
+		Callable* resolved =
+		    dynamic_cast<Callable*>(hit);
 		if (!resolved) {
 			if (auto os = dynamic_cast<OverloadSet*>(hit)) {
 				if (os->members.size() == 1)
@@ -3746,7 +3740,39 @@ Node* Parser::parse_inherited() {
 		}
 		if (!resolved)
 			raise_parse_error("inherited: '" + name + "' did not resolve to a method");
+		hit = resolved;
 	}
+
+	// Ordinary member-call resolution requires a receiver. `inherited`
+	// carries the enclosing method's implicit Self even though InheritedCall
+	// later emits a qualified Parent::Method(args) expression and therefore
+	// does not retain that receiver in its CST node.
+	Node* receiver = nullptr;
+	if (cur_method->is_static) {
+		if (auto owner =
+			dynamic_cast<ClassType*>(
+			    cur_method->owner_class))
+			receiver =
+			    new ClassRefValue(owner);
+		else
+			receiver =
+			    new TypeMemberQualifier(
+				cur_method->owner_class);
+	} else {
+		receiver = resolve_value("self");
+	}
+	Node* call_target =
+	    bind_lookup_result(receiver, hit);
+	auto fc = finalize_call(
+	    call_target, args, name,
+	    current_location());
+	// fc.receiver stays unused -- InheritedCall uses qualified-id syntax
+	// (Parent::X(args)), not member-access.
+	auto resolved =
+	    dynamic_cast<Callable*>(fc.callee);
+	if (!resolved)
+		raise_parse_error(
+		    "inherited: overload resolution failed");
 
 	auto n = new InheritedCall();
 	n->resolved = resolved;
