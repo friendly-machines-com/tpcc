@@ -8,6 +8,12 @@ type
     MarkerA, MarkerB, MarkerC, MarkerD);
   TMarkerSet = set of TMarker;
 
+const
+  ConstantFirst = [MarkerA, MarkerB];
+  ConstantSecond = [MarkerB..MarkerD];
+  ConstantUnion = ConstantFirst + ConstantSecond;
+  ConstantDifference = ConstantUnion - [MarkerB..MarkerC];
+
 var
   Separators: TCharSet;
   Characters: TCharSet;
@@ -88,5 +94,14 @@ begin
   Markers := Markers + [MarkerB];
   if (Selected <> 2) or
      not (MarkerD in Markers) then
-    Halt(7)
+    Halt(7);
+
+  if not (MarkerA in ConstantUnion) or
+     not (MarkerD in ConstantUnion) then
+    Halt(8);
+  if not (MarkerA in ConstantDifference) or
+     not (MarkerD in ConstantDifference) or
+     (MarkerB in ConstantDifference) or
+     (MarkerC in ConstantDifference) then
+    Halt(9)
 end.

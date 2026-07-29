@@ -384,6 +384,214 @@ static uint64_t constant_ordinal_bits(
 	return raw & constant_ordinal_mask(bits);
 }
 
+using ConstantSetKey = std::pair<bool, uint64_t>;
+
+struct ConstantSetRange {
+	ConstantSetKey lower;
+	ConstantSetKey upper;
+};
+
+static int compare_constant_set_keys(
+    const ConstantSetKey& first,
+    const ConstantSetKey& second) {
+	if (first.first != second.first)
+		return first.first ? -1 : 1;
+	if (first.second == second.second)
+		return 0;
+	if (first.first)
+		return first.second > second.second
+			   ? -1
+			   : 1;
+	return first.second < second.second
+		   ? -1
+		   : 1;
+}
+
+static std::optional<ConstantSetKey>
+constant_set_predecessor(ConstantSetKey value) {
+	if (value.first) {
+		if (value.second == UINT64_MAX)
+			return std::nullopt;
+		++value.second;
+		return value;
+	}
+	if (value.second != 0) {
+		--value.second;
+		return value;
+	}
+	return ConstantSetKey{true, 1};
+}
+
+static std::optional<ConstantSetKey>
+constant_set_successor(ConstantSetKey value) {
+	if (value.first) {
+		if (value.second > 1) {
+			--value.second;
+			return value;
+		}
+		return ConstantSetKey{false, 0};
+	}
+	if (value.second == UINT64_MAX)
+		return std::nullopt;
+	++value.second;
+	return value;
+}
+
+static std::optional<std::vector<ConstantSetRange>>
+constant_set_ranges(SetLiteral* set) {
+	if (!set)
+		return std::nullopt;
+	std::vector<ConstantSetRange> ranges;
+	ranges.reserve(set->items.size());
+	for (const SetLiteral::Item& item :
+	     set->items) {
+		auto lower =
+		    constant_ordinal_value(item.lower);
+		auto upper =
+		    constant_ordinal_value(
+			item.upper
+			    ? item.upper
+			    : item.lower);
+		if (!lower || !upper)
+			return std::nullopt;
+		ConstantSetRange range{
+		    *lower, *upper};
+		if (compare_constant_set_keys(
+			range.lower,
+			range.upper) <= 0)
+			ranges.push_back(range);
+	}
+	return ranges;
+}
+
+static ConstEvalResult constant_set_literal(
+    Type* result_ty,
+    const std::vector<ConstantSetRange>& ranges) {
+	auto result_set =
+	    dynamic_cast<FixedSetType*>(result_ty);
+	if (!result_set)
+		return ConstEvalResult::not_constant();
+	std::vector<SetLiteral::Item> items;
+	items.reserve(ranges.size());
+	for (const ConstantSetRange& range :
+	     ranges) {
+		ConstEvalResult lower =
+		    const_explicit_ordinal_cast(
+			range.lower.second,
+			range.lower.first,
+			result_set->item_type);
+		if (lower.kind !=
+		    ConstEvalResult::Kind::Success)
+			return lower;
+		Node* upper_node = nullptr;
+		if (compare_constant_set_keys(
+			range.lower,
+			range.upper) != 0) {
+			ConstEvalResult upper =
+			    const_explicit_ordinal_cast(
+				range.upper.second,
+				range.upper.first,
+				result_set->item_type);
+			if (upper.kind !=
+			    ConstEvalResult::Kind::Success)
+				return upper;
+			upper_node = upper.node;
+		}
+		items.push_back(
+		    SetLiteral::Item{
+			lower.node, upper_node});
+	}
+	return ConstEvalResult::success(
+	    new SetLiteral(
+		std::move(items), result_ty));
+}
+
+static ConstEvalResult fold_set_union(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 2 ||
+	    !dynamic_cast<FixedSetType*>(result_ty))
+		return ConstEvalResult::not_constant();
+	auto first =
+	    dynamic_cast<SetLiteral*>(args[0]);
+	auto second =
+	    dynamic_cast<SetLiteral*>(args[1]);
+	if (!first || !second)
+		return ConstEvalResult::not_constant();
+	std::vector<SetLiteral::Item> items =
+	    first->items;
+	items.insert(
+	    items.end(),
+	    second->items.begin(),
+	    second->items.end());
+	return ConstEvalResult::success(
+	    new SetLiteral(
+		std::move(items), result_ty));
+}
+
+static ConstEvalResult fold_set_difference(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 2 ||
+	    !dynamic_cast<FixedSetType*>(result_ty))
+		return ConstEvalResult::not_constant();
+	auto remaining = constant_set_ranges(
+	    dynamic_cast<SetLiteral*>(args[0]));
+	auto removed = constant_set_ranges(
+	    dynamic_cast<SetLiteral*>(args[1]));
+	if (!remaining || !removed)
+		return ConstEvalResult::not_constant();
+
+	for (const ConstantSetRange& removal :
+	     *removed) {
+		std::vector<ConstantSetRange> next;
+		next.reserve(remaining->size() + 1);
+		for (const ConstantSetRange& range :
+		     *remaining) {
+			if (compare_constant_set_keys(
+				removal.upper,
+				range.lower) < 0 ||
+			    compare_constant_set_keys(
+				range.upper,
+				removal.lower) < 0) {
+				next.push_back(range);
+				continue;
+			}
+			if (compare_constant_set_keys(
+				range.lower,
+				removal.lower) < 0) {
+				auto upper =
+				    constant_set_predecessor(
+					removal.lower);
+				if (!upper)
+					return ConstEvalResult::
+					    not_constant();
+				next.push_back(
+				    ConstantSetRange{
+					range.lower,
+					*upper});
+			}
+			if (compare_constant_set_keys(
+				removal.upper,
+				range.upper) < 0) {
+				auto lower =
+				    constant_set_successor(
+					removal.upper);
+				if (!lower)
+					return ConstEvalResult::
+					    not_constant();
+				next.push_back(
+				    ConstantSetRange{
+					*lower,
+					range.upper});
+			}
+		}
+		*remaining = std::move(next);
+	}
+	return constant_set_literal(
+	    result_ty, *remaining);
+}
+
 static ConstEvalResult fold_abs_impl(
     Type* result_ty,
     const std::vector<Node*>& args,
@@ -1121,13 +1329,18 @@ static const BuiltinDesc k_checked_pointer_difference_fallback{
 static const BuiltinDesc k_unchecked_pointer_difference_fallback{
     "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
 static const BuiltinDesc k_checked_set_union_fallback{
-    "::u_system::o_add", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
+    "::u_system::o_add", fold_set_union, {},
+    BuiltinGenericKind::SetUnionOrDifference};
 static const BuiltinDesc k_unchecked_set_union_fallback{
-    "::u_system::o_unchecked_add", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
+    "::u_system::o_unchecked_add", fold_set_union, {},
+    BuiltinGenericKind::SetUnionOrDifference};
 static const BuiltinDesc k_checked_set_difference_fallback{
-    "::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
+    "::u_system::o_subtract", fold_set_difference, {},
+    BuiltinGenericKind::SetUnionOrDifference};
 static const BuiltinDesc k_unchecked_set_difference_fallback{
-    "::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::SetUnionOrDifference};
+    "::u_system::o_unchecked_subtract",
+    fold_set_difference, {},
+    BuiltinGenericKind::SetUnionOrDifference};
 
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name ==

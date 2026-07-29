@@ -7418,6 +7418,13 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 	}
 
 	Node* expr = parse_expression();
+	if (dynamic_cast<BracketLiteral*>(expr) &&
+	    dynamic_cast<FixedSetType*>(ty))
+		// An empty `[]` has no element type of its own. Storage
+		// initializers already supply the exact destination type, so commit
+		// bracket syntax to that set before constant evaluation just as
+		// ordinary assignment/argument matching does.
+		expr = cast(expr, ty);
 	ConstEvalContext ctx;
 	ConstEvalResult folded = expr->const_eval(ctx);
 	if (folded.kind == ConstEvalResult::Kind::NotConstant)

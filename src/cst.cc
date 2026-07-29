@@ -848,6 +848,16 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult r = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (r.kind != ConstEvalResult::Kind::Success)
 		return r;
+	if (auto set = dynamic_cast<SetLiteral*>(r.node);
+	    set &&
+	    dynamic_cast<FixedSetType*>(set->ty) &&
+	    dynamic_cast<FixedSetType*>(ty))
+		// Set conversions preserve ordinal membership keys. Retagging the
+		// already-folded literal is the constant form of the runtime
+		// m_set_cast operation; the bounds themselves need no value
+		// conversion.
+		return ConstEvalResult::success(
+		    new SetLiteral(set->items, ty));
 	if (auto ordinal = constant_ordinal(r.node)) {
 		ConstEvalResult converted =
 		    const_explicit_ordinal_cast(
