@@ -31,4 +31,17 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/insert_builtin"
 	-o "$tmp/insert_runtime"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/insert_runtime"
 
+if ./mp -Furtl -o"$tmp/rejected.cc" \
+	tests/insert_non_string_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "Insert accepted a non-ShortString generic destination" >&2
+	exit 1
+fi
+if ! rg -Fq "no matching overload for 'insert'" "$tmp/stderr"; then
+	echo "Insert produced the wrong non-ShortString diagnostic" >&2
+	sed -n '1,20p' "$tmp/stderr" >&2
+	exit 1
+fi
+
 echo "Insert builtin tests passed"

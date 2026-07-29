@@ -1,7 +1,12 @@
 program DeleteBuiltin;
 
+type
+  TSmallString = string[8];
+
 var
   S: ShortString;
+  Small: TSmallString;
+  A: AnsiString;
   N: LongInt;
 
 begin
@@ -33,6 +38,25 @@ begin
   Delete(S, 1, 0);
   Delete(S, 99, 1);
   if Length(S) <> 4 then
+    begin
+      N := 0;
+      N := 1 div N
+    end;
+
+  Small := 'abcdefgh';
+  Delete(Small, 3, 3);
+  if Small <> 'abfgh' then
+    begin
+      N := 0;
+      N := 1 div N
+    end;
+
+  A := 'abcdef';
+  Delete(A, 2, 3);
+  if (Length(A) <> 3) or
+     (A[1] <> 'a') or
+     (A[2] <> 'e') or
+     (A[3] <> 'f') then
     begin
       N := 0;
       N := 1 div N

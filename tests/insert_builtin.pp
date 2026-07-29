@@ -1,7 +1,14 @@
 program InsertBuiltin;
 
+type
+  TSmallString = string[8];
+  TSourceString = string[4];
+
 var
   S: ShortString;
+  Small: TSmallString;
+  Source: TSourceString;
+  ASource, ADestination: AnsiString;
   N: LongInt;
 
 begin
@@ -37,6 +44,45 @@ begin
   S := 'abc';
   Insert(S, S, 2);
   if S <> 'aabcbc' then
+    begin
+      N := 0;
+      N := 1 div N
+    end;
+
+  Source := 'WXYZ';
+  Small := 'ab';
+  Insert(Source, Small, 2);
+  if Small <> 'aWXYZb' then
+    begin
+      N := 0;
+      N := 1 div N
+    end;
+
+  Small := 'abc';
+  Insert(Small, Small, 2);
+  if Small <> 'aabcbc' then
+    begin
+      N := 0;
+      N := 1 div N
+    end;
+
+  Small := '1234567';
+  Insert('X', Small, 99);
+  Insert('Y', Small, 99);
+  if Small <> '1234567X' then
+    begin
+      N := 0;
+      N := 1 div N
+    end;
+
+  ASource := 'XY';
+  ADestination := 'ab';
+  Insert(ASource, ADestination, 2);
+  if (Length(ADestination) <> 4) or
+     (ADestination[1] <> 'a') or
+     (ADestination[2] <> 'X') or
+     (ADestination[3] <> 'Y') or
+     (ADestination[4] <> 'b') then
     begin
       N := 0;
       N := 1 div N

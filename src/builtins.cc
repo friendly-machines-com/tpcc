@@ -1014,8 +1014,20 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_ln", fold_ln},
     {"::u_system::p_pos", fold_pos},
     {"::u_system::p_copy", nullptr},
-    {"::u_system::p_delete", nullptr},
-    {"::u_system::p_insert", nullptr},
+    {
+	.cxx_name = "::u_system::p_delete",
+	.const_fold = nullptr,
+	.generic_kind =
+	    BuiltinGenericKind::
+		ShortStringMutation,
+    },
+    {
+	.cxx_name = "::u_system::p_insert",
+	.const_fold = nullptr,
+	.generic_kind =
+	    BuiltinGenericKind::
+		ShortStringMutation,
+    },
     // TODO: Delphi has operators "explicit", "implicit".
 
     {"::u_system::o_bitwiseand", nullptr},

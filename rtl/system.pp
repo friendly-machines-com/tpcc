@@ -30,6 +30,9 @@ type
   PtrUInt = external name '::u_system::t_ptruint';
   SizeInt = external name '::u_system::t_sizeint';
   SizeUInt = external name '::u_system::t_sizeuint';
+  // The predefined ShortString is the concrete type String[255]. It does not
+  // mean "String[N] for any N" and is not an open-string formal; each
+  // explicitly bounded String[N] retains its own compile-time capacity.
   shortstring = external name '::u_system::t_shortstring<255>';
   Text = external name '::u_system::t_text';
   TextFile = Text;
@@ -434,10 +437,13 @@ function pos(needle: Char; const haystack: ShortString): LongInt; overload; exte
 function copy(const value: ShortString; index, count: SizeInt): ShortString; overload; external name '::u_system::p_copy';
 function copy(const value: AnsiString; index, count: SizeInt): AnsiString; overload; external name '::u_system::p_copy';
 function copy(value: Char; index, count: SizeInt): ShortString; overload; external name '::u_system::p_copy';
-procedure delete(var value: ShortString; index, count: LongInt); overload; external name '::u_system::p_delete';
+{ The omitted mutable types preserve the actual String[N] capacity. The
+  ShortStringMutation builtin contract rejects every non-ShortString actual;
+  this is not general var-parameter covariance or an open-string declaration. }
+procedure delete(var value; index, count: LongInt); overload; external name '::u_system::p_delete';
 procedure delete(var value: AnsiString; index, count: LongInt); overload; external name '::u_system::p_delete';
-procedure insert(const source: ShortString; var destination: ShortString; index: LongInt); overload; external name '::u_system::p_insert';
-procedure insert(source: Char; var destination: ShortString; index: LongInt); overload; external name '::u_system::p_insert';
+procedure insert(const source: ShortString; var destination; index: LongInt); overload; external name '::u_system::p_insert';
+procedure insert(source: Char; var destination; index: LongInt); overload; external name '::u_system::p_insert';
 procedure insert(const source: AnsiString; var destination: AnsiString; index: LongInt); overload; external name '::u_system::p_insert';
 
 operator xor(a, b: Boolean): Boolean; external name '::u_system::o_logicalxor';

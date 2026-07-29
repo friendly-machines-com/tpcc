@@ -3919,6 +3919,17 @@ inline void p_delete(t_ansistring& value, t_longint index, t_longint count) {
 	value.erase(index, count);
 }
 
+template<typename T>
+requires tpcc_is_shortstring_v<T>
+inline void p_delete(
+    tpcc_typed_storage_ref<T> value,
+    t_longint index, t_longint count) {
+	// An omitted mutable System formal reaches the RTL as a typed storage
+	// view.
+	p_delete(
+	    *value.value, index, count);
+}
+
 template<std::size_t SourceCapacity, std::size_t DestinationCapacity>
 inline void p_insert(
     const t_shortstring<SourceCapacity>& source,
@@ -3977,6 +3988,23 @@ inline void p_insert(
 
 inline void p_insert(const t_ansistring& source, t_ansistring& destination, t_longint index) {
 	destination.insert(source, index);
+}
+
+template<typename Source, typename Destination>
+requires tpcc_is_shortstring_v<Destination> &&
+	 (tpcc_is_shortstring_v<Source> ||
+	  std::is_same_v<
+	      std::remove_cv_t<Source>,
+	      t_char>)
+inline void p_insert(
+    const Source& source,
+    tpcc_typed_storage_ref<Destination> destination,
+    t_longint index) {
+	// As with Delete, preserve the actual destination String[N] selected by
+	// Pascal and reuse the existing capacity-aware implementation.
+	p_insert(
+	    source, *destination.value,
+	    index);
 }
 
 template<std::size_t ACapacity, std::size_t BCapacity>

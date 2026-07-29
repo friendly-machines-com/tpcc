@@ -10000,6 +10000,16 @@ std::optional<ArgumentMatch> Parser::match_argument(
 	if (target == unknown_type()) {
 		if (builtin &&
 		    builtin->generic_kind ==
+			BuiltinGenericKind::
+			    ShortStringMutation &&
+		    !dynamic_cast<ShortStringType*>(
+			source))
+			// Only the mutable String[N] formal is omitted in System's
+			// Delete/Insert declarations. Preserve its exact capacity without
+			// making arbitrary mutable arguments viable.
+			return std::nullopt;
+		if (builtin &&
+		    builtin->generic_kind ==
 			BuiltinGenericKind::StrOutput) {
 			if (parameter_index == 0 &&
 			    str_value_family(source) !=
