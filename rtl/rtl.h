@@ -3900,6 +3900,19 @@ inline void p_fillchar(tpcc_storage_ref destination, t_sizeint count, t_byte val
 	std::memset(destination.data, value, byte_count);
 }
 
+inline void p_fillbyte(
+    tpcc_storage_ref destination, t_sizeint count,
+    t_byte value) {
+	if (count <= 0)
+		return;
+	const std::size_t byte_count =
+	    static_cast<std::size_t>(count);
+	if (byte_count > destination.size)
+		m_runtime_error(201);
+	std::memset(
+	    destination.data, value, byte_count);
+}
+
 inline void p_filldword(
     tpcc_storage_ref destination, t_sizeint count, t_longword value) {
 	if (count <= 0)

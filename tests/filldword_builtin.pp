@@ -3,10 +3,12 @@ program FillDWordBuiltin;
 type
   TDWords = array[0..4] of DWord;
   PDWords = ^TDWords;
+  TBytes = array[0..5] of Byte;
 
 var
   Values: TDWords;
   ValuesPointer: PDWords;
+  Bytes: TBytes;
 
 begin
   Values[0] := 7;
@@ -35,5 +37,22 @@ begin
   if Values[2] <> LongWord(-1) then
     Halt(8);
   if Values[4] <> LongWord(-1) then
-    Halt(9)
+    Halt(9);
+
+  Bytes[0] := 7;
+  Bytes[5] := 9;
+  FillByte(Bytes[1], 4, Byte($A5));
+  if Bytes[0] <> 7 then
+    Halt(10);
+  if Bytes[1] <> Byte($A5) then
+    Halt(11);
+  if Bytes[4] <> Byte($A5) then
+    Halt(12);
+  if Bytes[5] <> 9 then
+    Halt(13);
+
+  FillByte(Bytes[1], 0, 0);
+  FillByte(Bytes[1], -1, 0);
+  if Bytes[1] <> Byte($A5) then
+    Halt(14)
 end.

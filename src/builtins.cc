@@ -1178,6 +1178,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::tpcc_index_write", nullptr},
     {"::u_system::p_chr", fold_chr},
     {"::u_system::p_fillchar", nullptr},
+    {"::u_system::p_fillbyte", nullptr},
     {"::u_system::p_filldword", nullptr},
     {"::u_system::p_prefetch", nullptr},
     {"::u_system::p_move", nullptr},

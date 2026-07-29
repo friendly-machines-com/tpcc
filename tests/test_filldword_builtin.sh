@@ -18,6 +18,12 @@ then
 	echo "FillDWord did not lower through the RTL" >&2
 	exit 1
 fi
+if ! rg -q '::u_system::p_fillbyte' \
+	"$tmp/filldword_builtin.cc"
+then
+	echo "FillByte did not lower through the RTL" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \
@@ -49,4 +55,4 @@ ASAN_OPTIONS=detect_leaks=1 \
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/filldword_builtin_runtime"
 
-echo "FillDWord builtin tests passed"
+echo "FillByte/FillDWord builtin tests passed"
