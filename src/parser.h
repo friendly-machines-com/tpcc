@@ -783,7 +783,27 @@ protected:
 	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 	Type* raise_type_mismatch(std::string message, Type* expected, Type* got);
+	Type* raise_type_mismatch_at(SourceLocation location, std::string message,
+				     Type* expected, Type* got);
 	Type* raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
+	Type* raise_type_kind_mismatch_at(SourceLocation location, std::string message,
+					  const char* expected_kind, Type* got);
+	Type* raise_type_error(std::string message, Type* relevant);
+	Type* raise_type_error_at(
+	    SourceLocation location, std::string message,
+	    Type* relevant);
+	[[noreturn]] void raise_value_error(
+	    std::string message, Node* relevant);
+	[[noreturn]] void raise_value_error_at(
+	    SourceLocation location, std::string message,
+	    Node* relevant);
+	[[noreturn]] void raise_values_error(
+	    std::string message,
+	    const std::vector<std::pair<std::string, Node*>>&
+		relevant);
+	[[noreturn]] void raise_routine_reference_error(
+	    std::string message, RoutineRef* reference,
+	    Type* destination_type);
 	[[noreturn]] void raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
 	[[noreturn]] void raise_overload_resolution_error(SourceLocation error_location,
 	                                                  std::string name,

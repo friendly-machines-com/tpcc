@@ -97,13 +97,16 @@ do
 		echo "expected tpcc to reject $source" >&2
 		exit 1
 	fi
-	expected=$(sed -n '1p' "$base.error")
-	if ! rg -F -q -- "$expected" "$tmp/stderr"
-	then
-		echo "wrong diagnostic for $source; expected: $expected" >&2
-		sed -n '1,20p' "$tmp/stderr" >&2
-		exit 1
-	fi
+	while IFS= read -r expected
+	do
+		test -z "$expected" && continue
+		if ! rg -F -q -- "$expected" "$tmp/stderr"
+		then
+			echo "wrong diagnostic for $source; expected: $expected" >&2
+			sed -n '1,40p' "$tmp/stderr" >&2
+			exit 1
+		fi
+	done < "$base.error"
 done
 
 echo "function pointer tests passed"

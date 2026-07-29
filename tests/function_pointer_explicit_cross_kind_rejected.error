@@ -1,1 +1,5 @@
-explicit cast between incompatible routine types
+explicit cast between incompatible routine types: expected type tplain but got type tbound
+type tplain =
+kind: routine
+type tbound =
+kind: method

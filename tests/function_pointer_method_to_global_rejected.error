@@ -1,1 +1,6 @@
 no overload of the routine reference is compatible with plain procedure/function target
+destination type: tplain
+type tplain =
+kind: routine
+value \tbox.run\ =
+kind: method

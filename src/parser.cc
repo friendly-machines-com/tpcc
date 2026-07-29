@@ -368,24 +368,115 @@ std::string Parser::complete_diagnostic_message(
 }
 
 Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got) {
+	return raise_type_mismatch_at(
+	    current_location(), std::move(message),
+	    expected, got);
+}
+
+Type* Parser::raise_type_mismatch_at(
+    SourceLocation location, std::string message,
+    Type* expected, Type* got) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
 	std::string expected_ref = ctx.type_ref(expected);
 	std::string got_ref = ctx.type_ref(got);
 	std::stringstream sst;
 	sst << message << ": expected type " << expected_ref << " but got type " << got_ref;
 	emit_parse_error_at(
-	    current_location(), sst.str(), ctx);
+	    std::move(location), sst.str(), ctx);
 	return expected; // future non-fatal diagnostics can continue with the expected type
 }
 
 Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got) {
+	return raise_type_kind_mismatch_at(
+	    current_location(), std::move(message),
+	    expected_kind, got);
+}
+
+Type* Parser::raise_type_kind_mismatch_at(
+    SourceLocation location, std::string message,
+    const char* expected_kind, Type* got) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
 	std::string got_ref = ctx.type_ref(got);
 	std::stringstream sst;
 	sst << message << ": expected " << expected_kind << " type but got " << got_ref;
 	emit_parse_error_at(
-	    current_location(), sst.str(), ctx);
+	    std::move(location), sst.str(), ctx);
 	return got; // future non-fatal diagnostics can continue with the parsed type
+}
+
+Type* Parser::raise_type_error(
+    std::string message, Type* relevant) {
+	return raise_type_error_at(
+	    current_location(), std::move(message),
+	    relevant);
+}
+
+Type* Parser::raise_type_error_at(
+    SourceLocation location, std::string message,
+    Type* relevant) {
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+		scopes, 4);
+	std::stringstream sst;
+	sst << message << "\n  type: "
+	    << ctx.type_ref(relevant);
+	emit_parse_error_at(
+	    std::move(location), sst.str(), ctx);
+	return relevant;
+}
+
+[[noreturn]] void Parser::raise_value_error(
+    std::string message, Node* relevant) {
+	raise_value_error_at(
+	    current_location(), std::move(message),
+	    relevant);
+}
+
+[[noreturn]] void Parser::raise_value_error_at(
+    SourceLocation location, std::string message,
+    Node* relevant) {
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+		scopes, 4);
+	std::stringstream sst;
+	sst << message << "\n  value: "
+	    << ctx.value_ref(relevant);
+	emit_parse_error_at(
+	    std::move(location), sst.str(), ctx);
+}
+
+[[noreturn]] void Parser::raise_values_error(
+    std::string message,
+    const std::vector<
+	std::pair<std::string, Node*>>& relevant) {
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+		scopes, 4);
+	std::stringstream sst;
+	sst << message;
+	for (const auto& [label, value] : relevant)
+		sst << "\n  " << label << ": "
+		    << ctx.value_ref(value);
+	emit_parse_error_at(
+	    current_location(), sst.str(), ctx);
+}
+
+[[noreturn]] void Parser::raise_routine_reference_error(
+    std::string message, RoutineRef* reference,
+    Type* destination_type) {
+	ErrorLetContext ctx =
+	    make_error_let_context_from_scopes(
+		scopes, 4);
+	std::stringstream sst;
+	sst << message;
+	if (destination_type)
+		sst << "\n  destination type: "
+		    << ctx.type_ref(destination_type);
+	if (reference)
+		sst << "\n  routine reference: "
+		    << ctx.value_ref(reference);
+	emit_parse_error_at(
+	    current_location(), sst.str(), ctx);
 }
 
 static const char* match_tier_name(
@@ -1776,7 +1867,9 @@ void Parser::maybe_parse_statement() {
 		std::string control_name = parse_identifier();
 		Node* control = resolve_lvalue(control_name);
 		if (!dynamic_cast<StorageSlot*>(control))
-			raise_parse_error("for control variable must be a simple variable");
+			raise_value_error(
+			    "for control variable must be a simple variable",
+			    control);
 		if (maybe_parse_colon_equals()) {
 			Node* initial = cast(
 			    parse_expression(),
@@ -1802,8 +1895,9 @@ void Parser::maybe_parse_statement() {
 				control->ty) &&
 			    !dynamic_cast<SubrangeType*>(
 				control->ty))
-				raise_parse_error(
-				    "for control variable must have an ordinal type");
+				raise_type_kind_mismatch(
+				    "for control variable",
+				    "ordinal", control->ty);
 
 			if (emitter)
 				emitter->emit_for_prologue(
@@ -1926,13 +2020,15 @@ void Parser::maybe_parse_statement() {
 						ordinal_designator,
 						&range,
 						&range_error))
-						raise_parse_error(
-						    range_error);
+						raise_type_error(
+						    range_error,
+						    ordinal_designator);
 					if (enum_range_has_gaps(
 						ordinal_designator,
 						range))
-						raise_parse_error(
-						    "for-in ordinal type has non-contiguous enum values");
+						raise_type_error(
+						    "for-in ordinal type has non-contiguous enum values",
+						    ordinal_designator);
 					element_type =
 					    ordinal_designator;
 				} else {
@@ -1968,21 +2064,25 @@ void Parser::maybe_parse_statement() {
 							FixedSetType*>(
 							collection_type);
 						if (!set)
-							raise_parse_error(
-							    "for-in collection has no built-in enumeration");
+							raise_type_kind_mismatch(
+							    "for-in collection",
+							    "string, array, or set",
+							    collection_type);
 						element_type =
 						    set->item_type;
 						if (!ordinal_range_for_type(
 							element_type,
 							&range,
 							&range_error))
-							raise_parse_error(
-							    range_error);
+							raise_type_error(
+							    range_error,
+							    element_type);
 						if (enum_range_has_gaps(
 							element_type,
 							range))
-							raise_parse_error(
-							    "for-in set item type has non-contiguous enum values");
+							raise_type_error(
+							    "for-in set item type has non-contiguous enum values",
+							    element_type);
 					}
 				}
 
@@ -2062,10 +2162,14 @@ void Parser::maybe_parse_statement() {
 		Node* target = resolve_value(id);
 		auto target_slot = dynamic_cast<StorageSlot*>(target);
 		if (!target_slot)
-			raise_parse_error("with target must currently be a simple variable");
+			raise_value_error(
+			    "with target must currently be a simple variable",
+			    target);
 		Frame* body_frame = get_type_body_frame(target_slot->ty);
 		if (!body_frame)
-			raise_parse_error("with target's type has no field body");
+			raise_type_kind_mismatch(
+			    "with target", "class, record, or object",
+			    target_slot->ty);
 		parse_keyword("do");
 		// emit_with_prologue introduces a C++ block. As with case selectors,
 		// nested blocks can safely reuse this tpcc-owned spelling.
@@ -2275,17 +2379,20 @@ Node* Parser::bind_lookup_result(
 		    slot &&
 		    slot->kind !=
 			StorageSlot::Kind::StaticMember)
-			raise_parse_error(
+			raise_type_error(
 			    "instance field cannot be accessed through a " +
 			    std::string(type_qualifier
 					    ? "type"
-					    : "class reference"));
-		if (dynamic_cast<Property*>(binding))
-			raise_parse_error(
+					    : "class reference"),
+			    slot->ty);
+		if (auto property =
+			dynamic_cast<Property*>(binding))
+			raise_type_error(
 			    "instance property cannot be accessed through a " +
 			    std::string(type_qualifier
 					    ? "type"
-					    : "class reference"));
+					    : "class reference"),
+			    property->ty);
 		if (auto method =
 			dynamic_cast<Method*>(binding)) {
 			const bool allowed =
@@ -2294,11 +2401,12 @@ Node* Parser::bind_lookup_result(
 			     (method->ty->kind == CLASS_METHOD ||
 			      method->ty->kind == CONSTRUCTOR));
 			if (!allowed)
-				raise_parse_error(
+				raise_type_error(
 				    "instance method cannot be accessed through a " +
 				    std::string(type_qualifier
 						    ? "type"
-						    : "class reference"));
+						    : "class reference"),
+				    method->ty);
 		}
 	}
 	if (auto property = dynamic_cast<Property*>(binding))
@@ -2843,7 +2951,9 @@ Node* Parser::parse_bracket_literal() {
 				    integer_literal_natural_type(
 					integer);
 			if (!is_set_item_type(bound_type))
-				raise_parse_error("set literal item is not ordinal");
+				raise_type_kind_mismatch(
+				    "set literal item",
+				    "ordinal", bound_type);
 			if (item_type == unknown_type()) {
 				item_type = bound_type;
 			} else {
@@ -2868,6 +2978,7 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 
 	Node* destination_or_pointer = nullptr;
 	PointerType* pointer_type = nullptr;
+	Type* pointer_operand_type = nullptr;
 	bool functional_form = false;
 
 	// The first operand selects one of Pascal's two forms. Ordinary value
@@ -2880,14 +2991,17 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 	if (visible_value || !is_new) {
 		destination_or_pointer =
 		    parse_designator();
+		pointer_operand_type =
+		    destination_or_pointer
+			? destination_or_pointer->ty
+			: nullptr;
 		pointer_type =
 		    dynamic_cast<PointerType*>(
-			destination_or_pointer
-			    ? destination_or_pointer->ty
-			    : nullptr);
+			pointer_operand_type);
 	} else if (maybe_resolve_type(input_token)) {
 		Type* parsed_type =
 		    parse_type_expression(false);
+		pointer_operand_type = parsed_type;
 		pointer_type =
 		    dynamic_cast<PointerType*>(parsed_type);
 		functional_form = true;
@@ -2898,15 +3012,17 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 	}
 
 	if (!pointer_type || pointer_type->is_untyped())
-		emit_parse_error_at(
+		raise_type_kind_mismatch_at(
 		    operation_location,
 		    std::string(is_new ? "New" : "Dispose") +
-			" requires a typed pointer");
+			" first operand",
+		    "typed pointer", pointer_operand_type);
 	if (is_new && !functional_form &&
 	    !is_assignable(destination_or_pointer))
-		emit_parse_error_at(
+		raise_value_error_at(
 		    operation_location,
-		    "New destination is not assignable");
+		    "New destination is not assignable",
+		    destination_or_pointer);
 
 	Type* allocated_type =
 	    pointer_type->item_type;
@@ -2917,21 +3033,22 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 		auto object =
 		    dynamic_cast<ObjectType*>(allocated_type);
 		if (!object)
-			emit_parse_error_at(
+			raise_type_kind_mismatch_at(
 			    operation_location,
 			    std::string(is_new ? "New" : "Dispose") +
-				" lifecycle form requires a pointer "
-				"to an old-style object");
+				" lifecycle pointee",
+			    "old-style object", allocated_type);
 
 		std::string lifecycle_name =
 		    parse_identifier();
 		if (maybe_parse_opening_paren()) {
 			if (input_token != ")") {
 				if (!is_new)
-					emit_parse_error_at(
+					raise_type_error_at(
 					    operation_location,
 					    "Dispose destructor cannot have "
-					    "arguments");
+					    "arguments",
+					    object);
 				lifecycle_args.push_back(
 				    parse_expression());
 				while (maybe_parse_comma())
@@ -2947,10 +3064,11 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 			      lifecycle_name)
 			: nullptr;
 		if (!candidates)
-			emit_parse_error_at(
+			raise_type_error_at(
 			    operation_location,
 			    "no old-style object member '" +
-				lifecycle_name + "'");
+				lifecycle_name + "'",
+			    object);
 
 		// Reuse ordinary member overload finalization. The receiver exists
 		// only to establish the already-known pointed-to object context;
@@ -2972,14 +3090,14 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 		if (!lifecycle_method ||
 		    lifecycle_method->ty->kind !=
 			(is_new ? CONSTRUCTOR : DESTRUCTOR))
-			emit_parse_error_at(
+			raise_type_kind_mismatch_at(
 			    operation_location,
 			    std::string(is_new ? "New" : "Dispose") +
-				(is_new
-				     ? " second operand must select "
-				       "a constructor"
-				     : " second operand must select "
-				       "a destructor"));
+				" second operand",
+			    is_new ? "constructor" : "destructor",
+			    finalized.callee
+				? finalized.callee->ty
+				: nullptr);
 	}
 	parse_closing_paren();
 
@@ -3072,6 +3190,7 @@ Node* Parser::parse_value_from_identifier(
 		    identifier_directives;
 	if (maybe_parse_period()) {
 		Node* base = nullptr;
+		Type* rejected_qualifier_type = nullptr;
 		auto qualifier_binding =
 		    maybe_resolve_type_or_value(id);
 		if (qualifier_binding) {
@@ -3083,20 +3202,30 @@ Node* Parser::parse_value_from_identifier(
 				Type* qualifier_type =
 				    std::get<Type*>(
 					*qualifier_binding);
-			if (auto class_type =
-				dynamic_cast<ClassType*>(
-				    qualifier_type))
-				base =
-				    new ClassRefValue(class_type);
-			else if (dynamic_cast<RecordType*>(
-				     qualifier_type) ||
-				 dynamic_cast<PackedRecordType*>(
-				     qualifier_type))
-				base =
-				    new TypeMemberQualifier(
-					qualifier_type);
+				rejected_qualifier_type =
+				    qualifier_type;
+				if (auto class_type =
+					dynamic_cast<ClassType*>(
+					    qualifier_type))
+					base =
+					    new ClassRefValue(
+						class_type);
+				else if (
+				    dynamic_cast<RecordType*>(
+					qualifier_type) ||
+				    dynamic_cast<
+					PackedRecordType*>(
+					qualifier_type))
+					base =
+					    new TypeMemberQualifier(
+						qualifier_type);
 			}
 		}
+		if (!base && rejected_qualifier_type)
+			raise_type_kind_mismatch(
+			    "member qualifier '" + id + "'",
+			    "class or record",
+			    rejected_qualifier_type);
 		if (!base)
 			raise_parse_error(
 			    "unresolved member qualifier: " +
@@ -3286,8 +3415,12 @@ Node* Parser::parse_value_from_identifier(
 				destination
 				    ? destination->ty
 				    : nullptr))
-				raise_parse_error(
-				    "Str destination must be a ShortString variable");
+				raise_type_kind_mismatch(
+				    "Str destination",
+				    "ShortString",
+				    destination
+					? destination->ty
+					: nullptr);
 			const StrValueFamily family =
 			    str_value_family(
 				item.value
@@ -3300,8 +3433,12 @@ Node* Parser::parse_value_from_identifier(
 				    "Str enumeration formatting is not implemented");
 			if (family ==
 			    StrValueFamily::Unsupported)
-				raise_parse_error(
-				    "Str currently supports integer and predefined real values");
+				raise_type_kind_mismatch(
+				    "Str value",
+				    "integer or predefined real",
+				    item.value
+					? item.value->ty
+					: nullptr);
 			if (item.precision)
 				// TODO: add the real precision formatter as a separate
 				// lowering family rather than teaching integer p_str an
@@ -3347,9 +3484,10 @@ Node* Parser::parse_value_from_identifier(
 						    formatted.value->ty != single_type() &&
 						    formatted.value->ty != double_type() &&
 						    formatted.value->ty != extended_type()) {
-							raise_parse_error(
-							    "a second Write/WriteLn colon qualifier "
-							    "requires a real value");
+							raise_type_kind_mismatch(
+							    "a second Write/WriteLn colon qualifier",
+							    "real",
+							    formatted.value->ty);
 						}
 						items.push_back(
 						    formatted);
@@ -3369,9 +3507,10 @@ Node* Parser::parse_value_from_identifier(
 				}
 				file = items.front().value;
 				if (!is_referenceable(file))
-					raise_parse_error(
+					raise_value_error(
 					    "Write/WriteLn text-file argument "
-					    "must be storage-backed");
+					    "must be storage-backed",
+					    file);
 				items.erase(items.begin());
 			}
 			const BuiltinDesc* implementation =
@@ -3455,9 +3594,10 @@ Node* Parser::parse_value_from_identifier(
 					return cast(value, target_routine);
 				if (value->ty == tmethod_type()) {
 					if (target_routine->kind != METHOD)
-						raise_parse_error(
-						    "TMethod can only be cast to an "
-						    "of-object routine type");
+						raise_type_kind_mismatch(
+						    "TMethod cast target",
+						    "of-object routine",
+						    target_routine);
 					return new ExplicitCast(
 					    value, target_routine);
 				}
@@ -3467,16 +3607,17 @@ Node* Parser::parse_value_from_identifier(
 					if (!target_routine
 						 ->accepts_routine_value_from(
 						     source_routine))
-						raise_parse_error(
+						raise_type_mismatch(
 						    "explicit cast between "
-						    "incompatible routine types");
+						    "incompatible routine types",
+						    target_routine,
+						    source_routine);
 					return new ExplicitCast(
 					    value, target_routine);
 				}
-				raise_parse_error(
-				    "explicit routine-type cast requires a "
-				    "routine value, TMethod, nil, or routine "
-				    "reference");
+				raise_type_mismatch(
+				    "explicit routine-type cast",
+				    target_routine, value->ty);
 			}
 			if (target_ty == tmethod_type()) {
 				if (value->ty == target_ty)
@@ -3486,9 +3627,10 @@ Node* Parser::parse_value_from_identifier(
 				    dynamic_cast<RoutineType*>(value->ty);
 				if (!source_routine ||
 				    source_routine->kind != METHOD)
-					raise_parse_error(
-					    "TMethod can only view an of-object "
-					    "routine value");
+					raise_type_kind_mismatch(
+					    "TMethod view source",
+					    "of-object routine",
+					    value->ty);
 				return new ExplicitCast(
 				    value, target_ty);
 			}
@@ -3761,11 +3903,17 @@ Node* Parser::maybe_auto_call(
     Node* n, LeadingTokenDirectives directives) {
 	if (auto property = dynamic_cast<PropertyAccess*>(n)) {
 		if (!property->property->index_types.empty() && property->indexes.empty())
-			raise_parse_error("indexed property '" + property->property->pas_name +
-					  "' requires an index argument list");
+			raise_value_error(
+			    "indexed property '" +
+				property->property->pas_name +
+				"' requires an index argument list",
+			    property->property);
 		if (!property->property->read_accessor)
-			raise_parse_error("write-only property '" + property->property->pas_name +
-					  "' cannot be read");
+			raise_value_error(
+			    "write-only property '" +
+				property->property->pas_name +
+				"' cannot be read",
+			    property->property);
 		return n;
 	}
 	if (!node_is_bare_callable(n))
@@ -3835,13 +3983,16 @@ Node* Parser::parse_member_selection(
 		*leading_directives =
 		    member_directives;
 	if (!body_frame_of(base))
-		raise_parse_error(
-		    "member access on non-composite type");
+		raise_type_kind_mismatch(
+		    "member access receiver",
+		    "class, record, object, interface, or unit",
+		    base ? base->ty : nullptr);
 	Node* member =
 	    maybe_bind_member(base, member_name);
 	if (!member)
-		raise_parse_error(
-		    "no member '" + member_name + "'");
+		raise_value_error(
+		    "no member '" + member_name + "'",
+		    base);
 	return member;
 }
 
@@ -3944,10 +4095,14 @@ Parser::maybe_resolve_custom_for_in(
 			    CLASS_CONSTRUCTOR ||
 			method->ty->kind ==
 			    CLASS_DESTRUCTOR)
-			    raise_parse_error(
+			    raise_type_kind_mismatch(
 				"for-in protocol member '" +
 				name +
-				"' must be a function or procedure");
+				"'",
+				"function or procedure",
+				finalized.callee
+				    ? finalized.callee->ty
+				    : nullptr);
 		    return make_call(
 			finalized,
 			std::move(arguments),
@@ -3981,8 +4136,9 @@ Parser::maybe_resolve_custom_for_in(
 	    maybe_bind_member(
 		enumerator, "movenext");
 	if (!move_member)
-		raise_parse_error(
-		    "for-in enumerator has no MoveNext member");
+		raise_type_error(
+		    "for-in enumerator has no MoveNext member",
+		    enumerator_type);
 	Node* move_call =
 	    parameterless_call(
 		move_member, "MoveNext",
@@ -3998,9 +4154,15 @@ Parser::maybe_resolve_custom_for_in(
 	auto current_property =
 	    dynamic_cast<PropertyAccess*>(
 		current);
-	if (!current_property)
-		raise_parse_error(
-		    "for-in enumerator Current must be a readable property");
+	if (!current_property) {
+		if (current)
+			raise_value_error(
+			    "for-in enumerator Current must be a readable property",
+			    current);
+		raise_type_error(
+		    "for-in enumerator has no Current member",
+		    enumerator_type);
+	}
 	// maybe_auto_call performs the existing indexed/write-only property
 	// validation; PropertyAccess emission later selects its already-resolved
 	// field or getter without repeating member lookup.
@@ -4019,8 +4181,9 @@ Parser::maybe_resolve_custom_for_in(
 		    maybe_bind_member(
 			enumerator, "free");
 		if (!free_member)
-			raise_parse_error(
-			    "class enumerator has no Free member");
+			raise_type_error(
+			    "class enumerator has no Free member",
+			    enumerator_type);
 		cleanup =
 		    parameterless_call(
 			free_member, "Free",
@@ -4035,9 +4198,10 @@ Parser::maybe_resolve_custom_for_in(
 		std::vector<Method*> destructors =
 		    nearest_object_destructors(object);
 		if (destructors.size() > 1)
-			raise_parse_error(
+			raise_type_error(
 			    "old-object enumerator has multiple destructors in "
-			    "its nearest declaring type; cleanup is ambiguous");
+			    "its nearest declaring type; cleanup is ambiguous",
+			    enumerator_type);
 		if (!destructors.empty()) {
 			Node* destructor =
 			    bind_lookup_result(
@@ -4134,7 +4298,9 @@ Node* Parser::parse_designator_tail(
 				for (Node* index : indexes) {
 					Property* property = default_property_for_type(result->ty);
 					if (!property)
-						raise_parse_error("index on type without a default property");
+						raise_type_error(
+						    "index on type without a default property",
+						    result->ty);
 					result = apply_property(result, property, {index});
 				}
 				continue;
@@ -4142,7 +4308,9 @@ Node* Parser::parse_designator_tail(
 
 			Property* property = default_property_for_type(result->ty);
 			if (!property)
-				raise_parse_error("index on type without a default property");
+				raise_type_error(
+				    "index on type without a default property",
+				    result->ty);
 			result = apply_property(result, property, std::move(indexes));
 		} else if (maybe_parse_circumflex()) {
 			// Postfix: no RHS. Auto-call bare callable LHS first (deref of a
@@ -4153,7 +4321,9 @@ Node* Parser::parse_designator_tail(
 			Type* ct = result->ty;
 			auto p = dynamic_cast<PointerType*>(ct);
 			if (!p)
-				raise_parse_error("deref of non-pointer type");
+				raise_type_kind_mismatch(
+				    "dereference operand",
+				    "pointer", ct);
 			auto d = new Dereference(result);
 			// Untyped Pointer^ is a Pascal place, not a readable value of
 			// some fabricated element type. unknown_type() lets only
@@ -4329,14 +4499,15 @@ bool Parser::is_supported_packed_assignment(Node* n) {
 }
 
 void Parser::validate_writable_destination(
-    Node* target,
-    SourceLocation error_location,
-    std::string not_assignable_message) {
+	Node* target,
+	SourceLocation error_location,
+	std::string not_assignable_message) {
 	if (!is_assignable(target))
-		emit_parse_error_at(
+		raise_value_error_at(
 		    error_location,
 		    std::move(
-			not_assignable_message));
+			not_assignable_message),
+		    target);
 
 	// A packed overlay is writable only when its source is a real assignable
 	// place. In particular, never accept `TPacked(F()).X` and then silently
@@ -4366,15 +4537,17 @@ void Parser::validate_writable_destination(
 				    overlay->a;
 	if (overlay_source &&
 	    !is_assignable(overlay_source))
-		emit_parse_error_at(
+		raise_value_error_at(
 		    error_location,
-		    "writable packed-record overlay requires an assignable source");
+		    "writable packed-record overlay requires an assignable source",
+		    overlay_source);
 	if (contains_packed_projection(target) &&
 	    !is_supported_packed_assignment(
 		target))
-		emit_parse_error_at(
+		raise_value_error_at(
 		    error_location,
-		    "write through a nested or indexed packed-record field is not implemented");
+		    "write through a nested or indexed packed-record field is not implemented",
+		    target);
 }
 
 Mutation* Parser::parse_mutation_statement(
@@ -4546,9 +4719,10 @@ Mutation* Parser::parse_mutation_statement(
 			return new Cast(
 			    bind_once(view->a),
 			    view->ty);
-		emit_parse_error_at(
+		raise_value_error_at(
 		    call_location,
-		    "internal error: assignable mutation destination has no stabilization rule");
+		    "internal error: assignable mutation destination has no stabilization rule",
+		    target);
 	};
 
 	Node* target = stabilize(source_target);
@@ -4594,9 +4768,10 @@ Mutation* Parser::parse_mutation_statement(
 
 	if (operation &&
 	    operation->ty == unknown_type())
-		emit_parse_error_at(
+		raise_value_error_at(
 		    call_location,
-		    "internal error: mutation operator has an unknown result type");
+		    "internal error: mutation operator has an unknown result type",
+		    operation);
 	Node* stored =
 	    cast(operation, source_target->ty);
 	if (directive_state.switch_enabled('r') &&
@@ -4682,12 +4857,25 @@ Node* Parser::mk_compare(
 		b_routine = a_routine;
 	}
 	if (a_routine || b_routine) {
-		if (id != "=" || !a_routine || !b_routine ||
-		    !a_routine->accepts_routine_value_from(
+		if (id != "=")
+			raise_type_error(
+			    "routine values can only be compared for equality",
+			    a_routine
+				? static_cast<Type*>(a_routine)
+				: static_cast<Type*>(b_routine));
+		if (!a_routine)
+			raise_type_mismatch(
+			    "routine-value comparison left operand",
+			    b_routine, a ? a->ty : nullptr);
+		if (!b_routine)
+			raise_type_mismatch(
+			    "routine-value comparison right operand",
+			    a_routine, b ? b->ty : nullptr);
+		if (!a_routine->accepts_routine_value_from(
 			b_routine))
-			raise_parse_error(
-			    "routine values can only be compared for equality "
-			    "with a compatible routine type");
+			raise_type_mismatch(
+			    "routine-value comparison",
+			    a_routine, b_routine);
 		auto equal = new RoutineEqual(a, b);
 		equal->ty = boolean_type();
 		return equal;
@@ -4835,9 +5023,13 @@ Node* Parser::parse_power() {
 			    operation_directives);
 		}
 		if (contains_packed_projection(x))
-			raise_parse_error("address of a packed-record field is not available");
+			raise_value_error(
+			    "address of a packed-record field is not available",
+			    x);
 		if (!is_referenceable(x))
-			raise_parse_error("address requires a storage-backed expression");
+			raise_value_error(
+			    "address requires a storage-backed expression",
+			    x);
 		auto n = new AddrOf(x);
 		n->ty = x->ty ? static_cast<Type*>(new PointerType(current_location(), x->ty)) : nullptr;
 		return parse_power_tail(
@@ -4918,9 +5110,10 @@ Node* Parser::parse_product_tail(Node* result) {
 			     !target->value_conversion_from(
 				 result->ty)) &&
 			    !checked_reference)
-				raise_parse_error(
+				raise_type_mismatch(
 				    "'as' requires compatible real-number "
-				    "or class/interface types");
+				    "or class/interface types",
+				    target, result->ty);
 			result = new Coerce(result, target);
 		} else if (maybe_parse_keyword("is")) {
 			// FPC RELEASED BUG: `_OP_IS` sits in opmultiply in FPC 3.x,
@@ -4928,11 +5121,17 @@ Node* Parser::parse_product_tail(Node* result) {
 			// fixed in FPC trunk). Match FPC 3.2.x behavior here for parity.
 			Type* target = parse_type_expression(false);
 			if (!(dynamic_cast<ClassType*>(result->ty) ||
-			      dynamic_cast<InterfaceType*>(result->ty)) ||
-			    !(dynamic_cast<ClassType*>(target) ||
+			      dynamic_cast<InterfaceType*>(result->ty)))
+				raise_type_kind_mismatch(
+				    "'is' left operand",
+				    "class or interface",
+				    result->ty);
+			if (!(dynamic_cast<ClassType*>(target) ||
 			      dynamic_cast<InterfaceType*>(target)))
-				raise_parse_error(
-				    "'is' requires class/interface types");
+				raise_type_kind_mismatch(
+				    "'is' target",
+				    "class or interface",
+				    target);
 			auto n = new CoerceCheck(result, target);
 			n->ty = boolean_type();
 			result = n;
@@ -5168,7 +5367,8 @@ PropertyAccess* Parser::apply_property(Node* receiver, Property* property, std::
 		message << "property '" << property->pas_name << "' expects "
 			<< property->index_types.size() << " index argument(s), got "
 			<< indexes.size();
-		raise_parse_error(message.str());
+		raise_value_error(
+		    message.str(), property);
 	}
 	for (size_t i = 0; i < indexes.size(); ++i) {
 		indexes[i] = cast(indexes[i], property->index_types[i]);
@@ -5220,8 +5420,12 @@ void Parser::validate_property_declaration(
 	    [&](RoutineType* routine, size_t count,
 		const char* which) {
 		    if (routine->formals.size() != count)
-			    raise_parse_error(std::string(which) + " accessor for property '" + property_name +
-					      "' has the wrong number of parameters");
+			    raise_type_error(
+				std::string(which) +
+				    " accessor for property '" +
+				    property_name +
+				    "' has the wrong number of parameters",
+				routine);
 		    for (size_t i = 0; i < index_types.size(); ++i)
 			    if (routine->formals[i].ty != index_types[i])
 				    raise_type_mismatch(std::string(which) + " property index parameter",
@@ -5232,7 +5436,9 @@ void Parser::validate_property_declaration(
 			dynamic_cast<StorageSlot*>(
 			    property->read_accessor)) {
 			if (!index_types.empty())
-				raise_parse_error("indexed property read accessor must be a method");
+				raise_type_kind_mismatch(
+				    "indexed property read accessor",
+				    "method", field->ty);
 			if (field->ty != property_type)
 				raise_type_mismatch("property read field", property_type, field->ty);
 		} else if (auto getter =
@@ -5243,7 +5449,10 @@ void Parser::validate_property_declaration(
 			if (routine->return_type != property_type)
 				raise_type_mismatch("property getter return type", property_type, routine->return_type);
 		} else {
-			raise_parse_error("property read accessor must be a field or method");
+			raise_type_kind_mismatch(
+			    "property read accessor",
+			    "field or method",
+			    property->read_accessor->ty);
 		}
 	}
 	if (property->write_accessor) {
@@ -5251,7 +5460,9 @@ void Parser::validate_property_declaration(
 			dynamic_cast<StorageSlot*>(
 			    property->write_accessor)) {
 			if (!index_types.empty())
-				raise_parse_error("indexed property write accessor must be a method");
+				raise_type_kind_mismatch(
+				    "indexed property write accessor",
+				    "method", field->ty);
 			if (field->ty != property_type)
 				raise_type_mismatch("property write field", property_type, field->ty);
 		} else if (auto setter =
@@ -5260,15 +5471,23 @@ void Parser::validate_property_declaration(
 			auto routine = static_cast<RoutineType*>(setter->ty);
 			validate_index_formals(routine, index_types.size() + 1, "write");
 			if (routine->return_type != &unit_type())
-				raise_parse_error("property setter must be a procedure");
+				raise_type_mismatch(
+				    "property setter return type",
+				    &unit_type(),
+				    routine->return_type);
 			if (routine->formals.back().ty != property_type)
 				raise_type_mismatch("property setter value parameter",
 						    property_type, routine->formals.back().ty);
 			auto mode = routine->formals.back().mode;
 			if (mode != ParamMode::Value && mode != ParamMode::Const)
-				raise_parse_error("property setter value parameter must be a value or const parameter");
+				raise_type_error(
+				    "property setter value parameter must be a value or const parameter",
+				    routine);
 		} else {
-			raise_parse_error("property write accessor must be a field or method");
+			raise_type_kind_mismatch(
+			    "property write accessor",
+			    "field or method",
+			    property->write_accessor->ty);
 		}
 	}
 }
@@ -5326,9 +5545,13 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	if (maybe_parse_directive("default")) {
 		is_default = true;
 		if (index_types.empty())
-			raise_parse_error("default property must have index parameters");
+			raise_type_error(
+			    "default property must have index parameters",
+			    owner_type);
 		if (owner_type->default_property)
-			raise_parse_error("only one default property may be declared per type");
+			raise_value_error(
+			    "only one default property may be declared per type",
+			    owner_type->default_property);
 		parse_semicolon();
 	}
 
@@ -5372,13 +5595,27 @@ void Parser::validate_method_ancestor_semantics(
 					ancestor->ty) &&
 				    method->is_static ==
 					ancestor->is_static;
+				auto raise_ancestor_error =
+				    [&](std::string message) {
+					    ErrorLetContext ctx =
+						make_error_let_context_from_scopes(
+						    scopes, 4);
+					    std::stringstream sst;
+					    sst << message
+						<< "\n  method: "
+						<< ctx.value_ref(method)
+						<< "\n  ancestor: "
+						<< ctx.value_ref(ancestor);
+					    emit_parse_error_at(
+						callable_source_location(
+						    method),
+						sst.str(), ctx);
+				    };
 				if (exact_signature &&
 				    !method->is_static) {
 					override_target_found = true;
 					if (ancestor->is_final)
-						emit_parse_error_at(
-						    callable_source_location(
-							method),
+						raise_ancestor_error(
 						    "method '" + pas_name +
 							"' overrides a final method");
 				}
@@ -5404,9 +5641,7 @@ void Parser::validate_method_ancestor_semantics(
 				// here. Old-style objects are the exception to the spelling
 				// rule: repeating `virtual` on the exact declaration is their
 				// normal override syntax.
-				emit_parse_error_at(
-				    callable_source_location(
-					method),
+				raise_ancestor_error(
 				    "method '" + pas_name +
 					"' would accidentally override an "
 					"ancestor after C++ carrier erasure");
@@ -5437,10 +5672,11 @@ void Parser::validate_method_ancestor_semantics(
 	if (method->virtual_kind ==
 		Method::VirtualKind::Override &&
 	    !override_target_found)
-		emit_parse_error_at(
+		raise_value_error_at(
 		    callable_source_location(method),
 		    "method '" + pas_name +
-			"' has no exact virtual ancestor to override");
+			"' has no exact virtual ancestor to override",
+		    method);
 }
 
 void Parser::validate_aggregate_declaration_semantics(
@@ -5569,14 +5805,18 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			continue;
 		} else if (peek_keyword("type")) {
 			if (is_class) {
-				raise_parse_error("class type unsupported");
+				raise_type_error(
+				    "class type unsupported",
+				    owner_class);
 			}
 			parse_type_block(true);
 			is_class = false;
 			continue; // type declarations consume their terminating semicolons
 		} else if (peek_keyword("const")) {
 			if (is_class) {
-				raise_parse_error("class const unsupported");
+				raise_type_error(
+				    "class const unsupported",
+				    owner_class);
 			}
 			parse_const_block(owner_class);
 			is_class = false;
@@ -5585,8 +5825,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			bool class_variables = is_class;
 			if (class_variables &&
 			    !dynamic_cast<ClassType*>(owner_class))
-				raise_parse_error(
-				    "class variables require a class container");
+				raise_type_kind_mismatch(
+				    "class variable container",
+				    "class", owner_class);
 			parse_keyword("var");
 			// This is an aggregate field section, not a declaration-scope var
 			// block.  Keep every field in Pascal declaration order so RecordType
@@ -5601,7 +5842,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				if (dynamic_cast<PackedRecordType*>(
 					owner_class) &&
 				    ty->has_managed_lifetime()) {
-					raise_parse_error("managed fields inside packed records are not implemented");
+					raise_type_error(
+					    "managed fields inside packed records are not implemented",
+					    ty);
 				}
 				for (const auto& member_name : member_names) {
 					// A class variable has one storage location owned by its
@@ -5643,23 +5886,27 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				owner_class) != nullptr) {
 				continue;
 			} else {
-				raise_parse_error(
-				    "class method requires a class or record container");
+				raise_type_kind_mismatch(
+				    "class method container",
+				    "class or record",
+				    owner_class);
 			}
 		} else if (peek_keyword("procedure") || peek_keyword("function") || peek_keyword("destructor") || peek_keyword("constructor")) {
 			if (dynamic_cast<PackedRecordType*>(
 				owner_class) &&
 			    !is_class)
-				raise_parse_error(
-				    "instance methods inside packed records are not implemented");
+				raise_type_error(
+				    "instance methods inside packed records are not implemented",
+				    owner_class);
 			if (is_class &&
 			    (peek_keyword("constructor") ||
 			     peek_keyword("destructor"))) {
 				auto class_type =
 				    dynamic_cast<ClassType*>(owner_class);
 				if (!class_type)
-					raise_parse_error(
-					    "class lifecycle hook requires a class");
+					raise_type_kind_mismatch(
+					    "class lifecycle hook owner",
+					    "class", owner_class);
 				parse_class_lifecycle_prototype(
 				    class_type,
 				    peek_keyword("constructor")
@@ -5675,7 +5922,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			continue; // parse_method_prototype consumes its terminating ';'
 		} else if (peek_keyword("property")) {
 			if (is_class)
-				raise_parse_error("'class property' is not implemented");
+				raise_type_error(
+				    "'class property' is not implemented",
+				    owner_class);
 			parse_property_declaration(body, owner_class);
 			continue; // property parser consumes its terminating semicolon(s)
 		} else if (peek_keyword("case")) {
@@ -5684,10 +5933,14 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			    dynamic_cast<PackedRecordType*>(
 				owner_class);
 			if (is_class) {
-				raise_parse_error("variant part only valid in a record, not in a metaclass");
+				raise_type_error(
+				    "variant part only valid in a record, not in a metaclass",
+				    owner_class);
 			}
 			if (!rt && !packed)
-				raise_parse_error("variant part only valid in a record");
+				raise_type_kind_mismatch(
+				    "variant part owner",
+				    "record", owner_class);
 			auto variant =
 			    parse_record_variant(
 				owner_class, body);
@@ -5698,7 +5951,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			break; // variant part must come last; do not require a trailing ';'
 		} else {
 			if (is_class) {
-				raise_parse_error("class var unsupported");
+				raise_type_error(
+				    "class var unsupported",
+				    owner_class);
 			}
 			// parse_var_block inlined
 			std::vector<std::string> member_names;
@@ -5711,7 +5966,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			if (dynamic_cast<PackedRecordType*>(
 				owner_class) &&
 			    ty->has_managed_lifetime()) {
-				raise_parse_error("managed fields inside packed records are not implemented");
+				raise_type_error(
+				    "managed fields inside packed records are not implemented",
+				    ty);
 			}
 			for (auto member_name : member_names) {
 				auto slot = new StorageSlot(
@@ -5822,8 +6079,9 @@ VariantPart* Parser::parse_record_variant(
 				auto fty = parse_type_expression(false);
 				if (packed &&
 				    fty->has_managed_lifetime())
-					raise_parse_error(
-					    "managed fields inside packed records are not implemented");
+					raise_type_error(
+					    "managed fields inside packed records are not implemented",
+					    fty);
 				for (const auto& fname : names) {
 					auto slot = new StorageSlot(
 					    cxx_value_name(fname), fty,
@@ -5860,8 +6118,9 @@ Type* Parser::parse_class_type(
 	parse_keyword("class");
 	if (maybe_parse_keyword("of")) {
 		if (completing_forward)
-			raise_parse_error(
-			    "forward class declaration must be completed by a class definition");
+			raise_type_error(
+			    "forward class declaration must be completed by a class definition",
+			    completing_forward);
 		auto target_ty = parse_type_expression(true);
 		if (auto target_class_ty = dynamic_cast<IncompleteType*>(target_ty)) {
 			return new ClassRefType(current_location(), target_class_ty);
@@ -5878,8 +6137,9 @@ Type* Parser::parse_class_type(
 			raise_parse_error(
 			    "class forward declaration is only valid as a named type declaration");
 		if (completing_forward)
-			raise_parse_error(
-			    "duplicate forward class declaration");
+			raise_type_error(
+			    "duplicate forward class declaration",
+			    completing_forward);
 		auto ct = new ClassType(
 		    current_location(), nullptr, {}, nullptr);
 		ct->is_forward_declaration = true;
@@ -5899,19 +6159,21 @@ Type* Parser::parse_class_type(
 		super_ty = dynamic_cast<ClassType*>(s_ty);
 		if (super_ty &&
 		    super_ty->is_forward_declaration) {
-			raise_parse_error(
+			raise_type_error(
 			    "superclass forward declaration '" +
 			    super_ty->forward_name +
-			    "' must be resolved before it is inherited");
+			    "' must be resolved before it is inherited",
+			    super_ty);
 		}
 		if (super_ty == nullptr) {
 			if (auto incomplete =
 				dynamic_cast<IncompleteType*>(s_ty);
 			    incomplete && !incomplete->resolved)
-				raise_parse_error(
+				raise_type_error(
 				    "superclass forward declaration '" +
 				    incomplete->name +
-				    "' must be resolved before it is inherited");
+				    "' must be resolved before it is inherited",
+				    incomplete);
 			raise_type_kind_mismatch("parse_class_type: superclass is not a class", "class", s_ty);
 		}
 		while (maybe_parse_comma()) {
@@ -5984,13 +6246,15 @@ ClassType* Parser::lookup_implicit_tobject_superclass() {
 	while (auto incomplete =
 		   dynamic_cast<IncompleteType*>(tobject_type)) {
 		if (!seen.insert(incomplete).second) {
-			raise_type_parse_error(
-			    "System.TObject has a cyclic type definition");
+			raise_type_error(
+			    "System.TObject has a cyclic type definition",
+			    incomplete);
 			return nullptr;
 		}
 		if (!incomplete->resolved) {
-			raise_type_parse_error(
-			    "System.TObject is unresolved while applying implicit class inheritance");
+			raise_type_error(
+			    "System.TObject is unresolved while applying implicit class inheritance",
+			    incomplete);
 			return nullptr;
 		}
 		tobject_type = incomplete->resolved;
@@ -6112,7 +6376,8 @@ Type* Parser::parse_array_type(bool direct_formal) {
 		if (type_block_frames.empty()) {
 			std::string error;
 			if (!ordinal_range_for_type(*it, &range, &error))
-				return raise_type_parse_error(error);
+				return raise_type_error(
+				    error, *it);
 		}
 		item_type = new FixedArrayType(current_location(), *it, range, item_type);
 	}
@@ -6149,11 +6414,13 @@ Type* Parser::parse_enum_type() {
 			    expression->const_eval(ctx);
 			if (folded.kind ==
 			    ConstEvalResult::Kind::NotConstant)
-				raise_parse_error(
-				    "explicit enum value must be constant");
+				raise_value_error(
+				    "explicit enum value must be constant",
+				    expression);
 			if (folded.kind ==
 			    ConstEvalResult::Kind::Error)
-				raise_parse_error(folded.message);
+				raise_value_error(
+				    folded.message, expression);
 
 			if (auto integer =
 				dynamic_cast<Integer*>(folded.node)) {
@@ -6166,9 +6433,10 @@ Type* Parser::parse_enum_type() {
 					      1}
 					: static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
 				if (integer->value > maximum)
-					raise_parse_error(
+					raise_value_error(
 					    "explicit enum value is outside "
-					    "signed 32-bit range");
+					    "signed 32-bit range",
+					    integer);
 				value = integer->negative
 					    ? -static_cast<int64_t>(
 						  integer->value)
@@ -6178,9 +6446,9 @@ Type* Parser::parse_enum_type() {
 				       dynamic_cast<EnumMemberRef*>(
 					   folded.node)) {
 				if (member->ty != et)
-					raise_parse_error(
-					    "explicit enum value uses a member "
-					    "of another enum type");
+					raise_type_mismatch(
+					    "explicit enum member value",
+					    et, member->ty);
 				value = member->value;
 			} else if (auto character =
 				       dynamic_cast<String*>(
@@ -6191,16 +6459,20 @@ Type* Parser::parse_enum_type() {
 				value = static_cast<unsigned char>(
 				    character->value[0]);
 			} else {
-				raise_parse_error(
-				    "explicit enum value must be an integer, "
-				    "character, or member of the same enum");
+				raise_type_kind_mismatch(
+				    "explicit enum value",
+				    "integer, character, or member of the same enum",
+				    folded.node
+					? folded.node->ty
+					: nullptr);
 			}
 		} else if (
 		    next_value >
 		    std::numeric_limits<int32_t>::max()) {
-			raise_parse_error(
+			raise_type_error(
 			    "implicit enum value is outside signed 32-bit "
-			    "range");
+			    "range",
+			    et);
 		}
 
 		et->members.push_back(
@@ -6587,21 +6859,31 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	ConstEvalResult lower_folded = lower_bound->const_eval(ctx);
 	ConstEvalResult upper_folded = upper_bound->const_eval(ctx);
 	if (lower_folded.kind == ConstEvalResult::Kind::NotConstant || upper_folded.kind == ConstEvalResult::Kind::NotConstant)
-		return raise_type_parse_error("subrange bounds must be constant expressions");
+		raise_values_error(
+		    "subrange bounds must be constant expressions",
+		    {{"lower bound", lower_bound},
+		     {"upper bound", upper_bound}});
 	if (lower_folded.kind == ConstEvalResult::Kind::Error)
-		return raise_type_parse_error(lower_folded.message);
+		raise_value_error(
+		    lower_folded.message, lower_bound);
 	if (upper_folded.kind == ConstEvalResult::Kind::Error)
-		return raise_type_parse_error(upper_folded.message);
+		raise_value_error(
+		    upper_folded.message, upper_bound);
 
 	std::string error;
 	auto lower = classify_subrange_bound(lower_folded.node, &error);
 	if (!lower)
-		return raise_type_parse_error(error);
+		raise_value_error(
+		    error, lower_folded.node);
 	auto upper = classify_subrange_bound(upper_folded.node, &error);
 	if (!upper)
-		return raise_type_parse_error(error);
+		raise_value_error(
+		    error, upper_folded.node);
 	if (lower->kind != upper->kind)
-		return raise_type_parse_error("subrange bounds must be compatible ordinal constants");
+		raise_values_error(
+		    "subrange bounds must be compatible ordinal constants",
+		    {{"lower bound", lower->node},
+		     {"upper bound", upper->node}});
 
 	// A subrange expression is generative. Its chosen host type and bounds
 	// determine compatibility and lowering, but never replace this definition
@@ -6626,22 +6908,33 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	switch (lower->kind) {
 	case FoldedSubrangeBound::Kind::Integer: {
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
-			return raise_type_parse_error("subrange upper bound is lower than lower bound");
+			raise_values_error(
+			    "subrange upper bound is lower than lower bound",
+			    {{"lower bound", lower->node},
+			     {"upper bound", upper->node}});
 		Type* host = infer_integer_subrange_host(lower->ordinal_value, upper->ordinal_value, &error);
 		if (!host)
-			return raise_type_parse_error(error);
+			raise_values_error(
+			    error,
+			    {{"lower bound", lower->node},
+			     {"upper bound", upper->node}});
 		Node* typed_lower = convert_integer_subrange_bound(*lower, host, &error);
 		if (!typed_lower)
-			return raise_type_parse_error(error);
+			raise_value_error(
+			    error, lower->node);
 		Node* typed_upper = convert_integer_subrange_bound(*upper, host, &error);
 		if (!typed_upper)
-			return raise_type_parse_error(error);
+			raise_value_error(
+			    error, upper->node);
 		return make_subrange(
 		    host, typed_lower, typed_upper);
 	}
 	case FoldedSubrangeBound::Kind::Char:
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
-			return raise_type_parse_error("subrange upper bound is lower than lower bound");
+			raise_values_error(
+			    "subrange upper bound is lower than lower bound",
+			    {{"lower bound", lower->node},
+			     {"upper bound", upper->node}});
 		return make_subrange(
 		    char_type(), lower->node,
 		    upper->node);
@@ -6649,12 +6942,18 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 		if (lower->ty != upper->ty)
 			return raise_type_mismatch("subrange constructor with bounds from the same enum type", lower->ty, upper->ty);
 		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0)
-			return raise_type_parse_error("subrange upper bound is lower than lower bound");
+			raise_values_error(
+			    "subrange upper bound is lower than lower bound",
+			    {{"lower bound", lower->node},
+			     {"upper bound", upper->node}});
 		return make_subrange(
 		    lower->ty, lower->node,
 		    upper->node);
 	}
-	return raise_type_parse_error("unsupported subrange bound kind");
+	raise_values_error(
+	    "unsupported subrange bound kind",
+	    {{"lower bound", lower->node},
+	     {"upper bound", upper->node}});
 }
 
 static bool token_continues_subrange_bound_after_primary(const std::string& token) {
@@ -6697,15 +6996,21 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		ConstEvalResult folded =
 		    capacity_expression->const_eval(ctx);
 		if (folded.kind == ConstEvalResult::Kind::NotConstant)
-			return raise_type_parse_error(
-			    "shortstring capacity must be a constant integer");
+			raise_value_error(
+			    "shortstring capacity must be a constant integer",
+			    capacity_expression);
 		if (folded.kind == ConstEvalResult::Kind::Error)
-			return raise_type_parse_error(folded.message);
+			raise_value_error(
+			    folded.message,
+			    capacity_expression);
 		auto capacity = dynamic_cast<Integer*>(folded.node);
 		if (!capacity || capacity->negative ||
 		    capacity->value == 0 || capacity->value > 255)
-			return raise_type_parse_error(
-			    "shortstring capacity must be in 1..255");
+			raise_value_error(
+			    "shortstring capacity must be in 1..255",
+			    folded.node
+				? folded.node
+				: capacity_expression);
 		// Bracketed string syntax is a type constructor. Do not reuse the
 		// builtin capacity cache: identical constructor operands still
 		// create distinct Pascal definitions, with compatibility handled
@@ -6936,9 +7241,10 @@ static bool ordinal_constant_matches_range_type(Type* base_type, const FoldedSub
 Node* Parser::parse_storage_initializer(Type* ty) {
 	while (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
 		if (!incomplete->resolved)
-			raise_parse_error(
+			raise_type_error(
 			    "initialized storage uses unresolved type '" +
-			    incomplete->name + "'");
+			    incomplete->name + "'",
+			    incomplete);
 		ty = incomplete->resolved;
 	}
 
@@ -6952,9 +7258,12 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		}
 		parse_closing_paren();
 		if (elements.size() != arr->range.length) {
-			raise_parse_error("array initializer length mismatch: expected " +
-					  std::to_string(arr->range.length) + " elements but got " +
-					  std::to_string(elements.size()));
+			raise_type_error(
+			    "array initializer length mismatch: expected " +
+				std::to_string(arr->range.length) +
+				" elements but got " +
+				std::to_string(elements.size()),
+			    arr);
 		}
 		return new FixedArrayLiteral(std::move(elements), ty);
 	}
@@ -6972,20 +7281,23 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 				    return field.pas_name == name;
 			    });
 			if (found == declared_fields.end())
-				raise_parse_error(
+				raise_type_error(
 				    "unknown record initializer field '" +
-				    name + "'");
+				    name + "'",
+				    ty);
 			const std::size_t field_index =
 			    static_cast<std::size_t>(
 				found - declared_fields.begin());
 			if (field_index < next_field)
-				raise_parse_error(
+				raise_type_error(
 				    "record initializer field '" + name +
-				    "' is repeated or out of declaration order");
+				    "' is repeated or out of declaration order",
+				    ty);
 			if (field_index > next_field)
-				raise_parse_error(
+				raise_type_error(
 				    "record initializer skips field(s) before '" +
-				    name + "'");
+				    name + "'",
+				    ty);
 
 			parse_colon();
 			fields.push_back(RecordLiteral::Field{
@@ -7003,16 +7315,18 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 
 	if (auto record = dynamic_cast<RecordType*>(ty)) {
 		if (record->variant)
-			raise_parse_error(
+			raise_type_error(
 			    "variant record constant initializers are not "
-			    "implemented");
+			    "implemented",
+			    record);
 		return parse_record(record->fields);
 	}
 	if (auto record = dynamic_cast<PackedRecordType*>(ty)) {
 		if (record->variant)
-			raise_parse_error(
+			raise_type_error(
 			    "variant record constant initializers are not "
-			    "implemented");
+			    "implemented",
+			    record);
 		return parse_record(record->fields);
 	}
 
@@ -7020,24 +7334,33 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 	ConstEvalContext ctx;
 	ConstEvalResult folded = expr->const_eval(ctx);
 	if (folded.kind == ConstEvalResult::Kind::NotConstant)
-		raise_parse_error("constant expression expected");
+		raise_value_error(
+		    "constant expression expected", expr);
 	if (folded.kind == ConstEvalResult::Kind::Error)
-		raise_parse_error(folded.message);
+		raise_value_error(
+		    folded.message, expr);
 	Node* value = folded.node;
 
 	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		OrdinalRange range;
 		std::string error;
 		if (!ordinal_range_for_type(s, &range, &error))
-			raise_parse_error(error);
+			raise_type_error(error, s);
 		auto bound = classify_subrange_bound(value, &error);
 		if (!bound)
-			raise_parse_error(error);
+			raise_value_error(error, value);
 		if (!ordinal_constant_matches_range_type(range.base_type, *bound))
-			raise_parse_error("constant initializer has incompatible ordinal type");
+			raise_type_mismatch(
+			    "constant initializer has incompatible ordinal type",
+			    range.base_type,
+			    bound->node
+				? bound->node->ty
+				: nullptr);
 		if (compare_ordinal_value(bound->ordinal_value, range.lower_ordinal) < 0 ||
 		    compare_ordinal_value(bound->ordinal_value, range.upper_ordinal) > 0)
-			raise_parse_error("constant initializer out of range for target type");
+			raise_type_error(
+			    "constant initializer out of range for target type",
+			    s);
 		// The constant has already been proven inside this exact declaration's
 		// bounds. Retain the SubrangeType on the initializer so the emitter
 		// constructs its concrete carrier instead of initializing that carrier
@@ -7048,9 +7371,12 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 	Node* converted = cast(value, ty);
 	ConstEvalResult checked = converted->const_eval(ctx);
 	if (checked.kind == ConstEvalResult::Kind::Error)
-		raise_parse_error(checked.message);
+		raise_value_error(
+		    checked.message, converted);
 	if (checked.kind == ConstEvalResult::Kind::NotConstant)
-		raise_parse_error("constant expression expected");
+		raise_value_error(
+		    "constant expression expected",
+		    converted);
 	return checked.node;
 }
 
@@ -7070,9 +7396,12 @@ void Parser::parse_const_block(Type* aggregate_owner) {
 			ConstEvalContext ctx;
 			ConstEvalResult folded = expr->const_eval(ctx);
 			if (folded.kind == ConstEvalResult::Kind::NotConstant)
-				raise_parse_error("constant expression expected");
+				raise_value_error(
+				    "constant expression expected",
+				    expr);
 			if (folded.kind == ConstEvalResult::Kind::Error)
-				raise_parse_error(folded.message);
+				raise_value_error(
+				    folded.message, expr);
 			if (aggregate_owner) {
 				auto constant = new ConstantDecl(
 				    cxx_value_name(name),
@@ -7102,8 +7431,9 @@ void Parser::parse_const_block(Type* aggregate_owner) {
 		auto ty = parse_type_expression(false);
 		if (aggregate_owner) {
 			if (!maybe_parse_equal())
-				raise_parse_error(
-				    "aggregate storage declaration requires an initializer");
+				raise_type_error(
+				    "aggregate storage declaration requires an initializer",
+				    ty);
 			Node* initializer =
 			    parse_storage_initializer(ty);
 			auto slot = new StorageSlot(
@@ -7899,9 +8229,11 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			    std::get_if<Type*>(
 				&*existing_binding);
 			if (!existing_type)
-				raise_type_parse_error(
+				raise_value_error(
 				    "duplicate identifier: " +
-				    name);
+				    name,
+				    std::get<Node*>(
+					*existing_binding));
 			existing = *existing_type;
 		}
 		IncompleteType* lhs_placeholder = nullptr;
@@ -7922,7 +8254,10 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			     !completing_forward) ||
 			    (lhs_placeholder &&
 			     lhs_placeholder->resolved)) {
-				raise_type_parse_error("duplicate type name: " + name);
+				raise_type_error(
+				    "duplicate type name: " +
+					name,
+				    existing);
 			}
 		} else {
 			lhs_placeholder = new IncompleteType(current_location(), name);
@@ -7938,8 +8273,9 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		Type* rhs = nullptr;
 		if (completing_forward &&
 		    !peek_keyword("class"))
-			raise_type_parse_error(
-			    "duplicate type name: " + name);
+			raise_type_error(
+			    "duplicate type name: " + name,
+			    completing_forward);
 		if (peek_keyword("class"))
 			rhs = parse_class_type(
 			    completing_forward, true);
@@ -8011,7 +8347,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		    PendingTypeDecl::Kind::ClassForward)
 			continue;
 		if (!resolver.normalize_type(decl.rhs))
-			raise_type_parse_error(resolver.error);
+			raise_type_error(
+			    resolver.error, decl.rhs);
 		if (decl.lhs_placeholder)
 			decl.lhs_placeholder->resolved =
 			    decl.rhs;
@@ -8022,8 +8359,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			continue;
 		if (!resolver.validate_definition(
 			decl.rhs, decl.name))
-			raise_type_parse_error(
-			    resolver.error);
+			raise_type_error(
+			    resolver.error, decl.rhs);
 	}
 	for (auto& decl : pending)
 		if (decl.kind ==
@@ -8391,11 +8728,12 @@ void Parser::validate_class_forwards(Frame* frame) {
 		if (!class_type ||
 		    !class_type->is_forward_declaration)
 			continue;
-		emit_parse_error_at(
+		raise_type_error_at(
 		    class_type->source_location,
 		    "forward class declaration '" +
 			class_type->forward_name +
-			"' was not resolved");
+			"' was not resolved",
+		    class_type);
 	}
 }
 
@@ -8605,9 +8943,10 @@ void Parser::parse_class_lifecycle_prototype(
 	RoutineType* sig = parse_routine_signature(
 	    true, false, false, kind, owner_class);
 	if (!sig->formals.empty())
-		raise_parse_error(
+		raise_type_error(
 		    std::string(lifecycle_name) +
-		    " cannot have parameters");
+		    " cannot have parameters",
+		    sig);
 	parse_semicolon();
 
 	// These directives all describe user-callable or dispatchable overloads;
@@ -8616,17 +8955,19 @@ void Parser::parse_class_lifecycle_prototype(
 	    peek_keyword("dynamic") || peek_keyword("override") ||
 	    peek_keyword("abstract") || peek_keyword("final") ||
 	    peek_keyword("static"))
-		raise_parse_error(
+		raise_type_error(
 		    std::string(lifecycle_name) +
-		    " cannot have routine directives");
+		    " cannot have routine directives",
+		    sig);
 	Method*& slot = constructing
 			    ? owner_class->class_constructor
 			    : owner_class->class_destructor;
 	if (slot)
-		raise_parse_error(
+		raise_type_error(
 		    std::string("only one ") +
 		    lifecycle_name +
-		    " may be declared in a class");
+		    " may be declared in a class",
+		    owner_class);
 
 	auto method = new Method(
 	    constructing ? "m_init" : "m_fini",
@@ -8635,9 +8976,10 @@ void Parser::parse_class_lifecycle_prototype(
 	method->ty = sig;
 	slot = method;
 	if (!current_unit)
-		raise_parse_error(
+		raise_type_error(
 		    std::string(lifecycle_name) +
-		    " declared outside a unit or program");
+		    " declared outside a unit or program",
+		    sig);
 	auto& scheduled = constructing
 			      ? current_unit->class_constructors
 			      : current_unit->class_destructors;
@@ -8679,8 +9021,9 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			if (vk == Method::VirtualKind::None &&
 			    !dynamic_cast<InterfaceType*>(
 				owner_class))
-				raise_parse_error(
-				    "only virtual methods can be abstract");
+				raise_type_error(
+				    "only virtual methods can be abstract",
+				    sig);
 			vk = Method::VirtualKind::Abstract;
 			parse_semicolon();
 		} else if (maybe_parse_keyword("dynamic")) {
@@ -8704,16 +9047,19 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	}
 	if (is_static) {
 		if (!is_class)
-			raise_parse_error(
-			    "static requires a class method declaration");
+			raise_type_error(
+			    "static requires a class method declaration",
+			    sig);
 		if (is_constructor || is_destructor)
-			raise_parse_error(
-			    "constructors and destructors cannot be static methods");
+			raise_type_error(
+			    "constructors and destructors cannot be static methods",
+			    sig);
 		if (vk != Method::VirtualKind::None ||
 		    is_final)
-			raise_parse_error(
+			raise_type_error(
 			    "static methods cannot be virtual, dynamic, override, "
-			    "abstract, or final");
+			    "abstract, or final",
+			    sig);
 		// Static methods remain class-owned Method declarations, but their
 		// value and call ABI is exactly the ordinary receiverless routine ABI.
 		sig->kind = ROUTINE;
@@ -8722,8 +9068,9 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 			owner_class) ||
 		    dynamic_cast<PackedRecordType*>(
 			owner_class))) {
-		raise_parse_error(
-		    "record class methods must be static");
+		raise_type_error(
+		    "record class methods must be static",
+		    sig);
 	}
 	// FPC accepts final only for a method which is virtual already. Keep final
 	// independent of VirtualKind because `override; final` is the normal
@@ -8737,19 +9084,22 @@ void Parser::parse_method_prototype(Frame* body, Type* owner_class, bool is_func
 	if (is_final) {
 		if (dynamic_cast<InterfaceType*>(
 			owner_class))
-			raise_parse_error(
-			    "final interface methods are not supported");
+			raise_type_error(
+			    "final interface methods are not supported",
+			    sig);
 		if (vk == Method::VirtualKind::None)
-			raise_parse_error(
-			    "only virtual methods can be final");
+			raise_type_error(
+			    "only virtual methods can be final",
+			    sig);
 	}
 	if (auto object =
 		dynamic_cast<ObjectType*>(owner_class)) {
 		if (is_constructor &&
 		    vk != Method::VirtualKind::None)
-			raise_parse_error(
+			raise_type_error(
 			    "old-style object constructors cannot be "
-			    "virtual, dynamic, override, abstract");
+			    "virtual, dynamic, override, abstract",
+			    sig);
 		if (is_constructor || is_destructor ||
 		    vk != Method::VirtualKind::None)
 			object->needs_vmt = true;
@@ -8852,7 +9202,10 @@ Procedure* Parser::match_or_create_procedure(
 
 	auto attach_to = [&](Callable* c) -> Procedure* {
 		if (c->has_body)
-			raise_parse_error("duplicate implementation of '" + pas_name + "'");
+			raise_type_error(
+			    "duplicate implementation of '" +
+				pas_name + "'",
+			    c->ty);
 		if (had_paren) {
 			// Pascal allows impl parameter names to differ from interface names.
 			// We update the prototype's names so local scope bindings match the body text.
@@ -8860,7 +9213,10 @@ Procedure* Parser::match_or_create_procedure(
 		}
 		auto p = dynamic_cast<Procedure*>(c);
 		if (!p)
-			raise_parse_error("'" + pas_name + "' is not a standalone procedure");
+			raise_type_kind_mismatch(
+			    "'" + pas_name + "'",
+			    "standalone procedure",
+			    c->ty);
 		return p;
 	};
 
@@ -8884,7 +9240,10 @@ Procedure* Parser::match_or_create_procedure(
 					    !m->has_body &&
 					    has_every_frame_binding(m)) {
 						if (pick)
-							raise_parse_error("ambiguous short-form impl");
+							raise_values_error(
+							    "ambiguous short-form impl",
+							    {{"candidate 1", pick},
+							     {"candidate 2", m}});
 						pick = m;
 					}
 				}
@@ -8896,7 +9255,10 @@ Procedure* Parser::match_or_create_procedure(
 					    sig_matches(m) &&
 					    has_every_frame_binding(m)) {
 						if (target)
-							raise_parse_error("ambiguous overload match");
+							raise_values_error(
+							    "ambiguous overload match",
+							    {{"candidate 1", target},
+							     {"candidate 2", m}});
 						target = attach_to(m);
 					}
 				}
@@ -8911,7 +9273,9 @@ Procedure* Parser::match_or_create_procedure(
 	// lower entries are used-unit dependencies, not declarations owned by
 	// the unit whose implementation is being parsed.
 	if (!target && short_form_implementation && existing)
-		raise_parse_error("no unimplemented prototype");
+		raise_type_error(
+		    "no unimplemented prototype",
+		    sig);
 
 	if (!target) {
 		target = new Procedure(
@@ -9189,13 +9553,17 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		Type* owner_ty = resolve_type(first_name, false);
 		Frame* owner_frame = get_type_body_frame(owner_ty);
 		if (!owner_frame)
-			raise_parse_error("'" + first_name + "' is not a class/record/object");
+			raise_type_kind_mismatch(
+			    "'" + first_name + "'",
+			    "class, record, or object",
+			    owner_ty);
 		if (is_class &&
 		    (is_constructor || is_destructor)) {
 			auto class_type = dynamic_cast<ClassType*>(owner_ty);
 			if (!class_type)
-				raise_parse_error(
-				    "class lifecycle implementation requires a class");
+				raise_type_kind_mismatch(
+				    "class lifecycle implementation owner",
+				    "class", owner_ty);
 			const bool constructing = is_constructor;
 			const char* lifecycle_name =
 			    constructing
@@ -9208,25 +9576,28 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 					     ? class_type->class_constructor
 					     : class_type->class_destructor;
 			if (!method || method->pas_name != method_name)
-				raise_parse_error(
+				raise_type_error(
 				    "no " +
 				    std::string(lifecycle_name) +
 				    " '" + method_name +
-				    "' on '" + first_name + "'");
+				    "' on '" + first_name + "'",
+				    class_type);
 			RoutineType* sig = parse_routine_signature(
 			    true, false, false, kind,
 			    owner_ty);
 			if (!sig->formals.empty())
-				raise_parse_error(
+				raise_type_error(
 				    std::string(lifecycle_name) +
-				    " cannot have parameters");
+				    " cannot have parameters",
+				    sig);
 			parse_semicolon();
 			if (method->has_body)
-				raise_parse_error(
+				raise_type_error(
 				    "duplicate implementation of " +
 				    std::string(lifecycle_name) +
 				    " '" +
-				    method_name + "'");
+				    method_name + "'",
+				    method->ty);
 			parse_routine_body(method, owner_frame);
 			return;
 		}
@@ -9270,9 +9641,11 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 					 sig))
 				    return;
 			    if (m)
-				    raise_parse_error(
+				    raise_values_error(
 					"ambiguous method implementation '" +
-					method_name + "'");
+					method_name + "'",
+					{{"candidate 1", m},
+					 {"candidate 2", candidate}});
 			    m = candidate;
 		    };
 		if (auto callable =
@@ -9289,12 +9662,16 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		// `T.Method` body can only attach to a declaration owned by exactly T,
 		// and only to its exact Pascal signature.
 		if (!m)
-			raise_parse_error(
+			raise_type_error(
 			    "no matching method declaration '" +
 			    method_name + "' on '" +
-			    first_name + "'");
+			    first_name + "'",
+			    sig);
 		if (m->has_body)
-			raise_parse_error("duplicate implementation of '" + method_name + "'");
+			raise_type_error(
+			    "duplicate implementation of '" +
+				method_name + "'",
+			    m->ty);
 		// Pascal permits implementation parameter names to differ from the
 		// prototype, but defaults belong to the prototype/call site. Replacing
 		// the complete formal objects here erased those defaults as soon as an
@@ -9372,32 +9749,37 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 				.pascal_identifiers.empty()) {
 				if (operator_declaration_name_known(
 					operator_declaration_name))
-					raise_parse_error(
+					raise_type_error(
 					    "operator '" +
 					    operator_declaration_name +
 					    "' does not accept " +
 					    std::to_string(
 						sig->formals
 						    .size()) +
-					    " parameter(s)");
-				raise_parse_error(
+					    " parameter(s)",
+					    sig);
+				raise_type_error(
 				    "unknown custom operator '" +
-				    operator_declaration_name + "'");
+				    operator_declaration_name + "'",
+				    sig);
 			}
 			if (!operator_identity
 				 .declaration_supported)
-				raise_parse_error(
+				raise_type_error(
 				    "operator '" +
 				    operator_declaration_name +
-				    "' is recognized but not supported");
+				    "' is recognized but not supported",
+				    sig);
 			if (operator_identity
 				.boolean_result &&
 			    sig->return_type !=
 				boolean_type())
-				raise_parse_error(
+				raise_type_mismatch(
 				    "operator '" +
 				    operator_declaration_name +
-				    "' must return Boolean");
+				    "' return type",
+				    boolean_type(),
+				    sig->return_type);
 		} else
 			operator_identity = {
 			    {first_name},
@@ -11215,8 +11597,10 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	if (match)
 		return match->value;
 	if (dynamic_cast<NilLiteral*>(a))
-		raise_parse_error(
-		    "'nil' is only valid in a reference or routine-value context");
+		raise_type_kind_mismatch(
+		    "'nil' conversion target",
+		    "reference or routine-value",
+		    target_ty);
 	std::vector<Node*> args{a};
 	const std::string conversion_name =
 	    directive_state.switch_enabled('r')
@@ -11332,10 +11716,13 @@ Node* Parser::try_resolve_routine_reference(
 Node* Parser::resolve_routine_reference(
     RoutineRef* reference, RoutineType* target_ty) {
 	if (!reference || !target_ty)
-		raise_parse_error("invalid contextual routine reference");
+		raise_routine_reference_error(
+		    "invalid contextual routine reference",
+		    reference, target_ty);
 	if (target_ty->kind != ROUTINE && target_ty->kind != METHOD)
-		raise_parse_error(
-		    "routine reference target is not a routine-value type");
+		raise_routine_reference_error(
+		    "routine reference target is not a routine-value type",
+		    reference, target_ty);
 	bool ambiguous = false;
 	if (Node* result =
 		try_resolve_routine_reference(
@@ -11343,28 +11730,33 @@ Node* Parser::resolve_routine_reference(
 		    &ambiguous))
 		return result;
 	if (ambiguous)
-		raise_parse_error(
+		raise_routine_reference_error(
 		    "routine reference is ambiguous for the destination "
-		    "routine type");
+		    "routine type",
+		    reference, target_ty);
 	std::string category = target_ty->kind == METHOD
 				   ? "procedure/function of object"
 				   : "plain procedure/function";
-	raise_parse_error(
+	raise_routine_reference_error(
 	    "no overload of the routine reference is compatible with " +
-	    category + " target");
+	    category + " target",
+	    reference, target_ty);
 }
 
 Node* Parser::resolve_routine_code_reference(
     RoutineRef* reference) {
 	if (!reference)
-		raise_parse_error("invalid routine code reference");
+		raise_routine_reference_error(
+		    "invalid routine code reference",
+		    reference, pointer_type());
 	std::vector<Callable*> candidates =
 	    routine_reference_candidates(
 		reference->candidates);
 	if (candidates.size() != 1)
-		raise_parse_error(
+		raise_routine_reference_error(
 		    "a Pointer routine reference requires one "
-		    "non-overloaded routine");
+		    "non-overloaded routine",
+		    reference, pointer_type());
 	Callable* candidate = candidates.front();
 	bool valid_plain =
 	    (dynamic_cast<Procedure*>(candidate) &&
@@ -11380,16 +11772,18 @@ Node* Parser::resolve_routine_code_reference(
 	     candidate->ty->kind == CLASS_METHOD) &&
 	    reference->receiver != nullptr;
 	if (!valid_plain && !valid_method)
-		raise_parse_error(
+		raise_routine_reference_error(
 		    "Pointer routine reference does not name a plain "
-		    "routine or bound instance method");
+		    "routine or bound instance method",
+		    reference, pointer_type());
 	if (valid_method &&
 	    !(reference->receiver->ty &&
 	      reference->receiver->ty->is_reference_type()) &&
 	    !is_referenceable(reference->receiver))
-		raise_parse_error(
+		raise_routine_reference_error(
 		    "a bound method code reference requires a stable "
-		    "object receiver");
+		    "object receiver",
+		    reference, pointer_type());
 
 	auto result = new RoutineRef(
 	    reference->receiver,
@@ -11502,10 +11896,11 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 		if (args.size() >
 		    c->ty->formals.size())
-			emit_parse_error_at(
+			raise_value_error_at(
 			    error_location,
 			    "too many arguments to '" +
-				name_for_error + "'");
+				name_for_error + "'",
+			    c);
 		for (size_t i = args.size();
 		     i < c->ty->formals.size(); ++i)
 			if (!c->ty->formals[i]
@@ -11513,12 +11908,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				// A singleton has no competing arity to rank. Report the
 				// missing source parameter directly while still using the
 				// shared matcher for every supplied argument.
-				emit_parse_error_at(
+				raise_value_error_at(
 				    error_location,
 				    "missing argument for parameter '" +
 					c->ty->formals[i].pas_name +
 					"' in call to '" +
-					name_for_error + "'");
+					name_for_error + "'",
+				    c);
 		auto match =
 		    callable_accepts_receiver(
 			c, receiver)
@@ -11544,20 +11940,22 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				if (failure ==
 				    MatchFailure::
 					PackedProjection)
-					emit_parse_error_at(
+					raise_value_error_at(
 					    error_location,
 					    "packed-record field cannot yet be passed "
 					    "as var/out parameter '" +
 						c->ty->formals[i].pas_name +
-						"'");
+						"'",
+					    args[i]);
 				if (failure ==
 				    MatchFailure::
 					NotStorageBacked)
-					emit_parse_error_at(
+					raise_value_error_at(
 					    error_location,
 					    "argument for var/out parameter '" +
 						c->ty->formals[i].pas_name +
-						"' is not a storage-backed expression");
+						"' is not a storage-backed expression",
+					    args[i]);
 				if (failure ==
 				    MatchFailure::
 					OrdinalRequired) {
@@ -11566,14 +11964,22 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 						args[i]
 						    ? args[i]->ty
 						    : nullptr);
-					emit_parse_error_at(
+					raise_type_kind_mismatch_at(
 					    error_location,
 					    name_for_error +
 						(rejected_pointer &&
 							 rejected_pointer
 							     ->is_untyped()
 						     ? " requires an ordinal or typed pointer argument"
-						     : " requires an ordinal argument"));
+						     : " requires an ordinal argument"),
+					    rejected_pointer &&
+						    rejected_pointer
+							->is_untyped()
+						? "ordinal or typed pointer"
+						: "ordinal",
+					    args[i]
+						? args[i]->ty
+						: nullptr);
 				}
 			}
 		}
@@ -11664,19 +12070,22 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		}
 		if (expected_return_type &&
 		    value_rty->return_type != expected_return_type)
-			emit_parse_error_at(
+			raise_type_mismatch_at(
 			    error_location,
-			    "routine value has the wrong result type");
+			    "routine value result",
+			    expected_return_type,
+			    value_rty->return_type);
 	}
 	if (chosen_match)
 		args = chosen_match->arguments;
 	if (auto method = dynamic_cast<Method*>(chosen)) {
 		if (!callable_accepts_receiver(
 			method, receiver))
-			emit_parse_error_at(
+			raise_value_error_at(
 			    error_location,
 			    "internal error: selected method has an "
-			    "incompatible receiver");
+			    "incompatible receiver",
+			    method);
 		if (method->is_static) {
 			// FPC evaluates an explicit object/class-reference qualifier
 			// exactly once even though a static method neither dereferences
@@ -11704,22 +12113,39 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	while (args.size() < rty->formals.size()) {
 		auto& p = rty->formals[args.size()];
 		if (!p.default_value) {
-			emit_parse_error_at(error_location, "missing argument for parameter '" + p.pas_name + "' in call to '" + name_for_error + "'");
+			raise_value_error_at(
+			    error_location,
+			    "missing argument for parameter '" +
+				p.pas_name + "' in call to '" +
+				name_for_error + "'",
+			    chosen
+				? static_cast<Node*>(chosen)
+				: target);
 		}
 		MatchFailure failure;
 		auto match = match_argument(
 		    p, p.default_value, builtin,
 		    args.size(), true, &failure);
 		if (!match)
-			emit_parse_error_at(
+			raise_type_mismatch_at(
 			    error_location,
 			    "default value for parameter '" +
 				p.pas_name +
-				"' is not applicable");
+				"' is not applicable",
+			    p.ty,
+			    p.default_value
+				? p.default_value->ty
+				: nullptr);
 		args.push_back(match->value);
 	}
 	if (args.size() > rty->formals.size()) {
-		emit_parse_error_at(error_location, "too many arguments to '" + name_for_error + "'");
+		raise_value_error_at(
+		    error_location,
+		    "too many arguments to '" +
+			name_for_error + "'",
+		    chosen
+			? static_cast<Node*>(chosen)
+			: target);
 	}
 	if (!chosen && value_rty) {
 		std::vector<Node*> converted;
@@ -11732,9 +12158,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 			    args[i], nullptr, i, true,
 			    &failure);
 			if (!match)
-				emit_parse_error_at(
+				raise_type_mismatch_at(
 				    error_location,
-				    "routine-value argument has an incompatible type");
+				    "routine-value argument",
+				    value_rty->formals[i].ty,
+				    args[i]
+					? args[i]->ty
+					: nullptr);
 			converted.push_back(
 			    match->value);
 		}
@@ -11750,7 +12180,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		if (!generic_ordinal_operation_accepts(
 			builtin->generic_kind,
 			operand_type))
-			emit_parse_error_at(
+			raise_type_kind_mismatch_at(
 			    error_location,
 			    name_for_error +
 				(builtin->generic_kind ==
@@ -11760,7 +12190,16 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 					 BuiltinGenericKind::
 					     EnumOrPointerStep
 				     ? " requires an ordinal or pointer argument"
-				     : " requires an ordinal argument"));
+				     : " requires an ordinal argument"),
+			    builtin->generic_kind ==
+					    BuiltinGenericKind::
+						UnaryOrdinalOrPointerStep ||
+					builtin->generic_kind ==
+					    BuiltinGenericKind::
+						EnumOrPointerStep
+				? "ordinal or pointer"
+				: "ordinal",
+			    operand_type);
 	}
 	if (builtin &&
 	    builtin->generic_kind ==
@@ -11768,10 +12207,14 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 	    (args.empty() || !args[0] ||
 	     !generic_absolute_value_accepts(
 		 args[0]->ty)))
-		emit_parse_error_at(
+		raise_type_kind_mismatch_at(
 		    error_location,
 		    name_for_error +
-			" requires a predefined numeric argument");
+			" requires a predefined numeric argument",
+		    "predefined numeric",
+		    args.empty() || !args[0]
+			? nullptr
+			: args[0]->ty);
 	if (builtin &&
 	    builtin->generic_kind == BuiltinGenericKind::SetMutation) {
 		// Until tpcc supports generic routine declarations, system.pp has to
@@ -11782,12 +12225,22 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 				    ? nullptr
 				    : dynamic_cast<FixedSetType*>(args[0] ? args[0]->ty : nullptr);
 		if (!set_type) {
-			emit_parse_error_at(error_location,
-					    name_for_error + " requires a set variable as its first argument");
+			raise_type_kind_mismatch_at(
+			    error_location,
+			    name_for_error +
+				" requires a set variable as its first argument",
+			    "set", args.empty() || !args[0]
+				       ? nullptr
+				       : args[0]->ty);
 		}
 		if (args.size() < 2 || !args[1]) {
-			emit_parse_error_at(error_location,
-					    name_for_error + " requires a set element as its second argument");
+			raise_value_error_at(
+			    error_location,
+			    name_for_error +
+				" requires a set element as its second argument",
+			    chosen
+				? static_cast<Node*>(chosen)
+				: target);
 		}
 		// FPC converts the element expression to the concrete set element
 		// type before generating the bit mutation. Do that here while the
@@ -11800,19 +12253,27 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		BuiltinGenericKind::SequenceLength &&
 	    (args.empty() || !args[0] ||
 	     !args[0]->ty->sequence_element_type()))
-		emit_parse_error_at(
+		raise_type_kind_mismatch_at(
 		    error_location,
 		    name_for_error +
-			" requires a string or array argument");
+			" requires a string or array argument",
+		    "string or array",
+		    args.empty() || !args[0]
+			? nullptr
+			: args[0]->ty);
 	if (builtin &&
 	    builtin->generic_kind ==
 		BuiltinGenericKind::SequenceResize &&
 	    (args.empty() || !args[0] ||
 	     !args[0]->ty->sequence_is_resizable()))
-		emit_parse_error_at(
+		raise_type_kind_mismatch_at(
 		    error_location,
 		    name_for_error +
-			" requires a writable ShortString, AnsiString, or dynamic array");
+			" requires a writable ShortString, AnsiString, or dynamic array",
+		    "writable ShortString, AnsiString, or dynamic array",
+		    args.empty() || !args[0]
+			? nullptr
+			: args[0]->ty);
 	return FinalizedCall{
 	    receiver, chosen ? static_cast<Node*>(chosen) : target,
 	    qualifier_effect};
@@ -11834,8 +12295,10 @@ Node* Parser::make_call(
 			    dynamic_cast<ClassType*>(
 				class_reference->target);
 			if (!result_type)
-				raise_parse_error(
-				    "constructor class reference does not target a class");
+				raise_type_kind_mismatch(
+				    "constructor class-reference target",
+				    "class",
+				    class_reference->target);
 			return new Construct(
 			    finalized.receiver, initializer,
 			    std::move(args), result_type);
@@ -11861,8 +12324,9 @@ Node* Parser::make_call(
 		if (!dynamic_cast<ShortStringType*>(
 			args[0] ? args[0]->ty
 				: nullptr))
-			raise_parse_error(
-			    "Val source must be a ShortString");
+			raise_type_kind_mismatch(
+			    "Val source", "ShortString",
+			    args[0] ? args[0]->ty : nullptr);
 
 		const ValDestinationFamily family =
 		    val_destination_family(
@@ -11876,14 +12340,18 @@ Node* Parser::make_call(
 		if (family ==
 		    ValDestinationFamily::
 			Unsupported)
-			raise_parse_error(
-			    "Val currently supports integer, subrange, and predefined real destinations");
+			raise_type_kind_mismatch(
+			    "Val destination",
+			    "integer, subrange, or predefined real",
+			    args[1] ? args[1]->ty : nullptr);
 		if (args.size() == 3 &&
 		    !is_integer_semantic_type(
 			args[2] ? args[2]->ty
 				: nullptr))
-			raise_parse_error(
-			    "Val code destination must be an integer variable");
+			raise_type_kind_mismatch(
+			    "Val code destination",
+			    "integer",
+			    args[2] ? args[2]->ty : nullptr);
 
 		Node* result = new ValCall(
 		    args[0], args[1],

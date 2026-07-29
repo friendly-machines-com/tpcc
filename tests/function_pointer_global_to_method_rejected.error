@@ -1,1 +1,6 @@
 no overload of the routine reference is compatible with procedure/function of object target
+destination type: tbound
+type tbound =
+kind: method
+value global =
+kind: routine
