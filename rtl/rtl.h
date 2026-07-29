@@ -3818,6 +3818,45 @@ inline void p_fillchar(tpcc_storage_ref destination, t_sizeint count, t_byte val
 	std::memset(destination.data, value, byte_count);
 }
 
+inline void p_filldword(
+    tpcc_storage_ref destination, t_sizeint count, t_longword value) {
+	if (count <= 0)
+		return;
+	constexpr std::size_t element_size = sizeof(t_longword);
+	const std::size_t element_count =
+	    static_cast<std::size_t>(count);
+	if (element_count >
+	    std::numeric_limits<std::size_t>::max() /
+		element_size)
+		m_runtime_error(201);
+	const std::size_t byte_count =
+	    element_count * element_size;
+	if (byte_count > destination.size)
+		m_runtime_error(201);
+
+	// A Pascal untyped `var` destination need not be aligned for DWord and
+	// need not denote an existing C++ uint32_t object. Seed its first four
+	// bytes with memcpy, then replicate that native-endian representation.
+	// Casting destination.data to t_longword* would instead introduce both
+	// alignment and object-lifetime/aliasing UB.
+	std::memcpy(
+	    destination.data,
+	    std::addressof(value),
+	    element_size);
+	std::size_t initialized = element_size;
+	while (initialized < byte_count) {
+		const std::size_t chunk =
+		    std::min(
+			initialized,
+			byte_count - initialized);
+		std::memcpy(
+		    destination.data + initialized,
+		    destination.data,
+		    chunk);
+		initialized += chunk;
+	}
+}
+
 inline void p_move(tpcc_const_storage_ref source,
     tpcc_storage_ref destination, t_sizeint count) {
 	if (count <= 0)

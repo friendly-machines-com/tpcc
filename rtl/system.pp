@@ -337,6 +337,8 @@ operator in(const item; const values): Boolean; external name '::u_system::o_in'
 function ord(const x): Cardinal; external name '::u_system::p_ord'; // generic intrinsic
 function chr(value: Byte): Char; external name '::u_system::p_chr';
 procedure fillchar(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillchar';
+// FillDWord's count is a number of DWord elements, not a byte count.
+procedure filldword(var destination; count: SizeInt; value: DWord); external name '::u_system::p_filldword';
 procedure move(const source; var destination; count: SizeInt); external name '::u_system::p_move';
 function comparebyte(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparebyte';
 function comparechar(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparechar';
