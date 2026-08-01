@@ -221,11 +221,23 @@ FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty)
 
 BracketLiteral::BracketLiteral(
     std::vector<Item> items,
-    Type* default_set_item_type)
+    Type* default_set_item_type,
+    FixedArrayType* default_array_type)
     : items(std::move(items)),
       default_set_item_type(
-	  default_set_item_type) {
-	this->ty = unknown_type();
+	  default_set_item_type),
+      default_array_type(default_array_type) {
+	if (default_array_type)
+		this->ty = default_array_type;
+	else if (default_set_item_type &&
+		 default_set_item_type !=
+		     unknown_type())
+		this->ty = new FixedSetType(
+		    default_set_item_type
+			->source_location,
+		    default_set_item_type);
+	else
+		this->ty = unknown_type();
 }
 
 ArrayLiteral::ArrayLiteral(
@@ -1224,6 +1236,7 @@ void BracketLiteral::collect_diagnostic_edges(
     ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(default_set_item_type);
+	ctx->add_type_edge(default_array_type);
 	for (const Item& item : items) {
 		ctx->add_value_edge(item.lower);
 		ctx->add_value_edge(item.upper);

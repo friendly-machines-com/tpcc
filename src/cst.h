@@ -5,6 +5,7 @@
 #include <sstream>
 
 class Type;
+class FixedArrayType;
 class Frame;
 class RoutineType;
 class Callable;
@@ -639,9 +640,14 @@ public:
 	};
 	std::vector<Item> items;
 	Type* default_set_item_type;
+	// The order-independent homogeneous array interpretation available when
+	// no destination supplies an element type. Null when ranges occur, the
+	// constructor is empty, or its elements have no common inferred type.
+	FixedArrayType* default_array_type;
 	BracketLiteral(
 	    std::vector<Item> items,
-	    Type* default_set_item_type);
+	    Type* default_set_item_type,
+	    FixedArrayType* default_array_type);
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(
 	    ConstEvalContext& ctx) const override;

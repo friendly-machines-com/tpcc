@@ -38,6 +38,13 @@ static Type* integer_literal_natural_type(
     const Integer* literal);
 static Integer* untyped_integer_constant(
     Node* expression);
+enum class BracketIntegerPreference {
+	Array,
+	Set,
+};
+static Type* infer_bracket_common_item_type(
+    const std::vector<BracketLiteral::Item>& items,
+    BracketIntegerPreference preference);
 
 static ErrorLetContext make_error_let_context_from_scopes(const std::vector<ScopeEntry>& scopes, unsigned max_depth) {
 	std::vector<DiagnosticScope> diagnostic_scopes;
@@ -2955,6 +2962,8 @@ static Type* infer_set_item_type(
 }
 
 Node* Parser::parse_bracket_literal() {
+	const SourceLocation location =
+	    current_location();
 	parse_opening_bracket();
 	std::vector<BracketLiteral::Item> items;
 	if (input_token != "]") {
@@ -2970,42 +2979,75 @@ Node* Parser::parse_bracket_literal() {
 	}
 	parse_closing_bracket();
 
-	// Do not convert the items here. Set, dynamic-array, and open-array
-	// candidates must each see the original nodes. The inferred ordinal type
-	// is retained only as the historical set interpretation when no array
-	// destination supplies another context.
-	Type* item_type = unknown_type();
-	for (const BracketLiteral::Item& item :
-	     items) {
-		for (Node* bound : {item.lower, item.upper}) {
-			if (!bound)
-				continue;
-			Type* bound_type = bound->ty;
-			if (auto integer =
-				untyped_integer_constant(
-				    bound))
-				bound_type =
-				    integer_literal_natural_type(
-					integer);
-			if (!is_set_item_type(bound_type))
-				raise_type_kind_mismatch(
-				    "set literal item",
-				    "ordinal", bound_type);
-			if (item_type == unknown_type()) {
-				item_type = bound_type;
-			} else {
-				Type* common =
-				    infer_set_item_type(
-					item_type, bound_type);
-				if (!common)
-					raise_type_mismatch("set literal items with a common ordinal type",
-							    item_type, bound_type);
-				item_type = common;
-			}
-		}
+	// Brackets are syntax, not an already-selected set operation. Keep every
+	// source item unchanged so a set, dynamic-array, or open-array candidate
+	// can supply its own element type. A best-effort common type exists only
+	// for consumers such as SizeOf which provide no destination at all.
+	Type* array_item_type =
+	    infer_bracket_common_item_type(
+		items,
+		BracketIntegerPreference::
+		    Array);
+	Type* set_item_type =
+	    infer_bracket_common_item_type(
+		items,
+		BracketIntegerPreference::
+		    Set);
+	Type* default_set_item_type =
+	    set_item_type &&
+		    set_item_type !=
+			unknown_type() &&
+		    is_set_item_type(
+			set_item_type)
+		? set_item_type
+		: unknown_type();
+
+	bool has_range = false;
+	for (const auto& item : items)
+		has_range =
+		    has_range ||
+		    item.upper != nullptr;
+
+	FixedArrayType* default_array_type =
+	    nullptr;
+	if (!has_range &&
+	    !items.empty() &&
+	    array_item_type &&
+	    array_item_type !=
+		unknown_type()) {
+		const uint64_t length =
+		    static_cast<uint64_t>(
+			items.size());
+		auto lower =
+		    new Integer(
+			0, integer_type());
+		auto upper =
+		    new Integer(
+			length - 1,
+			integer_type());
+		OrdinalRange range;
+		range.index_type =
+		    integer_type();
+		range.base_type =
+		    integer_type();
+		range.lower_bound = lower;
+		range.upper_bound = upper;
+		range.lower_ordinal =
+		    OrdinalRange::Value{
+			false, 0};
+		range.upper_ordinal =
+		    OrdinalRange::Value{
+			false, length - 1};
+		range.length = length;
+		default_array_type =
+		    new FixedArrayType(
+			location, integer_type(),
+			range, array_item_type);
 	}
 	return new BracketLiteral(
-	    std::move(items), item_type);
+	    std::move(items),
+	    default_set_item_type,
+	    default_array_type);
 }
 
 Node* Parser::parse_new_or_dispose(bool is_new) {
@@ -3531,8 +3573,12 @@ Node* Parser::parse_value_from_identifier(
 			    named_type && !maybe_resolve_value(input_token)) {
 				operand_type = parse_type_expression(false);
 			} else {
-				Node* operand = parse_expression();
-				operand_type = operand ? operand->ty : nullptr;
+				Node* operand =
+				    parse_expression();
+				operand_type =
+				    operand
+					? operand->ty
+					: nullptr;
 			}
 			parse_closing_paren();
 			if (!operand_type)
@@ -7654,7 +7700,10 @@ struct TypeBlockResolver {
 			dynamic_cast<BracketLiteral*>(
 			    node)) {
 			if (!normalize_type(
-				n->default_set_item_type))
+				n->default_set_item_type) ||
+			    !normalize_type_as(
+				n->default_array_type,
+				"bracket default array"))
 				return false;
 			for (auto& item : n->items)
 				if (!normalize_node(
@@ -10301,6 +10350,129 @@ static bool ordinal_interval_for_conversion(
 	*upper = ordinal_value(
 	    false, bounds.max_positive);
 	return true;
+}
+
+static Type* infer_bracket_common_item_type(
+    const std::vector<BracketLiteral::Item>& items,
+    BracketIntegerPreference preference) {
+	Type* exact_type = nullptr;
+	bool exact_type_still_common = true;
+	bool saw_untyped_integer = false;
+	bool all_integer = true;
+	bool have_integer_interval = false;
+	OrdinalRange::Value common_lower;
+	OrdinalRange::Value common_upper;
+
+	for (const auto& item : items) {
+		for (Node* bound :
+		     {item.lower, item.upper}) {
+			if (!bound)
+				continue;
+
+			OrdinalRange::Value lower;
+			OrdinalRange::Value upper;
+			if (auto literal =
+				untyped_integer_constant(
+				    bound)) {
+				saw_untyped_integer = true;
+				lower = ordinal_value(
+				    literal->negative,
+				    literal->value);
+				upper = lower;
+			} else {
+				if (!exact_type)
+					exact_type =
+					    bound->ty;
+				else if (
+				    exact_type !=
+				    bound->ty)
+					exact_type_still_common =
+					    false;
+				if (!is_integer_semantic_type(
+					bound->ty) ||
+				    !ordinal_interval_for_conversion(
+					bound->ty,
+					&lower,
+					&upper)) {
+					all_integer = false;
+					continue;
+				}
+			}
+
+			if (!have_integer_interval) {
+				common_lower = lower;
+				common_upper = upper;
+				have_integer_interval =
+				    true;
+			} else {
+				if (compare_ordinal_value(
+					lower,
+					common_lower) < 0)
+					common_lower =
+					    lower;
+				if (compare_ordinal_value(
+					upper,
+					common_upper) > 0)
+					common_upper =
+					    upper;
+			}
+		}
+	}
+
+	if (!saw_untyped_integer &&
+	    exact_type &&
+	    exact_type_still_common)
+		return exact_type;
+	if (!all_integer ||
+	    !have_integer_interval)
+		return unknown_type();
+
+	// This is a true range union, not FPC's order-dependent "replace the
+	// accumulator only when it fits the next type" scan. Arrays follow the
+	// signed-first ordinary constructor convention. Historical Pascal sets
+	// instead use an unsigned domain for nonnegative byte/word/cardinal
+	// constants. They remain separate interpretations of the same syntax.
+	const std::array<Type*, 8>
+	    signed_first{{
+		shortint_type(), byte_type(),
+		smallint_type(), word_type(),
+		integer_type(), cardinal_type(),
+		int64_type(), qword_type(),
+	    }};
+	const std::array<Type*, 8>
+	    unsigned_first{{
+		byte_type(), shortint_type(),
+		word_type(), smallint_type(),
+		cardinal_type(), integer_type(),
+		qword_type(), int64_type(),
+	    }};
+	const auto& candidates =
+	    preference ==
+		    BracketIntegerPreference::Array
+		? signed_first
+		: unsigned_first;
+	for (Type* candidate : candidates) {
+		OrdinalBounds bounds;
+		if (!integer_bounds(
+			candidate, &bounds))
+			continue;
+		const auto lower =
+		    ordinal_value(
+			bounds.signed_type,
+			bounds.signed_type
+			    ? bounds.min_magnitude
+			    : 0);
+		const auto upper =
+		    ordinal_value(
+			false,
+			bounds.max_positive);
+		if (compare_ordinal_value(
+			common_lower, lower) >= 0 &&
+		    compare_ordinal_value(
+			common_upper, upper) <= 0)
+			return candidate;
+	}
+	return unknown_type();
 }
 
 static bool conversion_requires_range_check(

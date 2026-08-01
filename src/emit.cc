@@ -3215,6 +3215,35 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, ", %zu)", s->value.size());
 		return;
 	}
+	if (auto literal =
+		dynamic_cast<BracketLiteral*>(
+		    expr)) {
+		if (!literal->default_array_type)
+			unhandled_node(
+			    "unresolved bracket constructor reached emission",
+			    literal);
+		// A context-free bracket constructor is one exact fixed-array
+		// value. Spell its type here because a braced initializer alone
+		// cannot participate in C++ template deduction for generic Pascal
+		// consumers such as Length, Low, and High.
+		emit_type_ref(
+		    literal->default_array_type);
+		fprintf(active, "{{");
+		for (size_t i = 0;
+		     i < literal->items.size();
+		     ++i) {
+			if (i)
+				fprintf(active, ", ");
+			if (literal->items[i].upper)
+				unhandled_node(
+				    "set range reached default array emission",
+				    literal);
+			emit_expression(
+			    literal->items[i].lower);
+		}
+		fprintf(active, "}}");
+		return;
+	}
 	if (auto a = dynamic_cast<ArrayLiteral*>(expr)) {
 		Type* item_type = nullptr;
 		if (auto dynamic =

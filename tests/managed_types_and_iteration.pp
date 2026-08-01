@@ -2,15 +2,19 @@ program ManagedTypesAndIteration;
 
 type
   TIntArray = array of Integer;
+  TStringArray = array of ShortString;
   TFixed = array[3..4] of Integer;
   TIntSet = set of Byte;
+  TWideSet = set of Integer;
   TSmall = 2..4;
   TChoice = (First, Second, Third);
 
 var
   A, B: TIntArray;
+  Texts: TStringArray;
   F: TFixed;
   S: TIntSet;
+  WideSet: TWideSet;
   ShortText: ShortString;
   LongText: AnsiString;
   I, Count, ResultCode: Integer;
@@ -45,6 +49,19 @@ begin
     Sum := Sum + I
 end;
 
+procedure CheckWidened(const X: array of Integer);
+begin
+  if Length(X) <> 3 then Halt(30);
+  if (X[0] <> 2) or (X[1] <> 300) or
+     (X[2] <> -40000) then Halt(31)
+end;
+
+procedure CheckText(const X: array of ShortString);
+begin
+  if Length(X) <> 2 then Halt(32);
+  if (X[0] <> 'ab') or (X[1] <> 'c') then Halt(33)
+end;
+
 procedure SelectBracket(X: TIntSet); overload;
 begin
   if 1 in X then ResultCode := 1
@@ -69,6 +86,29 @@ begin
   F[4] := 40;
   ReadConst(F);
   ReadConst([50, 60]);
+  CheckWidened([2, 300, -40000]);
+  A := [2, 300, -40000];
+  CheckWidened(A);
+  Texts := ['ab', 'c'];
+  CheckText(Texts);
+  CheckText(['ab', 'c']);
+  if SizeOf([2, 300, -40000]) <>
+     3 * SizeOf(Integer) then Halt(34);
+  if SizeOf([-40000, 300, 2]) <>
+     3 * SizeOf(Integer) then Halt(35);
+  if SizeOf([255, -1]) <>
+     2 * SizeOf(SmallInt) then Halt(36);
+  if SizeOf([-1, 255]) <>
+     2 * SizeOf(SmallInt) then Halt(37);
+  if Length([1, 2, 3]) <> 3 then Halt(40);
+  if Low([1, 2, 3]) <> 0 then Halt(41);
+  if High([1, 2, 3]) <> 2 then Halt(42);
+  WideSet := [2, 300, -40000];
+  if not (2 in WideSet) or
+     not (300 in WideSet) or
+     not (-40000 in WideSet) then Halt(38);
+  if not (300 in ([2, 300, -40000] + [])) then
+    Halt(39);
   ChangeValue(F);
   if F[3] <> 30 then Halt(3);
   ChangeVar(F);
