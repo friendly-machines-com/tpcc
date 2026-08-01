@@ -1,4 +1,5 @@
 #include "frame.h"
+#include "builtins.h"
 #include "cst.h"
 #include <cassert>
 #include <cstdio>
@@ -57,7 +58,7 @@ std::optional<Binding> Frame::lookup_type_or_value(
 			? callable
 			: overloads->members.front();
 		if (!callables.empty() &&
-		    !same_callable_overload_category(
+		    !same_callable_lookup_family(
 			callables.front(),
 			representative))
 			break;
@@ -140,7 +141,7 @@ Node* Frame::lookup_value(std::string name) const {
 			? callable
 			: overloads->members.front();
 		if (!callables.empty() &&
-		    !same_callable_overload_category(
+		    !same_callable_lookup_family(
 			callables.front(),
 			representative))
 			// An identically named but incompatible routine category in
@@ -267,6 +268,23 @@ bool same_callable_overload_category(
 		b_method->is_static)
 		return false;
 	return true;
+}
+
+static bool is_legacy_predefined_callable(
+    Callable* callable) {
+	const BuiltinDesc* desc =
+	    callable ? callable->builtin_desc : nullptr;
+	return desc &&
+	       (desc->syntax_kind !=
+		    BuiltinSyntaxKind::None ||
+		desc->type_bound_kind.has_value());
+}
+
+bool same_callable_lookup_family(
+    Callable* a, Callable* b) {
+	return same_callable_overload_category(a, b) &&
+	       is_legacy_predefined_callable(a) ==
+		   is_legacy_predefined_callable(b);
 }
 
 bool cxx_callable_signatures_collide(

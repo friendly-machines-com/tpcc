@@ -132,6 +132,14 @@ bool callable_binding_opens_parent(Node* binding);
 bool same_callable_overload_category(
     Callable* a, Callable* b);
 
+/** Whether two callables may be collected across a structural or lexical
+ * scope boundary. Legacy predefined syntax is a fallback lookup category,
+ * not an ordinary overload candidate, even when an ordinary declaration uses
+ * `overload`. Same-scope registration deliberately uses only
+ * same_callable_overload_category(). */
+bool same_callable_lookup_family(
+    Callable* a, Callable* b);
+
 /** Validate one pair of declarations which have already been collected under
  * one Pascal name. Every Type* edge reachable from either signature must have
  * passed type-block normalization first; raw pointer identity and C++ carrier

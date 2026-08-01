@@ -13,27 +13,20 @@ run_case() {
 	case "$name" in
 	new_dispose)
 		expected='user new 31
-5
 user dispose 37'
 		;;
 	write)
-		expected='builtin output
-11
-13'
+		expected=''
 		;;
 	str)
-		expected='17
-123'
+		expected='17'
 		;;
 	sizeof)
-		expected='21
-1'
+		expected='21'
 		;;
 	trunc_round)
 		expected='21
-22
-4
-5'
+22'
 		;;
 	*)
 		echo "unknown builtin-overload isolation case: $name" >&2
@@ -45,7 +38,7 @@ user dispose 37'
 	if ! ./mp -Furtl -o"$tmp/$name.cc" "$source" \
 	    >"$tmp/$name.compile.out" 2>"$tmp/$name.compile.err"
 	then
-		echo "mixed builtin/user overloads failed to compile: $source" >&2
+		echo "builtin-name shadowing failed to compile: $source" >&2
 		sed -n '1,80p' "$tmp/$name.compile.err" >&2
 		return 1
 	fi
@@ -64,18 +57,18 @@ user dispose 37'
 	    "$tmp/system.cc" \
 	    -o "$tmp/$name"
 	then
-		echo "mixed builtin/user overloads emitted invalid C++: $source" >&2
+		echo "builtin-name shadowing emitted invalid C++: $source" >&2
 		return 1
 	fi
 
 	if ! actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/$name")
 	then
-		echo "mixed builtin/user overload executable failed: $source" >&2
+		echo "builtin-name shadowing executable failed: $source" >&2
 		return 1
 	fi
 	if test "$actual" != "$expected"
 	then
-		echo "wrong mixed builtin/user overload selection: $source" >&2
+		echo "wrong builtin-name shadowing selection: $source" >&2
 		printf 'expected:\n%s\nactual:\n%s\n' \
 		    "$expected" "$actual" >&2
 		return 1
@@ -101,4 +94,4 @@ then
 	exit "$status"
 fi
 
-echo "builtin overload isolation tests passed"
+echo "builtin-name shadowing tests passed"

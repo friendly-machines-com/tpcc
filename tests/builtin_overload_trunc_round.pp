@@ -1,13 +1,11 @@
 program BuiltinOverloadTruncRound;
 
-{ Deliberately no `overload` directives: global routine families are
-  automatically overloadable in this compiler. }
+{ Same-scope global routines overload automatically. These nearer declarations
+  do not implicitly open the outer ordinary System names. }
 
 var
   UserTrunc: Int64;
   UserRound: Int64;
-  BuiltinTrunc: Int64;
-  BuiltinRound: Int64;
 
 function Trunc(Value: Integer): Int64;
 begin
@@ -20,16 +18,11 @@ begin
 end;
 
 begin
-  { Integer actuals select the ordinary user routines. }
+  { Without `overload`, the nearer ordinary functions shadow the outer
+    ordinary System functions. }
   UserTrunc := Trunc(20);
   UserRound := Round(20);
 
-  { Real actuals select the predefined named operators. }
-  BuiltinTrunc := Trunc(4.75);
-  BuiltinRound := Round(4.75);
-
   WriteLn(UserTrunc);
-  WriteLn(UserRound);
-  WriteLn(BuiltinTrunc);
-  WriteLn(BuiltinRound)
+  WriteLn(UserRound)
 end.

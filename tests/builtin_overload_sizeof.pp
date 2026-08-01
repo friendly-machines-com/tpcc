@@ -1,11 +1,10 @@
 program BuiltinOverloadSizeOf;
 
-{ Deliberately no `overload` directive: global routine families are
-  automatically overloadable in this compiler. }
+{ Same-scope global routines overload automatically. This nearer declaration
+  does not implicitly open the outer legacy System name. }
 
 var
   UserSize: Integer;
-  BuiltinSize: Integer;
 
 function SizeOf(Value: Integer): Integer;
 begin
@@ -13,12 +12,7 @@ begin
 end;
 
 begin
-  { A value actual selects the user declaration. }
+  { The ordinary declaration shadows legacy System SizeOf. }
   UserSize := SizeOf(20);
-
-  { A type operand selects the predefined SizeOf declaration. }
-  BuiltinSize := SizeOf(Byte);
-
-  WriteLn(UserSize);
-  WriteLn(BuiltinSize)
+  WriteLn(UserSize)
 end.

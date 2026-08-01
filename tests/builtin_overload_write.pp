@@ -1,7 +1,7 @@
 program BuiltinOverloadWrite;
 
-{ Deliberately no `overload` directives: global routine families are
-  automatically overloadable in this compiler. }
+{ Same-scope global routines overload automatically. These nearer declarations
+  do not implicitly open the outer legacy System names. }
 
 type
   TMarker = record
@@ -24,15 +24,14 @@ begin
 end;
 
 begin
-  { These select the user declarations, not the variadic System grammar. }
+  { The ordinary declarations shadow legacy System Write/WriteLn. }
   Marker.Value := 11;
   Write(Marker);
   Marker.Value := 13;
   WriteLn(Marker);
 
-  { These select the System declarations from the same overload families. }
-  Write('builtin');
-  WriteLn(' output');
-  WriteLn(UserWriteSeen);
-  WriteLn(UserWriteLnSeen)
+  if UserWriteSeen <> 11 then
+    Halt(1);
+  if UserWriteLnSeen <> 13 then
+    Halt(2)
 end.

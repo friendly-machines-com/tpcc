@@ -1,12 +1,10 @@
 program BuiltinOverloadStr;
 
-{ Deliberately no `overload` directive: global routine families are
-  automatically overloadable in this compiler. }
+{ Same-scope global routines overload automatically. This nearer declaration
+  does not implicitly open the outer legacy System name. }
 
 var
   UserStrSeen: Integer;
-  BuiltinValue: Int64;
-  Text: ShortString;
 
 procedure Str(Value: Integer);
 begin
@@ -14,13 +12,7 @@ begin
 end;
 
 begin
-  { One actual selects the user declaration. }
+  { The ordinary declaration shadows legacy System Str. }
   Str(17);
-
-  { The destination actual selects the predefined Str declaration. }
-  BuiltinValue := 123;
-  Str(BuiltinValue, Text);
-
-  WriteLn(UserStrSeen);
-  WriteLn(Text)
+  WriteLn(UserStrSeen)
 end.

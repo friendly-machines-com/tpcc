@@ -2504,18 +2504,15 @@ Parser::maybe_resolve_type_or_value(
 		    dynamic_cast<Callable*>(hit);
 		auto as_set =
 		    dynamic_cast<OverloadSet*>(hit);
-		if (!opens_parent) {
-			if (collected.empty())
-				return Binding{
-				    std::in_place_type<Node*>,
-				    bind_lookup_result(
-					it->qualifier,
-					hit)};
-			break;
-		}
+		if (!opens_parent &&
+		    collected.empty())
+			return Binding{
+			    std::in_place_type<Node*>,
+			    bind_lookup_result(
+				it->qualifier, hit)};
 		if (as_call) {
 			if (!collected.empty() &&
-			    !same_callable_overload_category(
+			    !same_callable_lookup_family(
 				collected.front(),
 				as_call))
 				break;
@@ -2524,7 +2521,7 @@ Parser::maybe_resolve_type_or_value(
 			if (as_set->members.empty())
 				continue;
 			if (!collected.empty() &&
-			    !same_callable_overload_category(
+			    !same_callable_lookup_family(
 				collected.front(),
 				as_set->members.front()))
 				break;
@@ -2535,6 +2532,8 @@ Parser::maybe_resolve_type_or_value(
 		} else {
 			break;
 		}
+		if (!opens_parent)
+			break;
 	}
 	if (collected.empty())
 		return std::nullopt;
@@ -2558,9 +2557,9 @@ Parser::maybe_resolve_type_or_value(
  *  lexical or unit scopes. */
 Node* Parser::maybe_resolve_value(std::string name) {
 	std::vector<Callable*> collected;
-	// Walk top-down. First hit shadows unless it's overload-marked; then
-	// keep walking to aggregate additional overload-marked hits from lower
-	// scopes (cross-unit overloading).
+	// Walk top-down. The first hit shadows unless it is overload-marked. Once
+	// opened, include the first compatible family from each lower scope; a
+	// family without `overload` is included and then terminates the walk.
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (auto unit =
 			dynamic_cast<UnitRef*>(it->qualifier);
@@ -2575,12 +2574,6 @@ Node* Parser::maybe_resolve_value(std::string name) {
 		Node* hit = lookup.binding;
 		if (!hit)
 			continue;
-		if (!lookup.opens_parent) {
-			if (collected.empty())
-				return bind_lookup_result(
-				    it->qualifier, hit);
-			break;
-		}
 		auto as_call = dynamic_cast<Callable*>(hit);
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
 		if (collected.empty() && !as_call && !as_set) {
@@ -2588,14 +2581,13 @@ Node* Parser::maybe_resolve_value(std::string name) {
 			return bind_lookup_result(
 			    it->qualifier, hit);
 		}
+		if (!lookup.opens_parent &&
+		    collected.empty())
+			return bind_lookup_result(
+			    it->qualifier, hit);
 		if (as_call) {
-			if (!as_call->has_overload_directive) {
-				if (collected.empty())
-					return as_call; // plain callable, first-hit wins
-				break;			// shadowed by collected overloads above
-			}
 			if (!collected.empty() &&
-			    !same_callable_overload_category(
+			    !same_callable_lookup_family(
 				collected.front(),
 				as_call))
 				break;
@@ -2604,7 +2596,7 @@ Node* Parser::maybe_resolve_value(std::string name) {
 			if (as_set->members.empty())
 				continue;
 			if (!collected.empty() &&
-			    !same_callable_overload_category(
+			    !same_callable_lookup_family(
 				collected.front(),
 				as_set->members.front()))
 				break;
@@ -2617,6 +2609,8 @@ Node* Parser::maybe_resolve_value(std::string name) {
 			// Non-callable value below a collected overload block -- stop.
 			break;
 		}
+		if (!lookup.opens_parent)
+			break;
 	}
 	if (collected.empty())
 		return nullptr;
@@ -9786,12 +9780,9 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 				break;
 			}
 		}
-		// FPC mode permits overloaded standalone/global routines without an
-		// explicit `overload` directive. Keep this policy at the parser call site:
-		// Frame is also used as class/object/record member storage, and making
-		// Frame::register_callable globally permissive would silently change method
-		// overload rules. Method prototypes still use their parsed directive bit.
-		has_overload = true;
+		// Distinct standalone signatures in this declaration Frame already
+		// form one local family without `overload`, as in FPC. Only the
+		// explicit directive opens lookup into an outer/unit scope.
 		/*
 		In an INTERFACE section there is this:
 		  function x: Integer;

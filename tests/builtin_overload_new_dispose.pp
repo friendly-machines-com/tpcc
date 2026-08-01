@@ -1,13 +1,7 @@
 program BuiltinOverloadNewDispose;
 
-{ Deliberately no `overload` directives: global routine families are
-  automatically overloadable in this compiler. }
-
-type
-  PInteger = ^Integer;
-
-var
-  P: PInteger;
+{ Same-scope global routines overload automatically. This nearer declaration
+  does not implicitly open the outer legacy System name. }
 
 procedure New(Value: Integer);
 begin
@@ -20,15 +14,8 @@ begin
 end;
 
 begin
-  { The Integer actuals select the user declarations. }
+  { A nearer ordinary declaration selects the new-Pascal layer. The legacy
+    System declarations are not fallback overloads. }
   New(31);
-
-  { The pointer actuals select the implicit System lifecycle declarations,
-    even though the user declarations remain in the same overload families. }
-  New(P);
-  P^ := 5;
-  WriteLn(P^);
-  Dispose(P);
-
   Dispose(37)
 end.
