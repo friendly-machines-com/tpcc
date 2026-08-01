@@ -2727,24 +2727,6 @@ static const BuiltinDesc* builtin_desc_for_node(Node* n) {
 		return b->desc;
 	if (auto c = dynamic_cast<Callable*>(n))
 		return c->builtin_desc;
-	if (auto overloads = dynamic_cast<OverloadSet*>(n)) {
-		const BuiltinDesc* found = nullptr;
-		for (Callable* member : overloads->members) {
-			const BuiltinDesc* candidate =
-			    member->builtin_desc;
-			if (!candidate ||
-			    candidate->syntax_kind ==
-				BuiltinSyntaxKind::None)
-				continue;
-			if (found && found != candidate)
-				// A collection containing distinct compiler grammars is not
-				// itself one grammar-bearing name. Ordinary call syntax will
-				// diagnose or select its members later.
-				return nullptr;
-			found = candidate;
-		}
-		return found;
-	}
 	return nullptr;
 }
 
@@ -2754,6 +2736,29 @@ static std::optional<TypeBoundKind> type_bound_kind_for_builtin(Node* n) {
 }
 
 static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
+	if (auto overloads =
+		dynamic_cast<OverloadSet*>(n)) {
+		BuiltinSyntaxKind common =
+		    BuiltinSyntaxKind::None;
+		for (Callable* member :
+		     overloads->members) {
+			const BuiltinDesc* desc =
+			    member->builtin_desc;
+			if (!desc ||
+			    desc->syntax_kind ==
+				BuiltinSyntaxKind::None)
+				return BuiltinSyntaxKind::None;
+			if (common !=
+				BuiltinSyntaxKind::None &&
+			    common != desc->syntax_kind)
+				return BuiltinSyntaxKind::None;
+			common = desc->syntax_kind;
+		}
+		// This selects only grammar shared by every candidate. An unresolved
+		// overload set never supplies lowering metadata; lowering reads the
+		// Callable selected by finalize_call.
+		return common;
+	}
 	const BuiltinDesc* desc = builtin_desc_for_node(n);
 	return desc ? desc->syntax_kind : BuiltinSyntaxKind::None;
 }
