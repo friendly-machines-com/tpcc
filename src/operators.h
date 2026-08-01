@@ -15,7 +15,6 @@ enum class OperatorInvocation {
 	ExplicitConversion,
 	UnaryToken,
 	BinaryToken,
-	NamedUnary,
 	MutatingUnary,
 	Lifecycle,
 };

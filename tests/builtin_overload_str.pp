@@ -5,6 +5,7 @@ program BuiltinOverloadStr;
 
 var
   UserStrSeen: Integer;
+  BuiltinValue: Int64;
   Text: ShortString;
 
 procedure Str(Value: Integer);
@@ -17,7 +18,8 @@ begin
   Str(17);
 
   { The destination actual selects the predefined Str declaration. }
-  Str(123, Text);
+  BuiltinValue := 123;
+  Str(BuiltinValue, Text);
 
   WriteLn(UserStrSeen);
   WriteLn(Text)

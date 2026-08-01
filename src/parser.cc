@@ -3276,43 +3276,6 @@ Node* Parser::parse_value_from_identifier(
 		return parse_member_selection(
 		    base, leading_directives);
 	}
-	if (input_token == "(") {
-		auto operator_identifier =
-		    operator_invocation_identifier(
-			OperatorInvocation::NamedUnary,
-			id, 1, false, false);
-		if (operator_identifier) {
-			// Trunc(...) and Round(...) are operator syntax, not ordinary
-			// calls to routines which happen to have those names. Resolve the
-			// canonical operator declaration identity first, then use the same
-			// argument parser and call matcher as every other callable family.
-			// In particular, do not merge an ordinary function named Trunc or
-			// Round into the operator candidates: source syntax chose the
-			// operator contract before overload selection.
-			SourceLocation call_location =
-			    current_location();
-			parse_opening_paren();
-			std::vector<Node*> args;
-			if (input_token != ")") {
-				args.push_back(
-				    parse_expression());
-				while (maybe_parse_comma())
-					args.push_back(
-					    parse_expression());
-			}
-			parse_closing_paren();
-			Node* family = resolve_value(
-			    std::string(
-				*operator_identifier));
-			auto finalized = finalize_call(
-			    family, args, id,
-			    call_location);
-			return make_call(
-			    finalized,
-			    std::move(args),
-			    identifier_directives);
-		}
-	}
 	auto binding =
 	    maybe_resolve_type_or_value(id);
 	if (binding &&

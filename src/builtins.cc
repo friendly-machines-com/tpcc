@@ -1239,8 +1239,8 @@ static const BuiltinDesc k_builtins[] = {
 	    BuiltinGenericKind::
 		OrdinalSuccessorOrPredecessor,
     },
-    {"::u_system::o_trunc", fold_trunc},
-    {"::u_system::o_round", fold_round},
+    {"::u_system::p_trunc", fold_trunc},
+    {"::u_system::p_round", fold_round},
     {"::u_system::p_frac", fold_frac},
     {"::u_system::p_sqr", fold_sqr},
     {"::u_system::p_sqrt", fold_sqrt},

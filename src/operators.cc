@@ -61,13 +61,6 @@ constexpr OperatorSpec k_operator_catalog[] = {
     {"uncheckeddec", "dec", 1, I::MutatingUnary, S::Unchecked,
      "&op_Decrement", "o_unchecked_dec", false, P::TpccExtension, true},
 
-    // Named unary syntax. These spellings denote operators, not ordinary
-    // functions with the same Pascal identifier.
-    {"trunc", "trunc", 1, I::NamedUnary, S::Always,
-     "&op_Trunc", "o_trunc", false, P::Delphi, true},
-    {"round", "round", 1, I::NamedUnary, S::Always,
-     "&op_Round", "o_round", false, P::Delphi, true},
-
     // Comparisons.
     {"equal", "=", 2, I::BinaryToken, S::Always,
      "&op_Equality", "o_equal", true, P::Delphi, true},
