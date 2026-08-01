@@ -94,4 +94,40 @@ then
 	exit "$status"
 fi
 
+source=tests/qualified_builtin_syntax.pp
+if ! ./mp -Furtl -o"$tmp/qualified.cc" "$source" \
+    >"$tmp/qualified.compile.out" 2>"$tmp/qualified.compile.err"
+then
+	echo "qualified builtin syntax failed to compile: $source" >&2
+	sed -n '1,80p' "$tmp/qualified.compile.err" >&2
+	exit 1
+fi
+
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-fsanitize=address,undefined \
+	-fno-sanitize-recover=all \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/qualified.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/qualified"
+
+if ! actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/qualified")
+then
+	echo "qualified builtin syntax executable failed: $source" >&2
+	exit 1
+fi
+if test "$actual" != "qualified 7"
+then
+	echo "wrong qualified builtin output: $source" >&2
+	printf 'expected:\n%s\nactual:\n%s\n' \
+	    "qualified 7" "$actual" >&2
+	exit 1
+fi
+
 echo "builtin-name shadowing tests passed"

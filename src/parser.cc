@@ -3267,7 +3267,10 @@ Node* Parser::parse_value_from_identifier(
 	if (leading_directives)
 		*leading_directives =
 		    identifier_directives;
+	std::optional<Binding> binding;
+	bool qualified_member = false;
 	if (maybe_parse_period()) {
+		qualified_member = true;
 		Node* base = nullptr;
 		Type* rejected_qualifier_type = nullptr;
 		auto qualifier_binding =
@@ -3309,11 +3312,43 @@ Node* Parser::parse_value_from_identifier(
 			raise_parse_error(
 			    "unresolved member qualifier: " +
 			    id);
-		return parse_member_selection(
-		    base, leading_directives);
+		LeadingTokenDirectives
+		    member_directives;
+		Node* member =
+		    parse_member_selection(
+			base, &member_directives);
+		identifier_directives =
+		    member_directives;
+		if (leading_directives)
+			*leading_directives =
+			    member_directives;
+		// Qualification changes only the lookup input. Once the member has
+		// been resolved, declaration-owned builtin grammar must see the same
+		// Node as an unqualified lookup; returning here used to send
+		// System.Write/New/SizeOf/Low/Str through generic call parsing.
+		binding = Binding{
+		    std::in_place_type<Node*>,
+		    member};
+		if (auto callable =
+			dynamic_cast<Callable*>(
+			    member);
+		    callable &&
+		    !callable->pas_name.empty())
+			id = callable->pas_name;
+		else if (auto overloads =
+			     dynamic_cast<
+				 OverloadSet*>(
+				 member);
+			 overloads &&
+			 !overloads->members.empty() &&
+			 !overloads->members.front()
+			      ->pas_name.empty())
+			id = overloads->members.front()
+				 ->pas_name;
+	} else {
+		binding =
+		    maybe_resolve_type_or_value(id);
 	}
-	auto binding =
-	    maybe_resolve_type_or_value(id);
 	if (binding &&
 	    std::holds_alternative<Node*>(*binding)) {
 		Node* value =
@@ -3324,7 +3359,8 @@ Node* Parser::parse_value_from_identifier(
 		// already applies this rule for `FunctionName := value`; it is equally
 		// required in value context for representation overlays such as
 		// `TWordRec(reverse_word).hi`.
-		if (input_token != "(") {
+		if (!qualified_member &&
+		    input_token != "(") {
 			if (auto c = dynamic_cast<Callable*>(value)) {
 				if (Node* result = active_function_result_lvalue(c))
 					return result;
