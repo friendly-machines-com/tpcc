@@ -90,6 +90,42 @@ begin
     Result := 15
 end;
 
+function Literal16(Value: SmallInt): Integer; overload;
+begin
+  if Value = Value then
+    Result := 21
+end;
+
+function Literal16(Value: Word): Integer; overload;
+begin
+  if Value = Value then
+    Result := 22
+end;
+
+function Literal32(Value: Integer): Integer; overload;
+begin
+  if Value = Value then
+    Result := 23
+end;
+
+function Literal32(Value: Cardinal): Integer; overload;
+begin
+  if Value = Value then
+    Result := 24
+end;
+
+function LiteralCrossWidth(Value: Int64): Integer; overload;
+begin
+  if Value = Value then
+    Result := 25
+end;
+
+function LiteralCrossWidth(Value: Byte): Integer; overload;
+begin
+  if Value = Value then
+    Result := 26
+end;
+
 begin
   Box.Value := 40;
   Sum := Box + 2;
@@ -123,13 +159,13 @@ begin
     Halt(7);
   if NumericKind(LeftByte and RightByte) <> 11 then
     Halt(8);
-  if NumericKind(SmallConstant) <> 10 then
+  if NumericKind(SmallConstant) <> 16 then
     Halt(9);
-  if NumericKind(WideConstant) <> 13 then
+  if NumericKind(WideConstant) <> 12 then
     Halt(10);
   if NumericKind(SmallConstant + 1) <> 11 then
     Halt(11);
-  if NumericKind(+SmallConstant) <> 10 then
+  if NumericKind(+SmallConstant) <> 16 then
     Halt(12);
   if NumericKind(-SmallConstant) <> 16 then
     Halt(13);
@@ -141,6 +177,14 @@ begin
     Halt(18);
   if NumericKind(LeftByte + Signed8) <> 11 then
     Halt(19);
+  if Literal16(42) <> 21 then
+    Halt(20);
+  if Literal32(42) <> 23 then
+    Halt(21);
+  { Signedness is the primary literal preference, not just a tie-break for
+    equal-width carriers: FPC selects Int64 over Byte here. }
+  if LiteralCrossWidth(42) <> 25 then
+    Halt(22);
 
   SmallLeft := 2;
   SmallRight := 3;

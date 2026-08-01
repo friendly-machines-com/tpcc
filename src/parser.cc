@@ -10034,6 +10034,47 @@ static Type* integer_literal_natural_type(
 	return qword_type();
 }
 
+static MatchRank::IntegerLiteralTarget
+integer_literal_target_kind(Type* target) {
+	if (auto range =
+		dynamic_cast<SubrangeType*>(target)) {
+		ConstEvalContext context;
+		ConstEvalResult folded =
+		    range->lower_bound->const_eval(
+			context);
+		std::string error;
+		auto lower =
+		    folded.kind ==
+			    ConstEvalResult::Kind::
+				Success
+			? classify_subrange_bound(
+			      folded.node, &error)
+			: std::nullopt;
+		if (!lower)
+			return MatchRank::
+			    IntegerLiteralTarget::None;
+		// A subrange's semantic domain, not its implementation carrier,
+		// determines signedness. Thus 1..10 remains in the unsigned
+		// preference class even when stored in ShortInt.
+		return lower->ordinal_value.negative
+			   ? MatchRank::
+				 IntegerLiteralTarget::
+				     Signed
+			   : MatchRank::
+				 IntegerLiteralTarget::
+				     Unsigned;
+	}
+	OrdinalBounds bounds;
+	if (!integer_bounds(target, &bounds))
+		return MatchRank::
+		    IntegerLiteralTarget::None;
+	return bounds.signed_type
+		   ? MatchRank::
+			 IntegerLiteralTarget::Signed
+		   : MatchRank::
+			 IntegerLiteralTarget::Unsigned;
+}
+
 static Integer* untyped_integer_constant(
     Node* expression) {
 	if (!expression ||
@@ -10145,6 +10186,20 @@ static bool rank_less(
 	if (a.tier != b.tier)
 		return static_cast<unsigned>(a.tier) <
 		       static_cast<unsigned>(b.tier);
+	if (a.integer_literal_target !=
+		MatchRank::IntegerLiteralTarget::
+		    None &&
+	    b.integer_literal_target !=
+		MatchRank::IntegerLiteralTarget::
+		    None &&
+	    a.integer_literal_target !=
+		b.integer_literal_target)
+		// Signedness precedes interval width for a positive untyped
+		// literal. In particular, FPC selects Int64 over Byte for 42;
+		// this is not merely a same-width Int64/QWord tie-break.
+		return a.integer_literal_target ==
+		       MatchRank::IntegerLiteralTarget::
+			   Signed;
 	if (a.distance != b.distance)
 		return a.distance < b.distance;
 	if (a.source_tier != b.source_tier)
@@ -10944,9 +10999,14 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				target, untyped_integer);
 			if (!distance)
 				return std::nullopt;
+			MatchRank rank{
+			    MatchRank::Tier::Direct,
+			    *distance};
+			rank.integer_literal_target =
+			    integer_literal_target_kind(
+				target);
 			return ArgumentMatch{
-			    {MatchRank::Tier::Direct,
-			     *distance},
+			    rank,
 			    new Integer(
 				untyped_integer->value,
 				target,

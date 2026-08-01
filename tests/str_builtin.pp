@@ -20,5 +20,11 @@ begin
 
   Str(IntegerValue:6, SmallText);
   if SmallText <> '   123' then
-    Halt(2)
+    Halt(2);
+
+  { Selection of Int64 rather than QWord belongs to ordinary overload
+    ranking; predefined Str must not need its own literal rule. }
+  Str(42, SmallText);
+  if SmallText <> '42' then
+    Halt(3)
 end.

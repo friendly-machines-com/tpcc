@@ -66,6 +66,11 @@ struct MatchRank {
 		OrdinaryOrSet,
 		Array,
 	};
+	enum class IntegerLiteralTarget {
+		None,
+		Signed,
+		Unsigned,
+	};
 	enum class Tier {
 		Exact,
 		Direct,
@@ -85,6 +90,12 @@ struct MatchRank {
 	// interpretation before ordinary per-element ranks are compared.
 	ContextualConstruction contextual_construction =
 	    ContextualConstruction::OrdinaryOrSet;
+	// A positive untyped Pascal integer prefers a viable signed integer
+	// formal before an unsigned one. Keep that choice structural: an Int64
+	// and a QWord both span 2^64 values, so no uint64_t distance can encode
+	// their FPC-compatible ordering without overflow.
+	IntegerLiteralTarget integer_literal_target =
+	    IntegerLiteralTarget::None;
 };
 
 /** Qualitative numeric direction is independent of the ordinary conversion
