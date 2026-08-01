@@ -5086,6 +5086,18 @@ template<typename T, std::size_t Capacity>
 requires (std::is_integral_v<T> ||
 	  std::is_floating_point_v<T>)
 inline void p_str(
+    T value,
+    tpcc_typed_storage_ref<
+	t_shortstring<Capacity>> destination) {
+	p_str(
+	    value,
+	    *destination.value);
+}
+
+template<typename T, std::size_t Capacity>
+requires (std::is_integral_v<T> ||
+	  std::is_floating_point_v<T>)
+inline void p_str(
     T value, t_sizeint width,
     t_shortstring<Capacity>& destination) {
 	p_str(
