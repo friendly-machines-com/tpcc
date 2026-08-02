@@ -66,36 +66,26 @@ struct MatchRank {
 		OrdinaryOrSet,
 		Array,
 	};
-	enum class IntegerLiteralTarget {
-		None,
-		Signed,
-		Unsigned,
-	};
 	enum class Tier {
 		Exact,
 		Direct,
 		Convert,
-		UserConvert,
 		Generic,
 	};
 	Tier tier;
 	uint64_t distance = 0;
-	/** A user conversion is one outer match operation whose source formal has
-	 * its own ordinary match rank. Keeping that rank structurally avoids
-	 * encoding two ordered quantities into an arbitrary integer offset. */
-	Tier source_tier = Tier::Exact;
-	uint64_t source_distance = 0;
 	// Bracket syntax has a historical direct set interpretation. Array
 	// construction is contextual and therefore loses to a viable set
 	// interpretation before ordinary per-element ranks are compared.
 	ContextualConstruction contextual_construction =
 	    ContextualConstruction::OrdinaryOrSet;
-	// A positive untyped Pascal integer prefers a viable signed integer
-	// formal before an unsigned one. Keep that choice structural: an Int64
-	// and a QWord both span 2^64 values, so no uint64_t distance can encode
-	// their FPC-compatible ordering without overflow.
-	IntegerLiteralTarget integer_literal_target =
-	    IntegerLiteralTarget::None;
+	// FPC gives an integer literal the smallest predefined carrier containing
+	// its value before overload comparison. When two viable target domains
+	// have the same interval distance, preserving that carrier's signedness
+	// breaks the tie (for example Byte literal 200 prefers QWord to Int64).
+	// This is deliberately after distance; SmallInt still beats Cardinal for
+	// 200 because its containing domain is much narrower.
+	bool integer_literal_sign_mismatch = false;
 };
 
 /** Qualitative numeric direction is independent of the ordinary conversion

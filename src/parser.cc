@@ -10098,54 +10098,32 @@ static Type* integer_literal_natural_type(
 			return integer_type();
 		return int64_type();
 	}
+	if (literal->value <= INT8_MAX)
+		return shortint_type();
 	if (literal->value <= UINT8_MAX)
 		return byte_type();
+	if (literal->value <= INT16_MAX)
+		return smallint_type();
 	if (literal->value <= UINT16_MAX)
 		return word_type();
+	if (literal->value <= INT32_MAX)
+		return integer_type();
 	if (literal->value <= UINT32_MAX)
 		return cardinal_type();
+	if (literal->value <= INT64_MAX)
+		return int64_type();
 	return qword_type();
 }
 
-static MatchRank::IntegerLiteralTarget
-integer_literal_target_kind(Type* target) {
-	if (auto range =
-		dynamic_cast<SubrangeType*>(target)) {
-		ConstEvalContext context;
-		ConstEvalResult folded =
-		    range->lower_bound->const_eval(
-			context);
-		std::string error;
-		auto lower =
-		    folded.kind ==
-			    ConstEvalResult::Kind::
-				Success
-			? classify_subrange_bound(
-			      folded.node, &error)
-			: std::nullopt;
-		if (!lower)
-			return MatchRank::
-			    IntegerLiteralTarget::None;
-		// A subrange's semantic domain, not its implementation carrier,
-		// determines signedness. Thus 1..10 remains in the unsigned
-		// preference class even when stored in ShortInt.
-		return lower->ordinal_value.negative
-			   ? MatchRank::
-				 IntegerLiteralTarget::
-				     Signed
-			   : MatchRank::
-				 IntegerLiteralTarget::
-				     Unsigned;
-	}
+static std::optional<bool>
+integer_carrier_is_signed(Type* type) {
+	while (auto range =
+		   dynamic_cast<SubrangeType*>(type))
+		type = range->base_type;
 	OrdinalBounds bounds;
-	if (!integer_bounds(target, &bounds))
-		return MatchRank::
-		    IntegerLiteralTarget::None;
-	return bounds.signed_type
-		   ? MatchRank::
-			 IntegerLiteralTarget::Signed
-		   : MatchRank::
-			 IntegerLiteralTarget::Unsigned;
+	if (!integer_bounds(type, &bounds))
+		return std::nullopt;
+	return bounds.signed_type;
 }
 
 static Integer* untyped_integer_constant(
@@ -10259,29 +10237,12 @@ static bool rank_less(
 	if (a.tier != b.tier)
 		return static_cast<unsigned>(a.tier) <
 		       static_cast<unsigned>(b.tier);
-	if (a.integer_literal_target !=
-		MatchRank::IntegerLiteralTarget::
-		    None &&
-	    b.integer_literal_target !=
-		MatchRank::IntegerLiteralTarget::
-		    None &&
-	    a.integer_literal_target !=
-		b.integer_literal_target)
-		// Signedness precedes interval width for a positive untyped
-		// literal. In particular, FPC selects Int64 over Byte for 42;
-		// this is not merely a same-width Int64/QWord tie-break.
-		return a.integer_literal_target ==
-		       MatchRank::IntegerLiteralTarget::
-			   Signed;
 	if (a.distance != b.distance)
 		return a.distance < b.distance;
-	if (a.source_tier != b.source_tier)
-		return static_cast<unsigned>(
-			   a.source_tier) <
-		       static_cast<unsigned>(
-			   b.source_tier);
-	return a.source_distance <
-	       b.source_distance;
+	if (a.integer_literal_sign_mismatch !=
+	    b.integer_literal_sign_mismatch)
+		return !a.integer_literal_sign_mismatch;
+	return false;
 }
 
 static int real_range_rank(Type* type) {
@@ -10955,6 +10916,11 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				    ? UINT64_MAX
 				    : combined.distance +
 					  rank.distance;
+			    combined
+				.integer_literal_sign_mismatch =
+				combined
+				    .integer_literal_sign_mismatch ||
+				rank.integer_literal_sign_mismatch;
 		    };
 		for (const BracketLiteral::Item& item :
 		     literal->items) {
@@ -11198,15 +11164,33 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			MatchRank rank{
 			    MatchRank::Tier::Direct,
 			    *distance};
-			rank.integer_literal_target =
-			    integer_literal_target_kind(
+			Type* natural =
+			    integer_literal_natural_type(
+				untyped_integer);
+			auto natural_signed =
+			    integer_carrier_is_signed(
+				natural);
+			auto target_signed =
+			    integer_carrier_is_signed(
 				target);
+			rank.integer_literal_sign_mismatch =
+			    !conversion_requires_range_check(
+				natural, target) &&
+			    natural_signed &&
+			    target_signed &&
+			    *natural_signed !=
+				*target_signed;
 			return ArgumentMatch{
 			    rank,
 			    new Integer(
 				untyped_integer->value,
 				target,
-				untyped_integer->negative)};
+				untyped_integer->negative),
+			    conversion_requires_range_check(
+				natural, target)
+				? numeric_conversion_profile(
+				      natural, target)
+				: NumericConversionProfile{}};
 		}
 	}
 	if (source == &untyped_integer_type() &&
