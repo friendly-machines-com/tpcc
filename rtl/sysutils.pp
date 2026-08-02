@@ -28,6 +28,8 @@ type
   public
     ErrorCode: Integer;
   end;
+  TSearchRec = record // FIXME
+  end;
 
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
