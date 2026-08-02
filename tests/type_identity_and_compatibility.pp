@@ -39,6 +39,10 @@ type
   TEnumA = (EnumA0, EnumA1);
   TEnumB = (EnumB0, EnumB1);
 
+  TStrongInteger = type Integer;
+  TStrongIntegerAlias = TStrongInteger;
+  TStrongExtended = type Extended;
+
   TConversionSource = record
     Value: Integer;
   end;
@@ -73,6 +77,11 @@ var
   RecordAlias: TRecordAlias;
   EnumA: TEnumA;
   EnumB: TEnumB;
+  StrongInteger: TStrongInteger;
+  StrongIntegerAlias: TStrongIntegerAlias;
+  BaseInteger: Integer;
+  StrongExtended: TStrongExtended;
+  BaseExtended: Extended;
   ConversionSource: TConversionSource;
   ConversionResultA: TConversionResultA;
   ConversionResultB: TConversionResultB;
@@ -99,6 +108,16 @@ end;
 procedure AcceptPointerAlias(var Value: TPointerAlias);
 begin
   Value := Value
+end;
+
+procedure SetBaseInteger(var Value: Integer);
+begin
+  Value := 41
+end;
+
+procedure SetStrongInteger(var Value: TStrongInteger);
+begin
+  Value := 43
 end;
 
 function PickRecord(Value: TRecordA): Integer; overload;
@@ -140,6 +159,31 @@ begin
 end;
 
 begin
+  StrongInteger := 2;
+  StrongIntegerAlias := 3;
+  StrongInteger := StrongInteger + StrongIntegerAlias;
+  if StrongInteger <> 5 then
+    Halt(30);
+  BaseInteger := StrongInteger;
+  StrongInteger := BaseInteger;
+  SetBaseInteger(StrongInteger);
+  SetStrongInteger(BaseInteger);
+  if StrongInteger <> 41 then
+    Halt(31);
+  if BaseInteger <> 43 then
+    Halt(32);
+  StrongInteger := TStrongInteger(BaseInteger);
+  BaseInteger := Integer(StrongInteger);
+
+  BaseExtended := 1.5;
+  StrongExtended := BaseExtended;
+  BaseExtended := StrongExtended;
+  StrongExtended := TStrongExtended(BaseExtended);
+  if StrongExtended <> 1.5 then
+    Halt(33);
+  if SizeOf(TStrongExtended) <> SizeOf(Extended) then
+    Halt(34);
+
   PointerA := PointerB;
   PointerAlias := PointerA;
   AcceptPointerAlias(PointerA);

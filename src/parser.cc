@@ -1394,6 +1394,7 @@ std::string Parser::consume() {
 			}
 		}
 	} else {
+fprintf(stderr, "CHAR >%c< %d\n", input_char, input_char);
 		raise_parse_error("unknown input character");
 	}
 	auto text = sst.str();
@@ -2770,6 +2771,7 @@ enum class StrValueFamily {
 static StrValueFamily str_value_family(Type* ty) {
 	if (is_integer_semantic_type(ty))
 		return StrValueFamily::Integer;
+	ty = distinct_storage_type(ty);
 	if (ty == single_type() ||
 	    ty == double_type() ||
 	    ty == extended_type())
@@ -2798,6 +2800,7 @@ static ValDestinationFamily
 val_destination_family(Type* ty) {
 	if (is_integer_semantic_type(ty))
 		return ValDestinationFamily::Integer;
+	ty = distinct_storage_type(ty);
 	if (ty == single_type() ||
 	    ty == double_type() ||
 	    ty == extended_type())
@@ -6650,8 +6653,18 @@ std::string Parser::parse_string_literal() {
 }
 
 static Type* subrange_range_type(Type* ty) {
-	while (auto s = dynamic_cast<SubrangeType*>(ty)) {
-		ty = s->base_type;
+	for (;;) {
+		if (auto distinct =
+			dynamic_cast<DistinctType*>(ty)) {
+			ty = distinct->base_type;
+			continue;
+		}
+		if (auto range =
+			dynamic_cast<SubrangeType*>(ty)) {
+			ty = range->base_type;
+			continue;
+		}
+		break;
 	}
 	return ty;
 }
@@ -8095,6 +8108,10 @@ struct TypeBlockResolver {
 		    dynamic_cast<UntypedIntegerType*>(ty) ||
 		    dynamic_cast<EnumType*>(ty))
 			return true;
+		if (auto distinct =
+			dynamic_cast<DistinctType*>(ty))
+			return normalize_type(
+			    distinct->base_type);
 		if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 			return normalize_type(s->base_type) &&
 			       normalize_node(s->lower_bound) &&
@@ -8291,6 +8308,10 @@ struct TypeBlockResolver {
 			       dynamic_cast<SubrangeType*>(ty))
 			ok = validate_complete_type(
 			    subrange->base_type);
+		else if (auto distinct =
+			     dynamic_cast<DistinctType*>(ty))
+			ok = validate_complete_type(
+			    distinct->base_type);
 		else if (auto record =
 			     dynamic_cast<RecordType*>(ty))
 			ok = validate_complete_frame(
@@ -8530,16 +8551,28 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		    std::move(current_type_declaration_name);
 		current_type_declaration_name = name;
 		Type* rhs = nullptr;
+		const SourceLocation rhs_location =
+		    current_location();
+		const bool distinct_definition =
+		    maybe_parse_keyword("type");
 		if (completing_forward &&
-		    !peek_keyword("class"))
+		    (distinct_definition ||
+		     !peek_keyword("class")))
 			raise_type_error(
 			    "duplicate type name: " + name,
 			    completing_forward);
-		if (peek_keyword("class"))
+		if (!distinct_definition &&
+		    peek_keyword("class"))
 			rhs = parse_class_type(
 			    completing_forward, true);
-		else
+		else {
 			rhs = parse_type_expression(false);
+			if (distinct_definition)
+				rhs = new DistinctType(
+				    rhs_location,
+				    cxx_type_name(name),
+				    rhs);
+		}
 		current_type_declaration_name =
 		    std::move(saved_type_declaration_name);
 		auto forward_class =
@@ -8663,6 +8696,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			existing_cxx = e->cxx_name;
 		else if (auto s = dynamic_cast<SubrangeType*>(rhs))
 			existing_cxx = s->cxx_name;
+		else if (auto d = dynamic_cast<DistinctType*>(rhs))
+			existing_cxx = d->cxx_name;
 		if (!existing_cxx.empty() && existing_cxx != decl.cxx) {
 			decl.alias = true;
 		} else {
@@ -8677,7 +8712,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			    dynamic_cast<InterfaceType*>(rhs) ||
 			    dynamic_cast<ObjectType*>(rhs) ||
 			    dynamic_cast<EnumType*>(rhs) ||
-			    dynamic_cast<SubrangeType*>(rhs);
+			    dynamic_cast<SubrangeType*>(rhs) ||
+			    dynamic_cast<DistinctType*>(rhs);
 			if (has_named_definition &&
 			    !rhs->owning_unit)
 				rhs->owning_unit =
@@ -8698,6 +8734,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 				e->cxx_name = decl.cxx;
 			else if (auto s = dynamic_cast<SubrangeType*>(rhs))
 				s->cxx_name = decl.cxx;
+			else if (auto d = dynamic_cast<DistinctType*>(rhs))
+				d->cxx_name = decl.cxx;
 		}
 	}
 	if (!emitter)
@@ -10080,8 +10118,7 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 // deliberately not an overload-ranking position. Only source-visible
 // parameters enter these ranks.
 static bool is_ordinal_intrinsic_argument(Type* ty) {
-	while (auto subrange = dynamic_cast<SubrangeType*>(ty))
-		ty = subrange->base_type;
+	ty = subrange_range_type(ty);
 	if (dynamic_cast<EnumType*>(ty))
 		return true;
 	OrdinalBounds bounds;
@@ -10139,11 +10176,8 @@ static bool generic_ordinal_operation_accepts(
 			dynamic_cast<PointerType*>(
 			    operand))
 			return !pointer->is_untyped();
-		while (auto subrange =
-			   dynamic_cast<SubrangeType*>(
-			       operand))
-			operand =
-			    subrange->base_type;
+		operand =
+		    subrange_range_type(operand);
 		return dynamic_cast<EnumType*>(
 			   operand) != nullptr;
 	}
@@ -10152,10 +10186,7 @@ static bool generic_ordinal_operation_accepts(
 
 static bool generic_absolute_value_accepts(
     Type* operand) {
-	while (auto subrange =
-		   dynamic_cast<SubrangeType*>(
-		       operand))
-		operand = subrange->base_type;
+	operand = subrange_range_type(operand);
 	OrdinalBounds bounds;
 	return integer_bounds(operand, &bounds) ||
 	       operand == single_type() ||
@@ -10395,6 +10426,7 @@ static bool rank_less(
 }
 
 static int real_range_rank(Type* type) {
+	type = distinct_storage_type(type);
 	if (type == single_type())
 		return 0;
 	if (type == double_type())
@@ -11052,6 +11084,19 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		if (source == target)
 			return ArgumentMatch{
 			    {MatchRank::Tier::Exact, 0},
+			    actual};
+		if ((dynamic_cast<DistinctType*>(
+			 source) ||
+		     dynamic_cast<DistinctType*>(
+			 target)) &&
+		    distinct_storage_type(source) ==
+			distinct_storage_type(target))
+			// FPC `type Base` creates a separate overload identity, but
+			// deliberately retains Base's storage identity for var/out.
+			// This is a language relation of DistinctType, not a general
+			// relaxation to equal-looking C++ carriers.
+			return ArgumentMatch{
+			    {MatchRank::Tier::Direct, 0},
 			    actual};
 		if (builtin &&
 		    builtin->generic_kind ==

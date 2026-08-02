@@ -177,6 +177,57 @@ struct IncompleteType: public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** FPC `T = type Base`: a fresh Pascal identity over Base's representation.
+ *
+ * This is not an ordinary alias: exact overload matching observes this
+ * Type*. It is also not an opaque newtype: Pascal assignment and var/out
+ * permit the base representation in both directions, and predefined
+ * operations use Base's family. The C++ backend therefore spells a named
+ * `using` for the shared carrier while retaining this separate semantic node.
+ */
+struct DistinctType: public Type {
+	std::string cxx_name;
+	Type* base_type;
+
+	DistinctType(
+	    SourceLocation source_location,
+	    std::string cxx_name, Type* base_type);
+	const char* diagnostic_kind() const override;
+	std::optional<ValueConversion>
+	value_conversion_from(
+	    const Type* source) const override;
+	std::optional<ValueConversion>
+	destination_conversion_from(
+	    const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
+	bool is_subtype_of(
+	    const Type* target) const override;
+	bool same_cxx_carrier_definition_as(
+	    const Type* other) const override;
+	Type* sequence_element_type() const override;
+	Type* array_element_type() const override;
+	Type* sequence_index_type() const override;
+	Type* sequence_length_type() const override;
+	bool sequence_is_resizable() const override;
+	bool has_managed_lifetime() const override;
+	bool is_reference_type() const override;
+	void collect_diagnostic_edges(
+	    ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+	void print_diagnostic_stub(
+	    ErrorLetContext* ctx, std::ostringstream& out,
+	    unsigned indent) const override;
+};
+
+/** Strip one or more FPC `type Base` identities to their shared storage type.
+ * This is representation inspection, not a conversion search. */
+Type* distinct_storage_type(Type* type);
+const Type* distinct_storage_type(
+    const Type* type);
+
 struct OrdinalRange {
 	struct Value {
 		bool negative = false;

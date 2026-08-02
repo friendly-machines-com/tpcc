@@ -60,6 +60,63 @@ int main() {
 	assert(shortint_to_int64->distance <
 	       shortint_to_single->distance);
 
+	DistinctType strong_integer(
+	    SourceLocation::internal(),
+	    "m_test_strong_integer",
+	    integer_type());
+	DistinctType strong_integer_sibling(
+	    SourceLocation::internal(),
+	    "m_test_strong_integer_sibling",
+	    integer_type());
+	assert(&strong_integer !=
+	       integer_type());
+	assert(&strong_integer !=
+	       &strong_integer_sibling);
+	assert(strong_integer
+	           .same_cxx_carrier_as(
+		       integer_type()));
+	assert(integer_type()
+	           ->same_cxx_carrier_as(
+		       &strong_integer));
+	auto base_to_strong =
+	    strong_integer.value_conversion_from(
+		integer_type());
+	auto strong_to_base =
+	    integer_type()->value_conversion_from(
+		&strong_integer);
+	auto sibling_to_strong =
+	    strong_integer.value_conversion_from(
+		&strong_integer_sibling);
+	assert(base_to_strong &&
+	       base_to_strong->kind ==
+		   ValueConversionClass::Direct);
+	assert(strong_to_base &&
+	       strong_to_base->kind ==
+		   ValueConversionClass::Direct);
+	assert(sibling_to_strong &&
+	       sibling_to_strong->kind ==
+		   ValueConversionClass::Direct);
+	RoutineType base_signature(
+	    SourceLocation::internal(),
+	    {Parameter(
+		"value", "p_value",
+		integer_type(),
+		ParamMode::Value, nullptr)},
+	    integer_type(), ROUTINE);
+	RoutineType strong_signature(
+	    SourceLocation::internal(),
+	    {Parameter(
+		"value", "p_value",
+		&strong_integer,
+		ParamMode::Value, nullptr)},
+	    integer_type(), ROUTINE);
+	assert(!base_signature
+		    .same_overload_signature_as(
+			&strong_signature));
+	assert(base_signature
+		   .same_cxx_parameter_list_as(
+		       &strong_signature));
+
 	PointerType pointer_a(
 	    SourceLocation::internal(),
 	    integer_type());

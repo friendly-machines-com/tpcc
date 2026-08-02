@@ -41,6 +41,8 @@ static std::string type_cxx_name(
 }
 
 static std::string named_type_local_cxx_name(Type* type) {
+	if (auto d = dynamic_cast<DistinctType*>(type))
+		return d->cxx_name;
 	if (auto s = dynamic_cast<SubrangeType*>(type))
 		return s->cxx_name;
 	if (auto r = dynamic_cast<RecordType*>(type))
@@ -495,6 +497,14 @@ void Emitter::emit_type_dependencies(
 			visit(set->item_type,
 			      inspect_nested_definition(
 				  set->item_type));
+			return;
+		}
+		if (auto distinct =
+			dynamic_cast<DistinctType*>(ty)) {
+			visit(
+			    distinct->base_type,
+			    inspect_nested_definition(
+				distinct->base_type));
 			return;
 		}
 		if (auto file =
@@ -2454,6 +2464,18 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 	if (!active)
 		return;
 	emit_type_dependencies(ty, true);
+	if (auto distinct =
+		dynamic_cast<DistinctType*>(ty)) {
+		// FPC `type Base` has a separate Pascal Type* but explicitly shares
+		// Base storage, including var/out aliasing. A C++ alias preserves that
+		// ABI; Pascal lookup has already used the distinct semantic identity.
+		fprintf(active, "using %s = ",
+			cxx_name.c_str());
+		emit_type_ref(
+		    distinct->base_type);
+		fprintf(active, ";\n");
+		return;
+	}
 	if (dynamic_cast<RoutineType*>(ty)) {
 		fprintf(active, "using %s = ", cxx_name.c_str());
 		emit_type_ref(ty);
@@ -3888,17 +3910,31 @@ void Emitter::emit_expression(Node* expr) {
 	if (auto ca = dynamic_cast<Cast*>(expr)) {
 		auto real_type =
 		    [](Type* type) {
+			    type =
+				distinct_storage_type(type);
 			    return type == single_type() ||
 				   type == double_type() ||
 				   type == extended_type();
 		    };
 		auto ordinal_type =
 		    [](Type* type) {
-			    while (auto range =
-				       dynamic_cast<SubrangeType*>(
-					   type))
-				    type =
-					range->base_type;
+			    for (;;) {
+				    if (auto distinct =
+					    dynamic_cast<DistinctType*>(
+						type)) {
+					    type =
+						distinct->base_type;
+					    continue;
+				    }
+				    if (auto range =
+					    dynamic_cast<SubrangeType*>(
+						type)) {
+					    type =
+						range->base_type;
+					    continue;
+				    }
+				    break;
+			    }
 			    OrdinalBounds bounds;
 			    return type == char_type() ||
 				   dynamic_cast<EnumType*>(
@@ -4316,6 +4352,19 @@ void Emitter::emit_template_value_arg(Node* expr) {
 void Emitter::emit_type_ref(Type* ty) {
 	if (!active)
 		return;
+	if (auto distinct =
+		dynamic_cast<DistinctType*>(ty)) {
+		if (distinct->cxx_name.empty())
+			unhandled_type(
+			    "distinct type has no generated C++ name",
+			    distinct);
+		fprintf(active, "%s",
+			type_cxx_name(
+			    distinct,
+			    distinct->cxx_name)
+			    .c_str());
+		return;
+	}
 	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		if (s->cxx_name.empty())
 			unhandled_type(

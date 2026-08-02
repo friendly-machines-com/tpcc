@@ -38,7 +38,9 @@ bool Type::same_cxx_carrier_as(
     const Type* other) const {
 	return other &&
 	       (this == other ||
-		same_cxx_carrier_definition_as(other));
+		same_cxx_carrier_definition_as(other) ||
+		other->same_cxx_carrier_definition_as(
+		    this));
 }
 
 bool Type::same_cxx_carrier_definition_as(
@@ -51,6 +53,32 @@ bool Type::same_cxx_carrier_definition_as(
 
 IncompleteType::IncompleteType(SourceLocation source_location, std::string name)
     : Type(std::move(source_location)), name(std::move(name)), resolved(nullptr) {}
+
+DistinctType::DistinctType(
+    SourceLocation source_location,
+    std::string cxx_name, Type* base_type)
+    : Type(std::move(source_location)),
+      cxx_name(std::move(cxx_name)),
+      base_type(base_type) {
+	assert(!this->cxx_name.empty());
+	assert(this->base_type);
+}
+
+Type* distinct_storage_type(Type* type) {
+	while (auto distinct =
+		   dynamic_cast<DistinctType*>(type))
+		type = distinct->base_type;
+	return type;
+}
+
+const Type* distinct_storage_type(
+    const Type* type) {
+	while (auto distinct =
+		   dynamic_cast<const DistinctType*>(
+		       type))
+		type = distinct->base_type;
+	return type;
+}
 
 EnumType::EnumType(SourceLocation source_location) : Type(std::move(source_location)), cxx_name("") {
 }
@@ -651,6 +679,11 @@ std::optional<TypeLayout> type_layout_impl(
 			return std::nullopt;
 		ty = incomplete->resolved;
 	}
+	if (auto distinct =
+		dynamic_cast<DistinctType*>(ty))
+		// FPC's `type Base` changes Pascal identity, not storage layout.
+		return type_layout_impl(
+		    distinct->base_type, visiting);
 	if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty))
 		return intrinsic->layout;
 	if (auto shortstring = dynamic_cast<ShortStringType*>(ty))
@@ -891,9 +924,21 @@ bool Type::predefined_explicit_conversion_from(
 // Integer widening rank; -1 for non-integer types.
 static int integer_widening_rank(
     const Type* ty) {
-	while (auto s =
-		   dynamic_cast<const SubrangeType*>(ty))
-		ty = s->base_type;
+	for (;;) {
+		if (auto distinct =
+			dynamic_cast<const DistinctType*>(
+			    ty)) {
+			ty = distinct->base_type;
+			continue;
+		}
+		if (auto range =
+			dynamic_cast<const SubrangeType*>(
+			    ty)) {
+			ty = range->base_type;
+			continue;
+		}
+		break;
+	}
 	auto it =
 	    dynamic_cast<const IntrinsicType*>(ty);
 	if (!it)
@@ -907,10 +952,21 @@ static bool predefined_ordinal_type(
     const Type* type) {
 	if (type == &untyped_integer_type())
 		return true;
-	while (auto range =
-		   dynamic_cast<const SubrangeType*>(
-		       type))
-		type = range->base_type;
+	for (;;) {
+		if (auto distinct =
+			dynamic_cast<const DistinctType*>(
+			    type)) {
+			type = distinct->base_type;
+			continue;
+		}
+		if (auto range =
+			dynamic_cast<const SubrangeType*>(
+			    type)) {
+			type = range->base_type;
+			continue;
+		}
+		break;
+	}
 	if (dynamic_cast<const EnumType*>(type))
 		return true;
 	auto intrinsic =
@@ -938,6 +994,7 @@ static bool predefined_object_reference_type(
 // bounds, while real widening has different semantics.
 static int real_widening_rank(
     const Type* ty) {
+	ty = distinct_storage_type(ty);
 	if (ty == single_type())
 		return 0;
 	if (ty == double_type())
@@ -1034,10 +1091,111 @@ static ValueConversion implicit_conversion(unsigned distance = 0) {
 }
 
 std::optional<ValueConversion>
+DistinctType::value_conversion_from(
+    const Type* source) const {
+	if (!source)
+		return std::nullopt;
+	const Type* target_storage =
+	    distinct_storage_type(base_type);
+	const Type* source_storage =
+	    distinct_storage_type(source);
+	if (source_storage == target_storage)
+		// `type Base` is a new overload identity, but FPC defines it as
+		// representation-compatible with Base and sibling distinct types.
+		return direct_conversion();
+	return target_storage
+	    ->value_conversion_from(source_storage);
+}
+
+std::optional<ValueConversion>
+DistinctType::destination_conversion_from(
+    const Type* source) const {
+	if (auto ordinary =
+		value_conversion_from(source))
+		return ordinary;
+	const Type* target_storage =
+	    distinct_storage_type(base_type);
+	return target_storage
+	    ->destination_conversion_from(
+		distinct_storage_type(source));
+}
+
+bool DistinctType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	if (!source)
+		return false;
+	const Type* target_storage =
+	    distinct_storage_type(base_type);
+	const Type* source_storage =
+	    distinct_storage_type(source);
+	return source_storage == target_storage ||
+	       target_storage
+		   ->predefined_explicit_conversion_from(
+		       source_storage);
+}
+
+bool DistinctType::is_subtype_of(
+    const Type* target) const {
+	if (this == target)
+		return true;
+	const Type* storage =
+	    distinct_storage_type(base_type);
+	const Type* target_storage =
+	    distinct_storage_type(target);
+	return storage == target_storage ||
+	       storage->is_subtype_of(
+		   target_storage);
+}
+
+bool DistinctType::
+    same_cxx_carrier_definition_as(
+	const Type* other) const {
+	return base_type &&
+	       base_type->same_cxx_carrier_as(
+		   distinct_storage_type(other));
+}
+
+Type* DistinctType::sequence_element_type() const {
+	return base_type->sequence_element_type();
+}
+
+Type* DistinctType::array_element_type() const {
+	return base_type->array_element_type();
+}
+
+Type* DistinctType::sequence_index_type() const {
+	return base_type->sequence_index_type();
+}
+
+Type* DistinctType::sequence_length_type() const {
+	return base_type->sequence_length_type();
+}
+
+bool DistinctType::sequence_is_resizable() const {
+	return base_type->sequence_is_resizable();
+}
+
+bool DistinctType::has_managed_lifetime() const {
+	return base_type->has_managed_lifetime();
+}
+
+bool DistinctType::is_reference_type() const {
+	return base_type->is_reference_type();
+}
+
+std::optional<ValueConversion>
 IntrinsicType::value_conversion_from(
     const Type* source_const) const {
-	auto source = source_const;
+	auto source = distinct_storage_type(
+	    source_const);
 	auto target = this;
+	if (source_const != source &&
+	    source == target)
+		// Exact identity was already tested by the matcher. A distinct
+		// identity over this same carrier is the FPC strong-type direct case,
+		// not an integer/real widening conversion.
+		return direct_conversion();
 	if (source == &untyped_integer_type()) {
 		// The expression matcher checks the literal's actual magnitude. At the
 		// type level it is a contextual integer value, not another nominal
@@ -1591,6 +1749,7 @@ static std::optional<OrdinalDomain>
 ordinal_domain(const Type* type) {
 	if (!type)
 		return std::nullopt;
+	type = distinct_storage_type(type);
 	if (auto range =
 		dynamic_cast<const SubrangeType*>(type)) {
 		auto lower =
@@ -2051,6 +2210,32 @@ void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostr
 		ctx->indent(out, indent + 1);
 		out << "resolved: " << ctx->known_type_ref(resolved);
 	}
+}
+
+const char* DistinctType::diagnostic_kind() const {
+	return "distinct_type";
+}
+
+void DistinctType::collect_diagnostic_edges(
+    ErrorLetContext* ctx) const {
+	ctx->add_type_edge(base_type);
+}
+
+void DistinctType::print_diagnostic_definition(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "base: "
+	    << ctx->known_type_ref(base_type);
+}
+
+void DistinctType::print_diagnostic_stub(
+    ErrorLetContext* ctx, std::ostringstream& out,
+    unsigned indent) const {
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "base: ...";
 }
 
 const char* FixedArrayType::diagnostic_kind() const { return "array"; }
