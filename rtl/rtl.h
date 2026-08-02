@@ -3901,7 +3901,9 @@ inline t_shortstring<255> o_implicit(
 	return result;
 }
 
-inline t_char p_chr(t_integer value) {
+template<typename T>
+requires std::is_integral_v<T>
+inline t_char p_chr(T value) {
 	return t_char{
 	    static_cast<t_byte>(value)};
 }
@@ -5440,6 +5442,24 @@ inline t_pointer p_getmem(t_ptruint size) {
 	return result;
 }
 
+template<typename T>
+requires std::is_object_v<T> || std::is_void_v<T>
+inline void p_getmem(
+    T*& destination, t_ptrint size) {
+	if (size < 0)
+		m_runtime_error(203);
+	p_getmem(
+	    destination,
+	    static_cast<t_ptruint>(size));
+}
+
+inline t_pointer p_getmem(t_ptrint size) {
+	if (size < 0)
+		m_runtime_error(203);
+	return p_getmem(
+	    static_cast<t_ptruint>(size));
+}
+
 inline t_pointer p_allocmem(t_ptruint size) {
 	t_pointer result =
 	    std::calloc(
@@ -5447,6 +5467,13 @@ inline t_pointer p_allocmem(t_ptruint size) {
 	if (!result && size != 0)
 		m_runtime_error(203);
 	return result;
+}
+
+inline t_pointer p_allocmem(t_ptrint size) {
+	if (size < 0)
+		m_runtime_error(203);
+	return p_allocmem(
+	    static_cast<t_ptruint>(size));
 }
 
 template<typename T>
@@ -5476,9 +5503,29 @@ inline T* p_reallocmem(
 	return destination;
 }
 
+template<typename T>
+requires std::is_object_v<T> || std::is_void_v<T>
+inline T* p_reallocmem(
+    T*& destination, t_ptrint size) {
+	if (size < 0)
+		m_runtime_error(203);
+	return p_reallocmem(
+	    destination,
+	    static_cast<t_ptruint>(size));
+}
+
 inline void p_freemem(t_pointer value, t_ptruint size) {
 	(void)size;
 	std::free(value);
+}
+
+inline void p_freemem(
+    t_pointer value, t_ptrint size) {
+	if (size < 0)
+		m_runtime_error(203);
+	p_freemem(
+	    value,
+	    static_cast<t_ptruint>(size));
 }
 
 inline t_ptruint p_freemem(t_pointer value) {

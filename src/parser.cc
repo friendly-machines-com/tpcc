@@ -10815,18 +10815,11 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				    combined.tier))
 				    combined.tier =
 					rank.tier;
-			    combined.distance =
-				rank.distance >
-					UINT64_MAX -
-					    combined.distance
-				    ? UINT64_MAX
-				    : combined.distance +
-					  rank.distance;
 			    combined
-				.integer_literal_sign_mismatch =
+				.integer_sign_mismatch =
 				combined
-				    .integer_literal_sign_mismatch ||
-				rank.integer_literal_sign_mismatch;
+				    .integer_sign_mismatch ||
+				rank.integer_sign_mismatch;
 		    };
 		for (const BracketLiteral::Item& item :
 		     literal->items) {

@@ -421,7 +421,10 @@ operator in(const item; const values): Boolean; external name '::u_system::o_in'
 function ord(const x): Cardinal; external name '::u_system::p_ord'; // generic intrinsic
 // FIXME: The selected Chr call must range-check Value under {$R+}. The
 // unchecked RTL path intentionally retains FPC's low-byte behavior.
-function chr(value: Integer): Char; external name '::u_system::p_chr';
+function chr(value: Integer): Char; overload; external name '::u_system::p_chr';
+function chr(value: Cardinal): Char; overload; external name '::u_system::p_chr';
+function chr(value: Int64): Char; overload; external name '::u_system::p_chr';
+function chr(value: QWord): Char; overload; external name '::u_system::p_chr';
 procedure fillchar(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillchar';
 procedure fillchar(var destination; count: SizeInt; value: Char); external name '::u_system::p_fillchar';
 procedure fillbyte(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillbyte';
@@ -500,10 +503,15 @@ function strlen(value: PChar): SizeInt; external name '::u_system::p_strlen';
 procedure New; external name '::u_system::p_new';
 procedure Dispose; external name '::u_system::p_dispose';
 procedure getmem(out destination: Pointer; size: PtrUInt); overload; external name '::u_system::p_getmem';
+procedure getmem(out destination: Pointer; size: PtrInt); overload; external name '::u_system::p_getmem';
 function getmem(size: PtrUInt): Pointer; overload; external name '::u_system::p_getmem';
-function allocmem(size: PtrUInt): Pointer; external name '::u_system::p_allocmem';
-function reallocmem(var destination: Pointer; size: PtrUInt): Pointer; external name '::u_system::p_reallocmem';
+function getmem(size: PtrInt): Pointer; overload; external name '::u_system::p_getmem';
+function allocmem(size: PtrUInt): Pointer; overload; external name '::u_system::p_allocmem';
+function allocmem(size: PtrInt): Pointer; overload; external name '::u_system::p_allocmem';
+function reallocmem(var destination: Pointer; size: PtrUInt): Pointer; overload; external name '::u_system::p_reallocmem';
+function reallocmem(var destination: Pointer; size: PtrInt): Pointer; overload; external name '::u_system::p_reallocmem';
 procedure freemem(value: Pointer; size: PtrUInt); overload; external name '::u_system::p_freemem';
+procedure freemem(value: Pointer; size: PtrInt); overload; external name '::u_system::p_freemem';
 function freemem(value: Pointer): PtrUInt; overload; external name '::u_system::p_freemem';
 procedure assign(out f: File; const name: ShortString); external name '::u_system::p_assign';
 procedure rewrite(var f: File; recordsize: LongInt = 128); external name '::u_system::p_rewrite';
