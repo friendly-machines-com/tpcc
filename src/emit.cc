@@ -1,6 +1,7 @@
 #include "emit.h"
 #include "builtins.h"
 #include "cst.h"
+#include "diagnostic.h"
 #include "frame.h"
 #include "operators.h"
 #include "types.h"
@@ -11,6 +12,7 @@
 #include <functional>
 #include <limits>
 #include <set>
+#include <sstream>
 #include <typeinfo>
 
 static std::string owner_cxx_name(Type* owner);
@@ -62,16 +64,35 @@ static std::string named_type_local_cxx_name(Type* type) {
 	return "";
 }
 
-// NODE may be null; SITE names the caller for the error message.
-[[noreturn]] static void unhandled_node(const char* site, const Node* node) {
-	if (node) {
-		fprintf(stderr, "internal compiler error: %s does not handle node kind '%s'\n",
-			site, typeid(*node).name());
-	} else {
-		fprintf(stderr, "internal compiler error: %s called with null node\n", site);
+[[noreturn]] static void emit_diagnostic_at(
+	const SourceLocation& loc, const char* severity,
+	const std::string& message) {
+	std::stringstream sst;
+	if (!loc.file_name.empty()) {
+		sst << loc.file_name;
+		if (loc.line_number != 0)
+			sst << '(' << loc.line_number << ')';
+		sst << ": ";
 	}
+	sst << severity << ": " << message << std::endl;
+	std::string r = sst.str();
+	fprintf(stderr, "%s\n", r.c_str());
 	fflush(stderr);
 	exit(1);
+}
+
+// NODE may be null; SITE names the caller for the error message.
+[[noreturn]] static void unhandled_node(const char* site, const Node* node) {
+	ErrorLetContext ctx(std::vector<DiagnosticScope>{}, 4);
+	std::stringstream sst;
+	sst << site;
+	if (node)
+		sst << " does not handle value " << ctx.value_ref(node);
+	else
+		sst << " called with null node";
+	sst << ctx.notes();
+	emit_diagnostic_at(
+	    SourceLocation::internal(), "internal compiler error", sst.str());
 }
 
 static void emit_integer_literal(FILE* out, uint64_t value, bool negative) {
@@ -86,14 +107,17 @@ static void emit_integer_literal(FILE* out, uint64_t value, bool negative) {
 }
 
 [[noreturn]] static void unhandled_type(const char* site, const Type* ty) {
-	if (ty) {
-		fprintf(stderr, "internal compiler error: %s does not handle type kind '%s'\n",
-			site, typeid(*ty).name());
-	} else {
-		fprintf(stderr, "internal compiler error: %s called with null type\n", site);
-	}
-	fflush(stderr);
-	exit(1);
+	ErrorLetContext ctx(std::vector<DiagnosticScope>{}, 4);
+	std::stringstream sst;
+	sst << site;
+	if (ty)
+		sst << " does not handle type " << ctx.type_ref(ty);
+	else
+		sst << " called with null type";
+	sst << ctx.notes();
+	emit_diagnostic_at(
+	    ty ? ty->source_location : SourceLocation::internal(),
+	    "internal compiler error", sst.str());
 }
 
 void Emitter::emit_enum_decl(EnumType* e) {
