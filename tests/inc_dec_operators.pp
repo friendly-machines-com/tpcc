@@ -121,6 +121,11 @@ var
   Character: Char;
   Integers: array[0..3] of Integer;
   IntegerPointer: TIntegerPointer;
+  Characters: array[0..3] of Char;
+  CharacterPointer: PChar;
+  CardinalDistance: Cardinal;
+  QWordDistance: QWord;
+  Int64Distance: Int64;
   Box: TBox;
   BoxLookups: Integer;
   PointerLookups: Integer;
@@ -174,6 +179,10 @@ begin
   {$else}
   {$ifdef TEST_INC_WRITE_ONLY}
   Inc(WriteOnlyBox.Value)
+  {$else}
+  {$ifdef TEST_POINTER_REAL_DISTANCE}
+  IntegerPointer := @Integers[0];
+  Inc(IntegerPointer, 1.5)
   {$else}
   Value.Data := 0;
   {$Q-}
@@ -345,6 +354,23 @@ begin
   if IntegerPointer <> @Integers[0] then
     Halt(15);
 
+  CharacterPointer := @Characters[0];
+  CardinalDistance := 2;
+  Inc(CharacterPointer, CardinalDistance);
+  if CharacterPointer <> @Characters[2] then
+    Halt(41);
+  QWordDistance := 1;
+  Inc(CharacterPointer, QWordDistance);
+  if CharacterPointer <> @Characters[3] then
+    Halt(42);
+  Int64Distance := -2;
+  Inc(CharacterPointer, Int64Distance);
+  if CharacterPointer <> @Characters[1] then
+    Halt(43);
+  Dec(CharacterPointer, QWordDistance);
+  if CharacterPointer <> @Characters[0] then
+    Halt(44);
+
   Integers[2] := 39;
   PointerLookups := 0;
   Inc(FindInteger()^);
@@ -406,6 +432,7 @@ begin
     Halt(32);
   if IndexLookups <> 1 then
     Halt(33)
+  {$endif}
   {$endif}
   {$endif}
 end.

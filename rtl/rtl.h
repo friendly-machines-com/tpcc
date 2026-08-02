@@ -4910,17 +4910,23 @@ inline T p_pred(T value) {
 	    value, 1, true);
 }
 
-template<typename T>
-requires (!std::is_void_v<T>)
+template<typename T, typename Amount>
+requires (
+    !std::is_void_v<T> &&
+    std::is_integral_v<
+	typename tpcc_ordinal_storage<Amount>::type>)
 inline T* m_pointer_step(
-    T* value, t_integer amount, bool subtract) {
+    T* value, Amount amount, bool subtract) {
 	// Pascal ^T stepping has the same element unit as C++ T* arithmetic.
 	// Preserve the pointer itself: converting through an address integer would
 	// discard C++ provenance and incorrectly define arithmetic on null or
 	// unrelated storage. The Pascal program therefore inherits the C++ rule
 	// that the result remains within the same array object or one-past it.
-	return subtract ? value - amount
-			: value + amount;
+	const auto raw_amount =
+	    tpcc_ordinal_storage<Amount>::get(
+		amount);
+	return subtract ? value - raw_amount
+			: value + raw_amount;
 }
 
 template<typename T>
@@ -5029,34 +5035,46 @@ inline T* o_dec(T* value) {
 	    value, 1, true);
 }
 
-template<typename T>
-requires (!std::is_void_v<T>)
+template<typename T, typename Amount>
+requires (
+    !std::is_void_v<T> &&
+    std::is_integral_v<
+	typename tpcc_ordinal_storage<Amount>::type>)
 inline T* o_unchecked_add(
-    T* value, t_integer amount) {
+    T* value, Amount amount) {
 	return m_pointer_step(
 	    value, amount, false);
 }
 
-template<typename T>
-requires (!std::is_void_v<T>)
+template<typename T, typename Amount>
+requires (
+    !std::is_void_v<T> &&
+    std::is_integral_v<
+	typename tpcc_ordinal_storage<Amount>::type>)
 inline T* o_add(
-    T* value, t_integer amount) {
+    T* value, Amount amount) {
 	return m_pointer_step(
 	    value, amount, false);
 }
 
-template<typename T>
-requires (!std::is_void_v<T>)
+template<typename T, typename Amount>
+requires (
+    !std::is_void_v<T> &&
+    std::is_integral_v<
+	typename tpcc_ordinal_storage<Amount>::type>)
 inline T* o_unchecked_subtract(
-    T* value, t_integer amount) {
+    T* value, Amount amount) {
 	return m_pointer_step(
 	    value, amount, true);
 }
 
-template<typename T>
-requires (!std::is_void_v<T>)
+template<typename T, typename Amount>
+requires (
+    !std::is_void_v<T> &&
+    std::is_integral_v<
+	typename tpcc_ordinal_storage<Amount>::type>)
 inline T* o_subtract(
-    T* value, t_integer amount) {
+    T* value, Amount amount) {
 	return m_pointer_step(
 	    value, amount, true);
 }

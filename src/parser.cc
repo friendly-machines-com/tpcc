@@ -11273,6 +11273,58 @@ Parser::match_callable_arguments(
 	}
 	if (builtin &&
 	    builtin->generic_kind ==
+		BuiltinGenericKind::
+		    EnumOrPointerStep &&
+	    args.size() == 2 &&
+	    args[0] && args[1]) {
+		auto pointer =
+		    dynamic_cast<PointerType*>(
+			args[0]->ty);
+		if (pointer) {
+			// Pascal cannot spell the generic declaration
+			//
+			//   (^T, U: integer ordinal) -> ^T
+			//
+			// used by pointer +/- distance and two-argument
+			// Inc/Dec. In particular, forcing U through Integer would
+			// reject an unsigned Cardinal variable (and would truncate
+			// wider pointer-sized distances). Preserve U exactly; the
+			// pointer RTL overload extracts its ordinal storage.
+			if (pointer->is_untyped())
+				return std::nullopt;
+			Node* amount = args[1];
+			if (auto literal =
+				untyped_integer_constant(
+				    amount)) {
+				Type* natural =
+				    integer_literal_natural_type(
+					literal);
+				amount = new Integer(
+				    literal->value, natural,
+				    literal->negative);
+			}
+			if (!is_integer_semantic_type(
+				amount->ty))
+				return std::nullopt;
+
+			// Both Pascal formals are unspellable, so this fallback
+			// remains below every viable fully typed custom operator.
+			// No conversion has occurred: a typed amount remains the
+			// same typed expression for the selected RTL template.
+			return CallableMatch{
+			    {
+				{MatchRank::Tier::Generic,
+				 0},
+				{MatchRank::Tier::Generic,
+				 0},
+			    },
+			    {args[0], amount},
+			    {nullptr, nullptr},
+			};
+		}
+	}
+	if (builtin &&
+	    builtin->generic_kind ==
 		BuiltinGenericKind::PointerDifference) {
 		// The root declaration's Pointer formals distinguish this overload
 		// from `(T, Integer) -> T`; they must not erase typed operands before

@@ -64,5 +64,8 @@ check_rejected \
 check_rejected \
 	TEST_INC_WRITE_ONLY \
 	"write-only property 'value' cannot be read"
+check_rejected \
+	TEST_POINTER_REAL_DISTANCE \
+	"no matching overload for 'uncheckedadd'"
 
 echo "inc/dec operator tests passed"
