@@ -12819,21 +12819,67 @@ Unit* Parser::load_or_get_unit(std::string name) {
 	}
 	if (!f)
 		raise_parse_error("cannot find unit file for: " + name);
-	// Per-unit Emitter writes <output_dir>/<name>.h and .cc. The nested Parser
-	// gets its own token/scope state plus this emitter; the shared
-	// unit_registry is what lets circular-dep detection work across the two.
+	// Per-unit Emitter writes <output_dir>/<name>.h and .cc. Keep both it and
+	// the nested Parser alive after publishing the interface: a legal
+	// implementation dependency may point back to the interface whose uses
+	// clause caused this load, so crossing immediately into this unit's
+	// implementation would observe that parent frame only half populated.
 	std::string dir = options ? options->output_dir : "";
-	Emitter unit_emitter;
-	unit_emitter.open_for_unit(name, dir);
-	Parser sub(unit_registry, &unit_emitter, options);
-	sub.push_input_file(f, opened, 1);
-	sub.start();
-	sub.parse_program_or_unit();
-	unit_emitter.close();
-	Unit* loaded = unit_registry->lookup(name);
-	if (!loaded)
+	auto unit_emitter = new Emitter;
+	unit_emitter->open_for_unit(name, dir);
+	auto sub =
+	    new Parser(
+		unit_registry,
+		unit_emitter, options);
+	sub->push_input_file(f, opened, 1);
+	sub->start();
+	if (!sub->maybe_parse_keyword("unit"))
+		sub->raise_parse_error(
+		    "used source file must declare a unit");
+	Unit* loaded =
+	    sub->parse_unit_interface_body();
+	if (!loaded ||
+	    strcasecmp(
+		loaded->name.c_str(),
+		name.c_str()) != 0)
 		raise_parse_error("file '" + opened + "' did not declare 'unit " + name + ";'");
+	loaded->pending_parser = sub;
+	loaded->pending_emitter =
+	    unit_emitter;
 	return loaded;
+}
+
+void Parser::complete_unit(Unit* unit) {
+	if (!unit ||
+	    unit->phase == UnitPhase::Done ||
+	    unit->phase ==
+		UnitPhase::
+		    ImplementationInProgress)
+		return;
+	if (unit->phase !=
+	    UnitPhase::InterfaceDone)
+		raise_parse_error(
+		    "cannot complete unit '" +
+		    unit->name +
+		    "' before its interface");
+	Parser* pending =
+	    unit->pending_parser;
+	Emitter* pending_emitter =
+	    unit->pending_emitter;
+	if (!pending || !pending_emitter)
+		raise_parse_error(
+		    "unit '" + unit->name +
+		    "' has no suspended implementation parser");
+
+	pending->parse_unit_implementation_body(
+	    unit);
+	pending_emitter->close();
+	while (!pending->input_files.empty())
+		pending->pop_input_file();
+	unit->pending_parser = nullptr;
+	unit->pending_emitter = nullptr;
+	delete pending;
+	delete pending_emitter;
 }
 
 std::vector<Unit*> Parser::parse_uses_clause(bool in_interface, std::string current_name) {
@@ -12857,7 +12903,7 @@ Unit* Parser::implicit_uses(std::string user_name) {
 	return load_or_get_unit("system");
 }
 
-void Parser::parse_unit_body() {
+Unit* Parser::parse_unit_interface_body() {
 	std::string name = parse_identifier();
 	parse_semicolon();
 	// Top-level invocation: open the emitter for the unit shape (.h + .cc).
@@ -12888,8 +12934,8 @@ void Parser::parse_unit_body() {
 	}
 	for (Unit* used : iface_units)
 		push_scope(used->frame, used->reference);
-	push_scope(unit_frame);
-	push_declaration_frame(unit_frame);
+	push_scope(unit->frame);
+	push_declaration_frame(unit->frame);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Header);
 		std::vector<std::string> h_files;
@@ -12902,14 +12948,37 @@ void Parser::parse_unit_body() {
 	if (emitter)
 		emitter->emit_unit_interface_epilogue();
 	unit->phase = UnitPhase::InterfaceDone;
+	unit->interface_uses = iface_units;
+	return unit;
+}
 
+void Parser::parse_unit_implementation_body(
+    Unit* unit) {
+	if (!unit ||
+	    current_unit != unit ||
+	    unit->phase !=
+		UnitPhase::InterfaceDone)
+		raise_parse_error(
+		    "internal error: invalid unit implementation continuation");
 	parse_keyword("implementation");
 	unit->phase = UnitPhase::ImplementationInProgress;
+	// Mark this unit active before completing dependencies. If one of their
+	// implementations uses this unit, its interface is already complete and
+	// the recursive completion request terminates here instead of treating a
+	// legal implementation cycle as an interface cycle.
+	for (Unit* used :
+	     unit->interface_uses)
+		complete_unit(used);
+
 	std::vector<Unit*> impl_units;
 	if (maybe_parse_keyword("uses")) {
-		impl_units = parse_uses_clause(false, name);
+		impl_units =
+		    parse_uses_clause(
+			false, unit->name);
 		parse_semicolon();
 	}
+	for (Unit* used : impl_units)
+		complete_unit(used);
 	// Rebuild only the lookup path for the implementation's precedence:
 	// this unit, implementation uses, interface uses. Interface and
 	// implementation declarations deliberately keep the same Frame identity.
@@ -12917,15 +12986,16 @@ void Parser::parse_unit_body() {
 	pop_scope(); // unit
 	for (Unit* used : impl_units)
 		push_scope(used->frame, used->reference);
-	push_scope(unit_frame);
-	push_declaration_frame(unit_frame);
+	push_scope(unit->frame);
+	push_declaration_frame(unit->frame);
 	if (emitter) {
 		emitter->set_section(Emitter::Section::Implementation);
 		std::vector<std::string> h_files;
 		for (Unit* u : impl_units)
 			h_files.push_back(u->name + ".h");
 		emitter->emit_unit_implementation_prologue(
-		    unit->cxx_namespace, name + ".h", h_files);
+		    unit->cxx_namespace,
+		    unit->name + ".h", h_files);
 	}
 	// Implementation section: same dispatcher; procedures with bodies attach
 	// to the interface prototypes via the lookup-then-adopt path in
@@ -12984,7 +13054,9 @@ void Parser::parse_unit_body() {
 	pop_scope(); // unit
 	for (size_t i = 0; i < impl_units.size(); i++)
 		pop_scope();
-	for (size_t i = 0; i < iface_units.size(); i++)
+	for (size_t i = 0;
+	     i < unit->interface_uses.size();
+	     i++)
 		pop_scope();
 
 	unit->phase = UnitPhase::Done;
@@ -13017,6 +13089,8 @@ void Parser::parse_program_or_unit() {
 				prog_units.push_back(u);
 			parse_semicolon();
 		}
+		for (Unit* used : prog_units)
+			complete_unit(used);
 		for (Unit* used : prog_units)
 			push_scope(used->frame, used->reference);
 		push_scope(program_frame);
@@ -13075,7 +13149,10 @@ void Parser::parse_program_or_unit() {
 		parse_period();
 		unit->phase = UnitPhase::Done;
 	} else if (maybe_parse_keyword("unit")) {
-		parse_unit_body();
+		Unit* unit =
+		    parse_unit_interface_body();
+		parse_unit_implementation_body(
+		    unit);
 	} else {
 		raise_parse_error("unknown input token");
 	}

@@ -6,7 +6,8 @@ tmp=${TMPDIR:-/tmp}/tpcc-unit-uses-scope-test.$$
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/positive" "$tmp/no-interface-reexport" \
 	"$tmp/no-implementation-reexport" "$tmp/cycles" \
-	"$tmp/explicit" "$tmp/shadow-type" "$tmp/shadow-value"
+	"$tmp/explicit" "$tmp/shadow-type" "$tmp/shadow-value" \
+	"$tmp/late-cycle"
 
 cd "$root"
 
@@ -81,6 +82,22 @@ fi
 ./mp -Furtl -Futests/07_mutual_impl \
 	-o"$tmp/cycles/implementation.cc" \
 	tests/07_mutual_impl/a.pp
+
+./mp -Furtl -Futests/unit_uses_scope \
+	-o"$tmp/late-cycle/main.cc" \
+	tests/unit_uses_scope/late_cycle_main.pp
+
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-fsanitize=address,undefined \
+	-I"$tmp/late-cycle" \
+	-Irtl \
+	"$tmp/late-cycle"/*.cc \
+	-o "$tmp/late-cycle/main"
+ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/late-cycle/main"
 
 if ./mp -Furtl -Futests/08_mutual_iface \
 	-o"$tmp/cycles/interface.cc" \

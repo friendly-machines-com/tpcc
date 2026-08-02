@@ -636,7 +636,18 @@ protected:
 	bool maybe_parse_colon_equals();
 	std::string parse_string_literal();
 
-	void parse_unit_body();
+	/** Parse a unit from its name through the complete interface, leaving this
+	 *  parser suspended at `implementation`. The published Unit frame can then
+	 *  satisfy dependants before this unit's implementation is resumed. */
+	Unit* parse_unit_interface_body();
+	/** Resume a parser suspended by parse_unit_interface_body and finish that
+	 *  unit. Interface and implementation dependencies are completed only
+	 *  after UNIT has entered ImplementationInProgress, which terminates legal
+	 *  implementation-only cycles. */
+	void parse_unit_implementation_body(Unit* unit);
+	/** Complete a recursively loaded InterfaceDone unit. Done units and the
+	 *  active side of an implementation cycle require no action. */
+	void complete_unit(Unit* unit);
 	/** Parse a comma-separated `uses A, B, C` list (the `uses` keyword must
 	 *  have been consumed by the caller). Loads each named unit if necessary
 	 *  and returns the Units in source order. This does not mutate `scopes`:

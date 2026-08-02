@@ -4,6 +4,8 @@
 #include <vector>
 
 class Frame;
+class Parser;
+class Emitter;
 class Method;
 class UnitRef;
 
@@ -40,6 +42,13 @@ public:
 	bool is_program;
 	UnitRef* reference;
 	UnitPhase phase;
+	// A recursively loaded unit publishes its complete interface before its
+	// implementation is parsed. The suspended parser retains token/directive
+	// state at the `implementation` keyword; its emitter keeps the unit's
+	// header and implementation streams open until completion.
+	Parser* pending_parser = nullptr;
+	Emitter* pending_emitter = nullptr;
+	std::vector<Unit*> interface_uses;
 	std::string initialization_cxx_name;
 	std::string finalization_cxx_name;
 	bool has_initialization = false;
