@@ -2343,7 +2343,9 @@ Node* Parser::maybe_parse_numeral() {
 			if (ec != std::errc() || ptr != input + input_size) {
 				raise_parse_error("malformed numeral: " + input_token);
 			}
-			auto lit = new Integer(value, &untyped_integer_type());
+			auto lit = new Integer(
+			    value, &untyped_integer_type(),
+			    false, base != 10);
 			consume();
 			return lit;
 		} else {
@@ -12005,6 +12007,47 @@ Node* Parser::cast_for_destination(
 	    a, target_ty, true);
 }
 
+static Node*
+contextual_based_integer_destination(
+    Node* expression, Type* target) {
+	Integer* literal =
+	    untyped_integer_constant(expression);
+	if (!literal ||
+	    !literal->based_literal ||
+	    literal->negative)
+		return nullptr;
+
+	OrdinalBounds bounds;
+	if (!integer_bounds(target, &bounds) ||
+	    !bounds.signed_type ||
+	    literal->value <= bounds.max_positive)
+		return nullptr;
+	const uint64_t unsigned_max =
+	    bounds.min_magnitude ==
+		    (uint64_t{1} << 63)
+		? UINT64_MAX
+		: bounds.min_magnitude * 2 - 1;
+	if (literal->value > unsigned_max)
+		return nullptr;
+
+	// `$` and `%` are the Pascal notation for carrier bit patterns as well as
+	// positive integer magnitudes. Once assignment has already selected a
+	// signed intrinsic destination, an otherwise-out-of-range based numeral
+	// fitting that carrier is constructed from those bits. This is not an
+	// implicit conversion edge: overload matching never enters this
+	// destination-only path. Decimal literals remain ordinary magnitudes;
+	// computed expressions have their operator's selected result type and
+	// follow the ordinary typed-destination conversion rules.
+	ConstEvalResult converted =
+	    const_explicit_ordinal_cast(
+		literal->value, false,
+		target);
+	return converted.kind ==
+		       ConstEvalResult::Kind::Success
+		   ? converted.node
+		   : nullptr;
+}
+
 Node* Parser::cast_impl(
     Node* a, Type* target_ty,
     bool allow_destination_conversion) {
@@ -12031,6 +12074,11 @@ Node* Parser::cast_impl(
 	if (!target_ty)
 		raise_parse_error(
 		    "implicit conversion has no target type");
+	if (allow_destination_conversion)
+		if (Node* based =
+			contextual_based_integer_destination(
+			    a, target_ty))
+			return based;
 	Parameter formal(
 	    "", "", target_ty,
 	    ParamMode::Value, nullptr);

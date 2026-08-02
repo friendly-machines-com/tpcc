@@ -595,7 +595,16 @@ public:
 	// fits in int64_t before conversion.
 	bool negative = false;
 	uint64_t value = 0;
-	Integer(uint64_t value, Type* ty, bool negative = false);
+	// True only for a numeral written with Pascal's $hex or %binary syntax.
+	// This survives references to an untyped named constant so a selected
+	// signed destination may interpret an otherwise-out-of-range numeral as
+	// its carrier bit pattern. Constant arithmetic deliberately does not
+	// propagate it: an expression result is a value, not source notation.
+	bool based_literal = false;
+	Integer(
+	    uint64_t value, Type* ty,
+	    bool negative = false,
+	    bool based_literal = false);
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

@@ -198,9 +198,12 @@ EnumMemberRef::EnumMemberRef(std::string cxx_name, int64_t value, Type* ty) {
 	this->ty = ty;
 }
 
-Integer::Integer(uint64_t value, Type* ty, bool negative) {
+Integer::Integer(
+    uint64_t value, Type* ty, bool negative,
+    bool based_literal) {
 	this->negative = negative && value != 0;
 	this->value = value;
+	this->based_literal = based_literal;
 	this->ty = ty;
 }
 
@@ -1072,7 +1075,12 @@ ConstEvalResult EnumMemberRef::const_eval(ConstEvalContext&) const { return Cons
 void EnumMemberRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "enum member = " << value << " : " << ctx->known_type_ref(ty); }
 
 const char* Integer::diagnostic_kind() const { return "integer"; }
-ConstEvalResult Integer::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new Integer(value, ty, negative)); }
+ConstEvalResult Integer::const_eval(ConstEvalContext&) const {
+	return ConstEvalResult::success(
+	    new Integer(
+		value, ty, negative,
+		based_literal));
+}
 void Integer::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "integer " << (negative ? "-" : "") << value << " : " << ctx->known_type_ref(ty); }
 
 const char* String::diagnostic_kind() const { return "string"; }
