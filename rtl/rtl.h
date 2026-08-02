@@ -2110,7 +2110,7 @@ struct t_ansistring {
 	}
 
 	void erase(
-	    t_longint index, t_longint count) {
+	    t_sizeint index, t_sizeint count) {
 		if (index < 1 || count <= 0)
 			return;
 		const std::size_t start =
@@ -2140,7 +2140,7 @@ struct t_ansistring {
 
 	void insert(
 	    const t_ansistring& source,
-	    t_longint index) {
+	    t_sizeint index) {
 		const std::size_t source_length =
 		    static_cast<std::size_t>(
 			source.m_length());
@@ -3901,8 +3901,9 @@ inline t_shortstring<255> o_implicit(
 	return result;
 }
 
-inline t_char p_chr(t_byte value) {
-	return t_char{value};
+inline t_char p_chr(t_integer value) {
+	return t_char{
+	    static_cast<t_byte>(value)};
 }
 
 inline void p_fillchar(tpcc_storage_ref destination, t_sizeint count, t_byte value) {
@@ -3912,6 +3913,13 @@ inline void p_fillchar(tpcc_storage_ref destination, t_sizeint count, t_byte val
 	if (byte_count > destination.size)
 		m_runtime_error(201);
 	std::memset(destination.data, value, byte_count);
+}
+
+inline void p_fillchar(
+    tpcc_storage_ref destination,
+    t_sizeint count, t_char value) {
+	p_fillchar(
+	    destination, count, value.value);
 }
 
 inline void p_fillbyte(
@@ -4101,7 +4109,7 @@ inline t_shortstring<255> p_copy(
 template<std::size_t Capacity>
 inline void p_delete(
     t_shortstring<Capacity>& value,
-    t_longint index, t_longint count) {
+    t_sizeint index, t_sizeint count) {
 	if (index < 1 || count <= 0)
 		return;
 	const std::size_t start = static_cast<std::size_t>(index - 1);
@@ -4115,7 +4123,9 @@ inline void p_delete(
 	value.length = static_cast<uint8_t>(length - removed);
 }
 
-inline void p_delete(t_ansistring& value, t_longint index, t_longint count) {
+inline void p_delete(
+    t_ansistring& value,
+    t_sizeint index, t_sizeint count) {
 	value.erase(index, count);
 }
 
@@ -4123,7 +4133,7 @@ template<typename T>
 requires tpcc_is_shortstring_v<T>
 inline void p_delete(
     tpcc_typed_storage_ref<T> value,
-    t_longint index, t_longint count) {
+    t_sizeint index, t_sizeint count) {
 	// An omitted mutable System formal reaches the RTL as a typed storage
 	// view.
 	p_delete(
@@ -4134,7 +4144,7 @@ template<std::size_t SourceCapacity, std::size_t DestinationCapacity>
 inline void p_insert(
     const t_shortstring<SourceCapacity>& source,
     t_shortstring<DestinationCapacity>& value,
-    t_longint index) {
+    t_sizeint index) {
 	if (source.length == 0)
 		return;
 
@@ -4179,14 +4189,17 @@ inline void p_insert(
 template<std::size_t Capacity>
 inline void p_insert(
     t_char source, t_shortstring<Capacity>& destination,
-    t_longint index) {
+    t_sizeint index) {
 	t_shortstring<1> one_character{};
 	one_character.length = 1;
 	one_character.data[0] = source;
 	p_insert(one_character, destination, index);
 }
 
-inline void p_insert(const t_ansistring& source, t_ansistring& destination, t_longint index) {
+inline void p_insert(
+    const t_ansistring& source,
+    t_ansistring& destination,
+    t_sizeint index) {
 	destination.insert(source, index);
 }
 
@@ -4199,7 +4212,7 @@ requires tpcc_is_shortstring_v<Destination> &&
 inline void p_insert(
     const Source& source,
     tpcc_typed_storage_ref<Destination> destination,
-    t_longint index) {
+    t_sizeint index) {
 	// As with Delete, preserve the actual destination String[N] selected by
 	// Pascal and reuse the existing capacity-aware implementation.
 	p_insert(

@@ -419,8 +419,11 @@ operator shr(a: QWord; b: Integer): QWord; external name '::u_system::o_rightshi
 operator in(const item; const values): Boolean; external name '::u_system::o_in';
 
 function ord(const x): Cardinal; external name '::u_system::p_ord'; // generic intrinsic
-function chr(value: Byte): Char; external name '::u_system::p_chr';
+// FIXME: The selected Chr call must range-check Value under {$R+}. The
+// unchecked RTL path intentionally retains FPC's low-byte behavior.
+function chr(value: Integer): Char; external name '::u_system::p_chr';
 procedure fillchar(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillchar';
+procedure fillchar(var destination; count: SizeInt; value: Char); external name '::u_system::p_fillchar';
 procedure fillbyte(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillbyte';
 // FillDWord's count is a number of DWord elements, not a byte count.
 procedure filldword(var destination; count: SizeInt; value: DWord); external name '::u_system::p_filldword';
@@ -545,11 +548,11 @@ function copy(value: Char; index, count: SizeInt): ShortString; overload; extern
 { The omitted mutable types preserve the actual String[N] capacity. The
   ShortStringMutation builtin contract rejects every non-ShortString actual;
   this is not general var-parameter covariance or an open-string declaration. }
-procedure delete(var value; index, count: LongInt); overload; external name '::u_system::p_delete';
-procedure delete(var value: AnsiString; index, count: LongInt); overload; external name '::u_system::p_delete';
-procedure insert(const source: ShortString; var destination; index: LongInt); overload; external name '::u_system::p_insert';
-procedure insert(source: Char; var destination; index: LongInt); overload; external name '::u_system::p_insert';
-procedure insert(const source: AnsiString; var destination: AnsiString; index: LongInt); overload; external name '::u_system::p_insert';
+procedure delete(var value; index, count: SizeInt); overload; external name '::u_system::p_delete';
+procedure delete(var value: AnsiString; index, count: SizeInt); overload; external name '::u_system::p_delete';
+procedure insert(const source: ShortString; var destination; index: SizeInt); overload; external name '::u_system::p_insert';
+procedure insert(source: Char; var destination; index: SizeInt); overload; external name '::u_system::p_insert';
+procedure insert(const source: AnsiString; var destination: AnsiString; index: SizeInt); overload; external name '::u_system::p_insert';
 
 operator xor(a, b: Boolean): Boolean; external name '::u_system::o_logicalxor';
 operator not(a: Boolean): Boolean; external name '::u_system::o_logicalnot';
