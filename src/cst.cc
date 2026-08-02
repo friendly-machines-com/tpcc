@@ -1293,6 +1293,9 @@ void ArrayLiteral::print_diagnostic_definition(
 }
 
 const char* NilLiteral::diagnostic_kind() const { return "nil"; }
+ConstEvalResult NilLiteral::const_eval(ConstEvalContext&) const {
+	return ConstEvalResult::success(const_cast<NilLiteral*>(this));
+}
 void NilLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "nil : " << ctx->known_type_ref(ty); }
 
 const char* OpenArrayConstView::diagnostic_kind() const {

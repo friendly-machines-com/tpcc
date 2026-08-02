@@ -731,6 +731,7 @@ class NilLiteral: public Node {
 public:
 	NilLiteral() = default;
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
