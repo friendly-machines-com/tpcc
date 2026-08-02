@@ -205,6 +205,8 @@ struct ShortStringType: public Type {
 	std::optional<ValueConversion>
 	destination_conversion_from(
 	    const Type* source) const override;
+	bool predefined_explicit_conversion_from(
+	    const Type* source) const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
 	Type* sequence_element_type() const override;

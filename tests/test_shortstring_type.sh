@@ -56,4 +56,21 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_pascal"
 	-o "$tmp/shortstring_type_runtime"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_runtime"
 
+if ./mp -Furtl \
+	-o"$tmp/implicit_rejected.cc" \
+	tests/ansistring_shortstring_implicit_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted implicit AnsiString-to-ShortString call conversion" >&2
+	exit 1
+fi
+if ! rg -Fq \
+	"no matching overload for 'taketiny'" \
+	"$tmp/stderr"
+then
+	echo "wrong implicit AnsiString-to-ShortString diagnostic" >&2
+	sed -n '1,120p' "$tmp/stderr" >&2
+	exit 1
+fi
+
 echo "ShortString type tests passed"

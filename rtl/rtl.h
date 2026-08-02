@@ -2185,6 +2185,29 @@ static_assert(
 static_assert(
     alignof(t_ansistring) == alignof(void*));
 
+template<std::size_t DestinationCapacity>
+inline t_shortstring<DestinationCapacity>
+tpcc_shortstring_cast(
+    const t_ansistring& source) {
+	// An explicit AnsiString -> ShortString conversion uses the managed
+	// string's stored length, not a C NUL terminator, and truncates to the
+	// destination's declared inline capacity even under {$R+}.
+	t_shortstring<DestinationCapacity> result{};
+	const std::size_t copied =
+	    std::min<std::size_t>(
+		static_cast<std::size_t>(
+		    source.m_length()),
+		DestinationCapacity);
+	result.length =
+	    t_char{
+		static_cast<uint8_t>(
+		    copied)};
+	std::copy_n(
+	    source.m_data(), copied,
+	    result.data);
+	return result;
+}
+
 // Pascal Initialize starts the lifetime of the managed part of an otherwise
 // uninitialized value. In particular, it must not release a handle which was
 // placed in the destination by a preceding bytewise Move: that handle has not

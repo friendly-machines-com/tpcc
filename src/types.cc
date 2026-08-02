@@ -1195,6 +1195,19 @@ ShortStringType::destination_conversion_from(
 		string->capacity - capacity));
 }
 
+bool ShortStringType::
+    predefined_explicit_conversion_from(
+	const Type* source) const {
+	// An explicit ShortString(AnsiString) construction copies the managed
+	// string payload into this destination's fixed inline capacity. It may
+	// truncate, so it must not become an implicit value-conversion edge used
+	// by overload resolution.
+	return Type::
+		   predefined_explicit_conversion_from(
+		       source) ||
+	       source == ansistring_type();
+}
+
 std::optional<ValueConversion>
 FixedSetType::value_conversion_from(
     const Type* source) const {

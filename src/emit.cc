@@ -3988,7 +3988,13 @@ void Emitter::emit_expression(Node* expr) {
 			ca->a ? ca->a->ty : nullptr);
 		auto target_shortstring =
 		    dynamic_cast<ShortStringType*>(ca->ty);
-		if (source_shortstring && target_shortstring) {
+		const bool source_ansistring =
+		    ca->a &&
+		    ca->a->ty ==
+			ansistring_type();
+		if (target_shortstring &&
+		    (source_shortstring ||
+		     source_ansistring)) {
 			fprintf(active,
 				"::u_system::tpcc_shortstring_cast<%u>(",
 				static_cast<unsigned>(
@@ -3997,8 +4003,6 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ")");
 			return;
 		}
-		const bool source_ansistring =
-		    ca->a && ca->a->ty == ansistring_type();
 		auto target_pointer =
 		    dynamic_cast<PointerType*>(ca->ty);
 		const bool target_pointer_integer =

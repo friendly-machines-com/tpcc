@@ -16,6 +16,7 @@ var
   Name: TName;
   Pair: TPair;
   Ordinary: ShortString;
+  LongText: AnsiString;
 
 begin
   Tiny := 'abcd';
@@ -66,5 +67,26 @@ begin
 
   SetLength(Ordinary, 300);
   if Length(Ordinary) <> 255 then
-    Halt(15)
+    Halt(15);
+
+  {$R+}
+  LongText := 'A'#0'BCD';
+  Tiny := TTiny(LongText);
+  if Length(Tiny) <> 2 then
+    Halt(16);
+  if (Tiny[1] <> 'A') or
+     (Ord(Tiny[2]) <> 0) then
+    Halt(17);
+
+  Name := TName(LongText);
+  if Length(Name) <> 5 then
+    Halt(18);
+  if (Name[3] <> 'B') or
+     (Name[5] <> 'D') then
+    Halt(19);
+
+  LongText := '';
+  Name := TName(LongText);
+  if Length(Name) <> 0 then
+    Halt(20)
 end.
