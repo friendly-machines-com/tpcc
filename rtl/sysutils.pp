@@ -30,6 +30,10 @@ type
   end;
   TSearchRec = record // FIXME
   end;
+  TSystemTime = record
+    Year, Month, DayOfWeek, Day, Hour, Minute, Second,  Millisecond: Word
+  end;
+  TProcedure = procedure;
 
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
