@@ -93,6 +93,78 @@ operator Positive(a: Single): Single; external name '::u_system::o_positive';
 operator Positive(a: Double): Double; external name '::u_system::o_positive';
 operator Positive(a: Extended): Extended; external name '::u_system::o_positive';
 
+// These are the complete direct, lossless integer assignment edges between
+// the fixed-width predefined types. Transitive pairs are intentionally
+// present: implicit conversion may use one operator := edge, never a chain.
+operator :=(a: ShortInt): SmallInt; external name '::u_system::o_implicit';
+operator :=(a: ShortInt): Integer; external name '::u_system::o_implicit';
+operator :=(a: ShortInt): Int64; external name '::u_system::o_implicit';
+
+operator :=(a: Byte): SmallInt; external name '::u_system::o_implicit';
+operator :=(a: Byte): Word; external name '::u_system::o_implicit';
+operator :=(a: Byte): Integer; external name '::u_system::o_implicit';
+operator :=(a: Byte): Cardinal; external name '::u_system::o_implicit';
+operator :=(a: Byte): Int64; external name '::u_system::o_implicit';
+operator :=(a: Byte): QWord; external name '::u_system::o_implicit';
+
+operator :=(a: SmallInt): Integer; external name '::u_system::o_implicit';
+operator :=(a: SmallInt): Int64; external name '::u_system::o_implicit';
+
+operator :=(a: Word): Integer; external name '::u_system::o_implicit';
+operator :=(a: Word): Cardinal; external name '::u_system::o_implicit';
+operator :=(a: Word): Int64; external name '::u_system::o_implicit';
+operator :=(a: Word): QWord; external name '::u_system::o_implicit';
+
+operator :=(a: Integer): Int64; external name '::u_system::o_implicit';
+
+operator :=(a: Cardinal): Int64; external name '::u_system::o_implicit';
+operator :=(a: Cardinal): QWord; external name '::u_system::o_implicit';
+
+// FIXME: These SizeInt/SizeUInt and PtrInt/PtrUInt edges describe a 64-bit
+// target. On a 32-bit target the signed types have Integer's domain and the
+// unsigned types have Cardinal's domain; -P must select the corresponding
+// declaration block before overload resolution.
+operator :=(a: ShortInt): PtrInt; external name '::u_system::o_implicit';
+operator :=(a: ShortInt): SizeInt; external name '::u_system::o_implicit';
+
+operator :=(a: Byte): PtrInt; external name '::u_system::o_implicit';
+operator :=(a: Byte): PtrUInt; external name '::u_system::o_implicit';
+operator :=(a: Byte): SizeInt; external name '::u_system::o_implicit';
+operator :=(a: Byte): SizeUInt; external name '::u_system::o_implicit';
+
+operator :=(a: SmallInt): PtrInt; external name '::u_system::o_implicit';
+operator :=(a: SmallInt): SizeInt; external name '::u_system::o_implicit';
+
+operator :=(a: Word): PtrInt; external name '::u_system::o_implicit';
+operator :=(a: Word): PtrUInt; external name '::u_system::o_implicit';
+operator :=(a: Word): SizeInt; external name '::u_system::o_implicit';
+operator :=(a: Word): SizeUInt; external name '::u_system::o_implicit';
+
+operator :=(a: Integer): PtrInt; external name '::u_system::o_implicit';
+operator :=(a: Integer): SizeInt; external name '::u_system::o_implicit';
+
+operator :=(a: Cardinal): PtrInt; external name '::u_system::o_implicit';
+operator :=(a: Cardinal): PtrUInt; external name '::u_system::o_implicit';
+operator :=(a: Cardinal): SizeInt; external name '::u_system::o_implicit';
+operator :=(a: Cardinal): SizeUInt; external name '::u_system::o_implicit';
+
+// TPCC currently gives these names distinct Pascal identity even though each
+// signed or unsigned group has one 64-bit value domain. These edges preserve
+// FPC's assignment compatibility without pretending the Type objects match.
+operator :=(a: Int64): PtrInt; external name '::u_system::o_implicit';
+operator :=(a: Int64): SizeInt; external name '::u_system::o_implicit';
+operator :=(a: PtrInt): Int64; external name '::u_system::o_implicit';
+operator :=(a: PtrInt): SizeInt; external name '::u_system::o_implicit';
+operator :=(a: SizeInt): Int64; external name '::u_system::o_implicit';
+operator :=(a: SizeInt): PtrInt; external name '::u_system::o_implicit';
+
+operator :=(a: QWord): PtrUInt; external name '::u_system::o_implicit';
+operator :=(a: QWord): SizeUInt; external name '::u_system::o_implicit';
+operator :=(a: PtrUInt): QWord; external name '::u_system::o_implicit';
+operator :=(a: PtrUInt): SizeUInt; external name '::u_system::o_implicit';
+operator :=(a: SizeUInt): QWord; external name '::u_system::o_implicit';
+operator :=(a: SizeUInt): PtrUInt; external name '::u_system::o_implicit';
+
 // The parser chooses one of these ordinary operator families before overload
 // resolution. Keeping both rows explicit also lets user-defined arithmetic
 // make the same checked/unchecked promise as System arithmetic.

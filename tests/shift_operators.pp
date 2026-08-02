@@ -73,15 +73,15 @@ begin
   Q := 1;
   Count := 1;
 
-  { This is ordinary overload resolution, independent of shifts. FPC treats a
-    nonnegative subrange as unsigned when equal-distance containing integer
-    formals differ only by sign. }
-  if SubrangeKind(N) <> 1 then Halt(39);
+  { This is ordinary overload resolution, independent of shifts. TNibble is a
+    distinct nominal type represented directly by its declared ShortInt base;
+    passing it to Byte requires one assignment edge. }
+  if SubrangeKind(N) <> 2 then Halt(39);
 
   { A variable count prevents FPC-style constant folding from shrinking the
     result to the folded literal's natural carrier. These checks exercise the
     ordinary runtime operator families. }
-  if ResultKind(N shl Count) <> 2 then Halt(1);
+  if ResultKind(N shl Count) <> 1 then Halt(1);
   if ResultKind(B shl Count) <> 2 then Halt(2);
   if ResultKind(SI shl Count) <> 1 then Halt(3);
   if ResultKind(W shl Count) <> 2 then Halt(4);
@@ -91,7 +91,7 @@ begin
   if ResultKind(I64 shl Count) <> 3 then Halt(8);
   if ResultKind(Q shl Count) <> 4 then Halt(9);
 
-  if ResultKind(N shr Count) <> 2 then Halt(10);
+  if ResultKind(N shr Count) <> 1 then Halt(10);
   if ResultKind(B shr Count) <> 2 then Halt(11);
   if ResultKind(SI shr Count) <> 1 then Halt(12);
   if ResultKind(W shr Count) <> 2 then Halt(13);

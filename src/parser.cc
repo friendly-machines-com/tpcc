@@ -10227,7 +10227,10 @@ integer_literal_target_distance(
 }
 
 static bool rank_less(
-    const MatchRank& a, const MatchRank& b) {
+    const MatchRank& a, Type* a_formal,
+    const MatchRank& b, Type* b_formal,
+    const std::function<bool(Type*, Type*)>&
+	direct_assignment_edge) {
 	if (a.contextual_construction !=
 	    b.contextual_construction)
 		return static_cast<unsigned>(
@@ -10237,8 +10240,30 @@ static bool rank_less(
 	if (a.tier != b.tier)
 		return static_cast<unsigned>(a.tier) <
 		       static_cast<unsigned>(b.tier);
-	if (a.distance != b.distance)
-		return a.distance < b.distance;
+	if (a_formal && b_formal &&
+	    a_formal != b_formal) {
+		const bool a_subtype =
+		    a_formal->is_subtype_of(
+			b_formal);
+		const bool b_subtype =
+		    b_formal->is_subtype_of(
+			a_formal);
+		if (a_subtype != b_subtype)
+			// Among equally long conversion sequences, the narrower formal
+			// is the smaller widening target. Mutual subtypes remain equal
+			// here because nominal identity was already tested by Exact.
+			return a_subtype;
+		const bool a_to_b =
+		    direct_assignment_edge(
+			a_formal, b_formal);
+		const bool b_to_a =
+		    direct_assignment_edge(
+			b_formal, a_formal);
+		if (a_to_b != b_to_a)
+			// Compare only the two direct edges. Following A -> X -> B here
+			// would make overload ranking depend on conversion chaining.
+			return a_to_b;
+	}
 	if (a.integer_literal_sign_mismatch !=
 	    b.integer_literal_sign_mismatch)
 		return !a.integer_literal_sign_mismatch;
@@ -10253,21 +10278,6 @@ static int real_range_rank(Type* type) {
 	if (type == extended_type())
 		return 2;
 	return -1;
-}
-
-static std::optional<int>
-integer_preference_rank(Type* type) {
-	while (auto range =
-		   dynamic_cast<SubrangeType*>(
-		       type))
-		type = range->base_type;
-	auto intrinsic =
-	    dynamic_cast<IntrinsicType*>(
-		type);
-	if (!intrinsic ||
-	    !intrinsic->rank)
-		return std::nullopt;
-	return *intrinsic->rank;
 }
 
 static bool ordinal_interval_for_conversion(
@@ -10498,145 +10508,6 @@ static bool conversion_requires_range_check(
 		   target_upper) > 0;
 }
 
-static NumericConversionProfile
-numeric_conversion_profile(
-    Type* source, Type* target) {
-	NumericConversionProfile result;
-	if (!source || !target ||
-	    source == target)
-		return result;
-	result.requires_range_check =
-	    conversion_requires_range_check(
-		source, target);
-
-	auto source_integer =
-	    integer_preference_rank(source);
-	auto target_integer =
-	    integer_preference_rank(target);
-	if (source_integer &&
-	    target_integer) {
-		if (dynamic_cast<SubrangeType*>(
-			source))
-			// A subrange's declared interval, not the intrinsic type chosen
-			// to store it, is the source domain. When two builtin integer
-			// formals both contain that interval, their ordinary distance
-			// and sign comparison select the closer carrier; the storage
-			// base must not manufacture a promotion toward itself.
-			result.preference =
-			    result.requires_range_check
-				? NumericPreference::
-				      Demotion
-				: NumericPreference::
-				      Promotion;
-		else if (*target_integer >
-		    *source_integer)
-			result.preference =
-			    NumericPreference::
-				Promotion;
-		else if (*target_integer <
-			 *source_integer)
-			result.preference =
-			    NumericPreference::
-				Demotion;
-		else
-			// Equal-ranked subranges use their semantic bounds to
-			// distinguish widening from narrowing.
-			result.preference =
-			    result
-				    .requires_range_check
-				? NumericPreference::
-				      Demotion
-				: NumericPreference::
-				      Promotion;
-		return result;
-	}
-
-	const int source_real =
-	    real_range_rank(source);
-	const int target_real =
-	    real_range_rank(target);
-	if (source_real >= 0 &&
-	    target_real >= 0) {
-		result.preference =
-		    target_real >= source_real
-			? NumericPreference::
-			      Promotion
-			: NumericPreference::
-			      Demotion;
-		return result;
-	}
-	if ((source_integer &&
-	     target_real >= 0) ||
-	    (source_real >= 0 &&
-	     target_integer)) {
-		result.preference =
-		    NumericPreference::
-			DomainChange;
-		return result;
-	}
-
-	const bool source_character =
-	    subrange_range_type(source) ==
-	    char_type();
-	const bool target_character =
-	    subrange_range_type(target) ==
-	    char_type();
-	if ((source_integer &&
-	     target_character) ||
-	    (source_character &&
-	     target_integer)) {
-		result.preference =
-		    NumericPreference::
-			DomainChange;
-		return result;
-	}
-
-	OrdinalRange::Value source_lower;
-	OrdinalRange::Value source_upper;
-	OrdinalRange::Value target_lower;
-	OrdinalRange::Value target_upper;
-	if (ordinal_interval_for_conversion(
-		source, &source_lower,
-		&source_upper) &&
-	    ordinal_interval_for_conversion(
-		target, &target_lower,
-		&target_upper))
-		// Remaining admitted ordinal conversions are within one nominal
-		// character or enumeration family. Domain containment is their
-		// promotion relation because they have no intrinsic numeric rank.
-		result.preference =
-		    result.requires_range_check
-			? NumericPreference::
-			      Demotion
-			: NumericPreference::
-			      Promotion;
-	return result;
-}
-
-static bool numeric_profile_less(
-    const NumericConversionProfile& a,
-    const NumericConversionProfile& b) {
-	if (a.preference !=
-	    b.preference)
-		return static_cast<unsigned>(
-			   a.preference) <
-		       static_cast<unsigned>(
-			   b.preference);
-	if (a.requires_range_check !=
-	    b.requires_range_check)
-		return !a.requires_range_check;
-	return false;
-}
-
-static NumericConversionProfile
-worse_numeric_profile(
-    const NumericConversionProfile& a,
-    const NumericConversionProfile& b) {
-	return numeric_profile_less(a, b)
-		   ? b
-		   : a;
-}
-
 std::optional<ArgumentMatch> Parser::match_argument(
     const Parameter& formal, Node* actual,
     const BuiltinDesc* builtin,
@@ -10782,7 +10653,6 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			converted->rank = {
 			    MatchRank::Tier::Generic,
 			    0};
-			converted->numeric_profile = {};
 			return converted;
 		}
 		if (builtin &&
@@ -10897,8 +10767,6 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    ParamMode::Value, nullptr);
 		MatchRank combined{
 		    MatchRank::Tier::Direct, 0};
-		NumericConversionProfile
-		    combined_numeric_profile;
 		if (!target_set)
 			combined.contextual_construction =
 			    MatchRank::
@@ -10945,11 +10813,6 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			if (!lower)
 				return std::nullopt;
 			combine(lower->rank);
-			combined_numeric_profile =
-			    worse_numeric_profile(
-				combined_numeric_profile,
-				lower
-				    ->numeric_profile);
 			if (!target_set) {
 				array_items.push_back(
 				    lower->value);
@@ -10964,11 +10827,6 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				if (!upper)
 					return std::nullopt;
 				combine(upper->rank);
-				combined_numeric_profile =
-				    worse_numeric_profile(
-					combined_numeric_profile,
-					upper
-					    ->numeric_profile);
 				upper_value =
 				    upper->value;
 			}
@@ -10982,14 +10840,12 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    combined,
 			    new SetLiteral(
 				std::move(set_items),
-				target),
-			    combined_numeric_profile};
+				target)};
 		return ArgumentMatch{
 		    combined,
 		    new ArrayLiteral(
 			std::move(array_items),
-			target),
-		    combined_numeric_profile};
+			target)};
 	}
 
 	if (auto open =
@@ -11154,6 +11010,18 @@ std::optional<ArgumentMatch> Parser::match_argument(
 		    {MatchRank::Tier::Direct, 0},
 		    new String(literal->value, target)};
 
+	if (auto literal = dynamic_cast<Real*>(actual);
+	    literal &&
+	    real_range_rank(target) >= 0)
+		// A real literal is constructed in its selected destination context;
+		// this does not invent a reverse Extended -> Single assignment edge.
+		return ArgumentMatch{
+		    {target == literal->ty
+			 ? MatchRank::Tier::Exact
+			 : MatchRank::Tier::Direct,
+		     0},
+		    new Real(literal->value, target)};
+
 	if (source == target)
 		return ArgumentMatch{
 		    {MatchRank::Tier::Exact, 0},
@@ -11174,12 +11042,16 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				target, untyped_integer);
 			if (!distance)
 				return std::nullopt;
-			MatchRank rank{
-			    MatchRank::Tier::Direct,
-			    *distance};
 			Type* natural =
 			    integer_literal_natural_type(
 				untyped_integer);
+			MatchRank rank{
+			    target == natural
+				? MatchRank::Tier::
+				      Exact
+				: MatchRank::Tier::
+				      Direct,
+			    *distance};
 			auto natural_signed =
 			    integer_carrier_is_signed(
 				natural);
@@ -11187,8 +11059,6 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    integer_carrier_is_signed(
 				target);
 			rank.integer_literal_sign_mismatch =
-			    !conversion_requires_range_check(
-				natural, target) &&
 			    natural_signed &&
 			    target_signed &&
 			    *natural_signed !=
@@ -11198,12 +11068,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    new Integer(
 				untyped_integer->value,
 				target,
-				untyped_integer->negative),
-			    conversion_requires_range_check(
-				natural, target)
-				? numeric_conversion_profile(
-				      natural, target)
-				: NumericConversionProfile{}};
+				untyped_integer->negative)};
 		}
 	}
 	if (source == &untyped_integer_type() &&
@@ -11224,9 +11089,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			 : MatchRank::Tier::Convert,
 		     conversion->distance},
 		    make_implicit_cast(
-			actual, target),
-		    numeric_conversion_profile(
-			source, target)};
+			actual, target)};
 	if (allow_declared_conversion)
 		return match_declared_conversion(
 		    actual, target,
@@ -11373,7 +11236,7 @@ Parser::match_callable_arguments(
 			first_match->value,
 			second_match->value,
 		    },
-		    {{}, {}},
+		    {nullptr, nullptr},
 		};
 	}
 	if (builtin &&
@@ -11433,7 +11296,7 @@ Parser::match_callable_arguments(
 			first_match->value,
 			second_match->value,
 		    },
-		    {{}, {}},
+		    {nullptr, nullptr},
 		};
 	}
 	if (builtin &&
@@ -11515,14 +11378,13 @@ Parser::match_callable_arguments(
 			{MatchRank::Tier::Generic, 0},
 		    },
 		    {item_match->value, values},
-		    {{}, {}},
+		    {nullptr, nullptr},
 		};
 	}
 	CallableMatch result;
 	result.ranks.reserve(args.size());
 	result.arguments.reserve(args.size());
-	result.numeric_profile.reserve(
-	    args.size());
+	result.formal_types.reserve(args.size());
 	for (size_t i = 0; i < args.size(); ++i) {
 		auto match = match_argument(
 		    signature->formals[i], args[i],
@@ -11534,10 +11396,62 @@ Parser::match_callable_arguments(
 		    match->rank);
 		result.arguments.push_back(
 		    match->value);
-		result.numeric_profile.push_back(
-		    match->numeric_profile);
+		result.formal_types.push_back(
+		    signature->formals[i].ty);
 	}
 	return result;
+}
+
+bool Parser::has_direct_assignment_edge(
+    Type* source, Type* target) {
+	// When two overloads both need one conversion, the narrower destination
+	// is the one which itself assigns directly to the other destination.
+	// Query the same directed relation used for actual arguments: intrinsic
+	// type relations and operator := declarations contribute indistinguishable
+	// edges. Requiring the operator's source formal to be exactly SOURCE is
+	// essential; accepting a merely convertible formal here would turn this
+	// one-edge question into an accidental SOURCE -> FORMAL -> TARGET chain.
+	if (!source || !target)
+		return false;
+	if (source == target ||
+	    source->is_subtype_of(target) ||
+	    target->value_conversion_from(source))
+		return true;
+
+	Node* family = maybe_resolve_value(
+	    std::string(
+		implicit_operator_identifier(
+		    directive_state
+			.switch_enabled('r'))));
+	if (auto member =
+		dynamic_cast<MemberAccess*>(family)) {
+		if (!dynamic_cast<UnitRef*>(
+			member->a))
+			return false;
+		family = member->b;
+	}
+
+	std::vector<Callable*> candidates;
+	if (auto callable =
+		dynamic_cast<Callable*>(family))
+		candidates.push_back(callable);
+	else if (auto overloads =
+		     dynamic_cast<OverloadSet*>(
+			 family))
+		candidates = overloads->members;
+	for (Callable* candidate : candidates) {
+		if (!dynamic_cast<Procedure*>(
+			candidate) ||
+		    candidate->ty->kind != ROUTINE ||
+		    candidate->ty->return_type !=
+			target ||
+		    candidate->ty->formals.size() != 1)
+			continue;
+		if (candidate->ty->formals[0].ty ==
+		    source)
+			return true;
+	}
+	return false;
 }
 
 std::optional<ArgumentMatch>
@@ -11586,13 +11500,11 @@ Parser::match_declared_conversion(
 
 	Callable* best_candidate = nullptr;
 	std::optional<ArgumentMatch> best_source;
+	Type* best_source_formal = nullptr;
 	std::vector<Callable*> best_candidates;
 	auto source_is_single_edge =
 	    [&](const Parameter& formal,
 		const ArgumentMatch& match) {
-		    if (match.numeric_profile
-			    .requires_range_check)
-			    return false;
 		    if (match.rank.tier ==
 			MatchRank::Tier::Exact)
 			    return true;
@@ -11670,18 +11582,39 @@ Parser::match_declared_conversion(
 			     CallableMatch{
 				 {source_match->rank},
 				 {source_match->value},
-				 {source_match
-				      ->numeric_profile}}});
+				 {candidate->ty
+				      ->formals[0]
+				      .ty}}});
 		if (!best_source ||
 		    rank_less(
 			source_match->rank,
-			best_source->rank)) {
+			candidate->ty
+			    ->formals[0].ty,
+			best_source->rank,
+			best_source_formal,
+			[this](Type* source,
+			       Type* destination) {
+				return has_direct_assignment_edge(
+				    source, destination);
+			})) {
 			best_candidate = candidate;
 			best_source = *source_match;
+			best_source_formal =
+			    candidate->ty
+				->formals[0].ty;
 			best_candidates = {candidate};
 		} else if (!rank_less(
 			       best_source->rank,
-			       source_match->rank)) {
+			       best_source_formal,
+			       source_match->rank,
+			       candidate->ty
+				   ->formals[0].ty,
+			       [this](Type* source,
+				      Type* destination) {
+				       return has_direct_assignment_edge(
+					   source,
+					   destination);
+			       })) {
 			best_candidates.push_back(
 			    candidate);
 		}
@@ -11703,9 +11636,7 @@ Parser::match_declared_conversion(
 	}
 
 	// The selected declaration supplies one ordinary implicit-conversion edge.
-	// Its origin does not create another overload rank. Source matching above
-	// has already selected the declaration; its ordinary distance remains the
-	// distance of the resulting Convert match.
+	// Its origin does not create another overload rank.
 	auto call = new ProcCall(
 	    nullptr, best_candidate,
 	    std::vector<Node*>{
@@ -11714,8 +11645,7 @@ Parser::match_declared_conversion(
 	return ArgumentMatch{
 	    {MatchRank::Tier::Convert,
 	     best_source->rank.distance},
-	    call,
-	    {}};
+	    call};
 }
 
 Node* Parser::match_explicit_conversion(
@@ -11770,43 +11700,11 @@ Node* Parser::match_explicit_conversion(
 	return nullptr;
 }
 
-static int compare_numeric_profiles(
-    const CallableMatch& a,
-    const CallableMatch& b) {
-	if (a.numeric_profile.size() !=
-	    b.numeric_profile.size())
-		return 0;
-	auto a_profile = a.numeric_profile;
-	auto b_profile = b.numeric_profile;
-	auto worst_first =
-	    [](const NumericConversionProfile& left,
-	       const NumericConversionProfile& right) {
-		    return numeric_profile_less(
-			right, left);
-	    };
-	std::sort(
-	    a_profile.begin(), a_profile.end(),
-	    worst_first);
-	std::sort(
-	    b_profile.begin(), b_profile.end(),
-	    worst_first);
-	for (size_t i = 0;
-	     i < a_profile.size(); ++i) {
-		if (numeric_profile_less(
-			a_profile[i],
-			b_profile[i]))
-			return -1;
-		if (numeric_profile_less(
-			b_profile[i],
-			a_profile[i]))
-			return 1;
-	}
-	return 0;
-}
-
 static bool dominates(
     const CallableMatch& a,
-    const CallableMatch& b) {
+    const CallableMatch& b,
+    const std::function<bool(Type*, Type*)>&
+	direct_assignment_edge) {
 	const auto has_generic_formal =
 	    [](const CallableMatch& match) {
 		    return std::ranges::any_of(
@@ -11824,33 +11722,38 @@ static bool dominates(
 	if (a_generic != b_generic)
 		// An omitted-type declaration is the compiler's representation of a
 		// relation Pascal source cannot quantify. Its established Generic
-		// tier is a fallback contract, not one more numeric conversion
-		// quality: every complete viable declaration must win before numeric
-		// profiles compare the remaining ordinary candidates. Otherwise a
-		// neutral profile on the omitted formal can steal the operation from
-		// a typed declaration which performs a legitimate promotion.
+		// tier is a fallback contract: every complete viable declaration must
+		// win before ordinary per-argument ranks compare the remaining
+		// candidates.
 		return !a_generic;
 
-	// Compare the multiset of numeric edge qualities worst-first. This keeps
-	// one especially bad conversion from being hidden by several exact
-	// arguments, while allowing exact-vs-promotion to settle mixed integer
-	// cases after their worst edges tie. Argument positions remain significant
-	// in the ordinary Pareto comparison below when the qualitative profiles
-	// are identical.
-	const int profile_comparison =
-	    compare_numeric_profiles(a, b);
-	if (profile_comparison != 0)
-		return profile_comparison < 0;
-	if (a.ranks.size() != b.ranks.size())
+	if (a.ranks.size() != b.ranks.size() ||
+	    a.formal_types.size() !=
+		a.ranks.size() ||
+	    b.formal_types.size() !=
+		b.ranks.size())
 		return false;
+	// Candidate quality is the product order of the per-argument conversion
+	// relations. No argument may compensate for another: A dominates B only
+	// when A is no worse at every corresponding position and strictly better
+	// somewhere. Consequently appending an equally compatible formal/actual
+	// coordinate cannot change an existing overload choice.
 	bool strict = false;
 	for (size_t i = 0;
 	     i < a.ranks.size(); ++i) {
 		if (rank_less(
-			b.ranks[i], a.ranks[i]))
+			b.ranks[i],
+			b.formal_types[i],
+			a.ranks[i],
+			a.formal_types[i],
+			direct_assignment_edge))
 			return false;
 		if (rank_less(
-			a.ranks[i], b.ranks[i]))
+			a.ranks[i],
+			a.formal_types[i],
+			b.ranks[i],
+			b.formal_types[i],
+			direct_assignment_edge))
 			strict = true;
 	}
 	return strict;
@@ -12349,7 +12252,14 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 					viable[j]
 					    .second,
 					viable[i]
-					    .second)) {
+					    .second,
+					[this](
+					    Type* source,
+					    Type* destination) {
+						return has_direct_assignment_edge(
+						    source,
+						    destination);
+					})) {
 					dom = true;
 					break;
 				}

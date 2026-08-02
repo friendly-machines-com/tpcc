@@ -257,6 +257,24 @@ static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Ty
 	return const_convert_integer(magnitude, negative, ty, ty);
 }
 
+static ConstEvalResult fold_implicit(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	// system.pp's predefined integer operator := declarations are pure
+	// representation conversions. Explicit Type(constant) syntax selects the
+	// same declaration, so its declaration-local RTL implementation must
+	// retain the constant expression instead of turning it into a runtime
+	// call. User conversion bodies do not carry this o_implicit descriptor.
+	if (args.size() != 1 ||
+	    !const_integer_arg(args[0]))
+		return ConstEvalResult::not_constant();
+	const Integer* value =
+	    const_integer_arg(args[0]);
+	return fold_integer_result(
+	    value->value, value->negative,
+	    result_ty);
+}
+
 static uint64_t unchecked_integer_bits(
     const Integer* value) {
 	return value->negative
@@ -1285,7 +1303,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::o_divide", fold_divide},
     {"::u_system::o_unchecked_intdivide", fold_unchecked_intdivide},
     {"::u_system::o_intdivide", fold_intdivide},
-    {"::u_system::o_implicit", nullptr},
+    {"::u_system::o_implicit", fold_implicit},
     // Old-style file Assign is an ordinary procedure, not an implicit
     // conversion despite sharing the Pascal spelling "assign".
     {"::u_system::p_assign", nullptr},

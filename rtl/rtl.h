@@ -80,6 +80,20 @@ namespace u_system {
 template<typename Destination>
 struct m_conversion_target {};
 
+// Pascal declarations decide which direct integer assignment edges exist.
+// This backend helper merely evaluates the already-selected edge; keeping it
+// generic avoids duplicating the same natural C++ conversion for every
+// source/destination declaration in system.pp.
+template<typename Source, typename Destination>
+requires (
+    std::is_integral_v<Source> &&
+    std::is_integral_v<Destination>)
+inline Destination o_implicit(
+    Source source,
+    m_conversion_target<Destination>) {
+	return static_cast<Destination>(source);
+}
+
 // `Fail` is constructor control flow, not a Pascal exception. Pascal except
 // handlers catch only tpcc_pascal_exception, so this marker passes through
 // them to an allocation or direct-initializer boundary.

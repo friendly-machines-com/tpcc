@@ -5,6 +5,9 @@ type
     Value: Integer;
   end;
   TSmall = 1..10;
+  TStableMarker = record
+    Value: Integer;
+  end;
 
 const
   SmallConstant = 3;
@@ -23,6 +26,7 @@ var
   Unsigned64: QWord;
   Real32: Single;
   SmallLeft, SmallRight: TSmall;
+  StableMarker: TStableMarker;
 
 operator :=(Value: Integer): TBox;
 begin
@@ -206,6 +210,46 @@ begin
   if (Value = Value) and (Count = Count) then Result := 47
 end;
 
+function StableExact(Value: Byte): Integer; overload;
+begin
+  if Value = Value then Result := 50
+end;
+
+function StableExact(Value: Int64): Integer; overload;
+begin
+  if Value = Value then Result := 51
+end;
+
+function StableExact(Value: Byte; Marker: TStableMarker): Integer; overload;
+begin
+  if (Value = Value) and (Marker.Value = Marker.Value) then Result := 50
+end;
+
+function StableExact(Value: Int64; Marker: TStableMarker): Integer; overload;
+begin
+  if (Value = Value) and (Marker.Value = Marker.Value) then Result := 51
+end;
+
+function StableWiden(Value: SmallInt): Integer; overload;
+begin
+  if Value = Value then Result := 52
+end;
+
+function StableWiden(Value: Int64): Integer; overload;
+begin
+  if Value = Value then Result := 53
+end;
+
+function StableWiden(Value: SmallInt; Marker: TStableMarker): Integer; overload;
+begin
+  if (Value = Value) and (Marker.Value = Marker.Value) then Result := 52
+end;
+
+function StableWiden(Value: Int64; Marker: TStableMarker): Integer; overload;
+begin
+  if (Value = Value) and (Marker.Value = Marker.Value) then Result := 53
+end;
+
 begin
   Box.Value := 40;
   Sum := Box + 2;
@@ -223,15 +267,22 @@ begin
   Signed64 := -1;
   Unsigned64 := 2;
   Real32 := 1.5;
+  StableMarker.Value := 1;
+
+  { Adding the same compatible formal/actual coordinate cannot rebalance the
+    existing coordinates of an overload family. }
+  if StableExact(LeftByte) <> 50 then Halt(50);
+  if StableExact(LeftByte, StableMarker) <> 50 then Halt(51);
+  if StableWiden(Signed8) <> 52 then Halt(52);
+  if StableWiden(Signed8, StableMarker) <> 52 then Halt(53);
 
   if NumericKind(LeftByte + RightByte) <> 11 then
     Halt(3);
   if NumericKind(Signed32 + Unsigned32) <> 12 then
     Halt(4);
-  { Int64 is Pascal's preferred arithmetic promotion from QWord even though
-    that conversion still requires a caller-side range check. A real-domain
-    fallback must not steal an expression whose source operands are integers. }
-  if NumericKind(Signed64 + Unsigned64) <> 12 then
+  { Neither Int64 -> QWord nor QWord -> Int64 is an implicit assignment
+    edge. Extended is the first declared arithmetic formal accepting both. }
+  if NumericKind(Signed64 + Unsigned64) <> 15 then
     Halt(5);
   if NumericKind(Real32 + Real32) <> 15 then
     Halt(6);
@@ -249,9 +300,9 @@ begin
     Halt(12);
   if NumericKind(-SmallConstant) <> 16 then
     Halt(13);
-  if NumericKind(Unsigned64 + Signed32) <> 13 then
+  if NumericKind(Unsigned64 + Signed32) <> 15 then
     Halt(16);
-  if NumericKind(Unsigned64 + Signed64) <> 12 then
+  if NumericKind(Unsigned64 + Signed64) <> 15 then
     Halt(17);
   if NumericKind(Unsigned16 + Signed8) <> 11 then
     Halt(18);
@@ -261,9 +312,9 @@ begin
     Halt(20);
   if Literal32(42) <> 23 then
     Halt(21);
-  { 42 has the natural carrier ShortInt. Byte cannot contain that carrier's
-    negative half, whereas Int64 can. }
-  if LiteralCrossWidth(42) <> 25 then
+  { The literal value fits Byte directly, and Byte has a direct widening edge
+    to Int64. The narrower viable formal therefore wins. }
+  if LiteralCrossWidth(42) <> 26 then
     Halt(22);
 
   { FPC gives an integer literal the smallest predefined carrier containing
@@ -285,24 +336,23 @@ begin
   if LiteralNatural(4294967296) <> 36 then Halt(36);
   if LiteralNatural(9223372036854775808) <> 37 then Halt(37);
 
-  { Signedness only breaks an equal interval-distance tie. It does not make a
-    much wider same-sign target beat a narrower containing target. }
+  { Signedness breaks a tie only when neither destination assigns directly to
+    the other. }
   if WideLiteral(4) <> 40 then Halt(38);
   if WideLiteral(200) <> 41 then Halt(39);
-  if DistanceBeforeSign(200) <> 42 then Halt(40);
+  if DistanceBeforeSign(200) <> 43 then Halt(40);
   if EqualDistanceSign(200) <> 45 then Halt(41);
 
-  { 4 is ShortInt, so conversion to Cardinal loses the complete negative
-    source domain and the Int64 family wins. 200 is Byte, so both conversions
-    contain the source domain and Cardinal wins by interval distance. }
-  if MixedLiteral(LeftByte, 4) <> 47 then Halt(42);
+  { Cardinal assigns directly to Int64, not conversely, so it is the narrower
+    common formal whenever both candidates are otherwise viable. }
+  if MixedLiteral(LeftByte, 4) <> 46 then Halt(42);
   if MixedLiteral(LeftByte, 200) <> 46 then Halt(43);
-  if MixedLiteral(LeftByte, 300) <> 47 then Halt(44);
+  if MixedLiteral(LeftByte, 300) <> 46 then Halt(44);
   if MixedLiteral(LeftByte, 40000) <> 46 then Halt(45);
   SmallLeft := 2;
-  if MixedLiteral(SmallLeft, 4) <> 47 then Halt(46);
+  if MixedLiteral(SmallLeft, 4) <> 46 then Halt(46);
   if MixedLiteral(SmallLeft, 200) <> 46 then Halt(47);
-  if MixedLiteral(SmallLeft, 300) <> 47 then Halt(48);
+  if MixedLiteral(SmallLeft, 300) <> 46 then Halt(48);
   if MixedLiteral(SmallLeft, 40000) <> 46 then Halt(49);
 
   SmallRight := 3;

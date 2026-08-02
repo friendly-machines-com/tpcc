@@ -1002,10 +1002,10 @@ static int integer_conversion_cost(
 	if (!integer_like_bounds(from, &from_bounds) || !integer_like_bounds(to, &to_bounds))
 		return -1;
 
-	// Compatible integer-family conversions are viable in both directions.
-	// Candidate matching separately classifies promotion direction and whether
-	// the source interval fits the destination. The former orders overloads;
-	// the latter controls the selected edge's caller-side {$R} check.
+	// This computes the local cost of a predefined integer assignment edge.
+	// The destination constructor admits the edge only when the source is a
+	// subtype of the destination; the reverse, narrowing direction is not an
+	// implicit edge.
 	uint64_t distance = ordinal_lower_bound_distance(from_bounds, to_bounds);
 	distance = saturating_add(distance, unsigned_abs_diff(from_bounds.max_positive, to_bounds.max_positive));
 
@@ -1044,32 +1044,35 @@ IntrinsicType::value_conversion_from(
 	if ((source == char_type() && target == byte_type()) ||
 	    (source == byte_type() && target == char_type()))
 		return implicit_conversion(20);
-	if (target == char_type()) {
-		auto range =
-		    dynamic_cast<const SubrangeType*>(
-			source);
-		if (range &&
-		    range->base_type == target)
-			return direct_conversion();
-	}
+	if (auto range =
+		dynamic_cast<const SubrangeType*>(
+		    source);
+	    range && range->base_type == target)
+		// A subrange has distinct Pascal identity but uses its declared base
+		// representation directly. Passing it to that base formal needs no
+		// assignment operator; another containing integer formal requires one
+		// widening edge.
+		return direct_conversion();
 
 	int integer_cost =
 	    integer_conversion_cost(source, target);
-	if (integer_cost >= 0)
+	if (integer_cost >= 0 &&
+	    source->is_subtype_of(target))
+		// Integer assignment edges follow value-set inclusion. The reverse
+		// direction is an explicit cast, not an implicit edge which overload
+		// ranking may discover and then penalize.
 		return implicit_conversion(
 		    static_cast<unsigned>(integer_cost));
 
 	int source_real = real_widening_rank(source);
 	int target_real = real_widening_rank(target);
-	if (source_real >= 0 && target_real >= 0) {
-		// All real-family directions are viable. Candidate matching records
-		// promotion versus demotion independently from the selected narrowing
-		// edge's {$R} obligation. Distance orders candidates whose qualitative
-		// profiles are otherwise equal.
+	if (source_real >= 0 &&
+	    target_real >= source_real) {
+		// Real assignment follows the declared precision direction. Omitting
+		// the reverse edge keeps overload viability structural; {$R} does not
+		// manufacture a narrowing assignment operator.
 		unsigned distance = static_cast<unsigned>(
-		    source_real < target_real
-			? target_real - source_real
-			: source_real - target_real);
+		    target_real - source_real);
 		return implicit_conversion(distance);
 	}
 	if (integer_widening_rank(source) >= 0 &&
@@ -1118,7 +1121,9 @@ ShortStringType::value_conversion_from(
 	if (capacity == string->capacity)
 		return direct_conversion();
 	if (string->capacity > capacity)
-		distance += 256;
+		// A shorter destination cannot represent every source value, so this
+		// direction requires explicit syntax rather than an implicit edge.
+		return std::nullopt;
 	return implicit_conversion(distance);
 }
 
@@ -1691,12 +1696,12 @@ SubrangeType::value_conversion_from(
 		source, this))
 		return std::nullopt;
 	// Contextual literals are checked against the exact endpoints before this
-	// type-level path. Runtime sources remain viable in both directions; the
-	// matcher classifies a wider source as a demotion and the selected Cast
-	// independently applies {$R}.
-	return source->is_subtype_of(this)
-		   ? direct_conversion()
-		   : implicit_conversion();
+	// type-level path. A runtime source has an implicit assignment edge only
+	// in the declared widening direction; the reverse operation requires
+	// explicit conversion syntax.
+	if (source->is_subtype_of(this))
+		return direct_conversion();
+	return std::nullopt;
 }
 
 bool SubrangeType::

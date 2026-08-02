@@ -79,36 +79,11 @@ struct MatchRank {
 	// interpretation before ordinary per-element ranks are compared.
 	ContextualConstruction contextual_construction =
 	    ContextualConstruction::OrdinaryOrSet;
-	// FPC gives an integer literal the smallest predefined carrier containing
-	// its value before overload comparison. When two viable target domains
-	// have the same interval distance, preserving that carrier's signedness
-	// breaks the tie (for example Byte literal 200 prefers QWord to Int64).
-	// This is deliberately after distance; SmallInt still beats Cardinal for
-	// 200 because its containing domain is much narrower.
+	// A contextual integer literal retains its natural carrier's signedness.
+	// This breaks only an otherwise incomparable pair of fitting destinations;
+	// identity, subtype, and direct assignment-edge direction are compared
+	// first.
 	bool integer_literal_sign_mismatch = false;
-};
-
-/** Qualitative numeric direction is independent of the ordinary conversion
- * tier and of {$R}. In particular, Pascal prefers QWord -> Int64 as a usual
- * arithmetic promotion even though that edge still needs a range check.
- * Keeping this product separate prevents a range-safe Integer -> Extended
- * fallback from categorically stealing an all-integer operation. */
-enum class NumericPreference {
-	// Exact, contextual-literal, and nonnumeric matches do not participate in
-	// numeric profile ordering; their existing MatchRank still applies.
-	Neutral,
-	// Conversion follows the language's numeric promotion order.
-	Promotion,
-	// Conversion reverses that order, or narrows equal-ranked subrange bounds.
-	Demotion,
-	// Integer to real, or an admitted integer/character-family crossing.
-	DomainChange,
-};
-
-struct NumericConversionProfile {
-	NumericPreference preference =
-	    NumericPreference::Neutral;
-	bool requires_range_check = false;
 };
 
 /** One candidate's treatment of one source argument. Matching never mutates
@@ -118,14 +93,15 @@ struct NumericConversionProfile {
 struct ArgumentMatch {
 	MatchRank rank;
 	Node* value;
-	NumericConversionProfile numeric_profile;
 };
 
 struct CallableMatch {
 	std::vector<MatchRank> ranks;
 	std::vector<Node*> arguments;
-	std::vector<NumericConversionProfile>
-	    numeric_profile;
+	// Dominance compares the formal types at each original argument position.
+	// Keeping them parallel to ranks prevents a candidate-wide score from
+	// erasing the subtype/assignment relation which made that argument viable.
+	std::vector<Type*> formal_types;
 };
 
 /** Candidate information retained when an implicit conversion search fails.
@@ -442,6 +418,8 @@ private:
 	    MatchFailure* failure,
 	    DeclaredConversionFailure*
 	        conversion_failure);
+	bool has_direct_assignment_edge(
+	    Type* source, Type* target);
 	Node* match_explicit_conversion(
 	    Node* actual, Type* target);
 	Node* make_implicit_cast(
