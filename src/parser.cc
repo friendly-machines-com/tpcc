@@ -3637,12 +3637,19 @@ Node* Parser::parse_value_from_identifier(
 			// replace the built-in boundary in the same way Implicit can.
 			if (Node* converted =
 				match_explicit_conversion(
-				    value, target_ty))
+				    value, target_ty,
+				    false))
 				return converted;
 
-			// No declared conversion contract applies. Preserve the existing
-			// predefined explicit casts, which include routine, pointer,
-			// ordinal, set, packed-overlay, and class-reference operations.
+			// A declared Explicit operation overrides the predefined type
+			// boundary, but an Implicit declaration is only a fallback after
+			// direct `Target(value)` construction. Otherwise System's
+			// widening rows can intercept an already-valid cast through some
+			// equal-domain source formal (for example PtrUInt -> QWord).
+			//
+			// Preserve the existing predefined explicit casts, which include
+			// routine, pointer, ordinal, set, packed-overlay, and
+			// class-reference operations.
 			if (target_ty == pointer_type()) {
 				if (auto reference =
 					dynamic_cast<RoutineRef*>(value))
@@ -3713,14 +3720,20 @@ Node* Parser::parse_value_from_identifier(
 				return new ExplicitCast(
 				    value, target_ty);
 			}
-			if (!target_ty
-				 ->predefined_explicit_conversion_from(
-				     value->ty))
-				raise_type_mismatch(
-				    "invalid predefined explicit conversion",
-				    target_ty, value->ty);
-			return new ExplicitCast(
-			    value, target_ty);
+			if (target_ty
+				->predefined_explicit_conversion_from(
+				    value->ty))
+				return new ExplicitCast(
+				    value, target_ty);
+			if (Node* converted =
+				match_explicit_conversion(
+				    value, target_ty,
+				    true))
+				return converted;
+			raise_type_mismatch(
+			    "invalid explicit conversion",
+			    target_ty, value->ty);
+			abort();
 		}
 	}
 	Type* visible_type =
@@ -10276,9 +10289,9 @@ static bool rank_less(
 			// would make overload ranking depend on conversion chaining.
 			return a_to_b;
 	}
-	if (a.integer_literal_sign_mismatch !=
-	    b.integer_literal_sign_mismatch)
-		return !a.integer_literal_sign_mismatch;
+	if (a.integer_sign_mismatch !=
+	    b.integer_sign_mismatch)
+		return !a.integer_sign_mismatch;
 	return false;
 }
 
@@ -11070,7 +11083,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			auto target_signed =
 			    integer_carrier_is_signed(
 				target);
-			rank.integer_literal_sign_mismatch =
+			rank.integer_sign_mismatch =
 			    natural_signed &&
 			    target_signed &&
 			    *natural_signed !=
@@ -11093,15 +11106,29 @@ std::optional<ArgumentMatch> Parser::match_argument(
 
 	auto conversion =
 	    target->value_conversion_from(source);
-	if (conversion)
+	if (conversion) {
+		MatchRank rank{
+		    conversion->kind ==
+			    ValueConversionClass::Direct
+			? MatchRank::Tier::Direct
+			: MatchRank::Tier::Convert,
+		    conversion->distance};
+		auto source_signed =
+		    integer_carrier_is_signed(
+			source);
+		auto target_signed =
+		    integer_carrier_is_signed(
+			target);
+		rank.integer_sign_mismatch =
+		    source_signed &&
+		    target_signed &&
+		    *source_signed !=
+			*target_signed;
 		return ArgumentMatch{
-		    {conversion->kind ==
-			     ValueConversionClass::Direct
-			 ? MatchRank::Tier::Direct
-			 : MatchRank::Tier::Convert,
-		     conversion->distance},
+		    rank,
 		    make_implicit_cast(
 			actual, target)};
+	}
 	if (allow_declared_conversion)
 		return match_declared_conversion(
 		    actual, target,
@@ -11654,35 +11681,53 @@ Parser::match_declared_conversion(
 	    std::vector<Node*>{
 		best_source->value});
 	call->ty = target;
+	MatchRank rank{
+	    MatchRank::Tier::Convert,
+	    best_source->rank.distance};
+	auto source_signed =
+	    integer_carrier_is_signed(
+		actual ? actual->ty : nullptr);
+	auto target_signed =
+	    integer_carrier_is_signed(
+		target);
+	rank.integer_sign_mismatch =
+	    source_signed &&
+	    target_signed &&
+	    *source_signed !=
+		*target_signed;
 	return ArgumentMatch{
-	    {MatchRank::Tier::Convert,
-	     best_source->rank.distance},
-	    call};
+	    rank, call};
 }
 
 Node* Parser::match_explicit_conversion(
-    Node* actual, Type* target) {
+    Node* actual, Type* target,
+    bool implicit_fallback) {
 	struct Family {
 		std::string_view diagnostic_name;
 		std::string_view identifier;
 	};
-	const std::array<Family, 3> families{{
-	    {"explicit", explicit_operator_identifier()},
-	    {"implicit", implicit_operator_identifier(true)},
+	const std::array<Family, 1> explicit_families{{
+	    {"explicit",
+	     explicit_operator_identifier()},
+	}};
+	const std::array<Family, 2> implicit_families{{
+	    {"implicit",
+	     implicit_operator_identifier(true)},
 	    {"uncheckedimplicit",
 	     implicit_operator_identifier(false)},
 	}};
 
-	// An explicit cast admits every direct conversion which an implicit
-	// context could use, plus conversions declared only as Explicit. Search
-	// whole operator families in this order instead of merging candidates:
-	// Explicit is an override of the fallback contracts, and checked
-	// Implicit is the deterministic safer choice when both implicit contracts
-	// exist. UncheckedImplicit remains available so T(X) is a superset under
-	// either {$R} state, but the cast itself never consults {$R}. Every family
-	// enters match_declared_conversion(), whose source match forbids A -> B -> T
-	// chaining; changing only the family identity must not create another
-	// conversion algebra.
+	// Explicit is searched before the predefined Target(value) boundary.
+	// Implicit and UncheckedImplicit are searched afterward, as fallback
+	// contracts. Keeping those phases separate prevents a System widening
+	// declaration from intercepting a direct predefined cast while still
+	// allowing a declared Explicit operation to override it. Within the
+	// fallback phase checked Implicit precedes UncheckedImplicit; the cast
+	// itself never consults {$R}. Every family enters
+	// match_declared_conversion(), whose source match forbids A -> B -> T
+	// chaining.
+	auto search =
+	    [&](const auto& families) -> Node* {
 	for (const Family& family : families) {
 		MatchFailure failure =
 		    MatchFailure::Incompatible;
@@ -11710,6 +11755,10 @@ Node* Parser::match_explicit_conversion(
 		    "ambiguous explicit conversion");
 	}
 	return nullptr;
+	};
+	return implicit_fallback
+		   ? search(implicit_families)
+		   : search(explicit_families);
 }
 
 static bool dominates(

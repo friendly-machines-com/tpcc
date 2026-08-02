@@ -79,11 +79,10 @@ struct MatchRank {
 	// interpretation before ordinary per-element ranks are compared.
 	ContextualConstruction contextual_construction =
 	    ContextualConstruction::OrdinaryOrSet;
-	// A contextual integer literal retains its natural carrier's signedness.
-	// This breaks only an otherwise incomparable pair of fitting destinations;
-	// identity, subtype, and direct assignment-edge direction are compared
-	// first.
-	bool integer_literal_sign_mismatch = false;
+	// An integer actual retains its carrier's signedness when two otherwise
+	// incomparable widening destinations are available. Identity, subtype,
+	// and direct assignment-edge direction are compared first.
+	bool integer_sign_mismatch = false;
 };
 
 /** One candidate's treatment of one source argument. Matching never mutates
@@ -421,7 +420,8 @@ private:
 	bool has_direct_assignment_edge(
 	    Type* source, Type* target);
 	Node* match_explicit_conversion(
-	    Node* actual, Type* target);
+	    Node* actual, Type* target,
+	    bool implicit_fallback);
 	Node* make_implicit_cast(
 	    Node* value, Type* target);
 	Node* cast(Node* a, Type* target_ty);
