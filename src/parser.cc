@@ -1575,7 +1575,11 @@ void Parser::maybe_parse_statement() {
 				if (value)
 					raise_parse_error("exit(value) in procedure");
 			} else {
-				value = value ? cast(value, ret_ty) : resolve_value("result");
+				value = value
+					    ? cast_for_destination(
+						  value, ret_ty)
+					    : resolve_value(
+						  "result");
 			}
 		} else if (ret_ty != &unit_type()) {
 			value = resolve_value("result");
@@ -1898,7 +1902,7 @@ void Parser::maybe_parse_statement() {
 			    "for control variable must be a simple variable",
 			    control);
 		if (maybe_parse_colon_equals()) {
-			Node* initial = cast(
+			Node* initial = cast_for_destination(
 			    parse_expression(),
 			    control->ty);
 			bool descending;
@@ -1910,7 +1914,7 @@ void Parser::maybe_parse_statement() {
 			else
 				raise_parse_error(
 				    "expected 'to' or 'downto' in for statement");
-			Node* final = cast(
+			Node* final = cast_for_destination(
 			    parse_expression(),
 			    control->ty);
 			parse_keyword("do");
@@ -4891,8 +4895,12 @@ Mutation* Parser::parse_mutation_statement(
 		    call_location,
 		    "internal error: mutation operator has an unknown result type",
 		    operation);
-	Node* stored =
-	    cast(operation, source_target->ty);
+	// Inc/Dec has already selected both its arithmetic operator and writable
+	// destination. Byte arithmetic, for example, produces Integer and stores
+	// it back into Byte; that storage conversion must not become an
+	// Integer -> Byte edge for unrelated overloads.
+	Node* stored = cast_for_destination(
+	    operation, source_target->ty);
 	if (directive_state.switch_enabled('r') &&
 	    operation->ty == source_target->ty &&
 	    (dynamic_cast<SubrangeType*>(
@@ -4957,7 +4965,8 @@ Node* Parser::mk_arith(
 }
 
 Node* Parser::mk_assign(Node* a, Node* b) {
-	return new Assign(a, cast(b, a->ty));
+	return new Assign(
+	    a, cast_for_destination(b, a->ty));
 }
 
 Node* Parser::mk_compare(
@@ -5490,7 +5499,9 @@ PropertyAccess* Parser::apply_property(Node* receiver, Property* property, std::
 		    message.str(), property);
 	}
 	for (size_t i = 0; i < indexes.size(); ++i) {
-		indexes[i] = cast(indexes[i], property->index_types[i]);
+		indexes[i] = cast_for_destination(
+		    indexes[i],
+		    property->index_types[i]);
 	}
 	if (!directive_state.switch_enabled('r') &&
 	    receiver &&
@@ -7500,7 +7511,8 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		return new Cast(bound->node, s);
 	}
 
-	Node* converted = cast(value, ty);
+	Node* converted =
+	    cast_for_destination(value, ty);
 	ConstEvalResult checked = converted->const_eval(ctx);
 	if (checked.kind == ConstEvalResult::Kind::Error)
 		raise_value_error(
@@ -8654,7 +8666,7 @@ void Parser::parse_var_block() {
 			if (names.size() != 1)
 				raise_parse_error(
 				    "an initialized variable declaration must have exactly one name");
-			initializer = cast(
+			initializer = cast_for_destination(
 			    parse_expression(), ty);
 		}
 		for (auto iter : names) {
@@ -11775,6 +11787,19 @@ Node* Parser::make_implicit_cast(
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
+	return cast_impl(
+	    a, target_ty, false);
+}
+
+Node* Parser::cast_for_destination(
+    Node* a, Type* target_ty) {
+	return cast_impl(
+	    a, target_ty, true);
+}
+
+Node* Parser::cast_impl(
+    Node* a, Type* target_ty,
+    bool allow_destination_conversion) {
 	if (auto reference = dynamic_cast<RoutineRef*>(a)) {
 		if (target_ty == pointer_type())
 			return resolve_routine_code_reference(reference);
@@ -11801,13 +11826,27 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	Parameter formal(
 	    "", "", target_ty,
 	    ParamMode::Value, nullptr);
-	MatchFailure failure;
+	MatchFailure failure =
+	    MatchFailure::Incompatible;
 	DeclaredConversionFailure conversion_failure;
 	auto match = match_argument(
 	    formal, a, nullptr, 0, true,
 	    &failure, &conversion_failure);
 	if (match)
 		return match->value;
+	if (allow_destination_conversion &&
+	    failure !=
+		MatchFailure::AmbiguousConversion &&
+	    a && a->ty)
+		if (target_ty
+			->destination_conversion_from(
+			    a->ty))
+			// The destination was fixed before this fallback. Narrowing here
+			// therefore cannot make a call candidate viable or participate
+			// in overload ranking; make_implicit_cast adds the selected
+			// store's ordinary {$R+} check when its value domain requires it.
+			return make_implicit_cast(
+			    a, target_ty);
 	if (dynamic_cast<NilLiteral*>(a))
 		raise_type_kind_mismatch(
 		    "'nil' conversion target",
@@ -12465,7 +12504,8 @@ Parser::FinalizedCall Parser::finalize_call(Node* target,
 		// type before generating the bit mutation. Do that here while the
 		// Pascal type is available; both omitted-type RTL formals can then
 		// retain their exact, related types at the C++ call boundary.
-		args[1] = cast(args[1], set_type->item_type);
+		args[1] = cast_for_destination(
+		    args[1], set_type->item_type);
 	}
 	if (builtin &&
 	    builtin->generic_kind ==

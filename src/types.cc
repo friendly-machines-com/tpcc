@@ -17,6 +17,14 @@ Type::value_conversion_from(const Type*) const {
 	return std::nullopt;
 }
 
+std::optional<ValueConversion>
+Type::destination_conversion_from(
+    const Type* source) const {
+	// Most types have no extra known-destination representation operation.
+	// Their storage relation is exactly their ordinary implicit relation.
+	return value_conversion_from(source);
+}
+
 bool Type::is_subtype_of(const Type* target) const {
 	return this == target;
 }
@@ -1041,9 +1049,10 @@ IntrinsicType::value_conversion_from(
 			    500 + real_widening_rank(target));
 	}
 
-	if ((source == char_type() && target == byte_type()) ||
-	    (source == byte_type() && target == char_type()))
-		return implicit_conversion(20);
+	// Char is a distinct nominal ordinal family, not an unsigned integer
+	// widening source or destination. Byte(CharValue) and Char(ByteValue)
+	// remain predefined explicit casts, but neither crossing may make a
+	// numeric overload viable.
 	if (auto range =
 		dynamic_cast<const SubrangeType*>(
 		    source);
@@ -1082,6 +1091,40 @@ IntrinsicType::value_conversion_from(
 	return std::nullopt;
 }
 
+std::optional<ValueConversion>
+IntrinsicType::destination_conversion_from(
+    const Type* source) const {
+	if (auto ordinary =
+		value_conversion_from(source))
+		return ordinary;
+
+	const int integer_cost =
+	    integer_conversion_cost(source, this);
+	if (integer_cost >= 0)
+		// A selected ordinal destination may truncate or reinterpret sign.
+		// This is the Pascal assignment boundary checked by {$R+}; it is not
+		// an implicit edge available to call matching.
+		return implicit_conversion(
+		    static_cast<unsigned>(
+			integer_cost));
+
+	const int source_real =
+	    real_widening_rank(source);
+	const int target_real =
+	    real_widening_rank(this);
+	if (source_real >= 0 &&
+	    target_real >= 0)
+		// Real assignment likewise permits the selected destination to lose
+		// range or precision. make_implicit_cast owns the optional range
+		// check after this relation has admitted the store.
+		return implicit_conversion(
+		    static_cast<unsigned>(
+			std::abs(
+			    target_real -
+			    source_real)));
+	return std::nullopt;
+}
+
 bool IntrinsicType::
     predefined_explicit_conversion_from(
 	const Type* source) const {
@@ -1094,6 +1137,12 @@ bool IntrinsicType::
 	// does not make any such pair implicitly viable.
 	if (predefined_ordinal_type(this) &&
 	    predefined_ordinal_type(source))
+		return true;
+	if (real_widening_rank(this) >= 0 &&
+	    real_widening_rank(source) >= 0)
+		// Type(value) explicitly selects the destination representation, so
+		// both real-family directions are one predefined cast even though
+		// only widening is an implicit overload edge.
 		return true;
 	// Only the address-sized integer types are direct pointer destinations.
 	// Requiring an explicit nested cast for another integer width keeps the
@@ -1125,6 +1174,25 @@ ShortStringType::value_conversion_from(
 		// direction requires explicit syntax rather than an implicit edge.
 		return std::nullopt;
 	return implicit_conversion(distance);
+}
+
+std::optional<ValueConversion>
+ShortStringType::destination_conversion_from(
+    const Type* source) const {
+	if (auto ordinary =
+		value_conversion_from(source))
+		return ordinary;
+	auto string =
+	    dynamic_cast<const ShortStringType*>(
+		source);
+	if (!string)
+		return std::nullopt;
+	// A known ShortString destination truncates excess payload according to
+	// its declared capacity. This storage operation must not make the reverse
+	// capacity direction viable during overload selection.
+	return implicit_conversion(
+	    static_cast<unsigned>(
+		string->capacity - capacity));
 }
 
 std::optional<ValueConversion>
@@ -1702,6 +1770,22 @@ SubrangeType::value_conversion_from(
 	if (source->is_subtype_of(this))
 		return direct_conversion();
 	return std::nullopt;
+}
+
+std::optional<ValueConversion>
+SubrangeType::destination_conversion_from(
+    const Type* source) const {
+	if (auto ordinary =
+		value_conversion_from(source))
+		return ordinary;
+	if (!source ||
+	    !ordinal_domains_are_compatible(
+		source, this))
+		return std::nullopt;
+	// The destination declaration is already fixed, so assignment may store a
+	// wider value and let {$R+} enforce this subrange's endpoints. This is not
+	// a reverse subtype or overload-conversion edge.
+	return implicit_conversion();
 }
 
 bool SubrangeType::

@@ -77,10 +77,10 @@ public:
 	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
 	/** Pascal type identity is exactly Type* identity. Value conversion is a
 	 * separate, directional operation owned by the destination constructor.
-	 * Viability does not imply either value-set inclusion or overload
-	 * preference: the matcher separately classifies a viable numeric edge by
-	 * Pascal promotion direction and by its {$R} obligation. Explicit casts
-	 * bypass that implicit-conversion selection. Subtyping is a
+	 * This is the relation used while selecting calls and operators, so it
+	 * contains only implicit edges which may affect overload viability.
+	 * Explicit casts and stores into an already-selected destination have
+	 * separate relations below. Subtyping is a
 	 * reflexive/transitive preorder: distinct definitions such as two
 	 * occurrences of 1..10 can be mutual subtypes without becoming identical.
 	 * Typed var/out matching, routine identity, overload ranking, and C++
@@ -88,11 +88,19 @@ public:
 	 * rules. */
 	virtual std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const;
+	/** Predefined conversion used only after the destination type has already
+	 * been selected: assignment, initialization, function result, Inc/Dec
+	 * writeback, and native indexing. It may narrow and therefore request a
+	 * caller-side {$R+} check, but it is never consulted for overload
+	 * viability. Declared operator := lookup still precedes this fallback. */
+	virtual std::optional<ValueConversion>
+	destination_conversion_from(
+	    const Type* source) const;
 	/** Whether source syntax `ThisType(value)` has one predefined direct
 	 * conversion edge after source-defined Explicit/Implicit contracts have
 	 * failed. This is deliberately separate from value_conversion_from():
-	 * implicit viability remains the narrower relation used by assignment and
-	 * overload selection, while explicit syntax also admits representation
+	 * implicit viability remains the narrower relation used by overload
+	 * selection, while explicit syntax also admits representation
 	 * operations such as ordinal truncation, related downcasts, pointer
 	 * crossings, and packed overlays. Implementations must inspect only SOURCE
 	 * and this destination; applying another conversion first would turn the
@@ -194,6 +202,9 @@ struct ShortStringType: public Type {
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion>
+	destination_conversion_from(
+	    const Type* source) const override;
 	bool same_cxx_carrier_definition_as(
 	    const Type* other) const override;
 	Type* sequence_element_type() const override;
@@ -717,6 +728,9 @@ public:
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>
 	value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion>
+	destination_conversion_from(
+	    const Type* source) const override;
 	bool predefined_explicit_conversion_from(
 	    const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;

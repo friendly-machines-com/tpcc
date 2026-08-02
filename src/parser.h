@@ -425,6 +425,11 @@ private:
 	Node* make_implicit_cast(
 	    Node* value, Type* target);
 	Node* cast(Node* a, Type* target_ty);
+	Node* cast_for_destination(
+	    Node* a, Type* target_ty);
+	Node* cast_impl(
+	    Node* a, Type* target_ty,
+	    bool allow_destination_conversion);
 	Node* resolve_routine_reference(
 	    RoutineRef* reference, RoutineType* target_ty);
 	Node* try_resolve_routine_reference(
