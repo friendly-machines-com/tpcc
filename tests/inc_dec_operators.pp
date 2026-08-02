@@ -117,7 +117,7 @@ var
   Choice: TChoice;
   ChoiceSlice: TChoiceSlice;
   DistanceChoice: TDistanceChoice;
-  DistanceAmount: Integer;
+  DistanceAmount: Byte;
   Character: Char;
   Integers: array[0..3] of Integer;
   IntegerPointer: TIntegerPointer;
