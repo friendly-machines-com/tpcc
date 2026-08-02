@@ -525,7 +525,8 @@ struct RecordLayout {
 
 // Compiler-side target layout used by SizeOf constant evaluation and by the
 // independent assertions emitted for ordinary C++ records.
-std::optional<TypeLayout> type_layout(Type* ty);
+// PACKED_CONTAINER is whether the use of the type is inside a packed container.
+std::optional<TypeLayout> type_layout(bool packed_container, Type* ty);
 std::optional<RecordLayout> record_layout(RecordType* record);
 std::optional<RecordLayout> packed_record_layout(
     PackedRecordType* record);

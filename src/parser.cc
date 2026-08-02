@@ -4546,8 +4546,8 @@ bool Parser::is_assignable(Node* n) {
 		if (!intrinsic_ordinal_carrier(cast->a ? cast->a->ty : nullptr) ||
 		    !intrinsic_ordinal_carrier(cast->ty))
 			return false;
-		auto source_layout = type_layout(cast->a->ty);
-		auto target_layout = type_layout(cast->ty);
+		auto source_layout = type_layout(false, cast->a->ty);
+		auto target_layout = type_layout(false, cast->ty);
 		return source_layout && target_layout &&
 		       source_layout->size == target_layout->size &&
 		       is_referenceable(cast->a) &&

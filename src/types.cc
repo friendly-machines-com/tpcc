@@ -470,8 +470,7 @@ bool align_up_u64(uint64_t value, uint64_t alignment, uint64_t* result) {
 		   : checked_add_u64(value, alignment - remainder, result);
 }
 
-std::optional<TypeLayout> type_layout_impl(
-    Type* ty, std::set<Type*>& visiting);
+std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std::set<Type*>& visiting);
 
 struct SequentialLayout {
 	uint64_t offset = 0;
@@ -479,9 +478,10 @@ struct SequentialLayout {
 	std::vector<AggregateFieldLayout> fields;
 };
 
+// not packed.
 bool append_aligned_field(SequentialLayout& layout,
 			  StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
-	auto field_layout = type_layout_impl(ty, visiting);
+	auto field_layout = type_layout_impl(false, ty, visiting);
 	if (!field_layout)
 		return false;
 	uint64_t offset;
@@ -593,7 +593,7 @@ struct PackedSequentialLayout {
 
 bool append_packed_field(PackedSequentialLayout& layout,
 			 StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
-	auto field_layout = type_layout_impl(ty, visiting);
+	auto field_layout = type_layout_impl(true, ty, visiting); // FIXME what
 	if (!field_layout)
 		return false;
 	uint64_t end;
@@ -672,7 +672,7 @@ std::optional<RecordLayout> packed_record_layout_impl(
 	};
 }
 
-std::optional<TypeLayout> type_layout_impl(
+std::optional<TypeLayout> type_layout_impl(bool packed_container,
     Type* ty, std::set<Type*>& visiting) {
 	while (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
 		if (!incomplete->resolved)
@@ -683,12 +683,37 @@ std::optional<TypeLayout> type_layout_impl(
 		dynamic_cast<DistinctType*>(ty))
 		// FPC's `type Base` changes Pascal identity, not storage layout.
 		return type_layout_impl(
-		    distinct->base_type, visiting);
+		    packed_container, distinct->base_type, visiting);
 	if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty))
 		return intrinsic->layout;
 	if (auto shortstring = dynamic_cast<ShortStringType*>(ty))
 		return TypeLayout{
 		    static_cast<uint64_t>(shortstring->capacity) + 1, 1};
+	if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
+		auto layout =
+		    packed_record_layout_impl(packed, visiting);
+		return layout
+			   ? std::optional<TypeLayout>{layout->type}
+			   : std::nullopt;
+	}
+	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
+		auto item = type_layout_impl(packed_container, array->item_type, visiting);
+		if (item->alignment != 1) {
+			fprintf(stderr, "error: item with alignment != 1 is not allowed inside a packed record.\n");
+			abort();
+		}
+		if (!item)
+			return std::nullopt;
+		uint64_t size;
+		if (!checked_multiply_u64(
+			item->size, array->range.length, &size))
+			return std::nullopt;
+		return TypeLayout{size, item->alignment};
+	}
+	if (packed_container) {
+		// The others are not allowed inside packed records.
+		return std::nullopt;
+	}
 	if (auto enumeration =
 		dynamic_cast<EnumType*>(ty)) {
 		uint64_t bytes =
@@ -704,59 +729,42 @@ std::optional<TypeLayout> type_layout_impl(
 		// generated static assertions enforcing identical size and alignment.
 		// Packed-record layout can therefore keep using the Pascal storage
 		// layout without duplicating a C++ ABI calculator here.
-		return type_layout_impl(subrange->base_type, visiting);
-	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
-		auto item = type_layout_impl(array->item_type, visiting);
-		if (!item)
-			return std::nullopt;
-		uint64_t size;
-		if (!checked_multiply_u64(
-			item->size, array->range.length, &size))
-			return std::nullopt;
-		return TypeLayout{size, item->alignment};
-	}
+		return type_layout_impl(packed_container, subrange->base_type, visiting);
 	// A dynamic array stores one shared-buffer handle, independent of its
 	// element type or current length. An open array is the non-owning
 	// data-and-count descriptor passed by open-array formals.
 	if (dynamic_cast<DynamicArrayType*>(ty))
-		return TypeLayout{8, 8};
+		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
 	if (dynamic_cast<OpenArrayType*>(ty))
-		return TypeLayout{16, 8};
+		return TypeLayout{16, 8}; // FIXME: target-dependent, impl-dependent
 	if (dynamic_cast<FixedSetType*>(ty))
-		return TypeLayout{24, 8};
+		return TypeLayout{24, 8}; // FIXME: target-dependent, impl-dependent
 	if (dynamic_cast<TypedFileType*>(ty))
-		return TypeLayout{8, 8};
+		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
 	if (dynamic_cast<PointerType*>(ty) ||
 	    dynamic_cast<ClassType*>(ty) ||
 	    dynamic_cast<InterfaceType*>(ty) ||
 	    dynamic_cast<ClassRefType*>(ty))
-		return TypeLayout{8, 8};
+		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
 	if (auto record = dynamic_cast<RecordType*>(ty)) {
 		auto layout = record_layout_impl(record, visiting);
 		return layout
 			   ? std::optional<TypeLayout>{layout->type}
 			   : std::nullopt;
 	}
-	if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
-		auto layout =
-		    packed_record_layout_impl(packed, visiting);
-		return layout
-			   ? std::optional<TypeLayout>{layout->type}
-			   : std::nullopt;
-	}
 	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
 		if (routine->kind == METHOD)
-			return TypeLayout{16, 8};
-		return TypeLayout{8, 8};
+			return TypeLayout{16, 8}; // FIXME: target-dependent
+		return TypeLayout{8, 8}; // FIXME: target-dependent
 	}
 	return std::nullopt;
 }
 
 } // namespace
 
-std::optional<TypeLayout> type_layout(Type* ty) {
+std::optional<TypeLayout> type_layout(bool packed_container, Type* ty) {
 	std::set<Type*> visiting;
-	return type_layout_impl(ty, visiting);
+	return type_layout_impl(packed_container, ty, visiting);
 }
 
 std::optional<RecordLayout> record_layout(RecordType* record) {
@@ -894,9 +902,9 @@ static bool predefined_overlay_compatible(
 		return false;
 	}
 	auto target_layout =
-	    type_layout(const_cast<Type*>(target));
+	    type_layout(false, const_cast<Type*>(target));
 	auto source_layout =
-	    type_layout(const_cast<Type*>(source));
+	    type_layout(false, const_cast<Type*>(source));
 	return target_layout && source_layout &&
 	       target_layout->size ==
 		   source_layout->size;

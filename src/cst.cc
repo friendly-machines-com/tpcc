@@ -1338,7 +1338,7 @@ BuiltinEnumeratorCurrent::diagnostic_kind() const {
 
 const char* SizeOf::diagnostic_kind() const { return "sizeof"; }
 ConstEvalResult SizeOf::const_eval(ConstEvalContext&) const {
-	auto layout = type_layout(operand_type);
+	auto layout = type_layout(false, operand_type);
 	if (!layout)
 		return ConstEvalResult::not_constant();
 	return ConstEvalResult::success(
