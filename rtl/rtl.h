@@ -5428,62 +5428,80 @@ inline t_sizeint p_strlen(const t_char* value) {
 	return length;
 }
 
-template<typename T>
-requires std::is_object_v<T> || std::is_void_v<T>
-inline void p_getmem(T*& destination, t_ptruint size) {
-	destination = static_cast<T*>(std::malloc(static_cast<std::size_t>(size)));
-	if (!destination && size != 0)
-		m_runtime_error(203);
+template<typename Size>
+requires
+    std::is_integral_v<Size> &&
+    (!std::is_same_v<
+	std::remove_cv_t<Size>, bool>)
+inline std::size_t m_allocation_size(
+    Size size) {
+	if constexpr (std::is_signed_v<Size>)
+		if (size < 0)
+			m_runtime_error(203);
+	using Unsigned =
+	    std::make_unsigned_t<Size>;
+	const Unsigned unsigned_size =
+	    static_cast<Unsigned>(size);
+	if constexpr (
+	    sizeof(Unsigned) >
+	    sizeof(std::size_t))
+		if (unsigned_size >
+		    static_cast<Unsigned>(
+			std::numeric_limits<
+			    std::size_t>::max()))
+			m_runtime_error(203);
+	return static_cast<std::size_t>(
+	    unsigned_size);
 }
 
-inline t_pointer p_getmem(t_ptruint size) {
-	t_pointer result =
-	    std::malloc(static_cast<std::size_t>(size));
-	if (!result && size != 0)
-		m_runtime_error(203);
-	return result;
-}
-
-template<typename T>
-requires std::is_object_v<T> || std::is_void_v<T>
+template<typename T, typename Size>
+requires
+    (std::is_object_v<T> ||
+     std::is_void_v<T>) &&
+    std::is_integral_v<Size>
 inline void p_getmem(
-    T*& destination, t_ptrint size) {
-	if (size < 0)
+    T*& destination, Size size) {
+	const std::size_t requested =
+	    m_allocation_size(size);
+	destination = static_cast<T*>(
+	    std::malloc(requested));
+	if (!destination && requested != 0)
 		m_runtime_error(203);
-	p_getmem(
-	    destination,
-	    static_cast<t_ptruint>(size));
 }
 
-inline t_pointer p_getmem(t_ptrint size) {
-	if (size < 0)
-		m_runtime_error(203);
-	return p_getmem(
-	    static_cast<t_ptruint>(size));
-}
-
-inline t_pointer p_allocmem(t_ptruint size) {
+template<typename Size>
+requires std::is_integral_v<Size>
+inline t_pointer p_getmem(Size size) {
+	const std::size_t requested =
+	    m_allocation_size(size);
 	t_pointer result =
-	    std::calloc(
-		1, static_cast<std::size_t>(size));
-	if (!result && size != 0)
+	    std::malloc(requested);
+	if (!result && requested != 0)
 		m_runtime_error(203);
 	return result;
 }
 
-inline t_pointer p_allocmem(t_ptrint size) {
-	if (size < 0)
+template<typename Size>
+requires std::is_integral_v<Size>
+inline t_pointer p_allocmem(Size size) {
+	const std::size_t requested =
+	    m_allocation_size(size);
+	t_pointer result =
+	    std::calloc(1, requested);
+	if (!result && requested != 0)
 		m_runtime_error(203);
-	return p_allocmem(
-	    static_cast<t_ptruint>(size));
+	return result;
 }
 
-template<typename T>
-requires std::is_object_v<T> || std::is_void_v<T>
+template<typename T, typename Size>
+requires
+    (std::is_object_v<T> ||
+     std::is_void_v<T>) &&
+    std::is_integral_v<Size>
 inline T* p_reallocmem(
-    T*& destination, t_ptruint size) {
+    T*& destination, Size size) {
 	const std::size_t requested =
-	    static_cast<std::size_t>(size);
+	    m_allocation_size(size);
 	if (requested == 0) {
 		// C and C++ leave realloc(p, 0) implementation-dependent. Pascal's
 		// storage operation needs one stable postcondition: release the old
@@ -5505,29 +5523,12 @@ inline T* p_reallocmem(
 	return destination;
 }
 
-template<typename T>
-requires std::is_object_v<T> || std::is_void_v<T>
-inline T* p_reallocmem(
-    T*& destination, t_ptrint size) {
-	if (size < 0)
-		m_runtime_error(203);
-	return p_reallocmem(
-	    destination,
-	    static_cast<t_ptruint>(size));
-}
-
-inline void p_freemem(t_pointer value, t_ptruint size) {
-	(void)size;
-	std::free(value);
-}
-
+template<typename Size>
+requires std::is_integral_v<Size>
 inline void p_freemem(
-    t_pointer value, t_ptrint size) {
-	if (size < 0)
-		m_runtime_error(203);
-	p_freemem(
-	    value,
-	    static_cast<t_ptruint>(size));
+    t_pointer value, Size size) {
+	(void)m_allocation_size(size);
+	std::free(value);
 }
 
 inline t_ptruint p_freemem(t_pointer value) {
