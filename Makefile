@@ -11,7 +11,7 @@ mp: src/main.o src/parser.o src/cst.o src/directive_expr.o src/frame.o src/types
 
 src/main.o: src/main.cc src/parser.h src/types.h src/units.h src/emit.h
 src/parser.o: src/parser.cc src/parser.h src/cst.h src/directive_expr.h src/frame.h src/types.h src/evaluator.h src/operators.h src/units.h src/emit.h
-src/cst.o: src/cst.cc src/cst.h
+src/cst.o: src/cst.cc src/cst.h src/types.h
 src/directive_expr.o: src/directive_expr.cc src/directive_expr.h
 src/frame.o: src/frame.cc src/frame.h src/types.h src/cst.h
 src/types.o: src/types.cc src/types.h src/builtins.h
