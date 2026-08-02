@@ -21,6 +21,10 @@ var
   EnumMiss: Boolean;
   DirectHit: Boolean;
   DirectEmptyMiss: Boolean;
+  IntegerProbe: Integer;
+  NarrowSetHit: Boolean;
+  NarrowSetHighMiss: Boolean;
+  NarrowSetLowMiss: Boolean;
 
 begin
   Integers := [1, 3..5];
@@ -40,5 +44,16 @@ begin
   EnumMiss := Green in Colours;
 
   DirectHit := 5 in [4, 5];
-  DirectEmptyMiss := 1 in []
+  DirectEmptyMiss := 1 in [];
+
+  {$R+}
+  IntegerProbe := 128;
+  NarrowSetHit :=
+    IntegerProbe in [1,2,4,8,16,32,64,128];
+  IntegerProbe := 256;
+  NarrowSetHighMiss :=
+    IntegerProbe in [1,2,4,8,16,32,64,128];
+  IntegerProbe := -1;
+  NarrowSetLowMiss :=
+    IntegerProbe in [1,2,4,8,16,32,64,128]
 end.

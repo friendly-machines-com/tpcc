@@ -21,5 +21,12 @@ int main() {
 	    p_directemptymiss !=
 		::u_system::p_false)
 		return 5;
+	if (p_narrowsethit !=
+		::u_system::p_true ||
+	    p_narrowsethighmiss !=
+		::u_system::p_false ||
+	    p_narrowsetlowmiss !=
+		::u_system::p_false)
+		return 6;
 	return 0;
 }

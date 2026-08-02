@@ -11388,8 +11388,9 @@ Parser::match_callable_arguments(
 		BuiltinGenericKind::SetMembership) {
 		// Only System's omitted-type declaration enters here. Custom In
 		// declarations have complete Pascal formals and use the ordinary loop
-		// below. Build this candidate's missing `(T, set of T)` relationship
-		// without changing either source node or introducing a lookup path.
+		// below. Build this candidate's missing integer-domain/set-domain or
+		// nominal `(T, set of T)` relationship without changing either source
+		// node or introducing a lookup path.
 		if (args.size() != 2 ||
 		    !args[0] || !args[1])
 			return std::nullopt;
@@ -11441,16 +11442,32 @@ Parser::match_callable_arguments(
 		if (!is_set_item_type(item_type))
 			return std::nullopt;
 
-		Parameter item_formal(
-		    "item", "", item_type,
-		    ParamMode::Const, nullptr);
-		auto item_match =
-		    match_argument(
-			item_formal, args[0],
-			nullptr, 0,
-			allow_declared_conversion);
-		if (!item_match)
-			return std::nullopt;
+		Node* item = args[0];
+		const bool heterogeneous_integer_membership =
+		    item->ty !=
+			&untyped_integer_type() &&
+		    is_integer_semantic_type(
+			item->ty) &&
+		    is_integer_semantic_type(
+			item_type);
+		if (!heterogeneous_integer_membership) {
+			Parameter item_formal(
+			    "item", "", item_type,
+			    ParamMode::Const, nullptr);
+			auto item_match =
+			    match_argument(
+				item_formal, item,
+				nullptr, 0,
+				allow_declared_conversion);
+			if (!item_match)
+				return std::nullopt;
+			item = item_match->value;
+		}
+		// Do not narrow an Integer value to a smaller integer set carrier.
+		// Membership is a comparison, not storage: a value outside the set's
+		// representable domain is simply absent. Keeping the source value also
+		// matches the RTL's deliberately heterogeneous
+		// o_in(Value, t_set<Element>) contract.
 
 		// Both declared formals are omitted, so both retain Generic rank
 		// regardless of the candidate-local contextual construction. The
@@ -11461,7 +11478,7 @@ Parser::match_callable_arguments(
 			{MatchRank::Tier::Generic, 0},
 			{MatchRank::Tier::Generic, 0},
 		    },
-		    {item_match->value, values},
+		    {item, values},
 		    {nullptr, nullptr},
 		};
 	}
