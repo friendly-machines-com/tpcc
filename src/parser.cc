@@ -7456,20 +7456,117 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		return new RecordLiteral(std::move(fields), ty);
 	};
 
+	auto parse_variant_record =
+	    [&](Frame* members,
+		const RecordLayout& layout) -> Node* {
+		parse_opening_paren();
+		std::vector<RecordLiteral::Field> fields;
+		uint64_t initialized_through = 0;
+		while (input_token != ")") {
+			const std::string name =
+			    parse_identifier();
+			StorageSlot* slot = nullptr;
+			if (auto binding =
+				members
+				    ? members
+					  ->lookup_type_or_value_local(
+					      name)
+				    : std::nullopt)
+				if (auto value =
+					std::get_if<Node*>(
+					    &*binding))
+					slot =
+					    dynamic_cast<StorageSlot*>(
+						*value);
+			auto found = std::find_if(
+			    layout.fields.begin(),
+			    layout.fields.end(),
+			    [&](const auto& field) {
+				    return field.slot == slot;
+			    });
+			if (!slot ||
+			    found == layout.fields.end())
+				raise_type_error(
+				    "unknown record initializer field '" +
+				    name + "'",
+				    ty);
+
+			uint64_t next_offset =
+			    layout.type.size;
+			bool has_next = false;
+			for (const auto& candidate :
+			     layout.fields)
+				if (candidate.offset >=
+					initialized_through &&
+				    (!has_next ||
+				     candidate.offset <
+					 next_offset)) {
+					next_offset =
+					    candidate.offset;
+					has_next = true;
+				}
+			if (found->offset <
+				initialized_through ||
+			    !has_next)
+				raise_type_error(
+				    "record initializer field '" +
+				    name +
+				    "' is repeated or out of declaration order",
+				    ty);
+			if (found->offset != next_offset)
+				raise_type_error(
+				    "record initializer skips field(s) before '" +
+				    name + "'",
+				    ty);
+
+			parse_colon();
+			fields.push_back(
+			    RecordLiteral::Field{
+				found->slot,
+				parse_storage_initializer(
+				    found->ty),
+			    });
+			// Variant arms overlap. Advancing by the selected field's
+			// actual storage extent lets the next initializer choose any
+			// arm field at the next byte position, while rejecting a
+			// second field that overlaps storage already initialized.
+			initialized_through =
+			    found->offset + found->size;
+
+			if (input_token != ")")
+				parse_semicolon();
+		}
+		parse_closing_paren();
+		return new RecordLiteral(
+		    std::move(fields), ty);
+	};
+
 	if (auto record = dynamic_cast<RecordType*>(ty)) {
-		if (record->variant)
-			raise_type_error(
-			    "variant record constant initializers are not "
-			    "implemented",
-			    record);
+		if (record->variant) {
+			auto layout =
+			    record_layout(record);
+			if (!layout)
+				raise_type_error(
+				    "cannot determine variant record "
+				    "initializer layout",
+				    record);
+			return parse_variant_record(
+			    record->children, *layout);
+		}
 		return parse_record(record->fields);
 	}
 	if (auto record = dynamic_cast<PackedRecordType*>(ty)) {
-		if (record->variant)
-			raise_type_error(
-			    "variant record constant initializers are not "
-			    "implemented",
-			    record);
+		if (record->variant) {
+			auto layout =
+			    packed_record_layout(record);
+			if (!layout)
+				raise_type_error(
+				    "cannot determine packed variant record "
+				    "initializer layout",
+				    record);
+			return parse_variant_record(
+			    record->children, *layout);
+		}
 		return parse_record(record->fields);
 	}
 
