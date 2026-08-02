@@ -126,6 +126,86 @@ begin
     Result := 26
 end;
 
+function LiteralNatural(Value: ShortInt): Integer; overload;
+begin
+  if Value = Value then Result := 30
+end;
+
+function LiteralNatural(Value: Byte): Integer; overload;
+begin
+  if Value = Value then Result := 31
+end;
+
+function LiteralNatural(Value: SmallInt): Integer; overload;
+begin
+  if Value = Value then Result := 32
+end;
+
+function LiteralNatural(Value: Word): Integer; overload;
+begin
+  if Value = Value then Result := 33
+end;
+
+function LiteralNatural(Value: Integer): Integer; overload;
+begin
+  if Value = Value then Result := 34
+end;
+
+function LiteralNatural(Value: Cardinal): Integer; overload;
+begin
+  if Value = Value then Result := 35
+end;
+
+function LiteralNatural(Value: Int64): Integer; overload;
+begin
+  if Value = Value then Result := 36
+end;
+
+function LiteralNatural(Value: QWord): Integer; overload;
+begin
+  if Value = Value then Result := 37
+end;
+
+function WideLiteral(Value: Int64): Integer; overload;
+begin
+  if Value = Value then Result := 40
+end;
+
+function WideLiteral(Value: QWord): Integer; overload;
+begin
+  if Value = Value then Result := 41
+end;
+
+function DistanceBeforeSign(Value: SmallInt): Integer; overload;
+begin
+  if Value = Value then Result := 42
+end;
+
+function DistanceBeforeSign(Value: Cardinal): Integer; overload;
+begin
+  if Value = Value then Result := 43
+end;
+
+function EqualDistanceSign(Value: SmallInt): Integer; overload;
+begin
+  if Value = Value then Result := 44
+end;
+
+function EqualDistanceSign(Value: Word): Integer; overload;
+begin
+  if Value = Value then Result := 45
+end;
+
+function MixedLiteral(Value, Count: Cardinal): Integer; overload;
+begin
+  if (Value = Value) and (Count = Count) then Result := 46
+end;
+
+function MixedLiteral(Value, Count: Int64): Integer; overload;
+begin
+  if (Value = Value) and (Count = Count) then Result := 47
+end;
+
 begin
   Box.Value := 40;
   Sum := Box + 2;
@@ -181,12 +261,50 @@ begin
     Halt(20);
   if Literal32(42) <> 23 then
     Halt(21);
-  { Signedness is the primary literal preference, not just a tie-break for
-    equal-width carriers: FPC selects Int64 over Byte here. }
+  { 42 has the natural carrier ShortInt. Byte cannot contain that carrier's
+    negative half, whereas Int64 can. }
   if LiteralCrossWidth(42) <> 25 then
     Halt(22);
 
+  { FPC gives an integer literal the smallest predefined carrier containing
+    its value. Positive literals therefore alternate signed and unsigned
+    carriers at their range boundaries. }
+  if LiteralNatural(-129) <> 32 then Halt(23);
+  if LiteralNatural(-128) <> 30 then Halt(24);
+  if LiteralNatural(127) <> 30 then Halt(25);
+  if LiteralNatural(128) <> 31 then Halt(26);
+  if LiteralNatural(255) <> 31 then Halt(27);
+  if LiteralNatural(256) <> 32 then Halt(28);
+  if LiteralNatural(32767) <> 32 then Halt(29);
+  if LiteralNatural(32768) <> 33 then Halt(30);
+  if LiteralNatural(65535) <> 33 then Halt(31);
+  if LiteralNatural(65536) <> 34 then Halt(32);
+  if LiteralNatural(2147483647) <> 34 then Halt(33);
+  if LiteralNatural(2147483648) <> 35 then Halt(34);
+  if LiteralNatural(4294967295) <> 35 then Halt(35);
+  if LiteralNatural(4294967296) <> 36 then Halt(36);
+  if LiteralNatural(9223372036854775808) <> 37 then Halt(37);
+
+  { Signedness only breaks an equal interval-distance tie. It does not make a
+    much wider same-sign target beat a narrower containing target. }
+  if WideLiteral(4) <> 40 then Halt(38);
+  if WideLiteral(200) <> 41 then Halt(39);
+  if DistanceBeforeSign(200) <> 42 then Halt(40);
+  if EqualDistanceSign(200) <> 45 then Halt(41);
+
+  { 4 is ShortInt, so conversion to Cardinal loses the complete negative
+    source domain and the Int64 family wins. 200 is Byte, so both conversions
+    contain the source domain and Cardinal wins by interval distance. }
+  if MixedLiteral(LeftByte, 4) <> 47 then Halt(42);
+  if MixedLiteral(LeftByte, 200) <> 46 then Halt(43);
+  if MixedLiteral(LeftByte, 300) <> 47 then Halt(44);
+  if MixedLiteral(LeftByte, 40000) <> 46 then Halt(45);
   SmallLeft := 2;
+  if MixedLiteral(SmallLeft, 4) <> 47 then Halt(46);
+  if MixedLiteral(SmallLeft, 200) <> 46 then Halt(47);
+  if MixedLiteral(SmallLeft, 300) <> 47 then Halt(48);
+  if MixedLiteral(SmallLeft, 40000) <> 46 then Halt(49);
+
   SmallRight := 3;
   Sum := SmallLeft + SmallRight;
   if Selected <> 3 then
