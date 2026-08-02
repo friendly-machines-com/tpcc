@@ -75,7 +75,7 @@ fi
 for required in \
 	"ambiguous overload for 'in'" \
 	'viable cost [generic, generic]' \
-	'viable cost [user-convert via exact, exact]' \
+	'viable cost [convert, exact]' \
 	'tchoicea' \
 	'tchoiceb'
 do

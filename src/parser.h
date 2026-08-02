@@ -124,7 +124,7 @@ struct NumericConversionProfile {
 /** One candidate's treatment of one source argument. Matching never mutates
  * the source CST node. `value` is the candidate-local expression to use if
  * that candidate wins; it retains contextual literal typing or the exact
- * selected user conversion. */
+ * selected declared conversion. */
 struct ArgumentMatch {
 	MatchRank rank;
 	Node* value;
@@ -142,7 +142,7 @@ struct CallableMatch {
  * Matching uses this data only for diagnostics after the surrounding
  * expression has no viable interpretation; individual overload candidates
  * must be allowed to reject an argument without emitting an error. */
-struct UserConversionFailure {
+struct DeclaredConversionFailure {
 	std::vector<Callable*> candidates;
 	std::vector<std::pair<Callable*, CallableMatch>>
 	    viable;
@@ -436,21 +436,21 @@ private:
 	    const Parameter& formal, Node* actual,
 	    const BuiltinDesc* builtin,
 	    size_t parameter_index,
-	    bool allow_user_conversion = true,
+	    bool allow_declared_conversion = true,
 	    MatchFailure* failure = nullptr,
-	    UserConversionFailure*
+	    DeclaredConversionFailure*
 	        conversion_failure = nullptr);
 	std::optional<CallableMatch>
 	match_callable_arguments(
 	    Callable* callable,
 	    const std::vector<Node*>& args,
-	    bool allow_user_conversion = true);
+	    bool allow_declared_conversion = true);
 	std::optional<ArgumentMatch>
-	match_user_conversion(
+	match_declared_conversion(
 	    Node* actual, Type* target,
 	    std::string_view operator_identifier,
 	    MatchFailure* failure,
-	    UserConversionFailure*
+	    DeclaredConversionFailure*
 	        conversion_failure);
 	Node* match_explicit_conversion(
 	    Node* actual, Type* target);

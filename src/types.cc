@@ -1410,7 +1410,7 @@ PointerType::value_conversion_from(
 		// related class or class-reference overload wins independently of
 		// inheritance depth. The ordinary matcher consults this destination
 		// directly, rejects var/out before value conversion, and disables
-		// value conversion while matching a user conversion's source formal;
+		// value conversion while matching a declared conversion's source formal;
 		// consequently this edge cannot become class -> Pointer -> T.
 		return implicit_conversion(
 		    std::numeric_limits<unsigned>::max());

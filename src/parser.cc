@@ -495,8 +495,6 @@ static const char* match_tier_name(
 		return "direct";
 	case MatchRank::Tier::Convert:
 		return "convert";
-	case MatchRank::Tier::UserConvert:
-		return "user-convert";
 	case MatchRank::Tier::Generic:
 		return "generic";
 	}
@@ -513,16 +511,6 @@ static void append_cost_vector(
 		sst << match_tier_name(costs[i].tier);
 		if (costs[i].distance)
 			sst << "+" << costs[i].distance;
-		if (costs[i].tier ==
-		    MatchRank::Tier::UserConvert) {
-			sst << " via "
-			    << match_tier_name(
-				   costs[i].source_tier);
-			if (costs[i].source_distance)
-				sst << "+"
-				    << costs[i]
-					   .source_distance;
-		}
 	}
 	sst << "]";
 }
@@ -10679,9 +10667,9 @@ std::optional<ArgumentMatch> Parser::match_argument(
     const Parameter& formal, Node* actual,
     const BuiltinDesc* builtin,
     size_t parameter_index,
-    bool allow_user_conversion,
+    bool allow_declared_conversion,
     MatchFailure* failure,
-    UserConversionFailure*
+    DeclaredConversionFailure*
 	conversion_failure) {
 	if (failure)
 		*failure =
@@ -10812,7 +10800,7 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			    match_argument(
 				distance, actual,
 				nullptr, 0,
-				allow_user_conversion,
+				allow_declared_conversion,
 				failure,
 				conversion_failure);
 			if (!converted)
@@ -10907,10 +10895,10 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			// conversion may declare a set or array source formal and construct
 			// this syntax directly in that context. Re-enter the ordinary
 			// conversion-family lookup only from the outer match; matching the
-			// operator's source formal passes allow_user_conversion=false and
+			// operator's source formal passes allow_declared_conversion=false and
 			// therefore cannot form an A -> B -> C chain.
-			if (allow_user_conversion)
-				return match_user_conversion(
+			if (allow_declared_conversion)
+				return match_declared_conversion(
 				    actual, target,
 				    implicit_operator_identifier(
 					directive_state
@@ -11242,8 +11230,8 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			actual, target),
 		    numeric_conversion_profile(
 			source, target)};
-	if (allow_user_conversion)
-		return match_user_conversion(
+	if (allow_declared_conversion)
+		return match_declared_conversion(
 		    actual, target,
 		    implicit_operator_identifier(
 			directive_state
@@ -11257,7 +11245,7 @@ std::optional<CallableMatch>
 Parser::match_callable_arguments(
     Callable* callable,
     const std::vector<Node*>& args,
-    bool allow_user_conversion) {
+    bool allow_declared_conversion) {
 	auto signature =
 	    static_cast<RoutineType*>(callable->ty);
 	if (args.size() > signature->formals.size())
@@ -11516,7 +11504,7 @@ Parser::match_callable_arguments(
 		    match_argument(
 			item_formal, args[0],
 			nullptr, 0,
-			allow_user_conversion);
+			allow_declared_conversion);
 		if (!item_match)
 			return std::nullopt;
 
@@ -11542,7 +11530,7 @@ Parser::match_callable_arguments(
 		auto match = match_argument(
 		    signature->formals[i], args[i],
 		    builtin, i,
-		    allow_user_conversion);
+		    allow_declared_conversion);
 		if (!match)
 			return std::nullopt;
 		result.ranks.push_back(
@@ -11556,11 +11544,11 @@ Parser::match_callable_arguments(
 }
 
 std::optional<ArgumentMatch>
-Parser::match_user_conversion(
+Parser::match_declared_conversion(
     Node* actual, Type* target,
     std::string_view operator_identifier,
     MatchFailure* failure,
-    UserConversionFailure*
+    DeclaredConversionFailure*
 	conversion_failure) {
 	// The source construct chooses one canonical conversion identity before
 	// ordinary frame lookup: implicit contexts pass their {$R}-selected
@@ -11717,20 +11705,17 @@ Parser::match_user_conversion(
 		return std::nullopt;
 	}
 
-	// A source-defined conversion is one explicit language operation. Its
-	// source match above is exact or direct contextual literal construction,
-	// so this call is the only conversion edge from a typed source value.
-	// UserConvert remains below every intrinsic conversion and above an
-	// omitted-type generic formal; retaining the nested source rank keeps the
-	// representation complete without a numeric encoding or another pass.
+	// The selected declaration supplies one ordinary implicit-conversion edge.
+	// Its origin does not create another overload rank. Source matching above
+	// has already selected the declaration; its ordinary distance remains the
+	// distance of the resulting Convert match.
 	auto call = new ProcCall(
 	    nullptr, best_candidate,
 	    std::vector<Node*>{
 		best_source->value});
 	call->ty = target;
 	return ArgumentMatch{
-	    {MatchRank::Tier::UserConvert,
-	     0, best_source->rank.tier,
+	    {MatchRank::Tier::Convert,
 	     best_source->rank.distance},
 	    call,
 	    {}};
@@ -11756,15 +11741,15 @@ Node* Parser::match_explicit_conversion(
 	// Implicit is the deterministic safer choice when both implicit contracts
 	// exist. UncheckedImplicit remains available so T(X) is a superset under
 	// either {$R} state, but the cast itself never consults {$R}. Every family
-	// enters match_user_conversion(), whose source match forbids A -> B -> T
+	// enters match_declared_conversion(), whose source match forbids A -> B -> T
 	// chaining; changing only the family identity must not create another
 	// conversion algebra.
 	for (const Family& family : families) {
 		MatchFailure failure =
 		    MatchFailure::Incompatible;
-		UserConversionFailure
+		DeclaredConversionFailure
 		    conversion_failure;
-		auto match = match_user_conversion(
+		auto match = match_declared_conversion(
 		    actual, target, family.identifier,
 		    &failure, &conversion_failure);
 		if (match)
@@ -11917,7 +11902,7 @@ Node* Parser::cast(Node* a, Type* target_ty) {
 	    "", "", target_ty,
 	    ParamMode::Value, nullptr);
 	MatchFailure failure;
-	UserConversionFailure conversion_failure;
+	DeclaredConversionFailure conversion_failure;
 	auto match = match_argument(
 	    formal, a, nullptr, 0, true,
 	    &failure, &conversion_failure);
