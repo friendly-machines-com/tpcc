@@ -1185,7 +1185,7 @@ void Parser::handle_directive(
 std::string Parser::consume() {
 	std::stringstream sst;
 	sst.str("");
-	while (input_char == ' ' || input_char == '\n' || input_char == '\r') {
+	while (input_char == ' ' || input_char == '\n' || input_char == '\r' || input_char == '\t') {
 		consume_lowlevel();
 	}
 	if (input_char == EOF) {
