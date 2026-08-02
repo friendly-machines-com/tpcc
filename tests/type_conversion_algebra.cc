@@ -3,6 +3,19 @@
 #include <cassert>
 
 int main() {
+	// FPC's 64-bit System declarations are aliases, not equal-range nominal
+	// types. Compiler-owned SizeOf/Length and external RTL-name lookup must
+	// therefore return the canonical Int64/QWord Type* objects as well.
+	assert(sizeint_type() == int64_type());
+	assert(ptrint_type() == int64_type());
+	assert(ptruint_type() == qword_type());
+	assert(lookup_builtin_type(
+		   "::u_system::t_sizeint") ==
+	       int64_type());
+	assert(lookup_builtin_type(
+		   "::u_system::t_sizeuint") ==
+	       qword_type());
+
 	auto shortint_to_int64 =
 	    int64_type()->value_conversion_from(
 	        shortint_type());

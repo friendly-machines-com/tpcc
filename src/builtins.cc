@@ -69,10 +69,6 @@ IntrinsicType k_file(SourceLocation::builtin(), "::u_system::t_file", {}, {}, Ty
 PointerType k_pointer(
     SourceLocation::builtin(), nullptr,
     "::u_system::t_pointer");
-IntrinsicType k_ptrint(SourceLocation::builtin(), "::u_system::t_ptrint", 8, signed_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::Int64);
-IntrinsicType k_ptruint(SourceLocation::builtin(), "::u_system::t_ptruint", 7, unsigned_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::UInt64);
-IntrinsicType k_sizeint(SourceLocation::builtin(), "::u_system::t_sizeint", 8, signed_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::Int64);
-IntrinsicType k_sizeuint(SourceLocation::builtin(), "::u_system::t_sizeuint", 7, unsigned_bounds(64), TypeLayout{8, 8}, IntrinsicCarrier::UInt64);
 IntrinsicType k_fixedarray(SourceLocation::builtin(), "::u_system::t_fixedarray", {});
 IntrinsicType k_unknown(SourceLocation::builtin(), "::u_system::tpcc_unknown_type", {});
 
@@ -129,10 +125,6 @@ Type* const k_all_intrinsics[] = {
     &k_text,
     &k_file,
     &k_pointer,
-    &k_ptrint,
-    &k_ptruint,
-    &k_sizeint,
-    &k_sizeuint,
     &k_fixedarray,
     &k_unknown,
     //    &k_m_iobject,
@@ -156,12 +148,12 @@ Type* smallint_type() { return &k_smallint; }
 Type* cardinal_type() { return &k_longword; }
 Type* integer_type() { return &k_integer; }
 Type* longint_type() { return &k_longint; }
-Type* sizeint_type() { return &k_sizeint; }
+Type* sizeint_type() { return int64_type(); }
 Type* qword_type() { return &k_qword; }
 Type* int64_type() { return &k_int64; }
 Type* pointer_type() { return &k_pointer; }
-Type* ptrint_type() { return &k_ptrint; }
-Type* ptruint_type() { return &k_ptruint; }
+Type* ptrint_type() { return int64_type(); }
+Type* ptruint_type() { return qword_type(); }
 Type* boolean_type() { return &k_boolean; }
 Type* char_type() { return &k_char; }
 ShortStringType* shortstring_type(uint8_t capacity) {
@@ -1365,6 +1357,19 @@ Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name ==
 	    "::u_system::t_tmethod")
 		return tmethod_type();
+	// FIXME: A 32-bit -P target must map the signed names to LongInt and the
+	// unsigned names to LongWord. They are aliases, so lookup returns the
+	// canonical Type* rather than manufacturing four nominal intrinsics.
+	if (cxx_name ==
+		"::u_system::t_ptrint" ||
+	    cxx_name ==
+		"::u_system::t_sizeint")
+		return int64_type();
+	if (cxx_name ==
+		"::u_system::t_ptruint" ||
+	    cxx_name ==
+		"::u_system::t_sizeuint")
+		return qword_type();
 	for (auto t : k_all_intrinsics) {
 		if (auto q = dynamic_cast<IntrinsicType*>(t)) {
 			if (q->cxx_name == cxx_name) {

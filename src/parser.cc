@@ -11879,7 +11879,8 @@ Node* Parser::cast_impl(
 	if (allow_destination_conversion &&
 	    failure !=
 		MatchFailure::AmbiguousConversion &&
-	    a && a->ty)
+	    a && a->ty &&
+	    !untyped_integer_constant(a))
 		if (target_ty
 			->destination_conversion_from(
 			    a->ty))
@@ -11887,6 +11888,9 @@ Node* Parser::cast_impl(
 			// therefore cannot make a call candidate viable or participate
 			// in overload ranking; make_implicit_cast adds the selected
 			// store's ordinary {$R+} check when its value domain requires it.
+			// Untyped integer literals never reach this type-only path: their
+			// failed contextual match already means the actual magnitude does
+			// not fit, and erasing it here would accept `Byte := 300`.
 			return make_implicit_cast(
 			    a, target_ty);
 	if (dynamic_cast<NilLiteral*>(a))

@@ -244,10 +244,12 @@ using t_longint  = int32_t;
 using t_int64 = int64_t;
 using t_qword = uint64_t;
 using t_pointer = void*;
-using t_ptrint = intptr_t;
-using t_ptruint = uintptr_t;
-using t_sizeint = ssize_t;
-using t_sizeuint = size_t;
+// FIXME: A 32-bit -P target must make these aliases t_integer/t_longword.
+// The current RTL implements System's 64-bit Int64/QWord aliases exactly.
+using t_ptrint = t_int64;
+using t_ptruint = t_qword;
+using t_sizeint = t_int64;
+using t_sizeuint = t_qword;
 using t_single = float;
 using t_double = double;
 using t_extended = long double;

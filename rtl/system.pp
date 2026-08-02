@@ -26,10 +26,13 @@ type
   CodePointer = Pointer;
   PPointer = ^Pointer;
   TMethod = external name '::u_system::t_tmethod';
-  PtrInt = external name '::u_system::t_ptrint';
-  PtrUInt = external name '::u_system::t_ptruint';
-  SizeInt = external name '::u_system::t_sizeint';
-  SizeUInt = external name '::u_system::t_sizeuint';
+  // FIXME: A 32-bit -P target must alias PtrInt/SizeInt to LongInt and
+  // PtrUInt/SizeUInt to LongWord. The current System model is explicitly the
+  // FPC 64-bit variant, where these names have canonical Int64/QWord identity.
+  PtrInt = Int64;
+  PtrUInt = QWord;
+  SizeInt = Int64;
+  SizeUInt = QWord;
   // The predefined ShortString is the concrete type String[255]. It does not
   // mean "String[N] for any N" and is not an open-string formal; each
   // explicitly bounded String[N] retains its own compile-time capacity.
@@ -119,51 +122,6 @@ operator :=(a: Integer): Int64; external name '::u_system::o_implicit';
 
 operator :=(a: Cardinal): Int64; external name '::u_system::o_implicit';
 operator :=(a: Cardinal): QWord; external name '::u_system::o_implicit';
-
-// FIXME: These SizeInt/SizeUInt and PtrInt/PtrUInt edges describe a 64-bit
-// target. On a 32-bit target the signed types have Integer's domain and the
-// unsigned types have Cardinal's domain; -P must select the corresponding
-// declaration block before overload resolution.
-operator :=(a: ShortInt): PtrInt; external name '::u_system::o_implicit';
-operator :=(a: ShortInt): SizeInt; external name '::u_system::o_implicit';
-
-operator :=(a: Byte): PtrInt; external name '::u_system::o_implicit';
-operator :=(a: Byte): PtrUInt; external name '::u_system::o_implicit';
-operator :=(a: Byte): SizeInt; external name '::u_system::o_implicit';
-operator :=(a: Byte): SizeUInt; external name '::u_system::o_implicit';
-
-operator :=(a: SmallInt): PtrInt; external name '::u_system::o_implicit';
-operator :=(a: SmallInt): SizeInt; external name '::u_system::o_implicit';
-
-operator :=(a: Word): PtrInt; external name '::u_system::o_implicit';
-operator :=(a: Word): PtrUInt; external name '::u_system::o_implicit';
-operator :=(a: Word): SizeInt; external name '::u_system::o_implicit';
-operator :=(a: Word): SizeUInt; external name '::u_system::o_implicit';
-
-operator :=(a: Integer): PtrInt; external name '::u_system::o_implicit';
-operator :=(a: Integer): SizeInt; external name '::u_system::o_implicit';
-
-operator :=(a: Cardinal): PtrInt; external name '::u_system::o_implicit';
-operator :=(a: Cardinal): PtrUInt; external name '::u_system::o_implicit';
-operator :=(a: Cardinal): SizeInt; external name '::u_system::o_implicit';
-operator :=(a: Cardinal): SizeUInt; external name '::u_system::o_implicit';
-
-// TPCC currently gives these names distinct Pascal identity even though each
-// signed or unsigned group has one 64-bit value domain. These edges preserve
-// FPC's assignment compatibility without pretending the Type objects match.
-operator :=(a: Int64): PtrInt; external name '::u_system::o_implicit';
-operator :=(a: Int64): SizeInt; external name '::u_system::o_implicit';
-operator :=(a: PtrInt): Int64; external name '::u_system::o_implicit';
-operator :=(a: PtrInt): SizeInt; external name '::u_system::o_implicit';
-operator :=(a: SizeInt): Int64; external name '::u_system::o_implicit';
-operator :=(a: SizeInt): PtrInt; external name '::u_system::o_implicit';
-
-operator :=(a: QWord): PtrUInt; external name '::u_system::o_implicit';
-operator :=(a: QWord): SizeUInt; external name '::u_system::o_implicit';
-operator :=(a: PtrUInt): QWord; external name '::u_system::o_implicit';
-operator :=(a: PtrUInt): SizeUInt; external name '::u_system::o_implicit';
-operator :=(a: SizeUInt): QWord; external name '::u_system::o_implicit';
-operator :=(a: SizeUInt): PtrUInt; external name '::u_system::o_implicit';
 
 // The parser chooses one of these ordinary operator families before overload
 // resolution. Keeping both rows explicit also lets user-defined arithmetic
@@ -370,11 +328,6 @@ operator not(a: Cardinal): Cardinal; external name '::u_system::o_logicalnot';
 operator not(a: Integer): Integer; external name '::u_system::o_logicalnot';
 operator not(a: QWord): QWord; external name '::u_system::o_logicalnot';
 operator not(a: Int64): Int64; external name '::u_system::o_logicalnot';
-operator not(a: PtrInt): PtrInt; external name '::u_system::o_logicalnot';
-operator not(a: PtrUInt): PtrUInt; external name '::u_system::o_logicalnot';
-operator not(a: SizeInt): SizeInt; external name '::u_system::o_logicalnot';
-operator not(a: SizeUInt): SizeUInt; external name '::u_system::o_logicalnot';
-
 operator and(a, b: Byte): Integer; external name '::u_system::o_bitwiseand';
 operator and(a, b: ShortInt): Integer; external name '::u_system::o_bitwiseand';
 operator and(a, b: Word): Integer; external name '::u_system::o_bitwiseand';
