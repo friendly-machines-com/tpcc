@@ -6,6 +6,16 @@ program ShiftOperators;
 type
   TNibble = 0..15;
 
+const
+  VersionNr = '3';
+  ReleaseNr = '2';
+  PatchNr = '0';
+  FoldedOrd = Ord(VersionNr);
+  FoldedShift = (Ord(VersionNr) - Ord('0')) shl 14;
+  WordVersion = ((Ord(VersionNr) - Ord('0')) shl 14) +
+                ((Ord(ReleaseNr) - Ord('0')) shl 7) +
+                (Ord(PatchNr) - Ord('0'));
+
 var
   N: TNibble;
   B: Byte;
@@ -62,6 +72,10 @@ begin
 end;
 
 begin
+  if FoldedOrd <> 51 then Halt(40);
+  if FoldedShift <> 49152 then Halt(41);
+  if WordVersion <> 49408 then Halt(42);
+
   N := 1;
   B := 1;
   SI := 1;

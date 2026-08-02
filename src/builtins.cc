@@ -394,6 +394,79 @@ static uint64_t constant_ordinal_bits(
 	return raw & constant_ordinal_mask(bits);
 }
 
+static ConstEvalResult fold_ord(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	if (args.size() != 1 || !args[0])
+		return ConstEvalResult::not_constant();
+	auto value =
+	    constant_ordinal_value(args[0]);
+	if (!value)
+		return ConstEvalResult::not_constant();
+	// The RTL returns Ord through its declared Cardinal result, including the
+	// two's-complement representation of negative enumeration values. Use the
+	// same ordinary ordinal cast here so a constant call has exactly that
+	// result rather than acquiring separate constant-only semantics.
+	return const_explicit_ordinal_cast(
+	    value->second, value->first,
+	    result_ty);
+}
+
+static ConstEvalResult fold_shift(
+    Type* result_ty,
+    const std::vector<Node*>& args,
+    bool left) {
+	if (args.size() != 2 ||
+	    !args[0] || !args[1])
+		return ConstEvalResult::not_constant();
+	auto value =
+	    constant_ordinal_value(args[0]);
+	auto count =
+	    constant_ordinal_value(args[1]);
+	auto carrier =
+	    constant_ordinal_carrier(result_ty);
+	if (!value || !count || !carrier ||
+	    carrier->bits == 0)
+		return ConstEvalResult::not_constant();
+
+	const uint64_t mask =
+	    constant_ordinal_mask(carrier->bits);
+	const uint64_t raw =
+	    constant_ordinal_bits(
+		value->first, value->second,
+		carrier->bits);
+	const uint64_t raw_count =
+	    count->first
+		? uint64_t{0} - count->second
+		: count->second;
+	// System's runtime shift helpers mask the count at the promoted result
+	// width, including negative counts. Mirror their unsigned operation here:
+	// besides keeping constant and runtime evaluation identical, it avoids
+	// C++'s undefined signed and oversized shifts.
+	const unsigned amount =
+	    static_cast<unsigned>(
+		raw_count & (carrier->bits - 1));
+	const uint64_t shifted =
+	    left ? (raw << amount) & mask
+		 : raw >> amount;
+	return const_explicit_ordinal_cast(
+	    shifted, false, result_ty);
+}
+
+static ConstEvalResult fold_leftshift(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_shift(
+	    result_ty, args, true);
+}
+
+static ConstEvalResult fold_rightshift(
+    ConstEvalContext&, Type* result_ty,
+    const std::vector<Node*>& args) {
+	return fold_shift(
+	    result_ty, args, false);
+}
+
 using ConstantSetKey = std::pair<bool, uint64_t>;
 
 struct ConstantSetRange {
@@ -1032,7 +1105,7 @@ static ConstEvalResult fold_chr(ConstEvalContext&, Type* result_ty, const std::v
 // Pascal-visible builtin procedures/functions. To add one: append a row
 // AND implement `::u_system::p_<name>` in rtl.h. Linker enforces the rtl.h side.
 static const BuiltinDesc k_builtins[] = {
-    {"::u_system::p_ord", nullptr, {}, BuiltinGenericKind::OrdinalValue},
+    {"::u_system::p_ord", fold_ord, {}, BuiltinGenericKind::OrdinalValue},
     // Both operations have the same generic Pascal signature and type
     // relationship; only their ordinary RTL function bodies differ.
     {"::u_system::p_include", nullptr, {}, BuiltinGenericKind::SetMutation},
@@ -1300,8 +1373,8 @@ static const BuiltinDesc k_builtins[] = {
     // conversion despite sharing the Pascal spelling "assign".
     {"::u_system::p_assign", nullptr},
     {"::u_system::o_modulus", fold_modulus},
-    {"::u_system::o_leftshift", nullptr},
-    {"::u_system::o_rightshift", nullptr},
+    {"::u_system::o_leftshift", fold_leftshift},
+    {"::u_system::o_rightshift", fold_rightshift},
 
     {"::u_system::o_lessthan", nullptr},
     {"::u_system::o_lessthanorequal", nullptr},

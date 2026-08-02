@@ -67,6 +67,7 @@ type
   TExceptProc = procedure(ExceptObject: TObject;
     Address, Frame: Pointer);
   TSysCharSet = set of Char;
+  SignalHandler = procedure; // FIXME: cdecl;
 
 const
   MaxLongint = $7fffffff;
