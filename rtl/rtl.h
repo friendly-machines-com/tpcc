@@ -4562,13 +4562,13 @@ inline Result m_leftshift(
 	using UResult = std::make_unsigned_t<Result>;
 	constexpr unsigned width =
 	    std::numeric_limits<UResult>::digits;
-	if constexpr (std::is_signed_v<Count>)
-		if (count < 0)
-			return 0;
 	using UCount = std::make_unsigned_t<Count>;
-	UCount amount = static_cast<UCount>(count);
-	if (amount >= width)
-		return 0;
+	// Wrap at the promoted result width. Conversion
+	// through UCount also gives negative Integer counts their two's-complement
+	// low bits, so -1 becomes 31 for a 32-bit result and 63 for a 64-bit one.
+	UCount amount =
+	    static_cast<UCount>(count) &
+	    static_cast<UCount>(width - 1);
 	return m_integer_from_bits<Result>(
 	    static_cast<UResult>(
 		static_cast<UResult>(value) <<
@@ -4583,13 +4583,10 @@ inline Result m_rightshift(
 	using UResult = std::make_unsigned_t<Result>;
 	constexpr unsigned width =
 	    std::numeric_limits<UResult>::digits;
-	if constexpr (std::is_signed_v<Count>)
-		if (count < 0)
-			return 0;
 	using UCount = std::make_unsigned_t<Count>;
-	UCount amount = static_cast<UCount>(count);
-	if (amount >= width)
-		return 0;
+	UCount amount =
+	    static_cast<UCount>(count) &
+	    static_cast<UCount>(width - 1);
 	return m_integer_from_bits<Result>(
 	    static_cast<UResult>(value) >> amount);
 }
@@ -4602,9 +4599,14 @@ inline Result m_rightshift(
 	inline INTEGER_RESULT o_bitwisexor(T a, T b) { return static_cast<INTEGER_RESULT>(a) ^ static_cast<INTEGER_RESULT>(b); } \
 	inline INTEGER_RESULT o_unchecked_intdivide(T a, T b) { return m_unchecked_intdivide(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); } \
 	inline INTEGER_RESULT o_intdivide(T a, T b) { return m_checked_intdivide(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); } \
-	inline INTEGER_RESULT o_modulus(T a, T b) { return m_modulus(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); } \
-	inline INTEGER_RESULT o_leftshift(T a, T b) { return m_leftshift(m_arithmetic_operand<INTEGER_RESULT>(a), b); } \
-	inline INTEGER_RESULT o_rightshift(T a, T b) { return m_rightshift(m_arithmetic_operand<INTEGER_RESULT>(a), b); }
+	inline INTEGER_RESULT o_modulus(T a, T b) { return m_modulus(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); }
+
+// Shift promotion differs from the other integer operations for unsigned
+// Byte and Word, and every family takes an Integer count. Keep that contract
+// separate instead of overloading INTEGER_RESULT with two meanings.
+#define TPCC_DEFINE_SHIFT_OPERATIONS(T, SHIFT_RESULT) \
+	inline SHIFT_RESULT o_leftshift(T a, t_integer b) { return m_leftshift(m_arithmetic_operand<SHIFT_RESULT>(a), b); } \
+	inline SHIFT_RESULT o_rightshift(T a, t_integer b) { return m_rightshift(m_arithmetic_operand<SHIFT_RESULT>(a), b); }
 
 #define TPCC_DEFINE_INTEGRAL_OPERATIONS(T, INTEGER_RESULT) \
 	TPCC_DEFINE_INTEGER_ARITHMETIC_OPERATIONS(T, INTEGER_RESULT, t_double) \
@@ -4618,6 +4620,14 @@ TPCC_DEFINE_INTEGRAL_OPERATIONS(t_longword, t_longword)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_integer, t_integer)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_int64, t_int64)
 TPCC_DEFINE_INTEGRAL_OPERATIONS(t_qword, t_qword)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_byte, t_longword)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_shortint, t_integer)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_word, t_longword)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_smallint, t_integer)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_longword, t_longword)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_integer, t_integer)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_int64, t_int64)
+TPCC_DEFINE_SHIFT_OPERATIONS(t_qword, t_qword)
 TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_single)
 TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_double)
 TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_extended)

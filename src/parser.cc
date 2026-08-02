@@ -10515,7 +10515,20 @@ numeric_conversion_profile(
 	    integer_preference_rank(target);
 	if (source_integer &&
 	    target_integer) {
-		if (*target_integer >
+		if (dynamic_cast<SubrangeType*>(
+			source))
+			// A subrange's declared interval, not the intrinsic type chosen
+			// to store it, is the source domain. When two builtin integer
+			// formals both contain that interval, their ordinary distance
+			// and sign comparison select the closer carrier; the storage
+			// base must not manufacture a promotion toward itself.
+			result.preference =
+			    result.requires_range_check
+				? NumericPreference::
+				      Demotion
+				: NumericPreference::
+				      Promotion;
+		else if (*target_integer >
 		    *source_integer)
 			result.preference =
 			    NumericPreference::
@@ -11586,7 +11599,7 @@ Parser::match_declared_conversion(
 		    // An uncommitted literal has no typed A value which must first
 		    // undergo an A -> B conversion. Candidate-local construction of
 		    // that literal directly as the declared source formal B therefore
-		    // leaves the user B -> C operation as the one conversion edge.
+			// leaves the declared B -> C operation as the one conversion edge.
 		    // Keep this list tied to the CST forms which match_argument
 		    // actually contextualizes; a favorable Direct rank by itself
 		    // must never reopen typed widening, narrowing, or subtyping.
