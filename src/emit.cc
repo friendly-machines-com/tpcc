@@ -2225,13 +2225,10 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	//   Every slot is registered in the SAME Frame so Pascal lookup remains
 	//   flat. RecordType::fields and VariantPart retain only the source-order
 	//   layout tree; the generic frame walk must not emit record fields again.
-	if (rec) {
-		for (const auto& field : rec->fields) {
-			fprintf(active, "\t");
-			emit_type_ref(field.ty);
-			fprintf(active, " %s;\n", field.slot->cxx_name.c_str());
-		}
-	}
+	if (rec)
+		emit_aggregate_member_fields(rec->fields);
+	if (auto obj = dynamic_cast<ObjectType*>(ty))
+		emit_aggregate_member_fields(obj->fields);
 	for (auto& kv : body->value_declarations()) {
 		Node* v = kv.second.value;
 		if (auto slot = dynamic_cast<StorageSlot*>(v)) {
@@ -4371,6 +4368,17 @@ void Emitter::emit_template_value_arg(Node* expr) {
 		return;
 	}
 	unhandled_node("emit_template_value_arg", expr);
+}
+
+void Emitter::emit_aggregate_member_fields(
+    const std::vector<AggregateField>& fields) {
+	if (!active)
+		return;
+	for (const auto& field : fields) {
+		fprintf(active, "\t");
+		emit_type_ref(field.ty);
+		fprintf(active, " %s;\n", field.slot->cxx_name.c_str());
+	}
 }
 
 void Emitter::emit_type_ref(Type* ty) {

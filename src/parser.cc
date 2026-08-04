@@ -6015,6 +6015,8 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 						packed->fields.push_back({member_name, slot, ty});
 					else if (auto record = dynamic_cast<RecordType*>(owner_class))
 						record->fields.push_back({member_name, slot, ty});
+					else if (auto object = dynamic_cast<ObjectType*>(owner_class))
+						object->fields.push_back({member_name, slot, ty});
 				}
 				parse_semicolon();
 			}
@@ -6132,6 +6134,8 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 					packed->fields.push_back({member_name, slot, ty});
 				else if (auto record = dynamic_cast<RecordType*>(owner_class))
 					record->fields.push_back({member_name, slot, ty});
+				else if (auto object = dynamic_cast<ObjectType*>(owner_class))
+					object->fields.push_back({member_name, slot, ty});
 			}
 		}
 		if (input_token.size() && input_token != "end") {

@@ -615,6 +615,12 @@ struct ObjectType: public Type {
 	std::string cxx_name;
 	ObjectType* super;
 	bool needs_vmt = false;
+	// Source-order aggregate-member fields, mirroring RecordType::fields. The
+	// Frame lookup table's std::map ordering must not drive C++ member emission
+	// or layout reconstruction (see RecordType::fields for the same rule).
+	// Sometimes objects are used as fields inside (non-packed) records.
+	std::vector<AggregateField> fields;
+
 	ObjectType(SourceLocation source_location, Frame* children, ObjectType* super);
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion>

@@ -11,6 +11,7 @@ class EnumType;
 class SubrangeType;
 class PackedRecordType;
 struct VariantPart;
+struct AggregateField;
 class Callable;
 class Method;
 class RoutineType;
@@ -236,6 +237,8 @@ public:
 
 	void emit_expression(Node* expr);
 	void emit_type_ref(Type* ty);
+	void emit_aggregate_member_fields(
+	    const std::vector<AggregateField>& fields);
 
     private:
 	// Emit every concrete subrange carrier whose spelling is required by TY

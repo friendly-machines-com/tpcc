@@ -586,6 +586,45 @@ std::optional<RecordLayout> record_layout_impl(
 	};
 }
 
+// Object layout walks super first (recursive), then own source-order fields.
+// Like RecordType but with a super pointer and no variant part. The C++
+// backend handles vmt/vptr via its own ABI when an object declares virtual
+// methods; this layout calculation does not model vptr, only declared fields.
+std::optional<TypeLayout> object_layout_impl(
+    ObjectType* object, std::set<Type*>& visiting) {
+	if (!visiting.insert(object).second)
+		return std::nullopt;
+
+	SequentialLayout fixed;
+
+	if (object->super) {
+		auto super_layout =
+		    object_layout_impl(object->super, visiting);
+		if (!super_layout) {
+			visiting.erase(object);
+			return std::nullopt;
+		}
+		fixed.offset = super_layout->size;
+		fixed.alignment = super_layout->alignment;
+	}
+
+	for (const auto& field : object->fields) {
+		if (!append_aligned_field(
+			fixed, field.slot, field.ty, visiting)) {
+			visiting.erase(object);
+			return std::nullopt;
+		}
+	}
+
+	uint64_t size;
+	bool ok = align_up_u64(
+	    fixed.offset == 0 ? 1 : fixed.offset,
+	    fixed.alignment, &size);
+	visiting.erase(object);
+	return ok ? std::optional<TypeLayout>{TypeLayout{size, fixed.alignment}}
+		  : std::nullopt;
+}
+
 struct PackedSequentialLayout {
 	uint64_t offset = 0;
 	std::vector<AggregateFieldLayout> fields;
@@ -752,6 +791,8 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container,
 			   ? std::optional<TypeLayout>{layout->type}
 			   : std::nullopt;
 	}
+	if (auto object = dynamic_cast<ObjectType*>(ty))
+		return object_layout_impl(object, visiting);
 	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
 		if (routine->kind == METHOD)
 			return TypeLayout{16, 8}; // FIXME: target-dependent
