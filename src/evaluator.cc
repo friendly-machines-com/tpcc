@@ -71,6 +71,27 @@ ConstEvalResult const_explicit_ordinal_cast(
 				  ? UINT64_MAX
 				  : (uint64_t{1} << bits) - 1;
 	raw &= mask;
+	if (auto enumeration =
+		dynamic_cast<EnumType*>(carrier)) {
+		// Succ/Pred and explicit casts on enum carriers land here. The
+		// resulting ordinal selects a defined member when one exists, so
+		// downstream consumers (subrange bounds, designators) see the same
+		// shape that Low/High produce. Values that fall in a declaration gap
+		// keep the Integer-with-enum-type fallback rather than fabricating a
+		// name.
+		int64_t stepped = static_cast<int64_t>(raw);
+		if (signed_target &&
+		    (raw & (uint64_t{1} << (bits - 1))))
+			stepped = -static_cast<int64_t>(
+			    ((~raw) & mask) + 1);
+		for (const auto& member :
+		     enumeration->members)
+			if (member.value == stepped)
+				return ConstEvalResult::success(
+				    new EnumMemberRef(
+					member.cxx_name,
+					member.value, to_ty));
+	}
 	if (signed_target &&
 	    (raw & (uint64_t{1} << (bits - 1)))) {
 		uint64_t signed_magnitude =
