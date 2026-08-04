@@ -10668,6 +10668,53 @@ static bool conversion_requires_range_check(
 		   target_upper) > 0;
 }
 
+// A bracket-literal item matched against a subrange element formal is
+// contextual: a compile-time-constant ordinal of the subrange's base type is
+// admissible if its value lies within the subrange endpoints. This mirrors
+// parse_storage_initializer's direct-subrange path so the BracketLiteral
+// branch doesn't have to commit to a narrowing conversion at type level.
+// Returns nullopt when the situation doesn't apply; callers fall back to the
+// ordinary match.
+static std::optional<ArgumentMatch>
+contextual_subrange_constant_match(
+    const Parameter& formal, Node* actual) {
+	auto subrange =
+	    dynamic_cast<SubrangeType*>(formal.ty);
+	if (!subrange)
+		return std::nullopt;
+	if (formal.mode == ParamMode::Var ||
+	    formal.mode == ParamMode::Out)
+		return std::nullopt;
+	ConstEvalContext ctx;
+	ConstEvalResult folded =
+	    actual->const_eval(ctx);
+	if (folded.kind !=
+	    ConstEvalResult::Kind::Success)
+		return std::nullopt;
+	std::string error;
+	auto bound = classify_subrange_bound(
+	    folded.node, &error);
+	if (!bound)
+		return std::nullopt;
+	OrdinalRange range;
+	if (!ordinal_range_for_type(
+		subrange, &range, &error))
+		return std::nullopt;
+	if (!ordinal_constant_matches_range_type(
+		range.base_type, *bound))
+		return std::nullopt;
+	if (compare_ordinal_value(
+		bound->ordinal_value,
+		range.lower_ordinal) < 0 ||
+	    compare_ordinal_value(
+		bound->ordinal_value,
+		range.upper_ordinal) > 0)
+		return std::nullopt;
+	return ArgumentMatch{
+	    {MatchRank::Tier::Direct, 0},
+	    new Cast(bound->node, subrange)};
+}
+
 std::optional<ArgumentMatch> Parser::match_argument(
     const Parameter& formal, Node* actual,
     const BuiltinDesc* builtin,
@@ -10956,13 +11003,23 @@ std::optional<ArgumentMatch> Parser::match_argument(
 				    .integer_sign_mismatch ||
 				rank.integer_sign_mismatch;
 		    };
+		auto match_bracket_item =
+		    [&](Node* in_node)
+		    -> std::optional<ArgumentMatch> {
+				if (auto m =
+					contextual_subrange_constant_match(
+					    item_formal, in_node))
+					return m;
+				return match_argument(
+				    item_formal, in_node,
+				    nullptr, 0, false, failure);
+			};
 		for (const BracketLiteral::Item& item :
 		     literal->items) {
 			if (!target_set && item.upper)
 				return std::nullopt;
-			auto lower = match_argument(
-			    item_formal, item.lower,
-			    nullptr, 0, false, failure);
+			auto lower =
+			    match_bracket_item(item.lower);
 			if (!lower)
 				return std::nullopt;
 			combine(lower->rank);
@@ -10973,10 +11030,8 @@ std::optional<ArgumentMatch> Parser::match_argument(
 			}
 			Node* upper_value = nullptr;
 			if (item.upper) {
-				auto upper = match_argument(
-				    item_formal,
-				    item.upper, nullptr,
-				    0, false, failure);
+				auto upper =
+				    match_bracket_item(item.upper);
 				if (!upper)
 					return std::nullopt;
 				combine(upper->rank);
