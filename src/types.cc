@@ -755,10 +755,6 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container,
 		// Packed-record layout can therefore keep using the Pascal storage
 		// layout without duplicating a C++ ABI calculator here.
 		return type_layout_impl(packed_container, subrange->base_type, visiting);
-	if (packed_container) {
-		// The others are not allowed inside packed records.
-		return std::nullopt;
-	}
 	if (auto enumeration =
 		dynamic_cast<EnumType*>(ty)) {
 		uint64_t bytes =
@@ -768,6 +764,10 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container,
 			   ? std::optional<TypeLayout>{
 				 TypeLayout{bytes, bytes}}
 			   : std::nullopt;
+	}
+	if (packed_container) {
+		// The others are not allowed inside packed records.
+		return std::nullopt;
 	}
 	// A dynamic array stores one shared-buffer handle, independent of its
 	// element type or current length. An open array is the non-owning
