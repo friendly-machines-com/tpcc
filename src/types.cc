@@ -749,6 +749,12 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container,
 			return std::nullopt;
 		return TypeLayout{size, item->alignment};
 	}
+	if (auto subrange = dynamic_cast<SubrangeType*>(ty))
+		// The emitted carrier is deliberately one base-type member, with
+		// generated static assertions enforcing identical size and alignment.
+		// Packed-record layout can therefore keep using the Pascal storage
+		// layout without duplicating a C++ ABI calculator here.
+		return type_layout_impl(packed_container, subrange->base_type, visiting);
 	if (packed_container) {
 		// The others are not allowed inside packed records.
 		return std::nullopt;
@@ -763,12 +769,6 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container,
 				 TypeLayout{bytes, bytes}}
 			   : std::nullopt;
 	}
-	if (auto subrange = dynamic_cast<SubrangeType*>(ty))
-		// The emitted carrier is deliberately one base-type member, with
-		// generated static assertions enforcing identical size and alignment.
-		// Packed-record layout can therefore keep using the Pascal storage
-		// layout without duplicating a C++ ABI calculator here.
-		return type_layout_impl(packed_container, subrange->base_type, visiting);
 	// A dynamic array stores one shared-buffer handle, independent of its
 	// element type or current length. An open array is the non-owning
 	// data-and-count descriptor passed by open-array formals.
