@@ -172,7 +172,6 @@ enum class DirectiveSwitchCategory {
 	Module,
 	Optimizer,
 	RecordPacking,
-	EnumPacking,
 };
 
 enum class InterfaceModel {
@@ -207,13 +206,21 @@ class DirectiveState {
 	std::array<bool, 26> module_switches{};
 	std::array<bool, 26> optimizer_switches{};
 	bool record_packing = false;
-	bool enum_packing = false;
+	// Minimum byte size for an enum carrier; range-implied growth is applied
+	// at declaration time so values that don't fit still widen the carrier.
+	int packenum = 4;
 	InterfaceModel interface_model = InterfaceModel::COM;
 
 public:
 	DirectiveState();
 	bool switch_enabled(char letter) const;
 	void set_switch(char letter, bool enabled);
+	int get_packenum() const {
+		return packenum;
+	}
+	void set_packenum(int value) {
+		packenum = value;
+	}
 	LeadingTokenDirectives leading_token_directives() const {
 		return LeadingTokenDirectives{
 		    switch_enabled('q'),
@@ -231,7 +238,7 @@ public:
 class SavedDirectiveState {
 	std::array<bool, 26> local_switches;
 	bool record_packing;
-	bool enum_packing;
+	int packenum;
 
 public:
 	explicit SavedDirectiveState(

@@ -844,7 +844,7 @@ static constexpr std::array<
 	DirectiveSwitchCategory::Local,		// W
 	DirectiveSwitchCategory::Module,	// X
 	DirectiveSwitchCategory::Unsupported,	// Y
-	DirectiveSwitchCategory::EnumPacking,	// Z
+	DirectiveSwitchCategory::Unsupported,	// Z
 };
 
 static std::optional<size_t>
@@ -882,8 +882,6 @@ bool DirectiveState::switch_enabled(
 		return optimizer_switches[*index];
 	case DirectiveSwitchCategory::RecordPacking:
 		return record_packing;
-	case DirectiveSwitchCategory::EnumPacking:
-		return enum_packing;
 	case DirectiveSwitchCategory::Unsupported:
 		return false;
 	}
@@ -908,9 +906,6 @@ void DirectiveState::set_switch(
 	case DirectiveSwitchCategory::RecordPacking:
 		record_packing = enabled;
 		break;
-	case DirectiveSwitchCategory::EnumPacking:
-		enum_packing = enabled;
-		break;
 	case DirectiveSwitchCategory::Unsupported:
 		break;
 	}
@@ -920,13 +915,13 @@ SavedDirectiveState::SavedDirectiveState(
     const DirectiveState& state)
     : local_switches(state.local_switches),
       record_packing(state.record_packing),
-      enum_packing(state.enum_packing) {}
+      packenum(state.packenum) {}
 
 void SavedDirectiveState::restore(
     DirectiveState& state) const {
 	state.local_switches = local_switches;
 	state.record_packing = record_packing;
-	state.enum_packing = enum_packing;
+	state.packenum = packenum;
 }
 
 // Extract the content of a single-quoted string literal token (with '' escape).
@@ -1094,6 +1089,29 @@ void Parser::handle_directive(
 			emit_parse_error_at(
 			    directive_location,
 			    "$iochecks expects ON or OFF");
+		return;
+	}
+	if (name == "packenum" ||
+	    name == "minenumsize" ||
+	    name == "z") {
+		const std::string arg =
+		    compact_directive_argument(rest);
+		int value;
+		if (arg == "normal" ||
+		    arg == "default")
+			value = 4;
+		else if (arg == "1" ||
+			 arg == "2" ||
+			 arg == "4")
+			value = std::stoi(arg);
+		else {
+			emit_parse_error_at(
+			    directive_location,
+			    "$" + name +
+				" expects 1, 2, 4, NORMAL, or DEFAULT");
+			return;
+		}
+		directive_state.set_packenum(value);
 		return;
 	}
 	if (name == "define") {
@@ -6644,6 +6662,31 @@ Type* Parser::parse_enum_type() {
 			break;
 	} while (true);
 	parse_closing_paren();
+
+	int64_t min_value = et->members.front().value;
+	int64_t max_value = et->members.front().value;
+	for (const auto& m : et->members) {
+		if (m.value < min_value)
+			min_value = m.value;
+		if (m.value > max_value)
+			max_value = m.value;
+	}
+	const int packenum =
+	    directive_state.get_packenum();
+	int savesize = 1;
+	if (min_value >= std::numeric_limits<int8_t>::min() && max_value <= std::numeric_limits<int8_t>::max()) {
+		savesize = 1;
+	} else if (min_value >= std::numeric_limits<int16_t>::min() && max_value <= std::numeric_limits<int16_t>::max()) {
+		savesize = 2;
+	} else if (min_value >= std::numeric_limits<int32_t>::min() && max_value <= std::numeric_limits<int32_t>::max()) {
+		savesize = 4;
+	} else {
+		raise_parse_error("enum range too big");
+	}
+	if (savesize < packenum) {
+		savesize = packenum;
+	}
+	et->carrier_bits = savesize * 8;
 	return et;
 }
 
