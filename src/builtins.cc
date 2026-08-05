@@ -414,6 +414,121 @@ static ConstEvalResult fold_ord(
 	    result_ty);
 }
 
+enum class ComparisonKind {
+	LessThan,
+	LessThanOrEqual,
+	Equal,
+	GreaterThan,
+	GreaterThanOrEqual,
+};
+
+static int compare_ordinal_constants(
+    const std::pair<bool, uint64_t>& a,
+    const std::pair<bool, uint64_t>& b) {
+	if (a.first != b.first)
+		return a.first ? -1 : 1;
+	if (a.first) {
+		// Both negative: larger magnitude is the smaller value.
+		if (a.second != b.second)
+			return a.second > b.second ? -1 : 1;
+		return 0;
+	}
+	if (a.second != b.second)
+		return a.second < b.second ? -1 : 1;
+	return 0;
+}
+
+static ConstEvalResult fold_comparison(
+    ComparisonKind kind,
+    const std::vector<Node*>& args) {
+	if (args.size() != 2 ||
+	    !args[0] || !args[1])
+		return ConstEvalResult::not_constant();
+	auto a = constant_ordinal_value(args[0]);
+	auto b = constant_ordinal_value(args[1]);
+	if (!a || !b)
+		return ConstEvalResult::not_constant();
+	const int c =
+	    compare_ordinal_constants(*a, *b);
+	bool result;
+	switch (kind) {
+	case ComparisonKind::LessThan:
+		result = c < 0;
+		break;
+	case ComparisonKind::LessThanOrEqual:
+		result = c <= 0;
+		break;
+	case ComparisonKind::Equal:
+		result = c == 0;
+		break;
+	case ComparisonKind::GreaterThan:
+		result = c > 0;
+		break;
+	case ComparisonKind::GreaterThanOrEqual:
+		result = c >= 0;
+		break;
+	}
+	return ConstEvalResult::success(
+	    new EnumMemberRef(
+		result
+		    ? "::u_system::t_boolean::p_true"
+		    : "::u_system::t_boolean::p_false",
+		result ? 1 : 0,
+		boolean_type()));
+}
+
+static ConstEvalResult fold_lessthan(
+    ConstEvalContext&, Type*,
+    const std::vector<Node*>& args) {
+	return fold_comparison(
+	    ComparisonKind::LessThan, args);
+}
+static ConstEvalResult fold_lessthanorequal(
+    ConstEvalContext&, Type*,
+    const std::vector<Node*>& args) {
+	return fold_comparison(
+	    ComparisonKind::LessThanOrEqual,
+	    args);
+}
+static ConstEvalResult fold_equal(
+    ConstEvalContext&, Type*,
+    const std::vector<Node*>& args) {
+	return fold_comparison(
+	    ComparisonKind::Equal, args);
+}
+static ConstEvalResult fold_greaterthan(
+    ConstEvalContext&, Type*,
+    const std::vector<Node*>& args) {
+	return fold_comparison(
+	    ComparisonKind::GreaterThan, args);
+}
+static ConstEvalResult fold_greaterthanorequal(
+    ConstEvalContext&, Type*,
+    const std::vector<Node*>& args) {
+	return fold_comparison(
+	    ComparisonKind::GreaterThanOrEqual,
+	    args);
+}
+
+static ConstEvalResult fold_assigned(
+    ConstEvalContext&, Type*,
+    const std::vector<Node*>& args) {
+	if (args.size() != 1 || !args[0])
+		return ConstEvalResult::not_constant();
+	if (dynamic_cast<NilLiteral*>(args[0]))
+		return ConstEvalResult::success(
+		    new EnumMemberRef(
+			"::u_system::t_boolean::p_false",
+			0, boolean_type()));
+	if (dynamic_cast<AddrOf*>(args[0]) ||
+	    dynamic_cast<RoutineRef*>(args[0]))
+		return ConstEvalResult::success(
+		    new EnumMemberRef(
+			"::u_system::t_boolean::p_true",
+			1, boolean_type()));
+	return ConstEvalResult::not_constant();
+}
+
 static ConstEvalResult fold_shift(
     Type* result_ty,
     const std::vector<Node*>& args,
@@ -1271,7 +1386,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_finalize", nullptr},
     {"::u_system::p_comparebyte", nullptr},
     {"::u_system::p_comparechar", nullptr},
-    {"::u_system::p_assigned", nullptr, {}, BuiltinGenericKind::Assigned},
+    {"::u_system::p_assigned", fold_assigned, {}, BuiltinGenericKind::Assigned},
     {
 	.cxx_name = "::u_system::p_abs",
 	.const_fold = fold_abs,
@@ -1378,11 +1493,11 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::o_leftshift", fold_leftshift},
     {"::u_system::o_rightshift", fold_rightshift},
 
-    {"::u_system::o_lessthan", nullptr},
-    {"::u_system::o_lessthanorequal", nullptr},
-    {"::u_system::o_equal", nullptr},
-    {"::u_system::o_greaterthan", nullptr},
-    {"::u_system::o_greaterthanorequal", nullptr},
+    {"::u_system::o_lessthan", fold_lessthan},
+    {"::u_system::o_lessthanorequal", fold_lessthanorequal},
+    {"::u_system::o_equal", fold_equal},
+    {"::u_system::o_greaterthan", fold_greaterthan},
+    {"::u_system::o_greaterthanorequal", fold_greaterthanorequal},
     {"::u_system::o_in", nullptr, {}, BuiltinGenericKind::SetMembership},
     {"::u_system::p_supports", nullptr},
 
