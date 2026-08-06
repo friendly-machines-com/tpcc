@@ -617,6 +617,7 @@ protected:
 	FormattedValue parse_formatted_value();
 	void parse_statement();
 	Frame* parse_aggregate_type_body(Type* owner_class);
+	Node* parse_property_accessor_reference(Frame* body);
 	void parse_property_declaration(Frame* body, Type* owner_type);
 	void validate_property_declaration(Property* property);
 	void validate_method_ancestor_semantics(

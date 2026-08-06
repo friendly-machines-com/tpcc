@@ -5702,6 +5702,31 @@ void Parser::validate_property_declaration(
 	}
 }
 
+Node* Parser::parse_property_accessor_reference(Frame* body) {
+	std::string name = parse_identifier();
+	Node* result = body->lookup_value(name);
+	if (maybe_parse_period()) {
+		// Not allowing any expression here on purpose.
+		do {
+			std::string name = parse_identifier();
+			body = body_frame_of(result);
+			if (body == nullptr) {
+				raise_parse_error("invalid property reference"); // FIXME
+				return nullptr;
+			}
+			result = body->lookup_value(name);
+		} while (maybe_parse_period());
+		if (result && dynamic_cast<StorageSlot*>(result)) {
+			return result;
+		} else {
+			raise_type_parse_error("expected storageslot");
+			return nullptr;
+		}
+	} else {
+		return result;
+	}
+}
+
 void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	parse_keyword("property");
 	std::string property_name = parse_identifier();
@@ -5733,15 +5758,13 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	Node* write_accessor = nullptr;
 	while (input_token != ";") {
 		if (maybe_parse_directive("read")) {
-			std::string name = parse_identifier();
-			read_accessor = body->lookup_value(name);
+			read_accessor = parse_property_accessor_reference(body);
 			if (!read_accessor)
-				raise_parse_error("unknown read accessor '" + name + "' for property '" + property_name + "'");
+				raise_parse_error("unknown read accessor for property '" + property_name + "'");
 		} else if (maybe_parse_directive("write")) {
-			std::string name = parse_identifier();
-			write_accessor = body->lookup_value(name);
+			write_accessor = parse_property_accessor_reference(body);
 			if (!write_accessor)
-				raise_parse_error("unknown write accessor '" + name + "' for property '" + property_name + "'");
+				raise_parse_error("unknown write accessor for property '" + property_name + "'");
 		} else {
 			raise_parse_error("expected read or write accessor in property '" + property_name + "'");
 		}
