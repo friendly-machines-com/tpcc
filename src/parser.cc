@@ -1656,21 +1656,9 @@ void Parser::maybe_parse_statement() {
 							false);
 					} else if (
 					    maybe_parse_period()) {
-						UnitRef* unit =
-						    resolve_unit_type_qualifier(
-							first);
-						std::string member =
-						    parse_identifier();
 						exception_type =
-						    unit->unit->frame
-							->lookup_type(
-							    member);
-						if (!exception_type)
-							raise_parse_error(
-							    "unit '" +
-							    first +
-							    "' has no type '" +
-							    member + "'");
+						    parse_qualified_type_member(
+							first);
 					} else {
 						exception_type =
 						    resolve_type(
@@ -2581,14 +2569,6 @@ Node* Parser::maybe_resolve_value(std::string name) {
 	// opened, include the first compatible family from each lower scope; a
 	// family without `overload` is included and then terminates the walk.
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (auto unit =
-			dynamic_cast<UnitRef*>(it->qualifier);
-		    unit && unit->unit &&
-		    unit->unit->name == name) {
-			if (collected.empty())
-				return unit;
-			break;
-		}
 		ScopeValueLookup lookup =
 		    it->lookup_value(name);
 		Node* hit = lookup.binding;
@@ -2637,21 +2617,6 @@ Node* Parser::maybe_resolve_value(std::string name) {
 	if (collected.size() == 1)
 		return collected[0];
 	return new OverloadSet(std::move(collected));
-}
-
-UnitRef* Parser::resolve_unit_type_qualifier(
-    std::string name) {
-	if (maybe_resolve_type(name))
-		raise_parse_error(
-		    "type identifier '" + name +
-		    "' is not a unit qualifier");
-	Node* binding = maybe_resolve_value(name);
-	if (auto unit = dynamic_cast<UnitRef*>(binding))
-		return unit;
-	raise_parse_error(
-	    "identifier '" + name +
-	    "' is not a unit qualifier");
-	return nullptr;
 }
 
 /** Walk the scope stack top-down looking up a value-position name. Raise if not found. */
@@ -4135,6 +4100,85 @@ Node* Parser::parse_member_selection(
 		    "no member '" + member_name + "'",
 		    base);
 	return member;
+}
+
+Type* Parser::parse_qualified_type_member(
+    std::string lhs_name) {
+	auto binding =
+	    maybe_resolve_type_or_value(lhs_name);
+	if (!binding)
+		raise_type_parse_error(
+		    "unresolved member qualifier: " +
+		    lhs_name);
+	Node* base = nullptr;
+	Type* rejected_qualifier_type = nullptr;
+	if (auto value =
+		std::get_if<Node*>(&*binding))
+		base = *value;
+	else {
+		Type* qt =
+		    std::get<Type*>(*binding);
+		rejected_qualifier_type = qt;
+		if (auto ct =
+			dynamic_cast<ClassType*>(qt))
+			base = new ClassRefValue(ct);
+		else if (
+		    dynamic_cast<RecordType*>(qt) ||
+		    dynamic_cast<PackedRecordType*>(qt))
+			base =
+			    new TypeMemberQualifier(qt);
+	}
+	if (!base && rejected_qualifier_type)
+		raise_type_kind_mismatch(
+		    "member qualifier '" + lhs_name +
+		    "'",
+		    "class, record, or unit",
+		    rejected_qualifier_type);
+	if (!base)
+		raise_type_parse_error(
+		    "unresolved member qualifier: " +
+		    lhs_name);
+	Frame* members = body_frame_of(base);
+	if (!members)
+		raise_type_kind_mismatch(
+		    "member qualifier '" + lhs_name +
+		    "'",
+		    "class, record, or unit",
+		    base ? base->ty : nullptr);
+	Type* result = nullptr;
+	while (true) {
+		std::string member = parse_identifier();
+		auto member_binding =
+		    members->lookup_type_or_value(member);
+		if (!member_binding)
+			raise_type_parse_error(
+			    "no type '" + member +
+			    "' visible after '" +
+			    lhs_name + "'");
+		if (auto t =
+			std::get_if<Type*>(&*member_binding))
+			result = *t;
+		else {
+			Node* node =
+			    std::get<Node*>(*member_binding);
+			result = node ? node->ty : nullptr;
+		}
+		if (!result)
+			raise_type_parse_error(
+			    "no type '" + member +
+			    "' visible after '" +
+			    lhs_name + "'");
+		if (!maybe_parse_period())
+			break;
+		members = body_frame_of(result);
+		if (!members)
+			raise_type_kind_mismatch(
+			    "member qualifier '" + member +
+			    "'",
+			    "class, record, or unit",
+			    result);
+	}
+	return result;
 }
 
 Node* Parser::maybe_bind_member(
@@ -7291,19 +7335,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 				    parse_subrange_bound_expression());
 			}
 			if (maybe_parse_period()) {
-				UnitRef* unit =
-				    resolve_unit_type_qualifier(id);
-				std::string member =
-				    parse_identifier();
-				Type* result =
-				    unit->unit->frame->lookup_type(
-					member);
-				if (!result)
-					raise_type_parse_error(
-					    "unit '" + id +
-					    "' has no type '" +
-					    member + "'");
-				return result;
+				return parse_qualified_type_member(id);
 			}
 			if (token_continues_subrange_bound_after_primary(input_token)) {
 				Node* lower_bound =
@@ -13208,6 +13240,11 @@ Unit* Parser::parse_unit_interface_body() {
 	Unit* unit = unit_registry->register_new(name, unit_frame);
 	current_unit = unit;
 	unit->phase = UnitPhase::InterfaceInProgress;
+	// Self-bind the unit name to its UnitRef so `Unit.X` resolves through
+	// the ordinary scope walk: from inside this unit (self-qualification)
+	// and from any unit that `uses` this one (cross-unit qualification,
+	// because this frame is pushed onto the using scope's chain).
+	unit_frame->register_variable(name, unit->reference, /*ty=*/nullptr);
 
 	parse_keyword("interface");
 	// Install the interface lookup path in increasing precedence. Declaration

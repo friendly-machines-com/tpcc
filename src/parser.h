@@ -480,7 +480,6 @@ protected:
 	std::optional<Binding>
 	maybe_resolve_type_or_value(std::string name);
 	Node* maybe_resolve_value(std::string name);
-	UnitRef* resolve_unit_type_qualifier(std::string name);
 	Node* resolve_value(std::string name);
 	Type* maybe_resolve_type(std::string name);
 	Type* resolve_type(std::string name, bool allow_forward);
@@ -521,6 +520,12 @@ protected:
 	Node* parse_member_selection(
 	    Node* base,
 	    LeadingTokenDirectives* leading_directives);
+	/** Parse `LHS.RHS` in a type context. Resolves LHS through the same
+	 *  kind-dispatch as the value-context member path (UnitRef via self-bind,
+	 *  ClassType/RecordType wrapped), then looks RHS up as a TYPE in the
+	 *  resolved body frame. Raises if LHS resolves to a kind that has no
+	 *  type members, or if the named type is not present. */
+	Type* parse_qualified_type_member(std::string lhs_name);
 	/** Resolve NAME in RECEIVER's ordinary structural member environment and
 	 * bind the result to RECEIVER. This is the non-token-consuming half of
 	 * parse_member_selection, used by compiler-defined protocols which must
