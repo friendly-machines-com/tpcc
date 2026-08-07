@@ -920,6 +920,7 @@ enum class BitwiseOperation {
 	BitwiseXor,
 };
 
+// FIXME: maybe get the target types from the operand types.
 static ConstEvalResult fold_bitwise(Type* result_ty, const std::vector<Node*>& args, BitwiseOperation op) {
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
 		return ConstEvalResult::not_constant();
