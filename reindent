@@ -2,4 +2,4 @@
 
 #indent -kr -brf --tab-size 8 -ut -l180 src/parser.cc
 # TODO: SortIncludes: false
-clang-format -i --style='{BasedOnStyle: LLVM, IndentWidth: 8, TabWidth: 8, UseTab: ForIndentation, BreakBeforeBraces: Attach, ColumnLimit: 1200, PointerAlignment: Left, ReferenceAlignment: Left, AlignAfterOpenBracket: DontAlign, AllowShortFunctionsOnASingleLine: None, SeparateDefinitionBlocks: Always}' src/*.cc
+clang-format -i
