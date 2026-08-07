@@ -914,6 +914,49 @@ static ConstEvalResult fold_unchecked_pred(
 	    result_ty, args, false, false);
 }
 
+enum class BitwiseOperation {
+	BitwiseOr,
+	BitwiseAnd,
+	BitwiseXor,
+};
+
+static ConstEvalResult fold_bitwise(Type* result_ty, const std::vector<Node*>& args, BitwiseOperation op) {
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+		return ConstEvalResult::not_constant();
+	auto a_arg = const_integer_arg(args[0]);
+	auto a = unchecked_integer_bits(a_arg);
+	auto b_arg = const_integer_arg(args[1]);
+	auto b = unchecked_integer_bits(b_arg);
+
+	uint64_t mag = a;
+	switch (op) {
+	case BitwiseOperation::BitwiseOr:
+		mag |= b;
+		break;
+	case BitwiseOperation::BitwiseAnd:
+		mag &= b;
+		break;
+	case BitwiseOperation::BitwiseXor:
+		mag ^= b;
+		break;
+	}
+    return fold_unchecked_integer_bits(
+        mag,
+        result_ty);
+}
+
+static ConstEvalResult fold_bitwise_and(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseAnd);
+}
+
+static ConstEvalResult fold_bitwise_or(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseOr);
+}
+
+static ConstEvalResult fold_bitwise_xor(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseXor);
+}
+
 static ConstEvalResult fold_logical_not(
     ConstEvalContext&, Type* result_ty,
     const std::vector<Node*>& args) {
@@ -1464,9 +1507,9 @@ static const BuiltinDesc k_builtins[] = {
     },
     // TODO: Delphi has operators "explicit", "implicit".
 
-    {"::u_system::o_bitwiseand", nullptr},
-    {"::u_system::o_bitwiseor", nullptr},
-    {"::u_system::o_bitwisexor", nullptr},
+    {"::u_system::o_bitwiseand", fold_bitwise_and},
+    {"::u_system::o_bitwiseor", fold_bitwise_or},
+    {"::u_system::o_bitwisexor", fold_bitwise_xor},
 
     // Delphi {"::u_system::p_logicalor", nullptr},
     // Delphi {"::u_system::p_logicaland", nullptr},
