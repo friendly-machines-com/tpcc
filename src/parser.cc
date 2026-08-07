@@ -2409,7 +2409,6 @@ Node* Parser::parse_value(LeadingTokenDirectives* leading_directives) {
 		Type* literal_type = s.size() == 1 ? char_type() : shortstring_type();
 		return new String(std::move(s), literal_type);
 	}
-	// FIXME: bool literals also belong here (need enum-member support).
 	const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
 	return parse_value_from_identifier(parse_identifier(), identifier_directives, leading_directives);
 }
