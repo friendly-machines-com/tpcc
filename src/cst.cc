@@ -11,183 +11,65 @@ std::string Node::str() const {
 	return sst.str();
 }
 
-void Block::add(Node* stmt) {
-	statements.push_back(stmt);
-}
+void Block::add(Node* stmt) { statements.push_back(stmt); }
 
-Symbol::Symbol(std::string text) {
-	this->text = text;
-}
+Symbol::Symbol(std::string text) { this->text = text; }
 
-std::string Symbol::str() const {
-	return text;
-}
-UnaryOperation::UnaryOperation(Node* a) {
-	this->a = a;
-}
+std::string Symbol::str() const { return text; }
+UnaryOperation::UnaryOperation(Node* a) { this->a = a; }
 
 BinaryOperation::BinaryOperation(Node* a, Node* b) {
 	this->a = a;
 	this->b = b;
 }
 
-EvaluateThen::EvaluateThen(Node* a, Node* b)
-    : BinaryOperation(a, b) {
-	this->ty = b ? b->ty : nullptr;
-}
+EvaluateThen::EvaluateThen(Node* a, Node* b) : BinaryOperation(a, b) { this->ty = b ? b->ty : nullptr; }
 
-ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args)
-    : receiver(receiver), callee(callee), args(std::move(args)) {}
-ClassRefValue::ClassRefValue(ClassType* target)
-    : target(target) {
-	this->ty = new ClassRefType(
-	    target ? target->source_location : SourceLocation{}, target);
-}
-TypeMemberQualifier::TypeMemberQualifier(Type* target)
-    : target(target) {
-	this->ty = target;
-}
-Construct::Construct(
-    Node* class_reference, Method* initializer,
-    std::vector<Node*> args, ClassType* result_type)
-    : class_reference(class_reference), initializer(initializer),
-      args(std::move(args)) {
-	this->ty = result_type;
-}
-NewValue::NewValue(
-    Type* pointer_type, Type* allocated_type,
-    Method* initializer, std::vector<Node*> args)
-    : allocated_type(allocated_type), initializer(initializer),
-      args(std::move(args)) {
-	this->ty = pointer_type;
-}
-DisposeValue::DisposeValue(Node* pointer, Method* finalizer)
-    : pointer(pointer), finalizer(finalizer) {}
-ConstructorFail::ConstructorFail() {
-	this->ty = &unit_type();
-}
+ProcCall::ProcCall(Node* receiver, Node* callee, std::vector<Node*> args) : receiver(receiver), callee(callee), args(std::move(args)) {}
+ClassRefValue::ClassRefValue(ClassType* target) : target(target) { this->ty = new ClassRefType(target ? target->source_location : SourceLocation{}, target); }
+TypeMemberQualifier::TypeMemberQualifier(Type* target) : target(target) { this->ty = target; }
+Construct::Construct(Node* class_reference, Method* initializer, std::vector<Node*> args, ClassType* result_type) : class_reference(class_reference), initializer(initializer), args(std::move(args)) { this->ty = result_type; }
+NewValue::NewValue(Type* pointer_type, Type* allocated_type, Method* initializer, std::vector<Node*> args) : allocated_type(allocated_type), initializer(initializer), args(std::move(args)) { this->ty = pointer_type; }
+DisposeValue::DisposeValue(Node* pointer, Method* finalizer) : pointer(pointer), finalizer(finalizer) {}
+ConstructorFail::ConstructorFail() { this->ty = &unit_type(); }
 UnitRef::UnitRef(Unit* unit) : unit(unit) {}
-WriteCall::WriteCall(
-    bool newline, Node* file,
-    const BuiltinDesc* lowering_builtin_desc,
-    std::vector<FormattedValue> items)
-    : newline(newline), file(file),
-      lowering_builtin_desc(lowering_builtin_desc),
-      items(std::move(items)) {}
-StrCall::StrCall(
-    FormattedValue formatted,
-    Node* destination)
-    : formatted(formatted),
-      destination(destination) {
-	this->ty = &unit_type();
-}
-ValCall::ValCall(
-    Node* source, Node* destination, Node* code)
-    : source(source), destination(destination),
-      code(code) {
-	this->ty = &unit_type();
-}
+WriteCall::WriteCall(bool newline, Node* file, const BuiltinDesc* lowering_builtin_desc, std::vector<FormattedValue> items) : newline(newline), file(file), lowering_builtin_desc(lowering_builtin_desc), items(std::move(items)) {}
+StrCall::StrCall(FormattedValue formatted, Node* destination) : formatted(formatted), destination(destination) { this->ty = &unit_type(); }
+ValCall::ValCall(Node* source, Node* destination, Node* code) : source(source), destination(destination), code(code) { this->ty = &unit_type(); }
 Assign::Assign(Node* a, Node* b) : BinaryOperation(a, b) {}
-Mutation::Mutation(
-    Node* source_target,
-    std::vector<Binding> bindings,
-    Node* target,
-    StorageSlot* current,
-    Assign* assignment)
-    : source_target(source_target),
-      bindings(std::move(bindings)),
-      target(target),
-      current(current),
-      assignment(assignment) {}
-ShortCircuitOperation::ShortCircuitOperation(enum ShortCircuitOperationKind kind, Node* a, Node* b) : BinaryOperation(a, b) {
-	this->kind = kind;
-}
+Mutation::Mutation(Node* source_target, std::vector<Binding> bindings, Node* target, StorageSlot* current, Assign* assignment) : source_target(source_target), bindings(std::move(bindings)), target(target), current(current), assignment(assignment) {}
+ShortCircuitOperation::ShortCircuitOperation(enum ShortCircuitOperationKind kind, Node* a, Node* b) : BinaryOperation(a, b) { this->kind = kind; }
 MemberAccess::MemberAccess(Node* a, Node* b) : BinaryOperation(a, b) {}
-Property::Property(std::string pas_name,
-		   Type* property_type,
-		   std::vector<Type*> index_types,
-		   Node* read_accessor,
-		   Node* write_accessor,
-		   bool is_default)
-    : pas_name(std::move(pas_name)),
-      index_types(std::move(index_types)),
-      read_accessor(read_accessor),
-      write_accessor(write_accessor),
-      is_default(is_default) {
-	this->ty = property_type;
-}
-PropertyAccess::PropertyAccess(Node* receiver, Property* property, std::vector<Node*> indexes)
-    : receiver(receiver), property(property), indexes(std::move(indexes)) {
-	this->ty = property ? property->ty : nullptr;
-}
+Property::Property(std::string pas_name, Type* property_type, std::vector<Type*> index_types, Node* read_accessor, Node* write_accessor, bool is_default) : pas_name(std::move(pas_name)), index_types(std::move(index_types)), read_accessor(read_accessor), write_accessor(write_accessor), is_default(is_default) { this->ty = property_type; }
+PropertyAccess::PropertyAccess(Node* receiver, Property* property, std::vector<Node*> indexes) : receiver(receiver), property(property), indexes(std::move(indexes)) { this->ty = property ? property->ty : nullptr; }
 Index::Index(Node* a, Node* b) : BinaryOperation(a, b) {}
-Coerce::Coerce(Node* value, Type* target_type)
-    : UnaryOperation(value), target_type(target_type) {
-	this->ty = target_type;
-}
-CoerceCheck::CoerceCheck(Node* value, Type* target_type)
-    : UnaryOperation(value), target_type(target_type) {}
+Coerce::Coerce(Node* value, Type* target_type) : UnaryOperation(value), target_type(target_type) { this->ty = target_type; }
+CoerceCheck::CoerceCheck(Node* value, Type* target_type) : UnaryOperation(value), target_type(target_type) {}
 
 Dereference::Dereference(Node* a) : UnaryOperation(a) {}
-Return::Return(Node* a, unsigned try_depth)
-    : UnaryOperation(a), try_depth(try_depth) {}
-Raise::Raise(Node* object, Node* address, Node* frame)
-    : object(object), address(address), frame(frame) {}
+Return::Return(Node* a, unsigned try_depth) : UnaryOperation(a), try_depth(try_depth) {}
+Raise::Raise(Node* object, Node* address, Node* frame) : object(object), address(address), frame(frame) {}
 AddrOf::AddrOf(Node* a) : UnaryOperation(a) {}
-RoutineRef::RoutineRef(Node* receiver, Node* candidates)
-    : receiver(receiver), candidates(candidates) {}
-RoutineEqual::RoutineEqual(Node* a, Node* b)
-    : BinaryOperation(a, b) {}
+RoutineRef::RoutineRef(Node* receiver, Node* candidates) : receiver(receiver), candidates(candidates) {}
+RoutineEqual::RoutineEqual(Node* a, Node* b) : BinaryOperation(a, b) {}
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
-RangeCheckedCast::RangeCheckedCast(
-    Node* value, Type* target)
-    : Cast(value, target) {}
-OpenArrayConstView::OpenArrayConstView(
-    Node* value, Type* target)
-    : UnaryOperation(value) {
-	this->ty = target;
-}
-OpenArrayMutableView::OpenArrayMutableView(
-    Node* value, Type* target)
-    : UnaryOperation(value) {
-	this->ty = target;
-}
-OpenArrayOutView::OpenArrayOutView(
-    Node* value, Type* target)
-    : UnaryOperation(value) {
-	this->ty = target;
-}
-OpenArrayValueCopy::OpenArrayValueCopy(
-    Node* value, Type* target)
-    : UnaryOperation(value) {
-	this->ty = target;
-}
-ExplicitCast::ExplicitCast(
-    Node* value, Type* target)
-    : Cast(value, target) {}
-TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type)
-    : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
-ValueBound::ValueBound(
-    TypeBoundKind kind, Node* value,
-    Type* result_type)
-    : UnaryOperation(value), kind(kind) {
-	this->ty = result_type;
-}
-BuiltinEnumeratorCurrent::BuiltinEnumeratorCurrent(
-    Type* element_type) {
-	this->ty = element_type;
-}
-SizeOf::SizeOf(Type* operand_type)
-    : operand_type(operand_type) { this->ty = sizeint_type(); }
+RangeCheckedCast::RangeCheckedCast(Node* value, Type* target) : Cast(value, target) {}
+OpenArrayConstView::OpenArrayConstView(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+OpenArrayMutableView::OpenArrayMutableView(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+OpenArrayOutView::OpenArrayOutView(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+OpenArrayValueCopy::OpenArrayValueCopy(Node* value, Type* target) : UnaryOperation(value) { this->ty = target; }
+ExplicitCast::ExplicitCast(Node* value, Type* target) : Cast(value, target) {}
+TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type) : kind(kind), operand_type(operand_type) { this->ty = operand_type; }
+ValueBound::ValueBound(TypeBoundKind kind, Node* value, Type* result_type) : UnaryOperation(value), kind(kind) { this->ty = result_type; }
+BuiltinEnumeratorCurrent::BuiltinEnumeratorCurrent(Type* element_type) { this->ty = element_type; }
+SizeOf::SizeOf(Type* operand_type) : operand_type(operand_type) { this->ty = sizeint_type(); }
 
 // Value-identifier ctors: take an OPTIONAL Pascal name. If non-empty, apply
 // the `p_` prefix so the cxx identifier stays clear of C++ reserved words
 // (`new`, `class`, `false`, ...). If empty (anonymous entity -- nameless
 // parameter in a prototype, compiler temporary, routine-type declaration
 // `procedure of object`, etc.), cxx_name stays empty and emission skips it.
-StorageSlot::StorageSlot(std::string cxx_name, Type* ty,
-			 Kind kind, Type* owner_type)
-    : kind(kind), owner_type(owner_type) {
+StorageSlot::StorageSlot(std::string cxx_name, Type* ty, Kind kind, Type* owner_type) : kind(kind), owner_type(owner_type) {
 	this->cxx_name = cxx_name;
 	this->ty = ty;
 }
@@ -198,9 +80,7 @@ EnumMemberRef::EnumMemberRef(std::string cxx_name, int64_t value, Type* ty) {
 	this->ty = ty;
 }
 
-Integer::Integer(
-    uint64_t value, Type* ty, bool negative,
-    bool based_literal) {
+Integer::Integer(uint64_t value, Type* ty, bool negative, bool based_literal) {
 	this->negative = negative && value != 0;
 	this->value = value;
 	this->based_literal = based_literal;
@@ -217,95 +97,32 @@ Real::Real(long double value, Type* ty) {
 	this->ty = ty;
 }
 
-FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty)
-    : elements(std::move(elements)) {
-	this->ty = ty;
-}
+FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty) : elements(std::move(elements)) { this->ty = ty; }
 
-BracketLiteral::BracketLiteral(
-    std::vector<Item> items,
-    Type* default_set_item_type,
-    FixedArrayType* default_array_type)
-    : items(std::move(items)),
-      default_set_item_type(
-	  default_set_item_type),
-      default_array_type(default_array_type) {
+BracketLiteral::BracketLiteral(std::vector<Item> items, Type* default_set_item_type, FixedArrayType* default_array_type) : items(std::move(items)), default_set_item_type(default_set_item_type), default_array_type(default_array_type) {
 	if (default_array_type)
 		this->ty = default_array_type;
-	else if (default_set_item_type &&
-		 default_set_item_type !=
-		     unknown_type())
-		this->ty = new FixedSetType(
-		    default_set_item_type
-			->source_location,
-		    default_set_item_type);
+	else if (default_set_item_type && default_set_item_type != unknown_type())
+		this->ty = new FixedSetType(default_set_item_type->source_location, default_set_item_type);
 	else
 		this->ty = unknown_type();
 }
 
-ArrayLiteral::ArrayLiteral(
-    std::vector<Node*> elements, Type* ty)
-    : elements(std::move(elements)) {
-	this->ty = ty;
-}
+ArrayLiteral::ArrayLiteral(std::vector<Node*> elements, Type* ty) : elements(std::move(elements)) { this->ty = ty; }
 
-RecordLiteral::RecordLiteral(std::vector<Field> fields, Type* ty)
-    : fields(std::move(fields)) {
-	this->ty = ty;
-}
+RecordLiteral::RecordLiteral(std::vector<Field> fields, Type* ty) : fields(std::move(fields)) { this->ty = ty; }
 
-SetLiteral::SetLiteral(std::vector<Item> items, Type* ty)
-    : items(std::move(items)) {
-	this->ty = ty;
-}
+SetLiteral::SetLiteral(std::vector<Item> items, Type* ty) : items(std::move(items)) { this->ty = ty; }
 
-Callable::Callable(std::string cxx_name,
-		   std::string pas_name,
-		   RoutineType* ty,
-		   bool has_overload_directive)
-    : cxx_name(std::move(cxx_name)),
-      pas_name(std::move(pas_name)),
-      ty(ty),
-      has_overload_directive(has_overload_directive),
-      has_body(false),
-      body_frame(nullptr) {
-}
+Callable::Callable(std::string cxx_name, std::string pas_name, RoutineType* ty, bool has_overload_directive) : cxx_name(std::move(cxx_name)), pas_name(std::move(pas_name)), ty(ty), has_overload_directive(has_overload_directive), has_body(false), body_frame(nullptr) {}
 
-bool Callable::is_conversion_operator() const {
-	return pas_name == ":explicit" ||
-	       pas_name == ":implicit" ||
-	       pas_name == ":uncheckedimplicit" ||
-	       pas_name == ":=";
-}
+bool Callable::is_conversion_operator() const { return pas_name == ":explicit" || pas_name == ":implicit" || pas_name == ":uncheckedimplicit" || pas_name == ":="; }
 
-Procedure::Procedure(std::string cxx_name,
-		     std::string pas_name,
-		     RoutineType* ty,
-		     bool has_overload_directive)
-    : Callable(std::move(cxx_name),
-	       std::move(pas_name),
-	       ty,
-	       has_overload_directive) {
-}
+Procedure::Procedure(std::string cxx_name, std::string pas_name, RoutineType* ty, bool has_overload_directive) : Callable(std::move(cxx_name), std::move(pas_name), ty, has_overload_directive) {}
 
-Method::Method(std::string cxx_name,
-	       std::string pas_name,
-	       RoutineType* ty,
-	       bool has_overload_directive,
-	       Type* owner_class,
-	       VirtualKind virtual_kind)
-    : Callable(std::move(cxx_name),
-	       std::move(pas_name),
-	       ty,
-	       has_overload_directive),
-      owner_class(owner_class),
-      virtual_kind(virtual_kind),
-      is_static(false),
-      is_final(false),
-      vtable_slot(-1) {}
+Method::Method(std::string cxx_name, std::string pas_name, RoutineType* ty, bool has_overload_directive, Type* owner_class, VirtualKind virtual_kind) : Callable(std::move(cxx_name), std::move(pas_name), ty, has_overload_directive), owner_class(owner_class), virtual_kind(virtual_kind), is_static(false), is_final(false), vtable_slot(-1) {}
 
-OverloadSet::OverloadSet(std::vector<Callable*> members)
-    : members(std::move(members)) {}
+OverloadSet::OverloadSet(std::vector<Callable*> members) : members(std::move(members)) {}
 
 #include "diagnostic.h"
 #include "evaluator.h"
@@ -364,11 +181,8 @@ void BinaryOperation::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 void BinaryOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << " " << ctx->known_value_ref(a) << ", " << ctx->known_value_ref(b) << " : " << ctx->known_type_ref(ty); }
 
 const char* ProcCall::diagnostic_kind() const { return "call"; }
-const char* EvaluateThen::diagnostic_kind() const {
-	return "evaluate_then";
-}
-ConstEvalResult EvaluateThen::const_eval(
-    ConstEvalContext&) const {
+const char* EvaluateThen::diagnostic_kind() const { return "evaluate_then"; }
+ConstEvalResult EvaluateThen::const_eval(ConstEvalContext&) const {
 	// The left expression exists specifically for its runtime effects.
 	return ConstEvalResult::not_constant();
 }
@@ -383,10 +197,7 @@ ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
 	auto c = dynamic_cast<Callable*>(callee);
 	if (!c)
 		return ConstEvalResult::not_constant();
-	const BuiltinDesc* desc =
-	    lowering_builtin_desc
-		? lowering_builtin_desc
-		: c->builtin_desc;
+	const BuiltinDesc* desc = lowering_builtin_desc ? lowering_builtin_desc : c->builtin_desc;
 	if (!desc || !desc->const_fold)
 		return ConstEvalResult::not_constant();
 	std::vector<Node*> folded;
@@ -401,8 +212,7 @@ ConstEvalResult ProcCall::const_eval(ConstEvalContext& ctx) const {
 	// express exact T -> T relations which Pascal cannot yet quantify. Call
 	// construction restores that concrete result before evaluation, so the
 	// call node--not the declaration placeholder--is authoritative here.
-	return desc->const_fold(
-	    ctx, ty, folded);
+	return desc->const_fold(ctx, ty, folded);
 }
 
 void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
@@ -421,113 +231,71 @@ void ProcCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 	out << "returns: " << ctx->known_type_ref(ty);
 }
 
-const char* ClassRefValue::diagnostic_kind() const {
-	return "class_reference_value";
-}
-const char* TypeMemberQualifier::diagnostic_kind() const {
-	return "type_member_qualifier";
-}
-const char* Construct::diagnostic_kind() const {
-	return "construction";
-}
-const char* NewValue::diagnostic_kind() const {
-	return "new";
-}
-const char* DisposeValue::diagnostic_kind() const {
-	return "dispose";
-}
-const char* ConstructorFail::diagnostic_kind() const {
-	return "constructor_fail";
-}
-const char* UnitRef::diagnostic_kind() const {
-	return "unit_reference";
-}
-void UnitRef::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+const char* ClassRefValue::diagnostic_kind() const { return "class_reference_value"; }
+const char* TypeMemberQualifier::diagnostic_kind() const { return "type_member_qualifier"; }
+const char* Construct::diagnostic_kind() const { return "construction"; }
+const char* NewValue::diagnostic_kind() const { return "new"; }
+const char* DisposeValue::diagnostic_kind() const { return "dispose"; }
+const char* ConstructorFail::diagnostic_kind() const { return "constructor_fail"; }
+const char* UnitRef::diagnostic_kind() const { return "unit_reference"; }
+void UnitRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	// ErrorLetContext binds this node under Unit::name, while the quoted field
 	// records which semantic unit the node designates. The quotes matter: a
 	// bare unit name here would look like a graph reference and would require a
 	// second value definition.
 	out << diagnostic_kind() << "\n";
 	ctx->indent(out, indent + 1);
-	out << "unit: "
-	    << diagnostic_string_literal(
-		   unit ? unit->name : "<null>");
+	out << "unit: " << diagnostic_string_literal(unit ? unit->name : "<null>");
 }
-void ClassRefValue::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void ClassRefValue::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(target);
 }
-void TypeMemberQualifier::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void TypeMemberQualifier::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(target);
 }
-void Construct::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void Construct::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(class_reference);
 	ctx->add_value_edge(initializer);
 	for (Node* arg : args)
 		ctx->add_value_edge(arg);
 }
-void NewValue::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void NewValue::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(allocated_type);
 	ctx->add_value_edge(initializer);
 	for (Node* arg : args)
 		ctx->add_value_edge(arg);
 }
-void DisposeValue::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void DisposeValue::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(pointer);
 	ctx->add_value_edge(finalizer);
 }
-void ClassRefValue::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned) const {
-	out << "class reference "
-	    << ctx->known_type_ref(target)
-	    << " : " << ctx->known_type_ref(ty);
-}
-void TypeMemberQualifier::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned) const {
-	out << "type member qualifier "
-	    << ctx->known_type_ref(target);
-}
-void Construct::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
-	out << "construct "
-	    << ctx->known_type_ref(ty);
+void ClassRefValue::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "class reference " << ctx->known_type_ref(target) << " : " << ctx->known_type_ref(ty); }
+void TypeMemberQualifier::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "type member qualifier " << ctx->known_type_ref(target); }
+void Construct::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "construct " << ctx->known_type_ref(ty);
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "class reference: "
-	    << ctx->known_value_ref(class_reference);
+	out << "class reference: " << ctx->known_value_ref(class_reference);
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "initializer: "
-	    << ctx->known_value_ref(initializer);
+	out << "initializer: " << ctx->known_value_ref(initializer);
 	for (Node* arg : args) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
 		out << "arg: " << ctx->known_value_ref(arg);
 	}
 }
-void NewValue::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+void NewValue::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "new " << ctx->known_type_ref(allocated_type);
 	if (initializer) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << "initializer: "
-		    << ctx->known_value_ref(initializer);
+		out << "initializer: " << ctx->known_value_ref(initializer);
 	}
 	for (Node* arg : args) {
 		out << "\n";
@@ -536,21 +304,16 @@ void NewValue::print_diagnostic_definition(
 	}
 	out << " : " << ctx->known_type_ref(ty);
 }
-void DisposeValue::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+void DisposeValue::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "dispose " << ctx->known_value_ref(pointer);
 	if (finalizer) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << "finalizer: "
-		    << ctx->known_value_ref(finalizer);
+		out << "finalizer: " << ctx->known_value_ref(finalizer);
 	}
 }
 
-const char* WriteCall::diagnostic_kind() const {
-	return newline ? "writeln" : "write";
-}
+const char* WriteCall::diagnostic_kind() const { return newline ? "writeln" : "write"; }
 void WriteCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(file);
@@ -560,9 +323,7 @@ void WriteCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 		ctx->add_value_edge(item.precision);
 	}
 }
-void WriteCall::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+void WriteCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << diagnostic_kind();
 	if (file) {
 		out << "\n";
@@ -580,65 +341,47 @@ void WriteCall::print_diagnostic_definition(
 	}
 }
 
-const char* StrCall::diagnostic_kind() const {
-	return "str";
-}
-void StrCall::collect_diagnostic_edges(
-	ErrorLetContext* ctx) const {
+const char* StrCall::diagnostic_kind() const { return "str"; }
+void StrCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(formatted.value);
 	ctx->add_value_edge(formatted.width);
 	ctx->add_value_edge(formatted.precision);
 	ctx->add_value_edge(destination);
 }
-void StrCall::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-	unsigned indent) const {
+void StrCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "str\n";
 	ctx->indent(out, indent + 1);
-	out << "value: "
-	    << ctx->known_value_ref(
-		   formatted.value);
+	out << "value: " << ctx->known_value_ref(formatted.value);
 	if (formatted.width) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << "width: "
-		    << ctx->known_value_ref(
-			   formatted.width);
+		out << "width: " << ctx->known_value_ref(formatted.width);
 	}
 	if (formatted.precision) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << "precision: "
-		    << ctx->known_value_ref(
-			   formatted.precision);
+		out << "precision: " << ctx->known_value_ref(formatted.precision);
 	}
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "destination: "
-	    << ctx->known_value_ref(destination);
+	out << "destination: " << ctx->known_value_ref(destination);
 }
 
-const char* ValCall::diagnostic_kind() const {
-	return "val";
-}
-void ValCall::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+const char* ValCall::diagnostic_kind() const { return "val"; }
+void ValCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(source);
 	ctx->add_value_edge(destination);
 	ctx->add_value_edge(code);
 }
-void ValCall::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+void ValCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "val\n";
 	ctx->indent(out, indent + 1);
 	out << "source: " << ctx->known_value_ref(source);
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "destination: "
-	    << ctx->known_value_ref(destination);
+	out << "destination: " << ctx->known_value_ref(destination);
 	if (code) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
@@ -667,11 +410,8 @@ void InheritedCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 const char* Dereference::diagnostic_kind() const { return "deref"; }
 void Dereference::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "deref " << ctx->known_value_ref(a) << " : " << ctx->known_type_ref(ty); }
 const char* Assign::diagnostic_kind() const { return "assign"; }
-const char* Mutation::diagnostic_kind() const {
-	return "mutation";
-}
-void Mutation::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+const char* Mutation::diagnostic_kind() const { return "mutation"; }
+void Mutation::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(source_target);
 	for (const Binding& binding : bindings) {
@@ -682,56 +422,42 @@ void Mutation::collect_diagnostic_edges(
 	ctx->add_value_edge(current);
 	ctx->add_value_edge(assignment);
 }
-void Mutation::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
-	out << "mutate "
-	    << ctx->known_value_ref(source_target);
+void Mutation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "mutate " << ctx->known_value_ref(source_target);
 	for (const Binding& binding : bindings) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << "bind "
-		    << ctx->known_value_ref(binding.alias)
-		    << " = "
-		    << ctx->known_value_ref(
-			   binding.initializer);
+		out << "bind " << ctx->known_value_ref(binding.alias) << " = " << ctx->known_value_ref(binding.initializer);
 	}
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "current: "
-	    << ctx->known_value_ref(current);
+	out << "current: " << ctx->known_value_ref(current);
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "store: "
-	    << ctx->known_value_ref(assignment);
+	out << "store: " << ctx->known_value_ref(assignment);
 }
 const char* ShortCircuitOperation::diagnostic_kind() const { return kind == AND ? "and" : "or"; }
 void ShortCircuitOperation::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { BinaryOperation::print_diagnostic_definition(ctx, out, 0); }
 const char* MemberAccess::diagnostic_kind() const { return "member_access"; }
-ConstEvalResult MemberAccess::const_eval(
-    ConstEvalContext& ctx) const {
+ConstEvalResult MemberAccess::const_eval(ConstEvalContext& ctx) const {
 	// Aggregate static constants remain constants when selected through an
 	// instance. The left operand is only a qualifier; FPC does not evaluate
 	// it, just as it does not evaluate an instance qualifier for class/static
 	// storage.
-	if (auto constant =
-		dynamic_cast<ConstantDecl*>(b))
+	if (auto constant = dynamic_cast<ConstantDecl*>(b))
 		return constant->const_eval(ctx);
 	return ConstEvalResult::not_constant();
 }
 const char* Index::diagnostic_kind() const { return "index"; }
 const char* Return::diagnostic_kind() const { return "return"; }
 const char* Raise::diagnostic_kind() const { return "raise"; }
-void Raise::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void Raise::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(object);
 	ctx->add_value_edge(address);
 	ctx->add_value_edge(frame);
 }
-void Raise::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned) const {
+void Raise::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
 	out << "raise";
 	if (object)
 		out << " " << ctx->known_value_ref(object);
@@ -748,297 +474,145 @@ struct ConstantOrdinal {
 	uint64_t magnitude;
 };
 
-static std::optional<ConstantOrdinal>
-constant_ordinal(Node* node) {
-	if (auto integer =
-		dynamic_cast<Integer*>(node))
-		return ConstantOrdinal{
-		    integer->negative,
-		    integer->value};
-	if (auto member =
-		dynamic_cast<EnumMemberRef*>(node)) {
+static std::optional<ConstantOrdinal> constant_ordinal(Node* node) {
+	if (auto integer = dynamic_cast<Integer*>(node))
+		return ConstantOrdinal{integer->negative, integer->value};
+	if (auto member = dynamic_cast<EnumMemberRef*>(node)) {
 		if (member->value < 0)
-			return ConstantOrdinal{
-			    true,
-			    static_cast<uint64_t>(
-				-(member->value + 1)) +
-				1};
-		return ConstantOrdinal{
-		    false,
-		    static_cast<uint64_t>(
-			member->value)};
+			return ConstantOrdinal{true, static_cast<uint64_t>(-(member->value + 1)) + 1};
+		return ConstantOrdinal{false, static_cast<uint64_t>(member->value)};
 	}
-	if (auto character =
-		dynamic_cast<String*>(node);
-	    character &&
-	    character->ty == char_type() &&
-	    character->value.size() == 1)
-		return ConstantOrdinal{
-		    false,
-		    static_cast<unsigned char>(
-			character->value.front())};
+	if (auto character = dynamic_cast<String*>(node); character && character->ty == char_type() && character->value.size() == 1)
+		return ConstantOrdinal{false, static_cast<unsigned char>(character->value.front())};
 	return std::nullopt;
 }
 
-static int compare_constant_ordinals(
-    const ConstantOrdinal& left,
-    const ConstantOrdinal& right) {
+static int compare_constant_ordinals(const ConstantOrdinal& left, const ConstantOrdinal& right) {
 	if (left.negative != right.negative)
 		return left.negative ? -1 : 1;
 	if (left.magnitude == right.magnitude)
 		return 0;
 	if (left.negative)
-		return left.magnitude >
-			       right.magnitude
-			   ? -1
-			   : 1;
-	return left.magnitude <
-		       right.magnitude
-		   ? -1
-		   : 1;
+		return left.magnitude > right.magnitude ? -1 : 1;
+	return left.magnitude < right.magnitude ? -1 : 1;
 }
 
-static std::optional<long double>
-const_real_cast(
-    long double value, Type* target) {
-	auto convert =
-	    [value]<typename Target>() {
-		    const long double maximum =
-			static_cast<long double>(
-			    std::numeric_limits<
-				Target>::max());
-		    if (__builtin_isfinite(value) &&
-			(value < -maximum ||
-			 value > maximum)) {
-			    const long double infinity =
-				static_cast<long double>(
-				    std::numeric_limits<
-					Target>::
-					infinity());
-			    return __builtin_signbit(value)
-				       ? -infinity
-				       : infinity;
-		    }
-		    return static_cast<long double>(
-			static_cast<Target>(
-			    value));
-	    };
+static std::optional<long double> const_real_cast(long double value, Type* target) {
+	auto convert = [value]<typename Target>() {
+		const long double maximum = static_cast<long double>(std::numeric_limits<Target>::max());
+		if (__builtin_isfinite(value) && (value < -maximum || value > maximum)) {
+			const long double infinity = static_cast<long double>(std::numeric_limits<Target>::infinity());
+			return __builtin_signbit(value) ? -infinity : infinity;
+		}
+		return static_cast<long double>(static_cast<Target>(value));
+	};
 	if (target == single_type())
-		return convert
-		    .template operator()<float>();
+		return convert.template operator()<float>();
 	if (target == double_type())
-		return convert
-		    .template operator()<double>();
+		return convert.template operator()<double>();
 	if (target == extended_type())
 		return value;
 	return std::nullopt;
 }
 
-static bool real_constant_out_of_range(
-    long double value, Type* target) {
+static bool real_constant_out_of_range(long double value, Type* target) {
 	if (!__builtin_isfinite(value))
 		return false;
 	long double maximum = 0;
 	if (target == single_type())
-		maximum =
-		    static_cast<long double>(
-			std::numeric_limits<
-			    float>::max());
+		maximum = static_cast<long double>(std::numeric_limits<float>::max());
 	else if (target == double_type())
-		maximum =
-		    static_cast<long double>(
-			std::numeric_limits<
-			    double>::max());
+		maximum = static_cast<long double>(std::numeric_limits<double>::max());
 	else if (target == extended_type())
-		maximum =
-		    std::numeric_limits<
-			long double>::max();
+		maximum = std::numeric_limits<long double>::max();
 	else
 		return false;
-	return value < -maximum ||
-	       value > maximum;
+	return value < -maximum || value > maximum;
 }
 
 ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult r = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (r.kind != ConstEvalResult::Kind::Success)
 		return r;
-	if (auto set = dynamic_cast<SetLiteral*>(r.node);
-	    set &&
-	    dynamic_cast<FixedSetType*>(set->ty) &&
-	    dynamic_cast<FixedSetType*>(ty))
+	if (auto set = dynamic_cast<SetLiteral*>(r.node); set && dynamic_cast<FixedSetType*>(set->ty) && dynamic_cast<FixedSetType*>(ty))
 		// Set conversions preserve ordinal membership keys. Retagging the
 		// already-folded literal is the constant form of the runtime
 		// m_set_cast operation; the bounds themselves need no value
 		// conversion.
-		return ConstEvalResult::success(
-		    new SetLiteral(set->items, ty));
+		return ConstEvalResult::success(new SetLiteral(set->items, ty));
 	if (auto ordinal = constant_ordinal(r.node)) {
-		ConstEvalResult converted =
-		    const_explicit_ordinal_cast(
-			ordinal->magnitude,
-			ordinal->negative, ty);
-		if (converted.kind !=
-		    ConstEvalResult::Kind::Error)
+		ConstEvalResult converted = const_explicit_ordinal_cast(ordinal->magnitude, ordinal->negative, ty);
+		if (converted.kind != ConstEvalResult::Kind::Error)
 			return converted;
-		if (auto i =
-			dynamic_cast<Integer*>(
-			    r.node))
-			return const_convert_integer(
-			    i->value, i->negative,
-			    i->ty, ty);
+		if (auto i = dynamic_cast<Integer*>(r.node))
+			return const_convert_integer(i->value, i->negative, i->ty, ty);
 	}
 	if (auto real = dynamic_cast<Real*>(r.node)) {
-		if ((real->ty == single_type() ||
-		     real->ty == double_type() ||
-		     real->ty == extended_type()) &&
-		    (ty == single_type() ||
-		     ty == double_type() ||
-		     ty == extended_type())) {
-			auto converted =
-			    const_real_cast(
-				real->value, ty);
+		if ((real->ty == single_type() || real->ty == double_type() || real->ty == extended_type()) && (ty == single_type() || ty == double_type() || ty == extended_type())) {
+			auto converted = const_real_cast(real->value, ty);
 			if (converted)
-				return ConstEvalResult::success(
-				    new Real(
-					*converted,
-					ty));
+				return ConstEvalResult::success(new Real(*converted, ty));
 		}
 	}
 	return ConstEvalResult::not_constant();
 }
 void Cast::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "cast " << ctx->known_value_ref(a) << " to " << ctx->known_type_ref(ty); }
-const char* RangeCheckedCast::diagnostic_kind() const {
-	return "range_checked_cast";
-}
-ConstEvalResult RangeCheckedCast::const_eval(
-    ConstEvalContext& ctx) const {
-	ConstEvalResult value =
-	    a ? a->const_eval(ctx)
-	      : ConstEvalResult::not_constant();
-	if (value.kind !=
-	    ConstEvalResult::Kind::Success)
+const char* RangeCheckedCast::diagnostic_kind() const { return "range_checked_cast"; }
+ConstEvalResult RangeCheckedCast::const_eval(ConstEvalContext& ctx) const {
+	ConstEvalResult value = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
+	if (value.kind != ConstEvalResult::Kind::Success)
 		return value;
-	if (auto real =
-		dynamic_cast<Real*>(
-		    value.node)) {
-		if (real_constant_out_of_range(
-			real->value, ty))
-			return ConstEvalResult::error(
-			    "real constant out of range for target type");
+	if (auto real = dynamic_cast<Real*>(value.node)) {
+		if (real_constant_out_of_range(real->value, ty))
+			return ConstEvalResult::error("real constant out of range for target type");
 		return Cast::const_eval(ctx);
 	}
-	auto ordinal =
-	    constant_ordinal(value.node);
+	auto ordinal = constant_ordinal(value.node);
 	if (!ordinal)
 		return Cast::const_eval(ctx);
-	ConstEvalResult lower =
-	    const_eval_type_bound(
-		TypeBoundKind::Low, ty);
-	ConstEvalResult upper =
-	    const_eval_type_bound(
-		TypeBoundKind::High, ty);
-	if (lower.kind !=
-	    ConstEvalResult::Kind::Success)
+	ConstEvalResult lower = const_eval_type_bound(TypeBoundKind::Low, ty);
+	ConstEvalResult upper = const_eval_type_bound(TypeBoundKind::High, ty);
+	if (lower.kind != ConstEvalResult::Kind::Success)
 		return lower;
-	if (upper.kind !=
-	    ConstEvalResult::Kind::Success)
+	if (upper.kind != ConstEvalResult::Kind::Success)
 		return upper;
-	auto lower_ordinal =
-	    constant_ordinal(lower.node);
-	auto upper_ordinal =
-	    constant_ordinal(upper.node);
+	auto lower_ordinal = constant_ordinal(lower.node);
+	auto upper_ordinal = constant_ordinal(upper.node);
 	if (!lower_ordinal || !upper_ordinal)
-		return ConstEvalResult::error(
-		    "range-checked conversion has non-ordinal bounds");
-	if (compare_constant_ordinals(
-		*ordinal, *lower_ordinal) < 0 ||
-	    compare_constant_ordinals(
-		*ordinal, *upper_ordinal) > 0)
-		return ConstEvalResult::error(
-		    "integer constant out of range for target type");
-	return const_explicit_ordinal_cast(
-	    ordinal->magnitude,
-	    ordinal->negative, ty);
+		return ConstEvalResult::error("range-checked conversion has non-ordinal bounds");
+	if (compare_constant_ordinals(*ordinal, *lower_ordinal) < 0 || compare_constant_ordinals(*ordinal, *upper_ordinal) > 0)
+		return ConstEvalResult::error("integer constant out of range for target type");
+	return const_explicit_ordinal_cast(ordinal->magnitude, ordinal->negative, ty);
 }
-const char* ExplicitCast::diagnostic_kind() const {
-	return "explicit_cast";
-}
-ConstEvalResult ExplicitCast::const_eval(
-    ConstEvalContext& ctx) const {
-	ConstEvalResult value = a
-				    ? a->const_eval(ctx)
-				    : ConstEvalResult::not_constant();
-	if (value.kind !=
-	    ConstEvalResult::Kind::Success)
+const char* ExplicitCast::diagnostic_kind() const { return "explicit_cast"; }
+ConstEvalResult ExplicitCast::const_eval(ConstEvalContext& ctx) const {
+	ConstEvalResult value = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
+	if (value.kind != ConstEvalResult::Kind::Success)
 		return value;
-	if (auto integer =
-		dynamic_cast<Integer*>(
-		    value.node))
-		return const_explicit_ordinal_cast(
-		    integer->value,
-		    integer->negative, ty);
-	if (auto member =
-		dynamic_cast<EnumMemberRef*>(
-		    value.node)) {
-		const bool negative =
-		    member->value < 0;
-		const uint64_t magnitude =
-		    negative
-			? static_cast<uint64_t>(
-			      -(member->value + 1)) +
-			      1
-			: static_cast<uint64_t>(
-			      member->value);
-		return const_explicit_ordinal_cast(
-		    magnitude, negative, ty);
+	if (auto integer = dynamic_cast<Integer*>(value.node))
+		return const_explicit_ordinal_cast(integer->value, integer->negative, ty);
+	if (auto member = dynamic_cast<EnumMemberRef*>(value.node)) {
+		const bool negative = member->value < 0;
+		const uint64_t magnitude = negative ? static_cast<uint64_t>(-(member->value + 1)) + 1 : static_cast<uint64_t>(member->value);
+		return const_explicit_ordinal_cast(magnitude, negative, ty);
 	}
-	if (auto character =
-		dynamic_cast<String*>(value.node);
-	    character &&
-	    character->ty == char_type() &&
-	    character->value.size() == 1)
-		return const_explicit_ordinal_cast(
-		    static_cast<unsigned char>(
-			character->value.front()),
-		    false, ty);
+	if (auto character = dynamic_cast<String*>(value.node); character && character->ty == char_type() && character->value.size() == 1)
+		return const_explicit_ordinal_cast(static_cast<unsigned char>(character->value.front()), false, ty);
 	return Cast::const_eval(ctx);
 }
 
-ConstantDecl::ConstantDecl(
-    std::string cxx_name, Type* ty,
-    Node* initializer, Type* owner_type)
-    : cxx_name(std::move(cxx_name)),
-      initializer(initializer),
-      owner_type(owner_type) {
-	this->ty = ty;
-}
-const char* ConstantDecl::diagnostic_kind() const {
-	return "constant";
-}
-ConstEvalResult ConstantDecl::const_eval(
-    ConstEvalContext& ctx) const {
-	return initializer
-		   ? initializer->const_eval(ctx)
-		   : ConstEvalResult::not_constant();
-}
-void ConstantDecl::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+ConstantDecl::ConstantDecl(std::string cxx_name, Type* ty, Node* initializer, Type* owner_type) : cxx_name(std::move(cxx_name)), initializer(initializer), owner_type(owner_type) { this->ty = ty; }
+const char* ConstantDecl::diagnostic_kind() const { return "constant"; }
+ConstEvalResult ConstantDecl::const_eval(ConstEvalContext& ctx) const { return initializer ? initializer->const_eval(ctx) : ConstEvalResult::not_constant(); }
+void ConstantDecl::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(initializer);
 	ctx->add_type_edge(owner_type);
 }
-void ConstantDecl::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned) const {
-	out << "constant "
-	    << ctx->known_value_ref(initializer)
-	    << " : " << ctx->known_type_ref(ty);
-}
+void ConstantDecl::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "constant " << ctx->known_value_ref(initializer) << " : " << ctx->known_type_ref(ty); }
 
 const char* StorageSlot::diagnostic_kind() const { return "slot"; }
-void StorageSlot::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void StorageSlot::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(owner_type);
 	ctx->add_value_edge(initializer);
@@ -1053,9 +627,7 @@ void Property::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	for (Type* index_type : index_types)
 		ctx->add_type_edge(index_type);
 }
-void Property::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "property " << pas_name << " : " << ctx->known_type_ref(ty);
-}
+void Property::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "property " << pas_name << " : " << ctx->known_type_ref(ty); }
 
 const char* PropertyAccess::diagnostic_kind() const { return "property_access"; }
 void PropertyAccess::collect_diagnostic_edges(ErrorLetContext* ctx) const {
@@ -1065,22 +637,14 @@ void PropertyAccess::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	for (Node* index : indexes)
 		ctx->add_value_edge(index);
 }
-void PropertyAccess::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "property access " << ctx->known_value_ref(property) << " on "
-	    << ctx->known_value_ref(receiver);
-}
+void PropertyAccess::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "property access " << ctx->known_value_ref(property) << " on " << ctx->known_value_ref(receiver); }
 
 const char* EnumMemberRef::diagnostic_kind() const { return "enum_member"; }
 ConstEvalResult EnumMemberRef::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new EnumMemberRef(cxx_name, value, ty)); }
 void EnumMemberRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "enum member = " << value << " : " << ctx->known_type_ref(ty); }
 
 const char* Integer::diagnostic_kind() const { return "integer"; }
-ConstEvalResult Integer::const_eval(ConstEvalContext&) const {
-	return ConstEvalResult::success(
-	    new Integer(
-		value, ty, negative,
-		based_literal));
-}
+ConstEvalResult Integer::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new Integer(value, ty, negative, based_literal)); }
 void Integer::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "integer " << (negative ? "-" : "") << value << " : " << ctx->known_type_ref(ty); }
 
 const char* String::diagnostic_kind() const { return "string"; }
@@ -1094,10 +658,7 @@ void String::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstrea
 
 const char* Real::diagnostic_kind() const { return "real"; }
 ConstEvalResult Real::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(new Real(value, ty)); }
-void Real::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "real " << std::setprecision(std::numeric_limits<long double>::max_digits10)
-	    << value << " : " << ctx->known_type_ref(ty);
-}
+void Real::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "real " << std::setprecision(std::numeric_limits<long double>::max_digits10) << value << " : " << ctx->known_type_ref(ty); }
 
 const char* FixedArrayLiteral::diagnostic_kind() const { return "fixed_array_literal"; }
 ConstEvalResult FixedArrayLiteral::const_eval(ConstEvalContext& ctx) const {
@@ -1125,41 +686,31 @@ void FixedArrayLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::o
 	}
 }
 
-const char* RecordLiteral::diagnostic_kind() const {
-	return "record_literal";
-}
-ConstEvalResult RecordLiteral::const_eval(
-    ConstEvalContext& ctx) const {
+const char* RecordLiteral::diagnostic_kind() const { return "record_literal"; }
+ConstEvalResult RecordLiteral::const_eval(ConstEvalContext& ctx) const {
 	std::vector<Field> folded;
 	folded.reserve(fields.size());
 	for (const Field& field : fields) {
-		ConstEvalResult value = field.value
-					    ? field.value->const_eval(ctx)
-					    : ConstEvalResult::not_constant();
+		ConstEvalResult value = field.value ? field.value->const_eval(ctx) : ConstEvalResult::not_constant();
 		if (value.kind != ConstEvalResult::Kind::Success)
 			return value;
 		folded.push_back(Field{field.slot, value.node});
 	}
-	return ConstEvalResult::success(
-	    new RecordLiteral(std::move(folded), ty));
+	return ConstEvalResult::success(new RecordLiteral(std::move(folded), ty));
 }
-void RecordLiteral::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void RecordLiteral::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	for (const Field& field : fields) {
 		ctx->add_value_edge(field.slot);
 		ctx->add_value_edge(field.value);
 	}
 }
-void RecordLiteral::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+void RecordLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "record literal : " << ctx->known_type_ref(ty);
 	for (const Field& field : fields) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << ctx->known_value_ref(field.slot) << ": "
-		    << ctx->known_value_ref(field.value);
+		out << ctx->known_value_ref(field.slot) << ": " << ctx->known_value_ref(field.value);
 	}
 }
 
@@ -1168,9 +719,7 @@ ConstEvalResult SetLiteral::const_eval(ConstEvalContext& ctx) const {
 	std::vector<Item> folded;
 	folded.reserve(items.size());
 	for (const Item& item : items) {
-		ConstEvalResult lower = item.lower
-					    ? item.lower->const_eval(ctx)
-					    : ConstEvalResult::not_constant();
+		ConstEvalResult lower = item.lower ? item.lower->const_eval(ctx) : ConstEvalResult::not_constant();
 		if (lower.kind != ConstEvalResult::Kind::Success)
 			return lower;
 		Node* upper_node = nullptr;
@@ -1202,46 +751,26 @@ void SetLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	}
 }
 
-const char* BracketLiteral::diagnostic_kind() const {
-	return "bracket_literal";
-}
-ConstEvalResult BracketLiteral::const_eval(
-    ConstEvalContext& ctx) const {
+const char* BracketLiteral::diagnostic_kind() const { return "bracket_literal"; }
+ConstEvalResult BracketLiteral::const_eval(ConstEvalContext& ctx) const {
 	std::vector<SetLiteral::Item> folded;
 	folded.reserve(items.size());
 	for (const Item& item : items) {
-		ConstEvalResult lower =
-		    item.lower
-			? item.lower->const_eval(ctx)
-			: ConstEvalResult::not_constant();
-		if (lower.kind !=
-		    ConstEvalResult::Kind::Success)
+		ConstEvalResult lower = item.lower ? item.lower->const_eval(ctx) : ConstEvalResult::not_constant();
+		if (lower.kind != ConstEvalResult::Kind::Success)
 			return lower;
 		Node* upper = nullptr;
 		if (item.upper) {
-			ConstEvalResult result =
-			    item.upper->const_eval(ctx);
-			if (result.kind !=
-			    ConstEvalResult::Kind::Success)
+			ConstEvalResult result = item.upper->const_eval(ctx);
+			if (result.kind != ConstEvalResult::Kind::Success)
 				return result;
 			upper = result.node;
 		}
-		folded.push_back(
-		    SetLiteral::Item{
-			lower.node, upper});
+		folded.push_back(SetLiteral::Item{lower.node, upper});
 	}
-	return ConstEvalResult::success(
-	    new SetLiteral(
-		std::move(folded),
-		new FixedSetType(
-		    default_set_item_type
-			? default_set_item_type
-			      ->source_location
-			: SourceLocation::internal(),
-		    default_set_item_type)));
+	return ConstEvalResult::success(new SetLiteral(std::move(folded), new FixedSetType(default_set_item_type ? default_set_item_type->source_location : SourceLocation::internal(), default_set_item_type)));
 }
-void BracketLiteral::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void BracketLiteral::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(default_set_item_type);
 	ctx->add_type_edge(default_array_type);
@@ -1250,66 +779,41 @@ void BracketLiteral::collect_diagnostic_edges(
 		ctx->add_value_edge(item.upper);
 	}
 }
-void BracketLiteral::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+void BracketLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "bracket literal";
 	for (const Item& item : items) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << "item: "
-		    << ctx->known_value_ref(item.lower);
+		out << "item: " << ctx->known_value_ref(item.lower);
 		if (item.upper)
-			out << " .. "
-			    << ctx->known_value_ref(
-				   item.upper);
+			out << " .. " << ctx->known_value_ref(item.upper);
 	}
 }
 
-const char* ArrayLiteral::diagnostic_kind() const {
-	return "array_literal";
-}
-ConstEvalResult ArrayLiteral::const_eval(
-    ConstEvalContext&) const {
-	return ConstEvalResult::not_constant();
-}
-void ArrayLiteral::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+const char* ArrayLiteral::diagnostic_kind() const { return "array_literal"; }
+ConstEvalResult ArrayLiteral::const_eval(ConstEvalContext&) const { return ConstEvalResult::not_constant(); }
+void ArrayLiteral::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	for (Node* element : elements)
 		ctx->add_value_edge(element);
 }
-void ArrayLiteral::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
-	out << "array literal : "
-	    << ctx->known_type_ref(ty);
+void ArrayLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "array literal : " << ctx->known_type_ref(ty);
 	for (Node* element : elements) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
-		out << "item: "
-		    << ctx->known_value_ref(element);
+		out << "item: " << ctx->known_value_ref(element);
 	}
 }
 
 const char* NilLiteral::diagnostic_kind() const { return "nil"; }
-ConstEvalResult NilLiteral::const_eval(ConstEvalContext&) const {
-	return ConstEvalResult::success(const_cast<NilLiteral*>(this));
-}
+ConstEvalResult NilLiteral::const_eval(ConstEvalContext&) const { return ConstEvalResult::success(const_cast<NilLiteral*>(this)); }
 void NilLiteral::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "nil : " << ctx->known_type_ref(ty); }
 
-const char* OpenArrayConstView::diagnostic_kind() const {
-	return "open_array_const_view";
-}
-const char* OpenArrayMutableView::diagnostic_kind() const {
-	return "open_array_mutable_view";
-}
-const char* OpenArrayOutView::diagnostic_kind() const {
-	return "open_array_out_view";
-}
-const char* OpenArrayValueCopy::diagnostic_kind() const {
-	return "open_array_value_copy";
-}
+const char* OpenArrayConstView::diagnostic_kind() const { return "open_array_const_view"; }
+const char* OpenArrayMutableView::diagnostic_kind() const { return "open_array_mutable_view"; }
+const char* OpenArrayOutView::diagnostic_kind() const { return "open_array_out_view"; }
+const char* OpenArrayValueCopy::diagnostic_kind() const { return "open_array_value_copy"; }
 
 const char* TypeBound::diagnostic_kind() const { return kind == TypeBoundKind::Low ? "low" : "high"; }
 void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const {
@@ -1317,68 +821,38 @@ void TypeBound::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(operand_type);
 }
 ConstEvalResult TypeBound::const_eval(ConstEvalContext&) const { return const_eval_type_bound(kind, operand_type); }
-void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
-}
+void TypeBound::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << diagnostic_kind() << "(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty); }
 
-const char* ValueBound::diagnostic_kind() const {
-	return kind == TypeBoundKind::Low
-		   ? "low"
-		   : "high";
-}
-ConstEvalResult ValueBound::const_eval(
-    ConstEvalContext&) const {
-	return ConstEvalResult::not_constant();
-}
+const char* ValueBound::diagnostic_kind() const { return kind == TypeBoundKind::Low ? "low" : "high"; }
+ConstEvalResult ValueBound::const_eval(ConstEvalContext&) const { return ConstEvalResult::not_constant(); }
 
-const char*
-BuiltinEnumeratorCurrent::diagnostic_kind() const {
-	return "builtin_enumerator_current";
-}
+const char* BuiltinEnumeratorCurrent::diagnostic_kind() const { return "builtin_enumerator_current"; }
 
 const char* SizeOf::diagnostic_kind() const { return "sizeof"; }
 ConstEvalResult SizeOf::const_eval(ConstEvalContext&) const {
 	auto layout = type_layout(false, operand_type);
 	if (!layout)
 		return ConstEvalResult::not_constant();
-	return ConstEvalResult::success(
-	    new Integer(layout->size, sizeint_type()));
+	return ConstEvalResult::success(new Integer(layout->size, sizeint_type()));
 }
 void SizeOf::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(operand_type);
 }
-void SizeOf::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "sizeof(" << ctx->known_type_ref(operand_type)
-	    << ") : " << ctx->known_type_ref(ty);
-}
+void SizeOf::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "sizeof(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty); }
 
 const char* Coerce::diagnostic_kind() const { return "coerce"; }
-ConstEvalResult Coerce::const_eval(
-    ConstEvalContext& ctx) const {
-	return Cast(a, target_type).const_eval(ctx);
-}
+ConstEvalResult Coerce::const_eval(ConstEvalContext& ctx) const { return Cast(a, target_type).const_eval(ctx); }
 const char* CoerceCheck::diagnostic_kind() const { return "coerce_check"; }
-void CoerceCheck::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void CoerceCheck::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	UnaryOperation::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(target_type);
 }
-void CoerceCheck::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned) const {
-	out << "coerce_check " << ctx->known_value_ref(a)
-	    << " is " << ctx->known_type_ref(target_type)
-	    << " : " << ctx->known_type_ref(ty);
-}
+void CoerceCheck::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const { out << "coerce_check " << ctx->known_value_ref(a) << " is " << ctx->known_type_ref(target_type) << " : " << ctx->known_type_ref(ty); }
 const char* AddrOf::diagnostic_kind() const { return "addr_of"; }
 
-const char* RoutineRef::diagnostic_kind() const {
-	return "routine_ref";
-}
-ConstEvalResult RoutineRef::const_eval(
-    ConstEvalContext&) const {
+const char* RoutineRef::diagnostic_kind() const { return "routine_ref"; }
+ConstEvalResult RoutineRef::const_eval(ConstEvalContext&) const {
 	// This node is the semantic application of Pascal `@` to a routine.
 	// Resolution supplies the selected declaration and complete routine
 	// carrier. A receiver would make the value depend on runtime object
@@ -1386,23 +860,19 @@ ConstEvalResult RoutineRef::const_eval(
 	// when the declaration's body is supplied later.
 	if (!resolved || receiver)
 		return ConstEvalResult::not_constant();
-	auto result =
-	    new RoutineRef(nullptr, candidates);
+	auto result = new RoutineRef(nullptr, candidates);
 	result->resolved = resolved;
 	result->code_only = code_only;
 	result->ty = ty;
 	return ConstEvalResult::success(result);
 }
-void RoutineRef::collect_diagnostic_edges(
-    ErrorLetContext* ctx) const {
+void RoutineRef::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_value_edge(receiver);
 	ctx->add_value_edge(candidates);
 	ctx->add_value_edge(resolved);
 }
-void RoutineRef::print_diagnostic_definition(
-    ErrorLetContext* ctx, std::ostringstream& out,
-    unsigned indent) const {
+void RoutineRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "routine_ref : " << ctx->known_type_ref(ty);
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1424,9 +894,7 @@ void RoutineRef::print_diagnostic_definition(
 	}
 }
 
-const char* RoutineEqual::diagnostic_kind() const {
-	return "routine_equal";
-}
+const char* RoutineEqual::diagnostic_kind() const { return "routine_equal"; }
 
 static bool diagnostic_pas_ident_char(char ch) {
 	unsigned char c = static_cast<unsigned char>(ch);
@@ -1511,8 +979,7 @@ void Method::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstrea
 	}
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	out << "static: " << (is_static ? "yes" : "no")
-	    << "\n";
+	out << "static: " << (is_static ? "yes" : "no") << "\n";
 	ctx->indent(out, indent + 1);
 	out << "final: " << (is_final ? "yes" : "no");
 }

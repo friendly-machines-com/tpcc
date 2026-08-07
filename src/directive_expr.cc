@@ -5,8 +5,7 @@
 #include <functional>
 #include <system_error>
 
-bool eval_directive_expr(const std::string& expr,
-			 const std::map<std::string, std::string, CILess>& defines) {
+bool eval_directive_expr(const std::string& expr, const std::map<std::string, std::string, CILess>& defines) {
 	size_t p = 0;
 	auto skip_ws = [&]() {
 		while (p < expr.size() && (expr[p] == ' ' || expr[p] == '\t'))
@@ -30,8 +29,7 @@ bool eval_directive_expr(const std::string& expr,
 			return false;
 		if (v == 1)
 			return true;
-		throw DirectiveExprError{
-		    std::string("non-boolean value ") + std::to_string(v) + " where boolean required (" + where + ") in {$if ...}"};
+		throw DirectiveExprError{std::string("non-boolean value ") + std::to_string(v) + " where boolean required (" + where + ") in {$if ...}"};
 	};
 	auto lookup_ident = [&](const std::string& name) -> int64_t {
 		auto it = defines.find(name);

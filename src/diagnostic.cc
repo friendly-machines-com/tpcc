@@ -80,11 +80,9 @@ static std::string routine_signature_detail(ErrorLetContext* ctx, const RoutineT
 	return r;
 }
 
-ErrorLetContext::ErrorLetContext(const Frame* naming_frame, unsigned max_depth)
-    : ErrorLetContext(std::vector<DiagnosticScope>{{naming_frame, nullptr}}, max_depth) {}
+ErrorLetContext::ErrorLetContext(const Frame* naming_frame, unsigned max_depth) : ErrorLetContext(std::vector<DiagnosticScope>{{naming_frame, nullptr}}, max_depth) {}
 
-ErrorLetContext::ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned max_depth)
-    : naming_scopes(std::move(scopes)), max_depth(max_depth) {
+ErrorLetContext::ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned max_depth) : naming_scopes(std::move(scopes)), max_depth(max_depth) {
 	// Parser scopes are passed as an API-level naming context. They are not
 	// Frame::parent, and they are not used for aggregate child frames. Process
 	// from innermost to outermost so the first recorded name matches lookup
@@ -206,17 +204,11 @@ void ErrorLetContext::discover_value(const Node* node, unsigned depth) {
 	}
 }
 
-void ErrorLetContext::add_type_edge(const Type* ty) {
-	discover_type(ty, current_depth + 1);
-}
+void ErrorLetContext::add_type_edge(const Type* ty) { discover_type(ty, current_depth + 1); }
 
-void ErrorLetContext::add_value_edge(const Node* node) {
-	discover_value(node, current_depth + 1);
-}
+void ErrorLetContext::add_value_edge(const Node* node) { discover_value(node, current_depth + 1); }
 
-void ErrorLetContext::add_frame_edge(const Frame* frame, DiagnosticFrameUse use) {
-	index_frame(frame, use);
-}
+void ErrorLetContext::add_frame_edge(const Frame* frame, DiagnosticFrameUse use) { index_frame(frame, use); }
 
 void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 	// Invariant: frame indexing is NOT graph discovery. It is only how the
@@ -231,8 +223,7 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 		return;
 	indexed_frames.insert(key);
 
-	for (const auto& item :
-	     frame->type_declarations()) {
+	for (const auto& item : frame->type_declarations()) {
 		const std::string& name = item.first;
 		const Type* ty = item.second;
 		if (!ty)
@@ -244,8 +235,7 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 		}
 	}
 
-	for (const auto& item :
-	     frame->value_declarations()) {
+	for (const auto& item : frame->value_declarations()) {
 		const std::string& name = item.first;
 		const FrameValueEntry& entry = item.second;
 		if (entry.ty) {
@@ -293,13 +283,8 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 	// The Unit is not a second Node which could define a bare RHS identifier;
 	// naming this existing node directly keeps every printed reference inside
 	// the ordinary definition-before-use graph.
-	if (auto unit = dynamic_cast<const UnitRef*>(n.node);
-	    unit && unit->unit && !unit->unit->name.empty())
-		return NameBase{
-		    name_component(
-			unit->unit->name,
-			n.kind.c_str()),
-		    ""};
+	if (auto unit = dynamic_cast<const UnitRef*>(n.node); unit && unit->unit && !unit->unit->name.empty())
+		return NameBase{name_component(unit->unit->name, n.kind.c_str()), ""};
 
 	if (!n.value_names.empty())
 		return NameBase{name_component(n.value_names.front(), n.kind.c_str()), ""};
@@ -327,12 +312,8 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 	if (auto ix = dynamic_cast<const Index*>(n.node)) {
 		auto ait = value_nodes.find(ix->a);
 		auto bit = value_nodes.find(ix->b);
-		if (ait != value_nodes.end() && ait->second.name.assigned &&
-		    bit != value_nodes.end() && bit->second.name.assigned) {
-			return NameBase{name_component(render_name_display(ait->second.name) + "[" +
-							   render_name_display(bit->second.name) + "]",
-						       n.kind.c_str()),
-					""};
+		if (ait != value_nodes.end() && ait->second.name.assigned && bit != value_nodes.end() && bit->second.name.assigned) {
+			return NameBase{name_component(render_name_display(ait->second.name) + "[" + render_name_display(bit->second.name) + "]", n.kind.c_str()), ""};
 		}
 	}
 	if (auto d = dynamic_cast<const Dereference*>(n.node)) {
@@ -343,12 +324,8 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 	if (auto c = dynamic_cast<const Cast*>(n.node)) {
 		auto ait = value_nodes.find(c->a);
 		auto tit = type_nodes.find(c->ty);
-		if (ait != value_nodes.end() && ait->second.name.assigned &&
-		    tit != type_nodes.end() && tit->second.name.assigned) {
-			return NameBase{name_component(render_name_display(tit->second.name) + "(" +
-							   render_name_display(ait->second.name) + ")",
-						       n.kind.c_str()),
-					""};
+		if (ait != value_nodes.end() && ait->second.name.assigned && tit != type_nodes.end() && tit->second.name.assigned) {
+			return NameBase{name_component(render_name_display(tit->second.name) + "(" + render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
 		}
 	}
 	if (auto tb = dynamic_cast<const TypeBound*>(n.node)) {
@@ -386,24 +363,13 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 	}
 no_proc_call_name:
 
-	if (auto method =
-		dynamic_cast<const Method*>(n.node)) {
-		auto owner_it =
-		    type_nodes.find(method->owner_class);
-		if (owner_it != type_nodes.end() &&
-		    owner_it->second.name.assigned &&
-		    !method->pas_name.empty()) {
+	if (auto method = dynamic_cast<const Method*>(n.node)) {
+		auto owner_it = type_nodes.find(method->owner_class);
+		if (owner_it != type_nodes.end() && owner_it->second.name.assigned && !method->pas_name.empty()) {
 			// Method declarations do not have receiver expressions from which
 			// the generic MemberAccess naming rule could form Owner.Method.
 			// Their existing owner edge supplies the missing source context.
-			return NameBase{
-			    name_component(
-				render_name_display(
-				    owner_it->second.name) +
-				    "." +
-				    method->pas_name,
-				n.kind.c_str()),
-			    ""};
+			return NameBase{name_component(render_name_display(owner_it->second.name) + "." + method->pas_name, n.kind.c_str()), ""};
 		}
 	}
 
@@ -553,14 +519,11 @@ std::string ErrorLetContext::known_value_ref(const Node* node) const {
 	return render_name(it->second.name);
 }
 
-bool ErrorLetContext::has_known_value_ref(
-    const Node* node) const {
+bool ErrorLetContext::has_known_value_ref(const Node* node) const {
 	if (!node)
 		return false;
 	auto it = value_nodes.find(node);
-	return it != value_nodes.end() &&
-	       it->second.referenced &&
-	       it->second.name.assigned;
+	return it != value_nodes.end() && it->second.referenced && it->second.name.assigned;
 }
 
 void ErrorLetContext::indent(std::ostringstream& out, unsigned level) const {
@@ -587,16 +550,13 @@ static void print_source_location(std::ostringstream& out, const SourceLocation&
 void ErrorLetContext::print_frame_members(std::ostringstream& out, const Frame* frame, unsigned indent_level) const {
 	if (!frame)
 		return;
-	for (const auto& item :
-	     frame->value_declarations()) {
+	for (const auto& item : frame->value_declarations()) {
 		const std::string& name = item.first;
 		const FrameValueEntry& entry = item.second;
 		if (dynamic_cast<StorageSlot*>(entry.value)) {
 			indent(out, indent_level);
 			out << name << ": " << known_type_ref(entry.ty) << ";\n";
-		} else if (entry.value &&
-			   has_known_value_ref(
-			       entry.value)) {
+		} else if (entry.value && has_known_value_ref(entry.value)) {
 			// Aggregate collection deliberately discovers member types but not
 			// every member value. Only an independently reached value may be
 			// referenced here; all other entries remain name evidence.
