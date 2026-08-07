@@ -10,9 +10,12 @@
 #include <set>
 #include <utility>
 
-Type::Type(SourceLocation source_location) : source_location(std::move(source_location)) {}
+Type::Type(SourceLocation source_location) : source_location(std::move(source_location)) {
+}
 
-std::optional<ValueConversion> Type::value_conversion_from(const Type*) const { return std::nullopt; }
+std::optional<ValueConversion> Type::value_conversion_from(const Type*) const {
+	return std::nullopt;
+}
 
 std::optional<ValueConversion> Type::destination_conversion_from(const Type* source) const {
 	// Most types have no extra known-destination representation operation.
@@ -20,11 +23,17 @@ std::optional<ValueConversion> Type::destination_conversion_from(const Type* sou
 	return value_conversion_from(source);
 }
 
-bool Type::is_subtype_of(const Type* target) const { return this == target; }
+bool Type::is_subtype_of(const Type* target) const {
+	return this == target;
+}
 
-bool Type::same_formal_contract_as(const Type* other) const { return this == other; }
+bool Type::same_formal_contract_as(const Type* other) const {
+	return this == other;
+}
 
-bool Type::same_cxx_carrier_as(const Type* other) const { return other && (this == other || same_cxx_carrier_definition_as(other) || other->same_cxx_carrier_definition_as(this)); }
+bool Type::same_cxx_carrier_as(const Type* other) const {
+	return other && (this == other || same_cxx_carrier_definition_as(other) || other->same_cxx_carrier_definition_as(this));
+}
 
 bool Type::same_cxx_carrier_definition_as(const Type*) const {
 	// Records, packed records, objects, classes, interfaces, and enums are
@@ -33,7 +42,8 @@ bool Type::same_cxx_carrier_definition_as(const Type*) const {
 	return false;
 }
 
-IncompleteType::IncompleteType(SourceLocation source_location, std::string name) : Type(std::move(source_location)), name(std::move(name)), resolved(nullptr) {}
+IncompleteType::IncompleteType(SourceLocation source_location, std::string name) : Type(std::move(source_location)), name(std::move(name)), resolved(nullptr) {
+}
 
 DistinctType::DistinctType(SourceLocation source_location, std::string cxx_name, Type* base_type) : Type(std::move(source_location)), cxx_name(std::move(cxx_name)), base_type(base_type) {
 	assert(!this->cxx_name.empty());
@@ -52,7 +62,8 @@ const Type* distinct_storage_type(const Type* type) {
 	return type;
 }
 
-EnumType::EnumType(SourceLocation source_location) : Type(std::move(source_location)), cxx_name("") {}
+EnumType::EnumType(SourceLocation source_location) : Type(std::move(source_location)), cxx_name("") {
+}
 
 EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::string a, std::string b, unsigned p_carrier_bits, bool p_carrier_signed) : Type(std::move(source_location)), cxx_name(std::move(p_cxx_name)), carrier_bits(p_carrier_bits), carrier_signed(p_carrier_signed) {
 	members.push_back(Member{
@@ -85,39 +96,69 @@ FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, Ord
 	this->item_type = item_type;
 }
 
-DynamicArrayType::DynamicArrayType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)), item_type(item_type) {}
+DynamicArrayType::DynamicArrayType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)), item_type(item_type) {
+}
 
-OpenArrayType::OpenArrayType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)), item_type(item_type) {}
+OpenArrayType::OpenArrayType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)), item_type(item_type) {
+}
 
-ShortStringType::ShortStringType(SourceLocation source_location, uint8_t capacity) : Type(std::move(source_location)), capacity(capacity) { assert(capacity != 0); }
+ShortStringType::ShortStringType(SourceLocation source_location, uint8_t capacity) : Type(std::move(source_location)), capacity(capacity) {
+	assert(capacity != 0);
+}
 
-Type* ShortStringType::sequence_element_type() const { return char_type(); }
+Type* ShortStringType::sequence_element_type() const {
+	return char_type();
+}
 
-Type* ShortStringType::sequence_index_type() const { return integer_type(); }
+Type* ShortStringType::sequence_index_type() const {
+	return integer_type();
+}
 
-Type* ShortStringType::sequence_length_type() const { return byte_type(); }
+Type* ShortStringType::sequence_length_type() const {
+	return byte_type();
+}
 
-Type* FixedArrayType::sequence_length_type() const { return sizeint_type(); }
+Type* FixedArrayType::sequence_length_type() const {
+	return sizeint_type();
+}
 
-bool FixedArrayType::has_managed_lifetime() const { return item_type && item_type->has_managed_lifetime(); }
+bool FixedArrayType::has_managed_lifetime() const {
+	return item_type && item_type->has_managed_lifetime();
+}
 
-Type* DynamicArrayType::sequence_index_type() const { return sizeint_type(); }
+Type* DynamicArrayType::sequence_index_type() const {
+	return sizeint_type();
+}
 
-Type* DynamicArrayType::sequence_length_type() const { return sizeint_type(); }
+Type* DynamicArrayType::sequence_length_type() const {
+	return sizeint_type();
+}
 
-Type* OpenArrayType::sequence_index_type() const { return sizeint_type(); }
+Type* OpenArrayType::sequence_index_type() const {
+	return sizeint_type();
+}
 
-Type* OpenArrayType::sequence_length_type() const { return sizeint_type(); }
+Type* OpenArrayType::sequence_length_type() const {
+	return sizeint_type();
+}
 
-FixedSetType::FixedSetType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)) { this->item_type = item_type; }
+FixedSetType::FixedSetType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)) {
+	this->item_type = item_type;
+}
 
-TypedFileType::TypedFileType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)), item_type(item_type) {}
+TypedFileType::TypedFileType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)), item_type(item_type) {
+}
 
-PointerType::PointerType(SourceLocation source_location, Type* item_type, std::string cxx_name) : Type(std::move(source_location)), item_type(item_type), cxx_name(std::move(cxx_name)) {}
+PointerType::PointerType(SourceLocation source_location, Type* item_type, std::string cxx_name) : Type(std::move(source_location)), item_type(item_type), cxx_name(std::move(cxx_name)) {
+}
 
-RecordType::RecordType(SourceLocation source_location, Frame* children) : Type(std::move(source_location)) { this->children = children; }
+RecordType::RecordType(SourceLocation source_location, Frame* children) : Type(std::move(source_location)) {
+	this->children = children;
+}
 
-PackedRecordType::PackedRecordType(SourceLocation source_location, Frame* children) : Type(std::move(source_location)) { this->children = children; }
+PackedRecordType::PackedRecordType(SourceLocation source_location, Frame* children) : Type(std::move(source_location)) {
+	this->children = children;
+}
 
 ClassType::ClassType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super) : Type(std::move(source_location)) {
 	this->children = children;
@@ -184,10 +225,14 @@ bool ObjectType::has_managed_lifetime() const {
 	return false;
 }
 
-ModuleType::ModuleType(SourceLocation source_location, Frame* children) : Type(std::move(source_location)) { this->children = children; }
+ModuleType::ModuleType(SourceLocation source_location, Frame* children) : Type(std::move(source_location)) {
+	this->children = children;
+}
 
-UnitType::UnitType(SourceLocation source_location) : Type(std::move(source_location)) {}
-UntypedIntegerType::UntypedIntegerType(SourceLocation source_location) : Type(std::move(source_location)) {}
+UnitType::UnitType(SourceLocation source_location) : Type(std::move(source_location)) {
+}
+UntypedIntegerType::UntypedIntegerType(SourceLocation source_location) : Type(std::move(source_location)) {
+}
 
 RoutineType::RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind) : Type(std::move(source_location)) {
 	this->formals = std::move(formals);
@@ -711,9 +756,13 @@ static bool predefined_ordinal_type(const Type* type) {
 	return intrinsic && intrinsic->ordinal_bounds.has_value();
 }
 
-static bool predefined_integer_family_type(const Type* type) { return type == &untyped_integer_type() || integer_widening_rank(type) >= 0; }
+static bool predefined_integer_family_type(const Type* type) {
+	return type == &untyped_integer_type() || integer_widening_rank(type) >= 0;
+}
 
-static bool predefined_object_reference_type(const Type* type) { return dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type); }
+static bool predefined_object_reference_type(const Type* type) {
+	return dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type);
+}
 
 // Pascal real-family widening order. Keep this independent from the integer
 // rank stored on IntrinsicType: those ranks describe ordinal overloads and
@@ -756,7 +805,9 @@ static uint64_t saturating_add(uint64_t a, uint64_t b) {
 	return a + b;
 }
 
-static uint64_t unsigned_abs_diff(uint64_t a, uint64_t b) { return a >= b ? a - b : b - a; }
+static uint64_t unsigned_abs_diff(uint64_t a, uint64_t b) {
+	return a >= b ? a - b : b - a;
+}
 
 static uint64_t ordinal_lower_bound_distance(const OrdinalBounds& a, const OrdinalBounds& b) {
 	if (a.signed_type && b.signed_type)
@@ -800,9 +851,13 @@ static int integer_conversion_cost(const Type* from, const Type* to) {
 	return cost;
 }
 
-static ValueConversion direct_conversion(unsigned distance = 0) { return ValueConversion{ValueConversionClass::Direct, distance}; }
+static ValueConversion direct_conversion(unsigned distance = 0) {
+	return ValueConversion{ValueConversionClass::Direct, distance};
+}
 
-static ValueConversion implicit_conversion(unsigned distance = 0) { return ValueConversion{ValueConversionClass::Convert, distance}; }
+static ValueConversion implicit_conversion(unsigned distance = 0) {
+	return ValueConversion{ValueConversionClass::Convert, distance};
+}
 
 std::optional<ValueConversion> DistinctType::value_conversion_from(const Type* source) const {
 	if (!source)
@@ -839,21 +894,37 @@ bool DistinctType::is_subtype_of(const Type* target) const {
 	return storage == target_storage || storage->is_subtype_of(target_storage);
 }
 
-bool DistinctType::same_cxx_carrier_definition_as(const Type* other) const { return base_type && base_type->same_cxx_carrier_as(distinct_storage_type(other)); }
+bool DistinctType::same_cxx_carrier_definition_as(const Type* other) const {
+	return base_type && base_type->same_cxx_carrier_as(distinct_storage_type(other));
+}
 
-Type* DistinctType::sequence_element_type() const { return base_type->sequence_element_type(); }
+Type* DistinctType::sequence_element_type() const {
+	return base_type->sequence_element_type();
+}
 
-Type* DistinctType::array_element_type() const { return base_type->array_element_type(); }
+Type* DistinctType::array_element_type() const {
+	return base_type->array_element_type();
+}
 
-Type* DistinctType::sequence_index_type() const { return base_type->sequence_index_type(); }
+Type* DistinctType::sequence_index_type() const {
+	return base_type->sequence_index_type();
+}
 
-Type* DistinctType::sequence_length_type() const { return base_type->sequence_length_type(); }
+Type* DistinctType::sequence_length_type() const {
+	return base_type->sequence_length_type();
+}
 
-bool DistinctType::sequence_is_resizable() const { return base_type->sequence_is_resizable(); }
+bool DistinctType::sequence_is_resizable() const {
+	return base_type->sequence_is_resizable();
+}
 
-bool DistinctType::has_managed_lifetime() const { return base_type->has_managed_lifetime(); }
+bool DistinctType::has_managed_lifetime() const {
+	return base_type->has_managed_lifetime();
+}
 
-bool DistinctType::is_reference_type() const { return base_type->is_reference_type(); }
+bool DistinctType::is_reference_type() const {
+	return base_type->is_reference_type();
+}
 
 std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* source_const) const {
 	auto source = distinct_storage_type(source_const);
@@ -1298,14 +1369,18 @@ std::optional<ValueConversion> EnumType::value_conversion_from(const Type* sourc
 	return std::nullopt;
 }
 
-bool EnumType::predefined_explicit_conversion_from(const Type* source) const { return Type::predefined_explicit_conversion_from(source) || predefined_ordinal_type(source); }
+bool EnumType::predefined_explicit_conversion_from(const Type* source) const {
+	return Type::predefined_explicit_conversion_from(source) || predefined_ordinal_type(source);
+}
 
 bool IntrinsicType::same_cxx_carrier_definition_as(const Type* other) const {
 	auto intrinsic = dynamic_cast<const IntrinsicType*>(other);
 	return intrinsic && carrier && intrinsic->carrier && carrier == intrinsic->carrier;
 }
 
-bool SubrangeType::is_subtype_of(const Type* target) const { return this == target || ordinal_domain_is_subset(this, target); }
+bool SubrangeType::is_subtype_of(const Type* target) const {
+	return this == target || ordinal_domain_is_subset(this, target);
+}
 
 bool FixedSetType::is_subtype_of(const Type* target) const {
 	if (this == target)
@@ -1337,7 +1412,9 @@ std::optional<ValueConversion> SubrangeType::destination_conversion_from(const T
 	return implicit_conversion();
 }
 
-bool SubrangeType::predefined_explicit_conversion_from(const Type* source) const { return Type::predefined_explicit_conversion_from(source) || predefined_ordinal_type(source); }
+bool SubrangeType::predefined_explicit_conversion_from(const Type* source) const {
+	return Type::predefined_explicit_conversion_from(source) || predefined_ordinal_type(source);
+}
 
 std::optional<ValueConversion> RoutineType::value_conversion_from(const Type* source) const {
 	auto routine = dynamic_cast<const RoutineType*>(source);
@@ -1356,7 +1433,9 @@ bool RoutineType::same_parameter_and_result_types_as(const RoutineType* other) c
 	return true;
 }
 
-bool RoutineType::same_signature_as(const RoutineType* other) const { return other && kind == other->kind && same_parameter_and_result_types_as(other); }
+bool RoutineType::same_signature_as(const RoutineType* other) const {
+	return other && kind == other->kind && same_parameter_and_result_types_as(other);
+}
 
 bool RoutineType::same_overload_signature_as(const RoutineType* other) const {
 	if (!other || formals.size() != other->formals.size())
@@ -1479,9 +1558,12 @@ static std::string diagnostic_string_literal(const std::string& text) {
 	return r;
 }
 
-const char* ShortStringType::diagnostic_kind() const { return "shortstring"; }
+const char* ShortStringType::diagnostic_kind() const {
+	return "shortstring";
+}
 
-void ShortStringType::collect_diagnostic_edges(ErrorLetContext*) const {}
+void ShortStringType::collect_diagnostic_edges(ErrorLetContext*) const {
+}
 
 void ShortStringType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
@@ -1508,8 +1590,12 @@ void Type::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, 
 	out << "truncated: yes";
 }
 
-const char* IncompleteType::diagnostic_kind() const { return "incomplete"; }
-void IncompleteType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(resolved); }
+const char* IncompleteType::diagnostic_kind() const {
+	return "incomplete";
+}
+void IncompleteType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(resolved);
+}
 void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1521,9 +1607,13 @@ void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostr
 	}
 }
 
-const char* DistinctType::diagnostic_kind() const { return "distinct_type"; }
+const char* DistinctType::diagnostic_kind() const {
+	return "distinct_type";
+}
 
-void DistinctType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(base_type); }
+void DistinctType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(base_type);
+}
 
 void DistinctType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
@@ -1537,7 +1627,9 @@ void DistinctType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstrea
 	out << "base: ...";
 }
 
-const char* FixedArrayType::diagnostic_kind() const { return "array"; }
+const char* FixedArrayType::diagnostic_kind() const {
+	return "array";
+}
 void FixedArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(bounds);
 	ctx->add_value_edge(range.lower_bound);
@@ -1570,40 +1662,59 @@ void FixedArrayType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstr
 	out << "item: ...";
 }
 
-const char* DynamicArrayType::diagnostic_kind() const { return "dynamic array"; }
-void DynamicArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
+const char* DynamicArrayType::diagnostic_kind() const {
+	return "dynamic array";
+}
+void DynamicArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(item_type);
+}
 void DynamicArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "item: " << ctx->known_type_ref(item_type);
 }
 
-const char* OpenArrayType::diagnostic_kind() const { return "open array"; }
-void OpenArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
+const char* OpenArrayType::diagnostic_kind() const {
+	return "open array";
+}
+void OpenArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(item_type);
+}
 void OpenArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "item: " << ctx->known_type_ref(item_type);
 }
 
-const char* FixedSetType::diagnostic_kind() const { return "set"; }
-void FixedSetType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
+const char* FixedSetType::diagnostic_kind() const {
+	return "set";
+}
+void FixedSetType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(item_type);
+}
 void FixedSetType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "item: " << ctx->known_type_ref(item_type);
 }
 
-const char* TypedFileType::diagnostic_kind() const { return "file"; }
-void TypedFileType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(item_type); }
+const char* TypedFileType::diagnostic_kind() const {
+	return "file";
+}
+void TypedFileType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(item_type);
+}
 void TypedFileType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "item: " << ctx->known_type_ref(item_type);
 }
 
-const char* EnumType::diagnostic_kind() const { return "enum"; }
-void EnumType::collect_diagnostic_edges(ErrorLetContext*) const {}
+const char* EnumType::diagnostic_kind() const {
+	return "enum";
+}
+void EnumType::collect_diagnostic_edges(ErrorLetContext*) const {
+}
 void EnumType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "";
 	for (const auto& m : members) {
@@ -1647,7 +1758,9 @@ static void print_variant_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 	}
 }
 
-const char* RecordType::diagnostic_kind() const { return "record"; }
+const char* RecordType::diagnostic_kind() const {
+	return "record";
+}
 void RecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
@@ -1660,9 +1773,13 @@ void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	ctx->indent(out, indent);
 	out << "end";
 }
-void RecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
+void RecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << " ... end";
+}
 
-const char* PackedRecordType::diagnostic_kind() const { return "packed record"; }
+const char* PackedRecordType::diagnostic_kind() const {
+	return "packed record";
+}
 void PackedRecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
@@ -1675,9 +1792,13 @@ void PackedRecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::os
 	ctx->indent(out, indent);
 	out << "end";
 }
-void PackedRecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
+void PackedRecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << " ... end";
+}
 
-const char* InterfaceType::diagnostic_kind() const { return "interface"; }
+const char* InterfaceType::diagnostic_kind() const {
+	return "interface";
+}
 void InterfaceType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
@@ -1697,9 +1818,13 @@ void InterfaceType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 	ctx->indent(out, indent);
 	out << "end";
 }
-void InterfaceType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
+void InterfaceType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << " ... end";
+}
 
-const char* ClassType::diagnostic_kind() const { return "class"; }
+const char* ClassType::diagnostic_kind() const {
+	return "class";
+}
 void ClassType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(super);
 	for (auto* i : implemented_interfaces)
@@ -1738,10 +1863,16 @@ void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringst
 	ctx->indent(out, indent);
 	out << "end";
 }
-void ClassType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
+void ClassType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << " ... end";
+}
 
-const char* ClassRefType::diagnostic_kind() const { return "classref"; }
-void ClassRefType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_type_edge(target); }
+const char* ClassRefType::diagnostic_kind() const {
+	return "classref";
+}
+void ClassRefType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_type_edge(target);
+}
 void ClassRefType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1753,7 +1884,9 @@ void ClassRefType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstrea
 	out << "target: ...";
 }
 
-const char* ObjectType::diagnostic_kind() const { return "object"; }
+const char* ObjectType::diagnostic_kind() const {
+	return "object";
+}
 void ObjectType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(super);
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
@@ -1769,9 +1902,13 @@ void ObjectType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	ctx->indent(out, indent);
 	out << "end";
 }
-void ObjectType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const { out << " ... end"; }
+void ObjectType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << " ... end";
+}
 
-const char* PointerType::diagnostic_kind() const { return "pointer"; }
+const char* PointerType::diagnostic_kind() const {
+	return "pointer";
+}
 void PointerType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	if (item_type)
 		ctx->add_type_edge(item_type);
@@ -1790,8 +1927,12 @@ void PointerType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream
 	out << (item_type ? "to: ..." : "untyped");
 }
 
-const char* ModuleType::diagnostic_kind() const { return "module"; }
-void ModuleType::collect_diagnostic_edges(ErrorLetContext* ctx) const { ctx->add_frame_edge(children, DiagnosticFrameUse::ModuleMembers); }
+const char* ModuleType::diagnostic_kind() const {
+	return "module";
+}
+void ModuleType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	ctx->add_frame_edge(children, DiagnosticFrameUse::ModuleMembers);
+}
 void ModuleType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1803,13 +1944,21 @@ void ModuleType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream&
 	out << "details: ...";
 }
 
-const char* UnitType::diagnostic_kind() const { return "unit"; }
-void UnitType::collect_diagnostic_edges(ErrorLetContext*) const {}
-void UnitType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {}
+const char* UnitType::diagnostic_kind() const {
+	return "unit";
+}
+void UnitType::collect_diagnostic_edges(ErrorLetContext*) const {
+}
+void UnitType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {
+}
 
-const char* UntypedIntegerType::diagnostic_kind() const { return "untyped_integer"; }
-void UntypedIntegerType::collect_diagnostic_edges(ErrorLetContext*) const {}
-void UntypedIntegerType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {}
+const char* UntypedIntegerType::diagnostic_kind() const {
+	return "untyped_integer";
+}
+void UntypedIntegerType::collect_diagnostic_edges(ErrorLetContext*) const {
+}
+void UntypedIntegerType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {
+}
 
 static const char* param_mode_text(ParamMode mode) {
 	switch (mode) {
@@ -1825,7 +1974,9 @@ static const char* param_mode_text(ParamMode mode) {
 	return "";
 }
 
-const char* RoutineType::diagnostic_kind() const { return "routine"; }
+const char* RoutineType::diagnostic_kind() const {
+	return "routine";
+}
 
 void RoutineType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	for (const auto& p : formals) {
@@ -1885,7 +2036,9 @@ SubrangeType::SubrangeType(SourceLocation source_location, std::string cxx_name,
 	assert(this->upper_bound->ty == base_type);
 }
 
-const char* SubrangeType::diagnostic_kind() const { return "subrange"; }
+const char* SubrangeType::diagnostic_kind() const {
+	return "subrange";
+}
 
 void SubrangeType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(base_type);

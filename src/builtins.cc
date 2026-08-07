@@ -9,17 +9,23 @@
 #include <limits>
 #include <string>
 
-IntrinsicType::IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank, std::optional<OrdinalBounds> ordinal_bounds, std::optional<TypeLayout> layout, std::optional<IntrinsicCarrier> carrier) : Type(std::move(source_location)), cxx_name(std::move(cxx_name)), rank(std::move(rank)), ordinal_bounds(std::move(ordinal_bounds)), layout(std::move(layout)), carrier(std::move(carrier)) {}
+IntrinsicType::IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank, std::optional<OrdinalBounds> ordinal_bounds, std::optional<TypeLayout> layout, std::optional<IntrinsicCarrier> carrier) : Type(std::move(source_location)), cxx_name(std::move(cxx_name)), rank(std::move(rank)), ordinal_bounds(std::move(ordinal_bounds)), layout(std::move(layout)), carrier(std::move(carrier)) {
+}
 
-Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {}
+Builtin::Builtin(const BuiltinDesc* desc) : desc(desc) {
+}
 
 // Integer rows are ordered narrowest -> widest. IntrinsicType's destination
 // conversion rule uses the rank and explicit bounds to score widening and
 // narrowing without imposing one common type before overload selection.
 namespace {
-constexpr uint64_t unsigned_max_for_bits(unsigned bits) { return bits == 64 ? UINT64_MAX : ((uint64_t{1} << bits) - 1); }
+constexpr uint64_t unsigned_max_for_bits(unsigned bits) {
+	return bits == 64 ? UINT64_MAX : ((uint64_t{1} << bits) - 1);
+}
 
-constexpr OrdinalBounds unsigned_bounds(unsigned bits) { return OrdinalBounds{false, 0, unsigned_max_for_bits(bits)}; }
+constexpr OrdinalBounds unsigned_bounds(unsigned bits) {
+	return OrdinalBounds{false, 0, unsigned_max_for_bits(bits)};
+}
 
 constexpr OrdinalBounds signed_bounds(unsigned bits) {
 	return OrdinalBounds{
@@ -109,21 +115,51 @@ UntypedIntegerType& untyped_integer_type() {
 	return t;
 }
 
-Type* byte_type() { return &k_byte; }
-Type* shortint_type() { return &k_shortint; }
-Type* word_type() { return &k_word; }
-Type* smallint_type() { return &k_smallint; }
-Type* cardinal_type() { return &k_longword; }
-Type* integer_type() { return &k_integer; }
-Type* longint_type() { return &k_longint; }
-Type* sizeint_type() { return int64_type(); }
-Type* qword_type() { return &k_qword; }
-Type* int64_type() { return &k_int64; }
-Type* pointer_type() { return &k_pointer; }
-Type* ptrint_type() { return int64_type(); }
-Type* ptruint_type() { return qword_type(); }
-Type* boolean_type() { return &k_boolean; }
-Type* char_type() { return &k_char; }
+Type* byte_type() {
+	return &k_byte;
+}
+Type* shortint_type() {
+	return &k_shortint;
+}
+Type* word_type() {
+	return &k_word;
+}
+Type* smallint_type() {
+	return &k_smallint;
+}
+Type* cardinal_type() {
+	return &k_longword;
+}
+Type* integer_type() {
+	return &k_integer;
+}
+Type* longint_type() {
+	return &k_longint;
+}
+Type* sizeint_type() {
+	return int64_type();
+}
+Type* qword_type() {
+	return &k_qword;
+}
+Type* int64_type() {
+	return &k_int64;
+}
+Type* pointer_type() {
+	return &k_pointer;
+}
+Type* ptrint_type() {
+	return int64_type();
+}
+Type* ptruint_type() {
+	return qword_type();
+}
+Type* boolean_type() {
+	return &k_boolean;
+}
+Type* char_type() {
+	return &k_char;
+}
 ShortStringType* shortstring_type(uint8_t capacity) {
 	if (capacity == 255)
 		return &k_shortstring;
@@ -133,18 +169,42 @@ ShortStringType* shortstring_type(uint8_t capacity) {
 		result = new ShortStringType(SourceLocation::builtin(), capacity);
 	return result;
 }
-Type* ansistring_type() { return &k_ansistring; }
-Type* text_type() { return &k_text; }
-Type* file_type() { return &k_file; }
-Type* single_type() { return &k_single; }
-Type* double_type() { return &k_double; }
-Type* extended_type() { return &k_extended; }
-Type* set_type() { return &k_set; }
-Type* fixedarray_type() { return &k_fixedarray; }
-Type* unknown_type() { return &k_unknown; }
-RecordType* tmethod_type() { return &tmethod_definition().type; }
-StorageSlot* tmethod_code_field() { return &tmethod_definition().code; }
-StorageSlot* tmethod_data_field() { return &tmethod_definition().data; }
+Type* ansistring_type() {
+	return &k_ansistring;
+}
+Type* text_type() {
+	return &k_text;
+}
+Type* file_type() {
+	return &k_file;
+}
+Type* single_type() {
+	return &k_single;
+}
+Type* double_type() {
+	return &k_double;
+}
+Type* extended_type() {
+	return &k_extended;
+}
+Type* set_type() {
+	return &k_set;
+}
+Type* fixedarray_type() {
+	return &k_fixedarray;
+}
+Type* unknown_type() {
+	return &k_unknown;
+}
+RecordType* tmethod_type() {
+	return &tmethod_definition().type;
+}
+StorageSlot* tmethod_code_field() {
+	return &tmethod_definition().code;
+}
+StorageSlot* tmethod_data_field() {
+	return &tmethod_definition().data;
+}
 
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
 	ty = distinct_storage_type(ty);
@@ -155,15 +215,25 @@ bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
 	return true;
 }
 
-Type* IntrinsicType::sequence_element_type() const { return carrier == IntrinsicCarrier::AnsiString ? char_type() : nullptr; }
+Type* IntrinsicType::sequence_element_type() const {
+	return carrier == IntrinsicCarrier::AnsiString ? char_type() : nullptr;
+}
 
-Type* IntrinsicType::sequence_index_type() const { return carrier == IntrinsicCarrier::AnsiString ? integer_type() : nullptr; }
+Type* IntrinsicType::sequence_index_type() const {
+	return carrier == IntrinsicCarrier::AnsiString ? integer_type() : nullptr;
+}
 
-Type* IntrinsicType::sequence_length_type() const { return carrier == IntrinsicCarrier::AnsiString ? sizeint_type() : nullptr; }
+Type* IntrinsicType::sequence_length_type() const {
+	return carrier == IntrinsicCarrier::AnsiString ? sizeint_type() : nullptr;
+}
 
-bool IntrinsicType::sequence_is_resizable() const { return carrier == IntrinsicCarrier::AnsiString; }
+bool IntrinsicType::sequence_is_resizable() const {
+	return carrier == IntrinsicCarrier::AnsiString;
+}
 
-bool IntrinsicType::has_managed_lifetime() const { return carrier == IntrinsicCarrier::AnsiString; }
+bool IntrinsicType::has_managed_lifetime() const {
+	return carrier == IntrinsicCarrier::AnsiString;
+}
 
 bool integer_bounds(const Type* ty, OrdinalBounds* out) {
 	ty = distinct_storage_type(ty);
@@ -174,7 +244,9 @@ bool integer_bounds(const Type* ty, OrdinalBounds* out) {
 	return true;
 }
 
-static const Integer* const_integer_arg(Node* n) { return dynamic_cast<const Integer*>(n); }
+static const Integer* const_integer_arg(Node* n) {
+	return dynamic_cast<const Integer*>(n);
+}
 
 static bool const_numeric_as_long_double(Node* n, long double* out) {
 	if (auto i = dynamic_cast<const Integer*>(n)) {
@@ -190,7 +262,9 @@ static bool const_numeric_as_long_double(Node* n, long double* out) {
 	return false;
 }
 
-static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Type* ty) { return const_convert_integer(magnitude, negative, ty, ty); }
+static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Type* ty) {
+	return const_convert_integer(magnitude, negative, ty, ty);
+}
 
 static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	// system.pp's predefined integer operator := declarations are pure
@@ -204,7 +278,9 @@ static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const s
 	return fold_integer_result(value->value, value->negative, result_ty);
 }
 
-static uint64_t unchecked_integer_bits(const Integer* value) { return value->negative ? uint64_t{0} - value->value : value->value; }
+static uint64_t unchecked_integer_bits(const Integer* value) {
+	return value->negative ? uint64_t{0} - value->value : value->value;
+}
 
 static ConstEvalResult fold_unchecked_integer_bits(uint64_t bits, Type* result_ty) {
 	// The explicit ordinal cast is TPCC's existing representation conversion:
@@ -271,7 +347,9 @@ static std::optional<std::pair<bool, uint64_t>> constant_ordinal_value(Node* val
 	return std::nullopt;
 }
 
-static uint64_t constant_ordinal_mask(unsigned bits) { return bits == 64 ? UINT64_MAX : (uint64_t{1} << bits) - 1; }
+static uint64_t constant_ordinal_mask(unsigned bits) {
+	return bits == 64 ? UINT64_MAX : (uint64_t{1} << bits) - 1;
+}
 
 static uint64_t constant_ordinal_bits(bool negative, uint64_t magnitude, unsigned bits) {
 	const uint64_t raw = negative ? uint64_t{0} - magnitude : magnitude;
@@ -342,11 +420,21 @@ static ConstEvalResult fold_comparison(ComparisonKind kind, const std::vector<No
 	return ConstEvalResult::success(new EnumMemberRef(result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false", result ? 1 : 0, boolean_type()));
 }
 
-static ConstEvalResult fold_lessthan(ConstEvalContext&, Type*, const std::vector<Node*>& args) { return fold_comparison(ComparisonKind::LessThan, args); }
-static ConstEvalResult fold_lessthanorequal(ConstEvalContext&, Type*, const std::vector<Node*>& args) { return fold_comparison(ComparisonKind::LessThanOrEqual, args); }
-static ConstEvalResult fold_equal(ConstEvalContext&, Type*, const std::vector<Node*>& args) { return fold_comparison(ComparisonKind::Equal, args); }
-static ConstEvalResult fold_greaterthan(ConstEvalContext&, Type*, const std::vector<Node*>& args) { return fold_comparison(ComparisonKind::GreaterThan, args); }
-static ConstEvalResult fold_greaterthanorequal(ConstEvalContext&, Type*, const std::vector<Node*>& args) { return fold_comparison(ComparisonKind::GreaterThanOrEqual, args); }
+static ConstEvalResult fold_lessthan(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_comparison(ComparisonKind::LessThan, args);
+}
+static ConstEvalResult fold_lessthanorequal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_comparison(ComparisonKind::LessThanOrEqual, args);
+}
+static ConstEvalResult fold_equal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_comparison(ComparisonKind::Equal, args);
+}
+static ConstEvalResult fold_greaterthan(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_comparison(ComparisonKind::GreaterThan, args);
+}
+static ConstEvalResult fold_greaterthanorequal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_comparison(ComparisonKind::GreaterThanOrEqual, args);
+}
 
 static ConstEvalResult fold_assigned(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
 	if (args.size() != 1 || !args[0])
@@ -379,9 +467,13 @@ static ConstEvalResult fold_shift(Type* result_ty, const std::vector<Node*>& arg
 	return const_explicit_ordinal_cast(shifted, false, result_ty);
 }
 
-static ConstEvalResult fold_leftshift(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_shift(result_ty, args, true); }
+static ConstEvalResult fold_leftshift(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_shift(result_ty, args, true);
+}
 
-static ConstEvalResult fold_rightshift(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_shift(result_ty, args, false); }
+static ConstEvalResult fold_rightshift(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_shift(result_ty, args, false);
+}
 
 using ConstantSetKey = std::pair<bool, uint64_t>;
 
@@ -529,9 +621,13 @@ static ConstEvalResult fold_abs_impl(Type* result_ty, const std::vector<Node*>& 
 	return const_explicit_ordinal_cast(absolute, false, result_ty);
 }
 
-static ConstEvalResult fold_abs(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_abs_impl(result_ty, args, true); }
+static ConstEvalResult fold_abs(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_abs_impl(result_ty, args, true);
+}
 
-static ConstEvalResult fold_unchecked_abs(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_abs_impl(result_ty, args, false); }
+static ConstEvalResult fold_unchecked_abs(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_abs_impl(result_ty, args, false);
+}
 
 static ConstEvalResult fold_ordinal_step(Type* result_ty, const std::vector<Node*>& args, bool increment, bool checked) {
 	if (args.size() != 1 || !args[0])
@@ -552,13 +648,21 @@ static ConstEvalResult fold_ordinal_step(Type* result_ty, const std::vector<Node
 	return const_explicit_ordinal_cast(stepped, false, result_ty);
 }
 
-static ConstEvalResult fold_succ(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_ordinal_step(result_ty, args, true, true); }
+static ConstEvalResult fold_succ(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_ordinal_step(result_ty, args, true, true);
+}
 
-static ConstEvalResult fold_unchecked_succ(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_ordinal_step(result_ty, args, true, false); }
+static ConstEvalResult fold_unchecked_succ(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_ordinal_step(result_ty, args, true, false);
+}
 
-static ConstEvalResult fold_pred(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_ordinal_step(result_ty, args, false, true); }
+static ConstEvalResult fold_pred(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_ordinal_step(result_ty, args, false, true);
+}
 
-static ConstEvalResult fold_unchecked_pred(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_ordinal_step(result_ty, args, false, false); }
+static ConstEvalResult fold_unchecked_pred(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_ordinal_step(result_ty, args, false, false);
+}
 
 enum class BitwiseOperation {
 	BitwiseOr,
@@ -590,11 +694,17 @@ static ConstEvalResult fold_bitwise(Type* result_ty, const std::vector<Node*>& a
 	return fold_unchecked_integer_bits(mag, result_ty);
 }
 
-static ConstEvalResult fold_bitwise_and(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseAnd); }
+static ConstEvalResult fold_bitwise_and(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseAnd);
+}
 
-static ConstEvalResult fold_bitwise_or(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseOr); }
+static ConstEvalResult fold_bitwise_or(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseOr);
+}
 
-static ConstEvalResult fold_bitwise_xor(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseXor); }
+static ConstEvalResult fold_bitwise_xor(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_bitwise(result_ty, args, BitwiseOperation::BitwiseXor);
+}
 
 static ConstEvalResult fold_logical_not(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 1 || !const_integer_arg(args[0]))
@@ -654,8 +764,12 @@ static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& a
 	return fold_integer_result(mag, neg && mag != 0, result_ty);
 }
 
-static ConstEvalResult fold_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, false); }
-static ConstEvalResult fold_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_add_sub(result_ty, args, true); }
+static ConstEvalResult fold_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_add_sub(result_ty, args, false);
+}
+static ConstEvalResult fold_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_add_sub(result_ty, args, true);
+}
 
 static ConstEvalResult fold_unchecked_add_sub(Type* result_ty, const std::vector<Node*>& args, bool subtract) {
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
@@ -665,9 +779,13 @@ static ConstEvalResult fold_unchecked_add_sub(Type* result_ty, const std::vector
 	return fold_unchecked_integer_bits(subtract ? a - b : a + b, result_ty);
 }
 
-static ConstEvalResult fold_unchecked_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_unchecked_add_sub(result_ty, args, false); }
+static ConstEvalResult fold_unchecked_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_unchecked_add_sub(result_ty, args, false);
+}
 
-static ConstEvalResult fold_unchecked_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) { return fold_unchecked_add_sub(result_ty, args, true); }
+static ConstEvalResult fold_unchecked_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	return fold_unchecked_add_sub(result_ty, args, true);
+}
 
 static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
@@ -762,9 +880,13 @@ static ConstEvalResult fold_real_to_int64(const std::vector<Node*>& args, bool r
 	return fold_integer_result(static_cast<uint64_t>(magnitude), negative, int64_type());
 }
 
-static ConstEvalResult fold_trunc(ConstEvalContext&, Type*, const std::vector<Node*>& args) { return fold_real_to_int64(args, false); }
+static ConstEvalResult fold_trunc(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_real_to_int64(args, false);
+}
 
-static ConstEvalResult fold_round(ConstEvalContext&, Type*, const std::vector<Node*>& args) { return fold_real_to_int64(args, true); }
+static ConstEvalResult fold_round(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_real_to_int64(args, true);
+}
 
 static ConstEvalResult fold_frac(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 1)
@@ -1308,8 +1430,11 @@ const Frame& root_frame() {
 
 #include "diagnostic.h"
 
-const char* IntrinsicType::diagnostic_kind() const { return "intrinsic"; }
-void IntrinsicType::collect_diagnostic_edges(ErrorLetContext*) const {}
+const char* IntrinsicType::diagnostic_kind() const {
+	return "intrinsic";
+}
+void IntrinsicType::collect_diagnostic_edges(ErrorLetContext*) const {
+}
 void IntrinsicType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	// IntrinsicType is a compiler-provided Pascal-visible type. Do not print the
 	// C++ carrier name here, and do not infer a semantic family from the widening
@@ -1321,7 +1446,9 @@ void IntrinsicType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 	}
 }
 
-const char* Builtin::diagnostic_kind() const { return "builtin"; }
+const char* Builtin::diagnostic_kind() const {
+	return "builtin";
+}
 void Builtin::collect_diagnostic_edges(ErrorLetContext*) const {
 	// A Builtin denotes an opaque C++ overload set such as
 	// ::u_system::p_include, not one Pascal RoutineType. Do not add Node::ty

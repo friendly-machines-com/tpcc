@@ -80,7 +80,8 @@ static std::string routine_signature_detail(ErrorLetContext* ctx, const RoutineT
 	return r;
 }
 
-ErrorLetContext::ErrorLetContext(const Frame* naming_frame, unsigned max_depth) : ErrorLetContext(std::vector<DiagnosticScope>{{naming_frame, nullptr}}, max_depth) {}
+ErrorLetContext::ErrorLetContext(const Frame* naming_frame, unsigned max_depth) : ErrorLetContext(std::vector<DiagnosticScope>{{naming_frame, nullptr}}, max_depth) {
+}
 
 ErrorLetContext::ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned max_depth) : naming_scopes(std::move(scopes)), max_depth(max_depth) {
 	// Parser scopes are passed as an API-level naming context. They are not
@@ -204,11 +205,17 @@ void ErrorLetContext::discover_value(const Node* node, unsigned depth) {
 	}
 }
 
-void ErrorLetContext::add_type_edge(const Type* ty) { discover_type(ty, current_depth + 1); }
+void ErrorLetContext::add_type_edge(const Type* ty) {
+	discover_type(ty, current_depth + 1);
+}
 
-void ErrorLetContext::add_value_edge(const Node* node) { discover_value(node, current_depth + 1); }
+void ErrorLetContext::add_value_edge(const Node* node) {
+	discover_value(node, current_depth + 1);
+}
 
-void ErrorLetContext::add_frame_edge(const Frame* frame, DiagnosticFrameUse use) { index_frame(frame, use); }
+void ErrorLetContext::add_frame_edge(const Frame* frame, DiagnosticFrameUse use) {
+	index_frame(frame, use);
+}
 
 void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 	// Invariant: frame indexing is NOT graph discovery. It is only how the

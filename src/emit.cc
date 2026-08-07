@@ -29,9 +29,13 @@ static std::string owned_cxx_name(const Unit* owner, const std::string& local_na
 	return "::" + owner->cxx_namespace + "::" + local_name;
 }
 
-static std::string node_cxx_name(const Node* node, const std::string& local_name) { return owned_cxx_name(node ? node->owning_unit : nullptr, local_name); }
+static std::string node_cxx_name(const Node* node, const std::string& local_name) {
+	return owned_cxx_name(node ? node->owning_unit : nullptr, local_name);
+}
 
-static std::string type_cxx_name(const Type* type, const std::string& local_name) { return owned_cxx_name(type ? type->owning_unit : nullptr, local_name); }
+static std::string type_cxx_name(const Type* type, const std::string& local_name) {
+	return owned_cxx_name(type ? type->owning_unit : nullptr, local_name);
+}
 
 static std::string named_type_local_cxx_name(Type* type) {
 	if (auto d = dynamic_cast<DistinctType*>(type))
@@ -196,14 +200,21 @@ std::string cxx_value_name(std::string pas_name) {
 	return "p_" + pas_name;
 }
 
-static Type* conversion_operator_target(const Callable* callable) { return callable && callable->is_conversion_operator() ? callable->ty->return_type : nullptr; }
+static Type* conversion_operator_target(const Callable* callable) {
+	return callable && callable->is_conversion_operator() ? callable->ty->return_type : nullptr;
+}
 
 // Apply the `t_` prefix to a Pascal type identifier.
-std::string cxx_type_name(std::string pas_name) { return "t_" + pas_name; }
+std::string cxx_type_name(std::string pas_name) {
+	return "t_" + pas_name;
+}
 
-Emitter::Emitter() : out_h(nullptr), out_cc(nullptr), active(nullptr) {}
+Emitter::Emitter() : out_h(nullptr), out_cc(nullptr), active(nullptr) {
+}
 
-Emitter::~Emitter() { close(); }
+Emitter::~Emitter() {
+	close();
+}
 
 void Emitter::open_for_program(std::string output_path) {
 	out_cc = fopen(output_path.c_str(), "w");
@@ -219,7 +230,9 @@ void Emitter::open_for_unit(std::string unit_name, std::string output_dir) {
 	active = out_h;
 }
 
-void Emitter::set_section(Section s) { active = (s == Section::Header) ? out_h : out_cc; }
+void Emitter::set_section(Section s) {
+	active = (s == Section::Header) ? out_h : out_cc;
+}
 
 void Emitter::close() {
 	if (out_h) {
@@ -620,7 +633,9 @@ static std::string owner_cxx_name(Type* owner) {
 	return "";
 }
 
-static std::string owner_cxx_reference_name(Type* owner) { return type_cxx_name(owner, owner_cxx_name(owner)); }
+static std::string owner_cxx_reference_name(Type* owner) {
+	return type_cxx_name(owner, owner_cxx_name(owner));
+}
 
 static std::string inherited_owner_cxx_reference_name(Method* method) {
 	std::string owner = owner_cxx_reference_name(method ? method->owner_class : nullptr);
@@ -1568,7 +1583,9 @@ void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Posi
 	emit_formal_parameters(ty, true, conversion_target);
 }
 
-void Emitter::emit_callable_signature(Callable* c, Position pos, std::string owner_qualifier) { emit_routine_signature(c->ty, callable_cxx_name(c), pos, owner_qualifier, callable_is_cxx_destructor(c), conversion_operator_target(c)); }
+void Emitter::emit_callable_signature(Callable* c, Position pos, std::string owner_qualifier) {
+	emit_routine_signature(c->ty, callable_cxx_name(c), pos, owner_qualifier, callable_is_cxx_destructor(c), conversion_operator_target(c));
+}
 
 void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 	if (!active)

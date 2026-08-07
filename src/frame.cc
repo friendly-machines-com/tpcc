@@ -4,14 +4,17 @@
 #include <cassert>
 #include <cstdio>
 
-FrameValueEntry::FrameValueEntry() : value(nullptr), ty(nullptr) {}
+FrameValueEntry::FrameValueEntry() : value(nullptr), ty(nullptr) {
+}
 
 FrameValueEntry::FrameValueEntry(Node* value, Type* ty) {
 	this->value = value;
 	this->ty = ty;
 }
 
-Frame::Frame(Frame* parent) { this->parent = parent; }
+Frame::Frame(Frame* parent) {
+	this->parent = parent;
+}
 
 std::optional<Binding> Frame::lookup_type_or_value_local(std::string name) const {
 	auto found = items.find(name);
@@ -206,7 +209,9 @@ static bool is_legacy_predefined_callable(Callable* callable) {
 	return desc && (desc->syntax_kind != BuiltinSyntaxKind::None || desc->type_bound_kind.has_value());
 }
 
-bool same_callable_lookup_family(Callable* a, Callable* b) { return same_callable_overload_category(a, b) && is_legacy_predefined_callable(a) == is_legacy_predefined_callable(b); }
+bool same_callable_lookup_family(Callable* a, Callable* b) {
+	return same_callable_overload_category(a, b) && is_legacy_predefined_callable(a) == is_legacy_predefined_callable(b);
+}
 
 bool cxx_callable_signatures_collide(Callable* a, Callable* b) {
 	if (!a || !b || !same_emitted_callable_name(a, b))

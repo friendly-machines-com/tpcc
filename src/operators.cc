@@ -128,7 +128,9 @@ bool selection_matches(OperatorSelection selection, bool checks_enabled, bool lo
 
 } // namespace
 
-std::span<const OperatorSpec> operator_catalog() { return k_operator_catalog; }
+std::span<const OperatorSpec> operator_catalog() {
+	return k_operator_catalog;
+}
 
 std::vector<const OperatorSpec*> operator_declaration_specs(std::string_view declaration_name, std::size_t arity) {
 	std::vector<const OperatorSpec*> result;

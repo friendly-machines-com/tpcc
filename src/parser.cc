@@ -121,9 +121,12 @@ static std::unordered_set<std::string> keywords = {
     "xor", // operator
 };
 
-Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options) : unit_registry(unit_registry), emitter(emitter), options(options) {}
+Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options) : unit_registry(unit_registry), emitter(emitter), options(options) {
+}
 
-static std::string cxx_label_name(std::string pas_name) { return "pas_label_" + pas_name; }
+static std::string cxx_label_name(std::string pas_name) {
+	return "pas_label_" + pas_name;
+}
 void Parser::pop_input_file() {
 	assert(!input_files.empty());
 	fclose(input_files.back().input_file);
@@ -167,7 +170,9 @@ int Parser::consume_lowlevel() {
 	}
 	return result;
 }
-void Parser::push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number) { push_input_file_and_buffer(input_file, input_file_name, input_file_line_number, nullptr, 0); }
+void Parser::push_input_file(FILE* input_file, std::string input_file_name, int input_file_line_number) {
+	push_input_file_and_buffer(input_file, input_file_name, input_file_line_number, nullptr, 0);
+}
 void Parser::push_input_file_and_buffer(FILE* input_file, std::string input_file_name, int input_file_line_number, std::unique_ptr<char[]> buffer, size_t buffer_len) {
 	// If we're mid-parse, the tokenizer has one character already read from
 	// the current source sitting in input_char. Push it back onto that
@@ -194,7 +199,9 @@ void Parser::push_input_file_and_buffer(FILE* input_file, std::string input_file
 	input_char = fgetc(input_file);
 }
 
-void Parser::push_scope(const Frame* scope, Node* qualifier) { this->scopes.push_back(ScopeEntry{scope, qualifier}); }
+void Parser::push_scope(const Frame* scope, Node* qualifier) {
+	this->scopes.push_back(ScopeEntry{scope, qualifier});
+}
 
 void Parser::pop_scope() {
 	if (this->scopes.empty()) {
@@ -236,7 +243,9 @@ Unit* Parser::declaration_unit(Frame* frame) const {
 	return nullptr;
 }
 
-SourceLocation Parser::current_location() const { return SourceLocation(input_file_name, input_file_line_number); }
+SourceLocation Parser::current_location() const {
+	return SourceLocation(input_file_name, input_file_line_number);
+}
 
 [[noreturn]] static void emit_diagnostic_at(const SourceLocation& loc, const char* severity, const std::string& message) {
 	std::stringstream sst;
@@ -253,9 +262,13 @@ SourceLocation Parser::current_location() const { return SourceLocation(input_fi
 	exit(1);
 }
 
-[[noreturn]] static void emit_parse_error_at(const SourceLocation& loc, const std::string& message) { emit_diagnostic_at(loc, "error", message); }
+[[noreturn]] static void emit_parse_error_at(const SourceLocation& loc, const std::string& message) {
+	emit_diagnostic_at(loc, "error", message);
+}
 
-[[noreturn]] static void emit_fatal_error_at(const SourceLocation& loc, const std::string& message) { emit_diagnostic_at(loc, "fatal", message); }
+[[noreturn]] static void emit_fatal_error_at(const SourceLocation& loc, const std::string& message) {
+	emit_diagnostic_at(loc, "fatal", message);
+}
 
 std::string Parser::enclosing_diagnostic_references(ErrorLetContext& ctx) const {
 	std::stringstream sst;
@@ -285,7 +298,9 @@ std::string Parser::enclosing_diagnostic_references(ErrorLetContext& ctx) const 
 	return sst.str();
 }
 
-[[noreturn]] void Parser::emit_parse_error_at(SourceLocation loc, std::string message, ErrorLetContext& ctx) { ::emit_parse_error_at(loc, complete_diagnostic_message(std::move(message), ctx)); }
+[[noreturn]] void Parser::emit_parse_error_at(SourceLocation loc, std::string message, ErrorLetContext& ctx) {
+	::emit_parse_error_at(loc, complete_diagnostic_message(std::move(message), ctx));
+}
 
 std::string Parser::complete_diagnostic_message(std::string message, ErrorLetContext& ctx) const {
 	// The primary message contains ordinary references to its enclosing unit,
@@ -308,11 +323,17 @@ std::string Parser::complete_diagnostic_message(std::string message, ErrorLetCon
 	::emit_fatal_error_at(loc, complete_diagnostic_message(std::move(message), ctx));
 }
 
-[[noreturn]] void Parser::raise_parse_error(std::string message) { emit_parse_error_at(current_location(), message); }
+[[noreturn]] void Parser::raise_parse_error(std::string message) {
+	emit_parse_error_at(current_location(), message);
+}
 
-[[noreturn]] Type* Parser::raise_type_parse_error(std::string message) { emit_parse_error_at(current_location(), message); }
+[[noreturn]] Type* Parser::raise_type_parse_error(std::string message) {
+	emit_parse_error_at(current_location(), message);
+}
 
-Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got) { return raise_type_mismatch_at(current_location(), std::move(message), expected, got); }
+Type* Parser::raise_type_mismatch(std::string message, Type* expected, Type* got) {
+	return raise_type_mismatch_at(current_location(), std::move(message), expected, got);
+}
 
 Type* Parser::raise_type_mismatch_at(SourceLocation location, std::string message, Type* expected, Type* got) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
@@ -324,7 +345,9 @@ Type* Parser::raise_type_mismatch_at(SourceLocation location, std::string messag
 	return expected; // future non-fatal diagnostics can continue with the expected type
 }
 
-Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got) { return raise_type_kind_mismatch_at(current_location(), std::move(message), expected_kind, got); }
+Type* Parser::raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got) {
+	return raise_type_kind_mismatch_at(current_location(), std::move(message), expected_kind, got);
+}
 
 Type* Parser::raise_type_kind_mismatch_at(SourceLocation location, std::string message, const char* expected_kind, Type* got) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
@@ -335,7 +358,9 @@ Type* Parser::raise_type_kind_mismatch_at(SourceLocation location, std::string m
 	return got; // future non-fatal diagnostics can continue with the parsed type
 }
 
-Type* Parser::raise_type_error(std::string message, Type* relevant) { return raise_type_error_at(current_location(), std::move(message), relevant); }
+Type* Parser::raise_type_error(std::string message, Type* relevant) {
+	return raise_type_error_at(current_location(), std::move(message), relevant);
+}
 
 Type* Parser::raise_type_error_at(SourceLocation location, std::string message, Type* relevant) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
@@ -345,7 +370,9 @@ Type* Parser::raise_type_error_at(SourceLocation location, std::string message, 
 	return relevant;
 }
 
-[[noreturn]] void Parser::raise_value_error(std::string message, Node* relevant) { raise_value_error_at(current_location(), std::move(message), relevant); }
+[[noreturn]] void Parser::raise_value_error(std::string message, Node* relevant) {
+	raise_value_error_at(current_location(), std::move(message), relevant);
+}
 
 [[noreturn]] void Parser::raise_value_error_at(SourceLocation location, std::string message, Node* relevant) {
 	ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
@@ -569,7 +596,9 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 	emit_parse_error_at(callable_source_location(incoming), sst.str(), ctx);
 }
 
-bool Parser::is_defined(const std::string& sym) const { return options && options->defines.count(sym) > 0; }
+bool Parser::is_defined(const std::string& sym) const {
+	return options && options->defines.count(sym) > 0;
+}
 
 // See directive_expr.h/cc for the grammar and semantics; this is only the
 // glue that attaches the parser's file/line context to any error the
@@ -695,7 +724,8 @@ void DirectiveState::set_switch(char letter, bool enabled) {
 	}
 }
 
-SavedDirectiveState::SavedDirectiveState(const DirectiveState& state) : local_switches(state.local_switches), record_packing(state.record_packing), packenum(state.packenum) {}
+SavedDirectiveState::SavedDirectiveState(const DirectiveState& state) : local_switches(state.local_switches), record_packing(state.record_packing), packenum(state.packenum) {
+}
 
 void SavedDirectiveState::restore(DirectiveState& state) const {
 	state.local_switches = local_switches;
@@ -1175,7 +1205,9 @@ void Parser::parse_directive(std::string directive) {
 		raise_parse_error("expected directive " + directive);
 	}
 }
-bool Parser::peek_directive(std::string directive) { return peek_keyword(directive); }
+bool Parser::peek_directive(std::string directive) {
+	return peek_keyword(directive);
+}
 void Parser::parse_operator(std::string x) {
 	/* TODO: Limit to:
 *
@@ -1808,7 +1840,9 @@ Node* Parser::parse_numeral() {
 	}
 }
 
-bool ScopeEntry::is_receiver_environment() const { return qualifier && !dynamic_cast<UnitRef*>(qualifier); }
+bool ScopeEntry::is_receiver_environment() const {
+	return qualifier && !dynamic_cast<UnitRef*>(qualifier);
+}
 
 ScopeValueLookup ScopeEntry::lookup_value(const std::string& name) const {
 	Node* binding = frame->lookup_value(name);
@@ -2180,7 +2214,9 @@ static Type* parent_of(Type* ty) {
 	return nullptr;
 }
 
-static Frame* make_aggregate_body_frame(Type* owner) { return new Frame(owner ? get_type_body_frame(parent_of(owner)) : nullptr); }
+static Frame* make_aggregate_body_frame(Type* owner) {
+	return new Frame(owner ? get_type_body_frame(parent_of(owner)) : nullptr);
+}
 
 // Walk the parent chain from STARTING_AT, looking up NAME in each level's
 // body Frame. Returns the first hit as Node* (Callable* or OverloadSet*),
@@ -3062,7 +3098,9 @@ Node* Parser::maybe_bind_member(Node* receiver, const std::string& name) {
 	return member ? bind_lookup_result(receiver, member) : nullptr;
 }
 
-static bool custom_enumerator_value_type(Type* ty) { return dynamic_cast<RecordType*>(ty) || dynamic_cast<PackedRecordType*>(ty) || dynamic_cast<ObjectType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty); }
+static bool custom_enumerator_value_type(Type* ty) {
+	return dynamic_cast<RecordType*>(ty) || dynamic_cast<PackedRecordType*>(ty) || dynamic_cast<ObjectType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty);
+}
 
 static void collect_destructor_methods(Node* binding, std::vector<Method*>* out) {
 	auto collect = [out](Callable* callable) {
@@ -3254,7 +3292,9 @@ Node* Parser::parse_designator_tail(Node* result, LeadingTokenDirectives& leadin
 	return result;
 }
 
-static bool is_builtin_index_accessor(Builtin* builtin) { return builtin && builtin->desc && (builtin->desc->cxx_name == "::u_system::p_index" || builtin->desc->cxx_name == "::u_system::m_unchecked_index"); }
+static bool is_builtin_index_accessor(Builtin* builtin) {
+	return builtin && builtin->desc && (builtin->desc->cxx_name == "::u_system::p_index" || builtin->desc->cxx_name == "::u_system::m_unchecked_index");
+}
 
 static bool is_typed_pointer_index(PropertyAccess* access, Builtin* builtin) {
 	if (!access || !access->receiver || !is_builtin_index_accessor(builtin))
@@ -3560,7 +3600,9 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives 
 	return make_call(fc, std::move(args), directives);
 }
 
-Node* Parser::mk_assign(Node* a, Node* b) { return new Assign(a, cast_for_destination(b, a->ty)); }
+Node* Parser::mk_assign(Node* a, Node* b) {
+	return new Assign(a, cast_for_destination(b, a->ty));
+}
 
 Node* Parser::mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirectives directives) {
 	RoutineType* a_routine = a ? dynamic_cast<RoutineType*>(a->ty) : nullptr;
@@ -3754,7 +3796,9 @@ Node* Parser::parse_product_tail(Node* result) {
 	return result;
 }
 
-Node* Parser::parse_product() { return parse_product_tail(parse_power()); }
+Node* Parser::parse_product() {
+	return parse_product_tail(parse_power());
+}
 
 Node* Parser::parse_sum_tail(Node* result) {
 	while (true) {
@@ -3783,7 +3827,9 @@ Node* Parser::parse_sum_tail(Node* result) {
 	return result;
 }
 
-Node* Parser::parse_sum() { return parse_sum_tail(parse_product()); }
+Node* Parser::parse_sum() {
+	return parse_sum_tail(parse_product());
+}
 
 Node* Parser::parse_subrange_bound_expression_after_identifier(std::string id, LeadingTokenDirectives identifier_directives) {
 	LeadingTokenDirectives leading_directives = identifier_directives;
@@ -3792,7 +3838,9 @@ Node* Parser::parse_subrange_bound_expression_after_identifier(std::string id, L
 	return parse_sum_tail(parse_product_tail(parse_power_tail(result, leading_directives)));
 }
 
-Node* Parser::parse_subrange_bound_expression() { return parse_sum(); }
+Node* Parser::parse_subrange_bound_expression() {
+	return parse_sum();
+}
 
 Node* Parser::parse_comparison_tail(Node* result) {
 	while (true) {
@@ -3822,7 +3870,9 @@ Node* Parser::parse_comparison_tail(Node* result) {
 	return result;
 }
 
-Node* Parser::parse_comparison() { return parse_comparison_tail(parse_sum()); }
+Node* Parser::parse_comparison() {
+	return parse_comparison_tail(parse_sum());
+}
 
 Node* Parser::parse_expression_after_identifier(std::string id, LeadingTokenDirectives identifier_directives) {
 	LeadingTokenDirectives leading_directives = identifier_directives;
@@ -3831,7 +3881,9 @@ Node* Parser::parse_expression_after_identifier(std::string id, LeadingTokenDire
 	return parse_comparison_tail(parse_sum_tail(parse_product_tail(parse_power_tail(result, leading_directives))));
 }
 
-Node* Parser::parse_expression() { return parse_comparison(); }
+Node* Parser::parse_expression() {
+	return parse_comparison();
+}
 
 FormattedValue Parser::parse_formatted_value() {
 	FormattedValue result{
@@ -4782,7 +4834,9 @@ static bool ordinal_bounds_contains(const OrdinalBounds& bounds, bool negative, 
 	return magnitude <= bounds.max_positive;
 }
 
-static OrdinalRange::Value ordinal_value(bool negative, uint64_t magnitude) { return OrdinalRange::Value{magnitude != 0 && negative, magnitude}; }
+static OrdinalRange::Value ordinal_value(bool negative, uint64_t magnitude) {
+	return OrdinalRange::Value{magnitude != 0 && negative, magnitude};
+}
 
 static OrdinalRange::Value ordinal_value(int64_t value) {
 	if (value < 0)
@@ -5127,7 +5181,9 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	raise_values_error("unsupported subrange bound kind", {{"lower bound", lower->node}, {"upper bound", upper->node}});
 }
 
-static bool token_continues_subrange_bound_after_primary(const std::string& token) { return token == "." || token == "(" || token == "[" || token == "^" || token == "**" || token == "*" || token == "/" || token == "div" || token == "mod" || token == "and" || token == "shl" || token == "shr" || token == "as" || token == "is" || token == "<<" || token == ">>" || token == "><" || token == "+" || token == "-" || token == "or" || token == "|" || token == "xor"; }
+static bool token_continues_subrange_bound_after_primary(const std::string& token) {
+	return token == "." || token == "(" || token == "[" || token == "^" || token == "**" || token == "*" || token == "/" || token == "div" || token == "mod" || token == "and" || token == "shl" || token == "shr" || token == "as" || token == "is" || token == "<<" || token == ">>" || token == "><" || token == "+" || token == "-" || token == "or" || token == "|" || token == "xor";
+}
 
 static bool token_is_identifier_start(const std::string& token) {
 	if (token.empty() || keywords.find(token) != keywords.end())
@@ -5245,7 +5301,9 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 	}
 }
 
-void Parser::parse_statement() { maybe_parse_statement(); }
+void Parser::parse_statement() {
+	maybe_parse_statement();
+}
 void Parser::parse_block_body() {
 	while (input_token.size()) {
 		maybe_parse_statement();
@@ -5265,7 +5323,9 @@ void Parser::parse_unit_statement_sequence(bool stop_at_finalization) {
 	}
 }
 
-void Parser::push_statement_control_context() { statement_control_contexts.emplace_back(); }
+void Parser::push_statement_control_context() {
+	statement_control_contexts.emplace_back();
+}
 
 void Parser::pop_statement_control_context() {
 	if (statement_control_contexts.empty())
@@ -5273,7 +5333,9 @@ void Parser::pop_statement_control_context() {
 	statement_control_contexts.pop_back();
 }
 
-unsigned Parser::current_exception_block() const { return statement_control_contexts.empty() ? 0 : statement_control_contexts.back().current_exception_block; }
+unsigned Parser::current_exception_block() const {
+	return statement_control_contexts.empty() ? 0 : statement_control_contexts.back().current_exception_block;
+}
 
 unsigned Parser::enter_exception_block() {
 	if (statement_control_contexts.empty())
@@ -5968,7 +6030,9 @@ struct TypeBlockResolver {
 		return true;
 	}
 
-	static bool nominal_type_anchor(Type* ty) { return dynamic_cast<RecordType*>(ty) || dynamic_cast<PackedRecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ObjectType*>(ty); }
+	static bool nominal_type_anchor(Type* ty) {
+		return dynamic_cast<RecordType*>(ty) || dynamic_cast<PackedRecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ObjectType*>(ty);
+	}
 
 	bool validate_complete_frame(Frame* frame) {
 		if (!frame)
@@ -7408,7 +7472,9 @@ static bool is_ordinal_intrinsic_argument(Type* ty) {
 // identical operand domain. Keeping that contract here prevents a root
 // fallback from being ranked as viable and then interpreted under a different
 // enum/pointer rule after selection.
-static bool is_generic_ordinal_operation(BuiltinGenericKind kind) { return kind == BuiltinGenericKind::OrdinalValue || kind == BuiltinGenericKind::UnaryOrdinalOrPointerStep || kind == BuiltinGenericKind::EnumOrPointerStep || kind == BuiltinGenericKind::OrdinalSuccessorOrPredecessor; }
+static bool is_generic_ordinal_operation(BuiltinGenericKind kind) {
+	return kind == BuiltinGenericKind::OrdinalValue || kind == BuiltinGenericKind::UnaryOrdinalOrPointerStep || kind == BuiltinGenericKind::EnumOrPointerStep || kind == BuiltinGenericKind::OrdinalSuccessorOrPredecessor;
+}
 
 static bool generic_ordinal_operation_accepts(BuiltinGenericKind kind, Type* operand) {
 	if (kind == BuiltinGenericKind::OrdinalValue || kind == BuiltinGenericKind::OrdinalSuccessorOrPredecessor)
@@ -8536,9 +8602,13 @@ Node* Parser::make_implicit_cast(Node* value, Type* target) {
 	return new Cast(value, target);
 }
 
-Node* Parser::cast(Node* a, Type* target_ty) { return cast_impl(a, target_ty, false); }
+Node* Parser::cast(Node* a, Type* target_ty) {
+	return cast_impl(a, target_ty, false);
+}
 
-Node* Parser::cast_for_destination(Node* a, Type* target_ty) { return cast_impl(a, target_ty, true); }
+Node* Parser::cast_for_destination(Node* a, Type* target_ty) {
+	return cast_impl(a, target_ty, true);
+}
 
 static Node* contextual_based_integer_destination(Node* expression, Type* target) {
 	Integer* literal = untyped_integer_constant(expression);
