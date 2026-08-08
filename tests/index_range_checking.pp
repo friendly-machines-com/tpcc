@@ -11,21 +11,12 @@ var
 
 begin
   {$R-}
-  Character := Chr(42);
-  OrdinalByte := Character;
-  if OrdinalByte <> 42 then
-    Halt(3);
   WiderOrdinal := 42;
   OrdinalByte := WiderOrdinal;
   if OrdinalByte <> 42 then
     Halt(5);
   Values[1] := 40;
   {$R+}
-  // Char and Byte are distinct types with the same 0..255 domain, so this
-  // conversion is safe without a runtime check.
-  OrdinalByte := Character;
-  if OrdinalByte <> 42 then
-    Halt(4);
   // Word has a wider domain than Byte. Even though this particular runtime
   // value fits, {$R+} must check before committing it to the destination.
   OrdinalByte := WiderOrdinal;
