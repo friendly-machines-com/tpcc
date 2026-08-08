@@ -106,6 +106,14 @@ enum class BuiltinGenericKind {
 	// merely selects the question for the otherwise unexpressible generic
 	// formal. For ShortString, logical resize does not change fixed capacity.
 	SequenceResize,
+	// Enum or record equality has the otherwise-unspellable generic relation
+	//
+	//   (a, b: E) -> Boolean
+	//
+	// for every enum or record definition E. system.pp can only spell the concrete
+	// integer/string/pointer overloads, so this fallback accepts two operands
+	// of the same type (after subrange unwrap) and lowers to o_equal.
+	AggregateEquality,
 };
 
 enum class BuiltinSyntaxKind {

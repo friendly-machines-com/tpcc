@@ -8800,15 +8800,16 @@ static bool callable_accepts_receiver(Callable* callable, Node* receiver) {
 		return false;
 
 	Type* actual_type = receiver->ty;
-	if (auto class_reference = dynamic_cast<ClassRefType*>(actual_type))
+	if (auto class_reference = dynamic_cast<ClassRefType*>(actual_type)) {
 		actual_type = class_reference->target;
-	else if (auto pointer = dynamic_cast<PointerType*>(actual_type); pointer && (dynamic_cast<RecordType*>(pointer->item_type) || dynamic_cast<PackedRecordType*>(pointer->item_type) || dynamic_cast<ObjectType*>(pointer->item_type)))
+	} else if (auto pointer = dynamic_cast<PointerType*>(actual_type); pointer && (dynamic_cast<RecordType*>(pointer->item_type) || dynamic_cast<PackedRecordType*>(pointer->item_type) || dynamic_cast<ObjectType*>(pointer->item_type))) {
 		// Records and old-style objects are value types, so their method Self
 		// is ^Owner. Receiver viability is a relation between the referenced
 		// aggregate type and the declared owner, not between the pointer
 		// carrier and Owner. C++ member application performs the corresponding
 		// `->`; do not give this receiver a separate overload score.
 		actual_type = pointer->item_type;
+	}
 	const bool type_qualifier = dynamic_cast<TypeMemberQualifier*>(receiver) != nullptr;
 	switch (method->ty->kind) {
 	case CLASS_METHOD:
@@ -8986,6 +8987,18 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	}
 	if (builtin && builtin->generic_kind == BuiltinGenericKind::AbsoluteValue && (args.empty() || !args[0] || !generic_absolute_value_accepts(args[0]->ty)))
 		raise_type_kind_mismatch_at(error_location, name_for_error + " requires a predefined numeric argument", "predefined numeric", args.empty() || !args[0] ? nullptr : args[0]->ty);
+	if (builtin && builtin->generic_kind == BuiltinGenericKind::AggregateEquality) {
+		// The root = fallback has omitted formals; recover the unspellable
+		// (E, E) -> Boolean relation here. Both operands must be the same enum
+		// definition (after subrange unwrap) -- anything a concrete System or
+		// user overload could serve never reaches this candidate.
+		Type* left = args.empty() || !args[0] ? nullptr : args[0]->ty;
+		Type* right = args.size() < 2 || !args[1] ? nullptr : args[1]->ty;
+		left = left ? subrange_range_type(left) : nullptr;
+		right = right ? subrange_range_type(right) : nullptr;
+		if (!left || !right || !dynamic_cast<EnumType*>(left) || !dynamic_cast<EnumType*>(right) || left != right)
+			raise_type_kind_mismatch_at(error_location, name_for_error + " requires two operands of the same enum type", "same enum type", left && right ? right : nullptr);
+	}
 	if (builtin && builtin->generic_kind == BuiltinGenericKind::SetMutation) {
 		// Until tpcc supports generic routine declarations, system.pp has to
 		// spell these as `(var values; const item)`. Recover the otherwise
@@ -9044,7 +9057,11 @@ Node* Parser::make_call(FinalizedCall finalized, std::vector<Node*> args, Leadin
 	auto call = new ProcCall(finalized.receiver, finalized.callee, std::move(args));
 	call->ty = call_result_type(finalized.callee);
 	if (call->ty == unknown_type()) {
-		if (descriptor && (descriptor->generic_kind == BuiltinGenericKind::UnaryOrdinalOrPointerStep || descriptor->generic_kind == BuiltinGenericKind::EnumOrPointerStep || descriptor->generic_kind == BuiltinGenericKind::SetUnionOrDifference || descriptor->generic_kind == BuiltinGenericKind::AbsoluteValue || descriptor->generic_kind == BuiltinGenericKind::OrdinalSuccessorOrPredecessor) && !call->args.empty() && call->args[0])
+		if (descriptor && descriptor->generic_kind == BuiltinGenericKind::AggregateEquality) {
+			// Aggregate equality restores the otherwise unspellable
+			// `(E, E) -> Boolean` relation: its result is Boolean.
+			call->ty = boolean_type();
+		} else if (descriptor && (descriptor->generic_kind == BuiltinGenericKind::UnaryOrdinalOrPointerStep || descriptor->generic_kind == BuiltinGenericKind::EnumOrPointerStep || descriptor->generic_kind == BuiltinGenericKind::SetUnionOrDifference || descriptor->generic_kind == BuiltinGenericKind::AbsoluteValue || descriptor->generic_kind == BuiltinGenericKind::OrdinalSuccessorOrPredecessor) && !call->args.empty() && call->args[0]) {
 			// These root declarations omit a result type equal to their
 			// converted first argument: T for Abs and ordinal/pointer
 			// stepping, or `set of T` for set algebra. Candidate matching
@@ -9053,6 +9070,7 @@ Node* Parser::make_call(FinalizedCall finalized, std::vector<Node*> args, Leadin
 			// operator expressions plus Inc/Dec mutation share one
 			// result-typing mechanism.
 			call->ty = call->args[0]->ty;
+		}
 	}
 	const BuiltinDesc* implementation = builtin_implementation_at_call_site(descriptor, directives);
 	if (implementation != descriptor)

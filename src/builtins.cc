@@ -1236,6 +1236,7 @@ static const BuiltinDesc k_checked_set_union_fallback{"::u_system::o_add", fold_
 static const BuiltinDesc k_unchecked_set_union_fallback{"::u_system::o_unchecked_add", fold_set_union, {}, BuiltinGenericKind::SetUnionOrDifference};
 static const BuiltinDesc k_checked_set_difference_fallback{"::u_system::o_subtract", fold_set_difference, {}, BuiltinGenericKind::SetUnionOrDifference};
 static const BuiltinDesc k_unchecked_set_difference_fallback{"::u_system::o_unchecked_subtract", fold_set_difference, {}, BuiltinGenericKind::SetUnionOrDifference};
+static const BuiltinDesc k_aggregate_equal_fallback{"::u_system::o_equal", fold_equal, {}, BuiltinGenericKind::AggregateEquality};
 
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name == "::u_system::t_tmethod")
@@ -1368,6 +1369,12 @@ const Frame& root_frame() {
 		register_step(OperatorInvocation::BinaryToken, "+", 2, false, &k_unchecked_add_fallback);
 		register_step(OperatorInvocation::BinaryToken, "-", 2, true, &k_checked_subtract_fallback);
 		register_step(OperatorInvocation::BinaryToken, "-", 2, false, &k_unchecked_subtract_fallback);
+
+		// Enum or record equality is otherwise unspellable in system.pp.
+		// Register the omitted-formal = candidate in the root frame; the
+		// AggregateEquality descriptor validates the relation after
+		// selection, so concrete System/user overloads still win normally.
+		register_step(OperatorInvocation::BinaryToken, "=", 2, true, &k_aggregate_equal_fallback);
 
 		// Pascal cannot declare `(set of T, set of T) -> set of T` without
 		// generic routine syntax. A set-of-unknown placeholder gives these
