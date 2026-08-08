@@ -1651,6 +1651,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	Frame* body = nullptr;
 	const char* kw = "struct";
 	RecordType* rec = nullptr;
+	ObjectType* obj = nullptr;
 	if (auto r = dynamic_cast<RecordType*>(ty)) {
 		body = r->children;
 		rec = r;
@@ -1665,6 +1666,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		kw = "struct";
 	} else if (auto o = dynamic_cast<ObjectType*>(ty)) {
 		body = o->children;
+		obj = o;
 		kw = "struct";
 	} else {
 		unhandled_type("emit_aggregate_decl", ty);
@@ -1862,7 +1864,7 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 	//   layout tree; the generic frame walk must not emit record fields again.
 	if (rec)
 		emit_aggregate_member_fields(rec->fields);
-	if (auto obj = dynamic_cast<ObjectType*>(ty))
+	if (obj)
 		emit_aggregate_member_fields(obj->fields);
 	for (auto& kv : body->value_declarations()) {
 		Node* v = kv.second.value;
@@ -1877,6 +1879,8 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 				continue;
 			}
 			if (rec)
+				continue;
+			if (obj)
 				continue;
 			if (is_class && in_meta)
 				continue;
