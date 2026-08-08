@@ -640,29 +640,29 @@ static std::string compact_directive_argument(const std::string& argument) {
 
 static constexpr std::array<DirectiveSwitchCategory, 26> directive_switch_categories = {
     DirectiveSwitchCategory::RecordPacking, // A
-    DirectiveSwitchCategory::Local,         // B
-    DirectiveSwitchCategory::Local,         // C
-    DirectiveSwitchCategory::Module,        // D
-    DirectiveSwitchCategory::Module,        // E
+    DirectiveSwitchCategory::Unsupported,   // B; local
+    DirectiveSwitchCategory::Unsupported,   // C; local
+    DirectiveSwitchCategory::Unsupported,   // D; module
+    DirectiveSwitchCategory::Unsupported,   // E; module
     DirectiveSwitchCategory::Unsupported,   // F
-    DirectiveSwitchCategory::Local,         // G
-    DirectiveSwitchCategory::Local,         // H
+    DirectiveSwitchCategory::Unsupported,   // G; local
+    DirectiveSwitchCategory::Unsupported,   // H; local
     DirectiveSwitchCategory::Local,         // I
-    DirectiveSwitchCategory::Local,         // J
+    DirectiveSwitchCategory::Unsupported,   // J; local
     DirectiveSwitchCategory::Unsupported,   // K
     DirectiveSwitchCategory::Unsupported,   // L
-    DirectiveSwitchCategory::Local,         // M
+    DirectiveSwitchCategory::Unsupported,   // M; local
     DirectiveSwitchCategory::Unsupported,   // N
     DirectiveSwitchCategory::Optimizer,     // O
-    DirectiveSwitchCategory::Module,        // P
+    DirectiveSwitchCategory::Unsupported,   // P; module
     DirectiveSwitchCategory::Local,         // Q
     DirectiveSwitchCategory::Local,         // R
-    DirectiveSwitchCategory::Local,         // S
-    DirectiveSwitchCategory::Local,         // T
+    DirectiveSwitchCategory::Unsupported,   // S; local
+    DirectiveSwitchCategory::Unsupported,   // T; local
     DirectiveSwitchCategory::Unsupported,   // U
-    DirectiveSwitchCategory::Local,         // V
-    DirectiveSwitchCategory::Local,         // W
-    DirectiveSwitchCategory::Module,        // X
+    DirectiveSwitchCategory::Unsupported,   // V; local
+    DirectiveSwitchCategory::Unsupported,   // W; local
+    DirectiveSwitchCategory::Unsupported,   // X; module
     DirectiveSwitchCategory::Unsupported,   // Y
     DirectiveSwitchCategory::Unsupported,   // Z
 };
@@ -681,6 +681,18 @@ DirectiveState::DirectiveState() {
 	// result to continue with; source which deliberately uses IOResult opts
 	// out locally with {$I-}.
 	local_switches[static_cast<size_t>('i' - 'a')] = true;
+}
+
+bool DirectiveState::switch_supported(char letter) const {
+	auto index = directive_switch_index(letter);
+	if (!index)
+		return false;
+	switch (directive_switch_categories[*index]) {
+	case DirectiveSwitchCategory::Unsupported:
+		return false;
+	default:
+		return true;
+	}
 }
 
 bool DirectiveState::switch_enabled(char letter) const {
@@ -720,6 +732,7 @@ void DirectiveState::set_switch(char letter, bool enabled) {
 		record_packing = enabled;
 		break;
 	case DirectiveSwitchCategory::Unsupported:
+		raise_parse_error("unsupported switch");
 		break;
 	}
 }
@@ -801,7 +814,7 @@ void Parser::handle_directive(const std::string& body, SourceLocation directive_
 		if (option.size() != 2 || option[0] < 'a' || option[0] > 'z' || (option[1] != '+' && option[1] != '-'))
 			raise_parse_error("$ifopt expects one option letter followed by + or -");
 		const bool requested = option[1] == '+';
-		const bool cond = directive_state.switch_enabled(option[0]) == requested;
+		const bool cond = directive_state.switch_supported(option[0]) ? directive_state.switch_enabled(option[0]) == requested : false;
 		const bool outer = current_active();
 		ifdef_stack.push_back({outer, cond, outer && cond});
 		return;
@@ -871,7 +884,7 @@ void Parser::handle_directive(const std::string& body, SourceLocation directive_
 			emit_parse_error_at(directive_location, "$iochecks expects ON or OFF");
 		return;
 	}
-	if (name == "packenum" || name == "minenumsize") {
+	if (name == "packenum" || name == "minenumsize" || name == "z") {
 		const std::string arg = compact_directive_argument(rest);
 		int value;
 		if (arg == "normal" || arg == "default")
