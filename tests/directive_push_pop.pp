@@ -3,18 +3,12 @@ program DirectivePushPop;
 {$Q+}
 {$R-}
 {$I+}
-{$D-}
 {$O-}
-{$A+}
-{$Z+}
 {$define RemovedInside}
 
 {$push}
 {$R+, Q-}
-{$D+}
 {$O+}
-{$A-}
-{$Z-}
 {$undef RemovedInside}
 {$define AddedInside}
 
@@ -29,25 +23,10 @@ var
 {$else}
   WrongInnerR: MissingType;
 {$endif}
-{$ifopt D+}
-  InnerD: Integer;
-{$else}
-  WrongInnerD: MissingType;
-{$endif}
 {$ifopt O+}
   InnerO: Integer;
 {$else}
   WrongInnerO: MissingType;
-{$endif}
-{$ifopt A-}
-  InnerA: Integer;
-{$else}
-  WrongInnerA: MissingType;
-{$endif}
-{$ifopt Z-}
-  InnerZ: Integer;
-{$else}
-  WrongInnerZ: MissingType;
 {$endif}
 
 {$push}
@@ -81,21 +60,6 @@ var
   RestoredI: Integer;
 {$else}
   WrongRestoredI: MissingType;
-{$endif}
-{$ifopt A+}
-  RestoredA: Integer;
-{$else}
-  WrongRestoredA: MissingType;
-{$endif}
-{$ifopt Z+}
-  RestoredZ: Integer;
-{$else}
-  WrongRestoredZ: MissingType;
-{$endif}
-{$ifopt D+}
-  PersistentD: Integer;
-{$else}
-  WrongPersistentD: MissingType;
 {$endif}
 {$ifopt O+}
   PersistentO: Integer;

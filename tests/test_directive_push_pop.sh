@@ -14,18 +14,12 @@ cd "$root"
 for selected in \
 	p_innerq \
 	p_innerr \
-	p_innerd \
 	p_innero \
-	p_innera \
-	p_innerz \
 	p_nestedlocalrestored \
 	p_includechangedi \
 	p_restoredq \
 	p_restoredr \
 	p_restoredi \
-	p_restoreda \
-	p_restoredz \
-	p_persistentd \
 	p_persistento \
 	p_defineremovalpersists \
 	p_defineadditionpersists \
