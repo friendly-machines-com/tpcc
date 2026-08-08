@@ -168,7 +168,7 @@ begin
 
   Caught := False;
   try
-    S := E as Single
+    S := Single(E)
   except
     on ERangeError do
       Caught := True
