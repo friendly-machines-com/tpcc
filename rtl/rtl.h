@@ -5605,9 +5605,16 @@ inline Object* m_new_instance(
 	    ->m_allocate();
 }
 
+// Pascal Free releases the instance through the virtual FreeInstance hook.
+// TObject.FreeInstance (emitted as p_freeinstance) ends in "delete this", so a
+// plain object is freed here; an override (for example a refcounted TSymtable)
+// may defer or veto the storage release. Nil-safe: the receiver is tested
+// before dispatch.
 template<typename Object>
 inline void m_free_object(Object* object) {
-	delete object;
+	if (!object)
+		return;
+	object->p_freeinstance();
 }
 
 // Plain Pascal New allocates the exact pointed-to carrier. Deliberately omit

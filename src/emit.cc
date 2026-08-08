@@ -1831,6 +1831,18 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		fprintf(active, c->super ? "\tpublic: inline m_meta* m_classref() override {\n" : "\tpublic: virtual inline m_meta* m_classref() {\n");
 		fprintf(active, "\t\treturn p_classtype();\n");
 		fprintf(active, "\t}\n");
+		// TObject.FreeInstance is declared external name 'p_freeinstance' in
+		// rtl/system.pp, so the member-emission loop skips it. The base
+		// implementation owns instance storage release: the C++ destructor
+		// tears down managed members, then delete this frees the carrier
+		// through the most-derived virtual destructor. Overrides (for example
+		// a refcounted TSymtable) may defer or veto the release; dispatch
+		// reaches this base body only through `inherited`.
+		if (!c->super && c->owning_unit && c->owning_unit->name == "system") {
+			fprintf(active, "\tpublic: virtual void p_freeinstance() {\n");
+			fprintf(active, "\t\tdelete this;\n");
+			fprintf(active, "\t}\n");
+		}
 		// fallthrough
 	}
 	// Variant-record emission strategy:
