@@ -83,7 +83,7 @@ type
     Value: Integer;
   end;
   TOverlayArray = packed record
-    Values: array[0..1] of Integer;
+    Values: array[0..7] of Byte;
   end;
   TWriteOnlyBox = object
   private
