@@ -541,7 +541,7 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 	}
 	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
 		auto item = type_layout_impl(packed_container, array->item_type, visiting);
-		if (item->alignment != 1) {
+		if (packed_container && item->alignment != 1) {
 			fprintf(stderr, "error: item with alignment != 1 is not allowed inside a packed record.\n");
 			abort();
 		}
