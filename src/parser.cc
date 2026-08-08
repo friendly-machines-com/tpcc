@@ -9966,7 +9966,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 	if (builtin && builtin->generic_kind == BuiltinGenericKind::AbsoluteValue && (args.empty() || !args[0] || !generic_absolute_value_accepts(args[0]->ty))) {
 		raise_type_kind_mismatch_at(error_location, name_for_error + " requires a predefined numeric argument", "predefined numeric", args.empty() || !args[0] ? nullptr : args[0]->ty);
 	}
-	if (builtin && builtin->generic_kind == BuiltinGenericKind::AggregateEquality) {
+	if (builtin && builtin->generic_kind == BuiltinGenericKind::EnumEquality) {
 		// The root = fallback has omitted formals; recover the unspellable
 		// (E, E) -> Boolean relation here. Both operands must be the same enum
 		// definition (after subrange unwrap) -- anything a concrete System or
@@ -10046,8 +10046,8 @@ Node* Parser::make_call(FinalizedCall finalized, std::vector<Node*> args, Leadin
 	auto call = new ProcCall(finalized.receiver, finalized.callee, std::move(args));
 	call->ty = call_result_type(finalized.callee);
 	if (call->ty == unknown_type()) {
-		if (descriptor && descriptor->generic_kind == BuiltinGenericKind::AggregateEquality) {
-			// Aggregate equality restores the otherwise unspellable
+		if (descriptor && descriptor->generic_kind == BuiltinGenericKind::EnumEquality) {
+			// Enum equality restores the otherwise unspellable
 			// `(E, E) -> Boolean` relation: its result is Boolean.
 			call->ty = boolean_type();
 		} else if (descriptor && (descriptor->generic_kind == BuiltinGenericKind::UnaryOrdinalOrPointerStep || descriptor->generic_kind == BuiltinGenericKind::EnumOrPointerStep || descriptor->generic_kind == BuiltinGenericKind::SetUnionOrDifference || descriptor->generic_kind == BuiltinGenericKind::AbsoluteValue || descriptor->generic_kind == BuiltinGenericKind::OrdinalSuccessorOrPredecessor) && !call->args.empty() && call->args[0]) {
