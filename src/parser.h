@@ -214,6 +214,7 @@ class DirectiveState {
 public:
 	DirectiveState();
 	bool switch_enabled(char letter) const;
+	bool switch_supported(char letter) const;
 	void set_switch(char letter, bool enabled);
 	int get_packenum() const {
 		return packenum;

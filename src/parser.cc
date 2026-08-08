@@ -732,7 +732,6 @@ void DirectiveState::set_switch(char letter, bool enabled) {
 		record_packing = enabled;
 		break;
 	case DirectiveSwitchCategory::Unsupported:
-		raise_parse_error("unsupported switch");
 		break;
 	}
 }
@@ -933,7 +932,11 @@ void Parser::handle_directive(const std::string& body, SourceLocation directive_
 			while (position < switches.size()) {
 				if (position + 1 >= switches.size() || switches[position] < 'a' || switches[position] > 'z' || (switches[position + 1] != '+' && switches[position + 1] != '-'))
 					raise_parse_error("malformed option switch list");
-				directive_state.set_switch(switches[position], switches[position + 1] == '+');
+				if (directive_state.switch_supported(switches[position])) {
+					directive_state.set_switch(switches[position], switches[position + 1] == '+');
+				} else {
+					raise_parse_error("switch unsupported");
+				}
 				position += 2;
 				if (position == switches.size())
 					break;
