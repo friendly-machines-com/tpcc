@@ -79,28 +79,7 @@ TMethodDefinition& tmethod_definition() {
 }
 
 Type* const k_all_intrinsics[] = {
-    &k_byte,
-    &k_shortint,
-    &k_word,
-    &k_smallint,
-    &k_longword,
-    &k_integer,
-    &k_longint,
-    &k_qword,
-    &k_int64,
-    &k_set,
-    &k_single,
-    &k_double,
-    &k_extended,
-    &k_boolean,
-    &k_char,
-    &k_shortstring,
-    &k_ansistring,
-    &k_text,
-    &k_file,
-    &k_pointer,
-    &k_fixedarray,
-    &k_unknown,
+    &k_byte, &k_shortint, &k_word, &k_smallint, &k_longword, &k_integer, &k_longint, &k_qword, &k_int64, &k_set, &k_single, &k_double, &k_extended, &k_boolean, &k_char, &k_shortstring, &k_ansistring, &k_text, &k_file, &k_pointer, &k_fixedarray, &k_unknown,
     //    &k_m_iobject,
 };
 } // namespace
@@ -118,90 +97,119 @@ UntypedIntegerType& untyped_integer_type() {
 Type* byte_type() {
 	return &k_byte;
 }
+
 Type* shortint_type() {
 	return &k_shortint;
 }
+
 Type* word_type() {
 	return &k_word;
 }
+
 Type* smallint_type() {
 	return &k_smallint;
 }
+
 Type* cardinal_type() {
 	return &k_longword;
 }
+
 Type* integer_type() {
 	return &k_integer;
 }
+
 Type* longint_type() {
 	return &k_longint;
 }
+
 Type* sizeint_type() {
 	return int64_type();
 }
+
 Type* qword_type() {
 	return &k_qword;
 }
+
 Type* int64_type() {
 	return &k_int64;
 }
+
 Type* pointer_type() {
 	return &k_pointer;
 }
+
 Type* ptrint_type() {
 	return int64_type();
 }
+
 Type* ptruint_type() {
 	return qword_type();
 }
+
 Type* boolean_type() {
 	return &k_boolean;
 }
+
 Type* char_type() {
 	return &k_char;
 }
+
 ShortStringType* shortstring_type(uint8_t capacity) {
-	if (capacity == 255)
+	if (capacity == 255) {
 		return &k_shortstring;
+	}
 	static std::array<ShortStringType*, 256> types{};
 	ShortStringType*& result = types[capacity];
-	if (!result)
+	if (!result) {
 		result = new ShortStringType(SourceLocation::builtin(), capacity);
+	}
 	return result;
 }
+
 Type* ansistring_type() {
 	return &k_ansistring;
 }
+
 Type* text_type() {
 	return &k_text;
 }
+
 Type* file_type() {
 	return &k_file;
 }
+
 Type* single_type() {
 	return &k_single;
 }
+
 Type* double_type() {
 	return &k_double;
 }
+
 Type* extended_type() {
 	return &k_extended;
 }
+
 Type* set_type() {
 	return &k_set;
 }
+
 Type* fixedarray_type() {
 	return &k_fixedarray;
 }
+
 Type* unknown_type() {
 	return &k_unknown;
 }
+
 RecordType* tmethod_type() {
 	return &tmethod_definition().type;
 }
+
 StorageSlot* tmethod_code_field() {
 	return &tmethod_definition().code;
 }
+
 StorageSlot* tmethod_data_field() {
 	return &tmethod_definition().data;
 }
@@ -209,8 +217,9 @@ StorageSlot* tmethod_data_field() {
 bool intrinsic_ordinal_bounds(Type* ty, OrdinalBounds* out) {
 	ty = distinct_storage_type(ty);
 	auto intrinsic = dynamic_cast<const IntrinsicType*>(ty);
-	if (!intrinsic || !intrinsic->ordinal_bounds)
+	if (!intrinsic || !intrinsic->ordinal_bounds) {
 		return false;
+	}
 	*out = *intrinsic->ordinal_bounds;
 	return true;
 }
@@ -238,8 +247,9 @@ bool IntrinsicType::has_managed_lifetime() const {
 bool integer_bounds(const Type* ty, OrdinalBounds* out) {
 	ty = distinct_storage_type(ty);
 	auto intrinsic = dynamic_cast<const IntrinsicType*>(ty);
-	if (!intrinsic || !intrinsic->rank || !intrinsic->ordinal_bounds)
+	if (!intrinsic || !intrinsic->rank || !intrinsic->ordinal_bounds) {
 		return false;
+	}
 	*out = *intrinsic->ordinal_bounds;
 	return true;
 }
@@ -251,8 +261,9 @@ static const Integer* const_integer_arg(Node* n) {
 static bool const_numeric_as_long_double(Node* n, long double* out) {
 	if (auto i = dynamic_cast<const Integer*>(n)) {
 		*out = static_cast<long double>(i->value);
-		if (i->negative)
+		if (i->negative) {
 			*out = -*out;
+		}
 		return true;
 	}
 	if (auto r = dynamic_cast<const Real*>(n)) {
@@ -272,8 +283,9 @@ static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const s
 	// same declaration, so its declaration-local RTL implementation must
 	// retain the constant expression instead of turning it into a runtime
 	// call. User conversion bodies do not carry this o_implicit descriptor.
-	if (args.size() != 1 || !const_integer_arg(args[0]))
+	if (args.size() != 1 || !const_integer_arg(args[0])) {
 		return ConstEvalResult::not_constant();
+	}
 	const Integer* value = const_integer_arg(args[0]);
 	return fold_integer_result(value->value, value->negative, result_ty);
 }
@@ -290,21 +302,24 @@ static ConstEvalResult fold_unchecked_integer_bits(uint64_t bits, Type* result_t
 }
 
 static ConstEvalResult fold_unary_minus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !const_integer_arg(args[0]))
+	if (args.size() != 1 || !const_integer_arg(args[0])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto i = const_integer_arg(args[0]);
 	return fold_integer_result(i->value, !i->negative && i->value != 0, result_ty);
 }
 
 static ConstEvalResult fold_unchecked_unary_minus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !const_integer_arg(args[0]))
+	if (args.size() != 1 || !const_integer_arg(args[0])) {
 		return ConstEvalResult::not_constant();
+	}
 	return fold_unchecked_integer_bits(uint64_t{0} - unchecked_integer_bits(const_integer_arg(args[0])), result_ty);
 }
 
 static ConstEvalResult fold_unary_plus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !const_integer_arg(args[0]))
+	if (args.size() != 1 || !const_integer_arg(args[0])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto i = const_integer_arg(args[0]);
 	return fold_integer_result(i->value, i->negative, result_ty);
 }
@@ -315,8 +330,9 @@ struct ConstantOrdinalCarrier {
 };
 
 static std::optional<ConstantOrdinalCarrier> constant_ordinal_carrier(Type* type) {
-	while (auto range = dynamic_cast<SubrangeType*>(type))
+	while (auto range = dynamic_cast<SubrangeType*>(type)) {
 		type = range->base_type;
+	}
 	OrdinalBounds bounds;
 	if (integer_bounds(type, &bounds)) {
 		uint64_t high_bit = bounds.signed_type ? bounds.min_magnitude : bounds.max_positive;
@@ -327,23 +343,27 @@ static std::optional<ConstantOrdinalCarrier> constant_ordinal_carrier(Type* type
 		} while (high_bit != 0);
 		return ConstantOrdinalCarrier{bits, bounds.signed_type};
 	}
-	if (type == char_type())
+	if (type == char_type()) {
 		return ConstantOrdinalCarrier{8, false};
-	if (auto enumeration = dynamic_cast<EnumType*>(type))
+	}
+	if (auto enumeration = dynamic_cast<EnumType*>(type)) {
 		return ConstantOrdinalCarrier{enumeration->carrier_bits, enumeration->carrier_signed};
+	}
 	return std::nullopt;
 }
 
 static std::optional<std::pair<bool, uint64_t>> constant_ordinal_value(Node* value) {
-	if (auto integer = dynamic_cast<Integer*>(value))
+	if (auto integer = dynamic_cast<Integer*>(value)) {
 		return std::pair{integer->negative, integer->value};
+	}
 	if (auto member = dynamic_cast<EnumMemberRef*>(value)) {
 		const bool negative = member->value < 0;
 		const uint64_t magnitude = negative ? static_cast<uint64_t>(-(member->value + 1)) + 1 : static_cast<uint64_t>(member->value);
 		return std::pair{negative, magnitude};
 	}
-	if (auto character = dynamic_cast<String*>(value); character && character->ty == char_type() && character->value.size() == 1)
+	if (auto character = dynamic_cast<String*>(value); character && character->ty == char_type() && character->value.size() == 1) {
 		return std::pair{false, static_cast<uint64_t>(static_cast<unsigned char>(character->value.front()))};
+	}
 	return std::nullopt;
 }
 
@@ -357,11 +377,13 @@ static uint64_t constant_ordinal_bits(bool negative, uint64_t magnitude, unsigne
 }
 
 static ConstEvalResult fold_ord(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !args[0])
+	if (args.size() != 1 || !args[0]) {
 		return ConstEvalResult::not_constant();
+	}
 	auto value = constant_ordinal_value(args[0]);
-	if (!value)
+	if (!value) {
 		return ConstEvalResult::not_constant();
+	}
 	// The RTL returns Ord through its declared Cardinal result, including the
 	// two's-complement representation of negative enumeration values. Use the
 	// same ordinary ordinal cast here so a constant call has exactly that
@@ -378,26 +400,31 @@ enum class ComparisonKind {
 };
 
 static int compare_ordinal_constants(const std::pair<bool, uint64_t>& a, const std::pair<bool, uint64_t>& b) {
-	if (a.first != b.first)
+	if (a.first != b.first) {
 		return a.first ? -1 : 1;
+	}
 	if (a.first) {
 		// Both negative: larger magnitude is the smaller value.
-		if (a.second != b.second)
+		if (a.second != b.second) {
 			return a.second > b.second ? -1 : 1;
+		}
 		return 0;
 	}
-	if (a.second != b.second)
+	if (a.second != b.second) {
 		return a.second < b.second ? -1 : 1;
+	}
 	return 0;
 }
 
 static ConstEvalResult fold_comparison(ComparisonKind kind, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !args[0] || !args[1])
+	if (args.size() != 2 || !args[0] || !args[1]) {
 		return ConstEvalResult::not_constant();
+	}
 	auto a = constant_ordinal_value(args[0]);
 	auto b = constant_ordinal_value(args[1]);
-	if (!a || !b)
+	if (!a || !b) {
 		return ConstEvalResult::not_constant();
+	}
 	const int c = compare_ordinal_constants(*a, *b);
 	bool result;
 	switch (kind) {
@@ -423,37 +450,46 @@ static ConstEvalResult fold_comparison(ComparisonKind kind, const std::vector<No
 static ConstEvalResult fold_lessthan(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
 	return fold_comparison(ComparisonKind::LessThan, args);
 }
+
 static ConstEvalResult fold_lessthanorequal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
 	return fold_comparison(ComparisonKind::LessThanOrEqual, args);
 }
+
 static ConstEvalResult fold_equal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
 	return fold_comparison(ComparisonKind::Equal, args);
 }
+
 static ConstEvalResult fold_greaterthan(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
 	return fold_comparison(ComparisonKind::GreaterThan, args);
 }
+
 static ConstEvalResult fold_greaterthanorequal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
 	return fold_comparison(ComparisonKind::GreaterThanOrEqual, args);
 }
 
 static ConstEvalResult fold_assigned(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !args[0])
+	if (args.size() != 1 || !args[0]) {
 		return ConstEvalResult::not_constant();
-	if (dynamic_cast<NilLiteral*>(args[0]))
+	}
+	if (dynamic_cast<NilLiteral*>(args[0])) {
 		return ConstEvalResult::success(new EnumMemberRef("::u_system::t_boolean::p_false", 0, boolean_type()));
-	if (dynamic_cast<AddrOf*>(args[0]) || dynamic_cast<RoutineRef*>(args[0]))
+	}
+	if (dynamic_cast<AddrOf*>(args[0]) || dynamic_cast<RoutineRef*>(args[0])) {
 		return ConstEvalResult::success(new EnumMemberRef("::u_system::t_boolean::p_true", 1, boolean_type()));
+	}
 	return ConstEvalResult::not_constant();
 }
 
 static ConstEvalResult fold_shift(Type* result_ty, const std::vector<Node*>& args, bool left) {
-	if (args.size() != 2 || !args[0] || !args[1])
+	if (args.size() != 2 || !args[0] || !args[1]) {
 		return ConstEvalResult::not_constant();
+	}
 	auto value = constant_ordinal_value(args[0]);
 	auto count = constant_ordinal_value(args[1]);
 	auto carrier = constant_ordinal_carrier(result_ty);
-	if (!value || !count || !carrier || carrier->bits == 0)
+	if (!value || !count || !carrier || carrier->bits == 0) {
 		return ConstEvalResult::not_constant();
+	}
 
 	const uint64_t mask = constant_ordinal_mask(carrier->bits);
 	const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
@@ -483,19 +519,23 @@ struct ConstantSetRange {
 };
 
 static int compare_constant_set_keys(const ConstantSetKey& first, const ConstantSetKey& second) {
-	if (first.first != second.first)
+	if (first.first != second.first) {
 		return first.first ? -1 : 1;
-	if (first.second == second.second)
+	}
+	if (first.second == second.second) {
 		return 0;
-	if (first.first)
+	}
+	if (first.first) {
 		return first.second > second.second ? -1 : 1;
+	}
 	return first.second < second.second ? -1 : 1;
 }
 
 static std::optional<ConstantSetKey> constant_set_predecessor(ConstantSetKey value) {
 	if (value.first) {
-		if (value.second == UINT64_MAX)
+		if (value.second == UINT64_MAX) {
 			return std::nullopt;
+		}
 		++value.second;
 		return value;
 	}
@@ -514,44 +554,51 @@ static std::optional<ConstantSetKey> constant_set_successor(ConstantSetKey value
 		}
 		return ConstantSetKey{false, 0};
 	}
-	if (value.second == UINT64_MAX)
+	if (value.second == UINT64_MAX) {
 		return std::nullopt;
+	}
 	++value.second;
 	return value;
 }
 
 static std::optional<std::vector<ConstantSetRange>> constant_set_ranges(SetLiteral* set) {
-	if (!set)
+	if (!set) {
 		return std::nullopt;
+	}
 	std::vector<ConstantSetRange> ranges;
 	ranges.reserve(set->items.size());
 	for (const SetLiteral::Item& item : set->items) {
 		auto lower = constant_ordinal_value(item.lower);
 		auto upper = constant_ordinal_value(item.upper ? item.upper : item.lower);
-		if (!lower || !upper)
+		if (!lower || !upper) {
 			return std::nullopt;
+		}
 		ConstantSetRange range{*lower, *upper};
-		if (compare_constant_set_keys(range.lower, range.upper) <= 0)
+		if (compare_constant_set_keys(range.lower, range.upper) <= 0) {
 			ranges.push_back(range);
+		}
 	}
 	return ranges;
 }
 
 static ConstEvalResult constant_set_literal(Type* result_ty, const std::vector<ConstantSetRange>& ranges) {
 	auto result_set = dynamic_cast<FixedSetType*>(result_ty);
-	if (!result_set)
+	if (!result_set) {
 		return ConstEvalResult::not_constant();
+	}
 	std::vector<SetLiteral::Item> items;
 	items.reserve(ranges.size());
 	for (const ConstantSetRange& range : ranges) {
 		ConstEvalResult lower = const_explicit_ordinal_cast(range.lower.second, range.lower.first, result_set->item_type);
-		if (lower.kind != ConstEvalResult::Kind::Success)
+		if (lower.kind != ConstEvalResult::Kind::Success) {
 			return lower;
+		}
 		Node* upper_node = nullptr;
 		if (compare_constant_set_keys(range.lower, range.upper) != 0) {
 			ConstEvalResult upper = const_explicit_ordinal_cast(range.upper.second, range.upper.first, result_set->item_type);
-			if (upper.kind != ConstEvalResult::Kind::Success)
+			if (upper.kind != ConstEvalResult::Kind::Success) {
 				return upper;
+			}
 			upper_node = upper.node;
 		}
 		items.push_back(SetLiteral::Item{lower.node, upper_node});
@@ -560,24 +607,28 @@ static ConstEvalResult constant_set_literal(Type* result_ty, const std::vector<C
 }
 
 static ConstEvalResult fold_set_union(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty))
+	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty)) {
 		return ConstEvalResult::not_constant();
+	}
 	auto first = dynamic_cast<SetLiteral*>(args[0]);
 	auto second = dynamic_cast<SetLiteral*>(args[1]);
-	if (!first || !second)
+	if (!first || !second) {
 		return ConstEvalResult::not_constant();
+	}
 	std::vector<SetLiteral::Item> items = first->items;
 	items.insert(items.end(), second->items.begin(), second->items.end());
 	return ConstEvalResult::success(new SetLiteral(std::move(items), result_ty));
 }
 
 static ConstEvalResult fold_set_difference(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty))
+	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty)) {
 		return ConstEvalResult::not_constant();
+	}
 	auto remaining = constant_set_ranges(dynamic_cast<SetLiteral*>(args[0]));
 	auto removed = constant_set_ranges(dynamic_cast<SetLiteral*>(args[1]));
-	if (!remaining || !removed)
+	if (!remaining || !removed) {
 		return ConstEvalResult::not_constant();
+	}
 
 	for (const ConstantSetRange& removal : *removed) {
 		std::vector<ConstantSetRange> next;
@@ -589,14 +640,16 @@ static ConstEvalResult fold_set_difference(ConstEvalContext&, Type* result_ty, c
 			}
 			if (compare_constant_set_keys(range.lower, removal.lower) < 0) {
 				auto upper = constant_set_predecessor(removal.lower);
-				if (!upper)
+				if (!upper) {
 					return ConstEvalResult::not_constant();
+				}
 				next.push_back(ConstantSetRange{range.lower, *upper});
 			}
 			if (compare_constant_set_keys(removal.upper, range.upper) < 0) {
 				auto lower = constant_set_successor(removal.upper);
-				if (!lower)
+				if (!lower) {
 					return ConstEvalResult::not_constant();
+				}
 				next.push_back(ConstantSetRange{*lower, range.upper});
 			}
 		}
@@ -606,17 +659,21 @@ static ConstEvalResult fold_set_difference(ConstEvalContext&, Type* result_ty, c
 }
 
 static ConstEvalResult fold_abs_impl(Type* result_ty, const std::vector<Node*>& args, bool checked) {
-	if (args.size() != 1 || !args[0])
+	if (args.size() != 1 || !args[0]) {
 		return ConstEvalResult::not_constant();
-	if (auto real = dynamic_cast<Real*>(args[0]))
+	}
+	if (auto real = dynamic_cast<Real*>(args[0])) {
 		return ConstEvalResult::success(new Real(::fabsl(real->value), result_ty));
+	}
 	auto value = constant_ordinal_value(args[0]);
 	auto carrier = constant_ordinal_carrier(result_ty);
-	if (!value || !carrier)
+	if (!value || !carrier) {
 		return ConstEvalResult::not_constant();
+	}
 	const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
-	if (checked && value->first && carrier->signed_type && raw == (uint64_t{1} << (carrier->bits - 1)))
+	if (checked && value->first && carrier->signed_type && raw == (uint64_t{1} << (carrier->bits - 1))) {
 		return ConstEvalResult::error("integer constant overflow");
+	}
 	const uint64_t absolute = value->first ? (uint64_t{0} - raw) & constant_ordinal_mask(carrier->bits) : raw;
 	return const_explicit_ordinal_cast(absolute, false, result_ty);
 }
@@ -630,19 +687,22 @@ static ConstEvalResult fold_unchecked_abs(ConstEvalContext&, Type* result_ty, co
 }
 
 static ConstEvalResult fold_ordinal_step(Type* result_ty, const std::vector<Node*>& args, bool increment, bool checked) {
-	if (args.size() != 1 || !args[0])
+	if (args.size() != 1 || !args[0]) {
 		return ConstEvalResult::not_constant();
+	}
 	auto value = constant_ordinal_value(args[0]);
 	auto carrier = constant_ordinal_carrier(result_ty);
-	if (!value || !carrier || carrier->bits == 0)
+	if (!value || !carrier || carrier->bits == 0) {
 		return ConstEvalResult::not_constant();
+	}
 	const uint64_t mask = constant_ordinal_mask(carrier->bits);
 	const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
 	if (checked) {
 		const uint64_t minimum = carrier->signed_type ? uint64_t{1} << (carrier->bits - 1) : 0;
 		const uint64_t maximum = carrier->signed_type ? minimum - 1 : mask;
-		if ((increment && raw == maximum) || (!increment && raw == minimum))
+		if ((increment && raw == maximum) || (!increment && raw == minimum)) {
 			return ConstEvalResult::error("integer constant overflow");
+		}
 	}
 	const uint64_t stepped = increment ? (raw + 1) & mask : (raw - 1) & mask;
 	return const_explicit_ordinal_cast(stepped, false, result_ty);
@@ -672,8 +732,9 @@ enum class BitwiseOperation {
 
 // FIXME: maybe get the target types from the operand types.
 static ConstEvalResult fold_bitwise(Type* result_ty, const std::vector<Node*>& args, BitwiseOperation op) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto a_arg = const_integer_arg(args[0]);
 	auto a = unchecked_integer_bits(a_arg);
 	auto b_arg = const_integer_arg(args[1]);
@@ -707,11 +768,13 @@ static ConstEvalResult fold_bitwise_xor(ConstEvalContext&, Type* result_ty, cons
 }
 
 static ConstEvalResult fold_logical_not(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !const_integer_arg(args[0]))
+	if (args.size() != 1 || !const_integer_arg(args[0])) {
 		return ConstEvalResult::not_constant();
+	}
 	OrdinalBounds bounds;
-	if (!integer_bounds(result_ty, &bounds))
+	if (!integer_bounds(result_ty, &bounds)) {
 		return ConstEvalResult::not_constant();
+	}
 
 	// The Delphi operator name is LogicalNot for both Boolean negation and
 	// integer complement. For the integer overload, complement exactly the
@@ -743,16 +806,18 @@ static bool add_u64_checked(uint64_t a, uint64_t b, uint64_t* out) {
 }
 
 static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& args, bool subtract) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto a = const_integer_arg(args[0]);
 	auto b = const_integer_arg(args[1]);
 	bool bneg = subtract ? (!b->negative && b->value != 0) : b->negative;
 	bool neg = false;
 	uint64_t mag = 0;
 	if (a->negative == bneg) {
-		if (!add_u64_checked(a->value, b->value, &mag))
+		if (!add_u64_checked(a->value, b->value, &mag)) {
 			return ConstEvalResult::error("integer constant overflow");
+		}
 		neg = a->negative;
 	} else if (a->value >= b->value) {
 		mag = a->value - b->value;
@@ -767,13 +832,15 @@ static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& a
 static ConstEvalResult fold_add(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	return fold_add_sub(result_ty, args, false);
 }
+
 static ConstEvalResult fold_subtract(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	return fold_add_sub(result_ty, args, true);
 }
 
 static ConstEvalResult fold_unchecked_add_sub(Type* result_ty, const std::vector<Node*>& args, bool subtract) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	uint64_t a = unchecked_integer_bits(const_integer_arg(args[0]));
 	uint64_t b = unchecked_integer_bits(const_integer_arg(args[1]));
 	return fold_unchecked_integer_bits(subtract ? a - b : a + b, result_ty);
@@ -788,55 +855,64 @@ static ConstEvalResult fold_unchecked_subtract(ConstEvalContext&, Type* result_t
 }
 
 static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto a = const_integer_arg(args[0]);
 	auto b = const_integer_arg(args[1]);
 	uint64_t mag = 0;
-	if (a->value != 0 && b->value > UINT64_MAX / a->value)
+	if (a->value != 0 && b->value > UINT64_MAX / a->value) {
 		return ConstEvalResult::error("integer constant overflow");
+	}
 	mag = a->value * b->value;
 	bool neg = (a->negative != b->negative) && mag != 0;
 	return fold_integer_result(mag, neg, result_ty);
 }
 
 static ConstEvalResult fold_unchecked_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	return fold_unchecked_integer_bits(unchecked_integer_bits(const_integer_arg(args[0])) * unchecked_integer_bits(const_integer_arg(args[1])), result_ty);
 }
 
 static ConstEvalResult fold_intdivide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto a = const_integer_arg(args[0]);
 	auto b = const_integer_arg(args[1]);
-	if (b->value == 0)
+	if (b->value == 0) {
 		return ConstEvalResult::error("integer constant division by zero");
+	}
 	uint64_t mag = a->value / b->value;
 	bool neg = (a->negative != b->negative) && mag != 0;
 	return fold_integer_result(mag, neg, result_ty);
 }
 
 static ConstEvalResult fold_unchecked_intdivide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto a = const_integer_arg(args[0]);
 	auto b = const_integer_arg(args[1]);
-	if (b->value == 0)
+	if (b->value == 0) {
 		return ConstEvalResult::error("integer constant division by zero");
+	}
 	uint64_t magnitude = a->value / b->value;
 	bool negative = (a->negative != b->negative) && magnitude != 0;
 	return const_explicit_ordinal_cast(magnitude, negative, result_ty);
 }
 
 static ConstEvalResult fold_modulus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1]))
+	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
+	}
 	auto a = const_integer_arg(args[0]);
 	auto b = const_integer_arg(args[1]);
-	if (b->value == 0)
+	if (b->value == 0) {
 		return ConstEvalResult::error("integer constant modulo by zero");
+	}
 	uint64_t mag = a->value % b->value;
 	// Pascal's integer remainder follows the dividend's sign. For zero, keep the
 	// canonical non-negative representation.
@@ -845,36 +921,45 @@ static ConstEvalResult fold_modulus(ConstEvalContext&, Type* result_ty, const st
 }
 
 static ConstEvalResult fold_length(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !args[0])
+	if (args.size() != 1 || !args[0]) {
 		return ConstEvalResult::not_constant();
-	if (auto string = dynamic_cast<String*>(args[0]))
+	}
+	if (auto string = dynamic_cast<String*>(args[0])) {
 		return ConstEvalResult::success(new Integer(string->value.size(), result_ty));
-	if (auto array = dynamic_cast<FixedArrayType*>(args[0]->ty))
+	}
+	if (auto array = dynamic_cast<FixedArrayType*>(args[0]->ty)) {
 		return ConstEvalResult::success(new Integer(array->range.length, result_ty));
+	}
 	return ConstEvalResult::not_constant();
 }
 
 static ConstEvalResult fold_divide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2)
+	if (args.size() != 2) {
 		return ConstEvalResult::not_constant();
+	}
 	long double a = 0.0, b = 0.0;
-	if (!const_numeric_as_long_double(args[0], &a) || !const_numeric_as_long_double(args[1], &b))
+	if (!const_numeric_as_long_double(args[0], &a) || !const_numeric_as_long_double(args[1], &b)) {
 		return ConstEvalResult::not_constant();
-	if (b == 0.0)
+	}
+	if (b == 0.0) {
 		return ConstEvalResult::error("real constant division by zero");
+	}
 	return ConstEvalResult::success(new Real(a / b, result_ty));
 }
 
 static ConstEvalResult fold_real_to_int64(const std::vector<Node*>& args, bool round) {
-	if (args.size() != 1)
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
+	}
 	long double value = 0.0L;
-	if (!const_numeric_as_long_double(args[0], &value))
+	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
+	}
 	long double integral = round ? ::nearbyintl(value) : ::truncl(value);
 	constexpr long double limit = 0x1p63L;
-	if (!__builtin_isfinite(integral) || integral < -limit || integral >= limit)
+	if (!__builtin_isfinite(integral) || integral < -limit || integral >= limit) {
 		return ConstEvalResult::error(round ? "Round constant is outside the Int64 range" : "Trunc constant is outside the Int64 range");
+	}
 	bool negative = integral < 0.0L;
 	long double magnitude = negative ? -integral : integral;
 	return fold_integer_result(static_cast<uint64_t>(magnitude), negative, int64_type());
@@ -889,71 +974,86 @@ static ConstEvalResult fold_round(ConstEvalContext&, Type*, const std::vector<No
 }
 
 static ConstEvalResult fold_frac(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1)
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
+	}
 	long double value = 0.0L;
-	if (!const_numeric_as_long_double(args[0], &value))
+	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
+	}
 	long double integral = 0.0L;
 	return ConstEvalResult::success(new Real(::modfl(value, &integral), result_ty));
 }
 
 static ConstEvalResult fold_sqrt(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1)
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
+	}
 	long double value = 0.0L;
-	if (!const_numeric_as_long_double(args[0], &value))
+	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
+	}
 	return ConstEvalResult::success(new Real(::sqrtl(value), result_ty));
 }
 
 static ConstEvalResult fold_sqr(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1)
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
-	if (auto value = const_integer_arg(args[0]))
+	}
+	if (auto value = const_integer_arg(args[0])) {
 		return fold_unchecked_integer_bits(unchecked_integer_bits(value) * unchecked_integer_bits(value), result_ty);
+	}
 	long double value = 0.0L;
-	if (!const_numeric_as_long_double(args[0], &value))
+	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
+	}
 	return ConstEvalResult::success(new Real(value * value, result_ty));
 }
 
 static ConstEvalResult fold_exp(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1)
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
+	}
 	long double value = 0.0L;
-	if (!const_numeric_as_long_double(args[0], &value))
+	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
+	}
 	return ConstEvalResult::success(new Real(::expl(value), result_ty));
 }
 
 static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1)
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
+	}
 	long double value = 0.0L;
-	if (!const_numeric_as_long_double(args[0], &value))
+	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
+	}
 	return ConstEvalResult::success(new Real(::logl(value), result_ty));
 }
 
 static ConstEvalResult fold_pos(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2)
+	if (args.size() != 2) {
 		return ConstEvalResult::not_constant();
+	}
 	auto needle = dynamic_cast<const String*>(args[0]);
 	auto haystack = dynamic_cast<const String*>(args[1]);
-	if (!needle || !haystack)
+	if (!needle || !haystack) {
 		return ConstEvalResult::not_constant();
+	}
 	std::size_t found = haystack->value.find(needle->value);
 	uint64_t pascal_index = found == std::string::npos ? 0 : static_cast<uint64_t>(found + 1);
 	return fold_integer_result(pascal_index, false, result_ty);
 }
 
 static ConstEvalResult fold_chr(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1)
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
+	}
 	auto value = dynamic_cast<const Integer*>(args[0]);
-	if (!value || value->negative || value->value > 255)
+	if (!value || value->negative || value->value > 255) {
 		return ConstEvalResult::not_constant();
+	}
 	return ConstEvalResult::success(new String(std::string(1, static_cast<char>(static_cast<unsigned char>(value->value))), result_ty));
 }
 
@@ -1239,15 +1339,18 @@ static const BuiltinDesc k_unchecked_set_difference_fallback{"::u_system::o_unch
 static const BuiltinDesc k_aggregate_equal_fallback{"::u_system::o_equal", fold_equal, {}, BuiltinGenericKind::AggregateEquality};
 
 Type* lookup_builtin_type(std::string cxx_name) {
-	if (cxx_name == "::u_system::t_tmethod")
+	if (cxx_name == "::u_system::t_tmethod") {
 		return tmethod_type();
+	}
 	// FIXME: A 32-bit -P target must map the signed names to LongInt and the
 	// unsigned names to LongWord. They are aliases, so lookup returns the
 	// canonical Type* rather than manufacturing four nominal intrinsics.
-	if (cxx_name == "::u_system::t_ptrint" || cxx_name == "::u_system::t_sizeint")
+	if (cxx_name == "::u_system::t_ptrint" || cxx_name == "::u_system::t_sizeint") {
 		return int64_type();
-	if (cxx_name == "::u_system::t_ptruint" || cxx_name == "::u_system::t_sizeuint")
+	}
+	if (cxx_name == "::u_system::t_ptruint" || cxx_name == "::u_system::t_sizeuint") {
 		return qword_type();
+	}
 	for (auto t : k_all_intrinsics) {
 		if (auto q = dynamic_cast<IntrinsicType*>(t)) {
 			if (q->cxx_name == cxx_name) {
@@ -1280,8 +1383,9 @@ Type* lookup_builtin_type(std::string cxx_name) {
 
 const BuiltinDesc* lookup_builtin_desc(std::string_view cxx_name) {
 	for (auto& b : k_builtins) {
-		if (b.cxx_name == cxx_name)
+		if (b.cxx_name == cxx_name) {
 			return &b;
+		}
 	}
 	return nullptr;
 }
@@ -1351,8 +1455,9 @@ const Frame& root_frame() {
 			assert(identifier);
 			std::vector<Parameter> formals;
 			formals.emplace_back("value", "p_value", unknown_type(), ParamMode::Value, nullptr);
-			if (arity == 2)
+			if (arity == 2) {
 				formals.emplace_back("amount", "p_amount", unknown_type(), ParamMode::Value, nullptr);
+			}
 			auto routine_type = new RoutineType(SourceLocation::builtin(), std::move(formals), unknown_type(), ROUTINE);
 			auto procedure = new Procedure(std::string(descriptor->cxx_name), std::string(*identifier), routine_type, true);
 			procedure->builtin_desc = descriptor;
@@ -1440,8 +1545,10 @@ const Frame& root_frame() {
 const char* IntrinsicType::diagnostic_kind() const {
 	return "intrinsic";
 }
+
 void IntrinsicType::collect_diagnostic_edges(ErrorLetContext*) const {
 }
+
 void IntrinsicType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	// IntrinsicType is a compiler-provided Pascal-visible type. Do not print the
 	// C++ carrier name here, and do not infer a semantic family from the widening
@@ -1456,11 +1563,13 @@ void IntrinsicType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 const char* Builtin::diagnostic_kind() const {
 	return "builtin";
 }
+
 void Builtin::collect_diagnostic_edges(ErrorLetContext*) const {
 	// A Builtin denotes an opaque C++ overload set such as
 	// ::u_system::p_include, not one Pascal RoutineType. Do not add Node::ty
 	// here; it is intentionally null.
 }
+
 void Builtin::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	// Builtin::desc names the C++ implementation hook. Diagnostics describe the
 	// source-visible value instead; the let binding carries the Pascal name when

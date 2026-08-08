@@ -51,14 +51,16 @@ DistinctType::DistinctType(SourceLocation source_location, std::string cxx_name,
 }
 
 Type* distinct_storage_type(Type* type) {
-	while (auto distinct = dynamic_cast<DistinctType*>(type))
+	while (auto distinct = dynamic_cast<DistinctType*>(type)) {
 		type = distinct->base_type;
+	}
 	return type;
 }
 
 const Type* distinct_storage_type(const Type* type) {
-	while (auto distinct = dynamic_cast<const DistinctType*>(type))
+	while (auto distinct = dynamic_cast<const DistinctType*>(type)) {
 		type = distinct->base_type;
+	}
 	return type;
 }
 
@@ -79,14 +81,16 @@ EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::
 }
 
 const EnumType::Member* EnumType::min_member() const {
-	if (members.empty())
+	if (members.empty()) {
 		return nullptr;
+	}
 	return &*std::min_element(members.begin(), members.end(), [](const Member& a, const Member& b) { return a.value < b.value; });
 }
 
 const EnumType::Member* EnumType::max_member() const {
-	if (members.empty())
+	if (members.empty()) {
 		return nullptr;
+	}
 	return &*std::max_element(members.begin(), members.end(), [](const Member& a, const Member& b) { return a.value < b.value; });
 }
 
@@ -184,43 +188,55 @@ ObjectType::ObjectType(SourceLocation source_location, Frame* children, ObjectTy
 }
 
 static bool variant_has_managed_lifetime(const VariantPart* variant) {
-	if (!variant)
+	if (!variant) {
 		return false;
-	if (variant->selector_type && variant->selector_type->has_managed_lifetime())
+	}
+	if (variant->selector_type && variant->selector_type->has_managed_lifetime()) {
 		return true;
+	}
 	for (const VariantArm& arm : variant->arms) {
-		for (const AggregateField& field : arm.fields)
-			if (field.ty && field.ty->has_managed_lifetime())
+		for (const AggregateField& field : arm.fields) {
+			if (field.ty && field.ty->has_managed_lifetime()) {
 				return true;
-		if (variant_has_managed_lifetime(arm.variant))
+			}
+		}
+		if (variant_has_managed_lifetime(arm.variant)) {
 			return true;
+		}
 	}
 	return false;
 }
 
 bool RecordType::has_managed_lifetime() const {
-	for (const AggregateField& field : fields)
-		if (field.ty && field.ty->has_managed_lifetime())
+	for (const AggregateField& field : fields) {
+		if (field.ty && field.ty->has_managed_lifetime()) {
 			return true;
+		}
+	}
 	return variant_has_managed_lifetime(variant);
 }
 
 bool PackedRecordType::has_managed_lifetime() const {
-	for (const AggregateField& field : fields)
-		if (field.ty && field.ty->has_managed_lifetime())
+	for (const AggregateField& field : fields) {
+		if (field.ty && field.ty->has_managed_lifetime()) {
 			return true;
+		}
+	}
 	return variant_has_managed_lifetime(variant);
 }
 
 bool ObjectType::has_managed_lifetime() const {
-	if (super && super->has_managed_lifetime())
+	if (super && super->has_managed_lifetime()) {
 		return true;
-	if (!children)
+	}
+	if (!children) {
 		return false;
+	}
 	for (const auto& declaration : children->value_declarations()) {
 		auto slot = dynamic_cast<StorageSlot*>(declaration.second.value);
-		if (slot && slot->kind == StorageSlot::Kind::AggregateMember && slot->ty && slot->ty->has_managed_lifetime())
+		if (slot && slot->kind == StorageSlot::Kind::AggregateMember && slot->ty && slot->ty->has_managed_lifetime()) {
 			return true;
+		}
 	}
 	return false;
 }
@@ -231,6 +247,7 @@ ModuleType::ModuleType(SourceLocation source_location, Frame* children) : Type(s
 
 UnitType::UnitType(SourceLocation source_location) : Type(std::move(source_location)) {
 }
+
 UntypedIntegerType::UntypedIntegerType(SourceLocation source_location) : Type(std::move(source_location)) {
 }
 
@@ -247,8 +264,9 @@ bool ShortStringType::same_cxx_carrier_definition_as(const Type* other) const {
 
 bool FixedArrayType::same_cxx_carrier_definition_as(const Type* other) const {
 	auto array = dynamic_cast<const FixedArrayType*>(other);
-	if (!array || range.length != array->range.length || range.lower_ordinal.negative != array->range.lower_ordinal.negative || range.lower_ordinal.magnitude != array->range.lower_ordinal.magnitude || !item_type->same_cxx_carrier_as(array->item_type))
+	if (!array || range.length != array->range.length || range.lower_ordinal.negative != array->range.lower_ordinal.negative || range.lower_ordinal.magnitude != array->range.lower_ordinal.magnitude || !item_type->same_cxx_carrier_as(array->item_type)) {
 		return false;
+	}
 	Type* lower_type = range.lower_bound ? range.lower_bound->ty : nullptr;
 	Type* other_lower_type = array->range.lower_bound ? array->range.lower_bound->ty : nullptr;
 	return lower_type && other_lower_type && lower_type->same_cxx_carrier_as(other_lower_type);
@@ -292,10 +310,12 @@ bool ClassRefType::same_cxx_carrier_definition_as(const Type* other) const {
 
 bool PointerType::same_cxx_carrier_definition_as(const Type* other) const {
 	auto pointer = dynamic_cast<const PointerType*>(other);
-	if (!pointer || is_untyped() != pointer->is_untyped())
+	if (!pointer || is_untyped() != pointer->is_untyped()) {
 		return false;
-	if (is_untyped())
+	}
+	if (is_untyped()) {
 		return cxx_name == pointer->cxx_name;
+	}
 	return item_type->same_cxx_carrier_as(pointer->item_type);
 }
 
@@ -307,22 +327,25 @@ bool RoutineType::same_cxx_carrier_definition_as(const Type* other) const {
 namespace {
 
 bool checked_add_u64(uint64_t a, uint64_t b, uint64_t* result) {
-	if (b > std::numeric_limits<uint64_t>::max() - a)
+	if (b > std::numeric_limits<uint64_t>::max() - a) {
 		return false;
+	}
 	*result = a + b;
 	return true;
 }
 
 bool checked_multiply_u64(uint64_t a, uint64_t b, uint64_t* result) {
-	if (a != 0 && b > std::numeric_limits<uint64_t>::max() / a)
+	if (a != 0 && b > std::numeric_limits<uint64_t>::max() / a) {
 		return false;
+	}
 	*result = a * b;
 	return true;
 }
 
 bool align_up_u64(uint64_t value, uint64_t alignment, uint64_t* result) {
-	if (alignment == 0)
+	if (alignment == 0) {
 		return false;
+	}
 	const uint64_t remainder = value % alignment;
 	return remainder == 0 ? (*result = value, true) : checked_add_u64(value, alignment - remainder, result);
 }
@@ -338,14 +361,17 @@ struct SequentialLayout {
 // not packed.
 bool append_aligned_field(SequentialLayout& layout, StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
 	auto field_layout = type_layout_impl(false, ty, visiting);
-	if (!field_layout)
+	if (!field_layout) {
 		return false;
+	}
 	uint64_t offset;
-	if (!align_up_u64(layout.offset, field_layout->alignment, &offset))
+	if (!align_up_u64(layout.offset, field_layout->alignment, &offset)) {
 		return false;
+	}
 	uint64_t end;
-	if (!checked_add_u64(offset, field_layout->size, &end))
+	if (!checked_add_u64(offset, field_layout->size, &end)) {
 		return false;
+	}
 	layout.fields.push_back(AggregateFieldLayout{slot, ty, offset, field_layout->size});
 	layout.offset = end;
 	layout.alignment = std::max(layout.alignment, field_layout->alignment);
@@ -353,48 +379,59 @@ bool append_aligned_field(SequentialLayout& layout, StorageSlot* slot, Type* ty,
 }
 
 bool append_aligned_variant(SequentialLayout& layout, VariantPart* variant, std::set<Type*>& visiting) {
-	if (!variant)
+	if (!variant) {
 		return true;
-	if (variant->has_selector && !append_aligned_field(layout, variant->selector_slot, variant->selector_type, visiting))
+	}
+	if (variant->has_selector && !append_aligned_field(layout, variant->selector_slot, variant->selector_type, visiting)) {
 		return false;
-	if (variant->arms.empty())
+	}
+	if (variant->arms.empty()) {
 		return true;
+	}
 
 	uint64_t union_size = 0;
 	uint64_t union_alignment = 1;
 	std::vector<std::vector<AggregateFieldLayout>> arm_fields;
 	for (const auto& arm : variant->arms) {
 		SequentialLayout arm_layout;
-		for (const auto& field : arm.fields)
-			if (!append_aligned_field(arm_layout, field.slot, field.ty, visiting))
+		for (const auto& field : arm.fields) {
+			if (!append_aligned_field(arm_layout, field.slot, field.ty, visiting)) {
 				return false;
-		if (!append_aligned_variant(arm_layout, arm.variant, visiting))
+			}
+		}
+		if (!append_aligned_variant(arm_layout, arm.variant, visiting)) {
 			return false;
+		}
 
 		uint64_t arm_size;
-		if (!align_up_u64(arm_layout.offset == 0 ? 1 : arm_layout.offset, arm_layout.alignment, &arm_size))
+		if (!align_up_u64(arm_layout.offset == 0 ? 1 : arm_layout.offset, arm_layout.alignment, &arm_size)) {
 			return false;
+		}
 		union_size = std::max(union_size, arm_size);
 		union_alignment = std::max(union_alignment, arm_layout.alignment);
 		arm_fields.push_back(std::move(arm_layout.fields));
 	}
 
 	uint64_t union_offset;
-	if (!align_up_u64(layout.offset, union_alignment, &union_offset) || !checked_add_u64(union_offset, union_size, &layout.offset))
+	if (!align_up_u64(layout.offset, union_alignment, &union_offset) || !checked_add_u64(union_offset, union_size, &layout.offset)) {
 		return false;
+	}
 	layout.alignment = std::max(layout.alignment, union_alignment);
-	for (auto& fields : arm_fields)
+	for (auto& fields : arm_fields) {
 		for (auto& field : fields) {
-			if (!checked_add_u64(field.offset, union_offset, &field.offset))
+			if (!checked_add_u64(field.offset, union_offset, &field.offset)) {
 				return false;
+			}
 			layout.fields.push_back(field);
 		}
+	}
 	return true;
 }
 
 std::optional<RecordLayout> record_layout_impl(RecordType* record, std::set<Type*>& visiting) {
-	if (!visiting.insert(record).second)
+	if (!visiting.insert(record).second) {
 		return std::nullopt;
+	}
 
 	SequentialLayout fixed;
 	for (const auto& field : record->fields) {
@@ -425,8 +462,9 @@ std::optional<RecordLayout> record_layout_impl(RecordType* record, std::set<Type
 // backend handles vmt/vptr via its own ABI when an object declares virtual
 // methods; this layout calculation does not model vptr, only declared fields.
 std::optional<TypeLayout> object_layout_impl(ObjectType* object, std::set<Type*>& visiting) {
-	if (!visiting.insert(object).second)
+	if (!visiting.insert(object).second) {
 		return std::nullopt;
+	}
 
 	SequentialLayout fixed;
 
@@ -460,57 +498,70 @@ struct PackedSequentialLayout {
 
 bool append_packed_field(PackedSequentialLayout& layout, StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
 	auto field_layout = type_layout_impl(true, ty, visiting); // FIXME what
-	if (!field_layout)
+	if (!field_layout) {
 		return false;
+	}
 	uint64_t end;
-	if (!checked_add_u64(layout.offset, field_layout->size, &end))
+	if (!checked_add_u64(layout.offset, field_layout->size, &end)) {
 		return false;
+	}
 	layout.fields.push_back(AggregateFieldLayout{slot, ty, layout.offset, field_layout->size});
 	layout.offset = end;
 	return true;
 }
 
 bool append_packed_variant(PackedSequentialLayout& layout, VariantPart* variant, std::set<Type*>& visiting) {
-	if (!variant)
+	if (!variant) {
 		return true;
-	if (variant->has_selector && !append_packed_field(layout, variant->selector_slot, variant->selector_type, visiting))
+	}
+	if (variant->has_selector && !append_packed_field(layout, variant->selector_slot, variant->selector_type, visiting)) {
 		return false;
-	if (variant->arms.empty())
+	}
+	if (variant->arms.empty()) {
 		return true;
+	}
 
 	const uint64_t union_offset = layout.offset;
 	uint64_t union_size = 0;
 	std::vector<std::vector<AggregateFieldLayout>> arm_fields;
 	for (const auto& arm : variant->arms) {
 		PackedSequentialLayout arm_layout;
-		for (const auto& field : arm.fields)
-			if (!append_packed_field(arm_layout, field.slot, field.ty, visiting))
+		for (const auto& field : arm.fields) {
+			if (!append_packed_field(arm_layout, field.slot, field.ty, visiting)) {
 				return false;
-		if (!append_packed_variant(arm_layout, arm.variant, visiting))
+			}
+		}
+		if (!append_packed_variant(arm_layout, arm.variant, visiting)) {
 			return false;
+		}
 		union_size = std::max(union_size, arm_layout.offset);
 		arm_fields.push_back(std::move(arm_layout.fields));
 	}
-	if (!checked_add_u64(union_offset, union_size, &layout.offset))
+	if (!checked_add_u64(union_offset, union_size, &layout.offset)) {
 		return false;
-	for (auto& fields : arm_fields)
+	}
+	for (auto& fields : arm_fields) {
 		for (auto& field : fields) {
-			if (!checked_add_u64(field.offset, union_offset, &field.offset))
+			if (!checked_add_u64(field.offset, union_offset, &field.offset)) {
 				return false;
+			}
 			layout.fields.push_back(field);
 		}
+	}
 	return true;
 }
 
 std::optional<RecordLayout> packed_record_layout_impl(PackedRecordType* record, std::set<Type*>& visiting) {
-	if (!visiting.insert(record).second)
+	if (!visiting.insert(record).second) {
 		return std::nullopt;
+	}
 	PackedSequentialLayout layout;
-	for (const auto& field : record->fields)
+	for (const auto& field : record->fields) {
 		if (!append_packed_field(layout, field.slot, field.ty, visiting)) {
 			visiting.erase(record);
 			return std::nullopt;
 		}
+	}
 	if (!append_packed_variant(layout, record->variant, visiting)) {
 		visiting.erase(record);
 		return std::nullopt;
@@ -524,17 +575,21 @@ std::optional<RecordLayout> packed_record_layout_impl(PackedRecordType* record, 
 
 std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std::set<Type*>& visiting) {
 	while (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
-		if (!incomplete->resolved)
+		if (!incomplete->resolved) {
 			return std::nullopt;
+		}
 		ty = incomplete->resolved;
 	}
-	if (auto distinct = dynamic_cast<DistinctType*>(ty))
+	if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
 		// FPC's `type Base` changes Pascal identity, not storage layout.
 		return type_layout_impl(packed_container, distinct->base_type, visiting);
-	if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty))
+	}
+	if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty)) {
 		return intrinsic->layout;
-	if (auto shortstring = dynamic_cast<ShortStringType*>(ty))
+	}
+	if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
 		return TypeLayout{static_cast<uint64_t>(shortstring->capacity) + 1, 1};
+	}
 	if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
 		auto layout = packed_record_layout_impl(packed, visiting);
 		return layout ? std::optional<TypeLayout>{layout->type} : std::nullopt;
@@ -545,19 +600,22 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 			fprintf(stderr, "error: item with alignment != 1 is not allowed inside a packed record.\n");
 			abort();
 		}
-		if (!item)
+		if (!item) {
 			return std::nullopt;
+		}
 		uint64_t size;
-		if (!checked_multiply_u64(item->size, array->range.length, &size))
+		if (!checked_multiply_u64(item->size, array->range.length, &size)) {
 			return std::nullopt;
+		}
 		return TypeLayout{size, item->alignment};
 	}
-	if (auto subrange = dynamic_cast<SubrangeType*>(ty))
+	if (auto subrange = dynamic_cast<SubrangeType*>(ty)) {
 		// The emitted carrier is deliberately one base-type member, with
 		// generated static assertions enforcing identical size and alignment.
 		// Packed-record layout can therefore keep using the Pascal storage
 		// layout without duplicating a C++ ABI calculator here.
 		return type_layout_impl(packed_container, subrange->base_type, visiting);
+	}
 	if (auto enumeration = dynamic_cast<EnumType*>(ty)) {
 		uint64_t bytes = enumeration->carrier_bits / 8;
 		return enumeration->carrier_bits != 0 && enumeration->carrier_bits % 8 == 0 ? std::optional<TypeLayout>{TypeLayout{bytes, bytes}} : std::nullopt;
@@ -569,26 +627,33 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 	// A dynamic array stores one shared-buffer handle, independent of its
 	// element type or current length. An open array is the non-owning
 	// data-and-count descriptor passed by open-array formals.
-	if (dynamic_cast<DynamicArrayType*>(ty))
+	if (dynamic_cast<DynamicArrayType*>(ty)) {
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
-	if (dynamic_cast<OpenArrayType*>(ty))
+	}
+	if (dynamic_cast<OpenArrayType*>(ty)) {
 		return TypeLayout{16, 8}; // FIXME: target-dependent, impl-dependent
-	if (dynamic_cast<FixedSetType*>(ty))
+	}
+	if (dynamic_cast<FixedSetType*>(ty)) {
 		return TypeLayout{24, 8}; // FIXME: target-dependent, impl-dependent
-	if (dynamic_cast<TypedFileType*>(ty))
+	}
+	if (dynamic_cast<TypedFileType*>(ty)) {
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
-	if (dynamic_cast<PointerType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ClassRefType*>(ty))
+	}
+	if (dynamic_cast<PointerType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ClassRefType*>(ty)) {
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
+	}
 	if (auto record = dynamic_cast<RecordType*>(ty)) {
 		auto layout = record_layout_impl(record, visiting);
 		return layout ? std::optional<TypeLayout>{layout->type} : std::nullopt;
 	}
-	if (auto object = dynamic_cast<ObjectType*>(ty))
+	if (auto object = dynamic_cast<ObjectType*>(ty)) {
 		return object_layout_impl(object, visiting);
+	}
 	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
-		if (routine->kind == METHOD)
+		if (routine->kind == METHOD) {
 			return TypeLayout{16, 8}; // FIXME: target-dependent
-		return TypeLayout{8, 8};          // FIXME: target-dependent
+		}
+		return TypeLayout{8, 8}; // FIXME: target-dependent
 	}
 	return std::nullopt;
 }
@@ -614,29 +679,36 @@ namespace {
 static bool predefined_overlay_byte_copyable(const Type* type, std::set<const Type*>& visiting);
 
 static bool predefined_overlay_variant_byte_copyable(const VariantPart* variant, std::set<const Type*>& visiting) {
-	if (!variant)
+	if (!variant) {
 		return true;
+	}
 	for (const VariantArm& arm : variant->arms) {
-		for (const AggregateField& field : arm.fields)
-			if (!field.ty || !predefined_overlay_byte_copyable(field.ty, visiting))
+		for (const AggregateField& field : arm.fields) {
+			if (!field.ty || !predefined_overlay_byte_copyable(field.ty, visiting)) {
 				return false;
-		if (!predefined_overlay_variant_byte_copyable(arm.variant, visiting))
+			}
+		}
+		if (!predefined_overlay_variant_byte_copyable(arm.variant, visiting)) {
 			return false;
+		}
 	}
 	return true;
 }
 
 static bool predefined_overlay_byte_copyable(const Type* type, std::set<const Type*>& visiting) {
-	if (!type)
+	if (!type) {
 		return false;
+	}
 	while (auto incomplete = dynamic_cast<const IncompleteType*>(type)) {
-		if (!incomplete->resolved)
+		if (!incomplete->resolved) {
 			return false;
+		}
 		type = incomplete->resolved;
 	}
 	if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type)) {
-		if (!intrinsic->carrier)
+		if (!intrinsic->carrier) {
 			return false;
+		}
 		switch (*intrinsic->carrier) {
 		case IntrinsicCarrier::UInt8:
 		case IntrinsicCarrier::Int8:
@@ -657,35 +729,41 @@ static bool predefined_overlay_byte_copyable(const Type* type, std::set<const Ty
 			return false;
 		}
 	}
-	if (dynamic_cast<const ShortStringType*>(type) || dynamic_cast<const EnumType*>(type) || dynamic_cast<const PointerType*>(type) || dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type) || dynamic_cast<const ClassRefType*>(type) || dynamic_cast<const RoutineType*>(type) || dynamic_cast<const PackedRecordType*>(type))
+	if (dynamic_cast<const ShortStringType*>(type) || dynamic_cast<const EnumType*>(type) || dynamic_cast<const PointerType*>(type) || dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type) || dynamic_cast<const ClassRefType*>(type) || dynamic_cast<const RoutineType*>(type) || dynamic_cast<const PackedRecordType*>(type)) {
 		return true;
-	if (auto range = dynamic_cast<const SubrangeType*>(type))
+	}
+	if (auto range = dynamic_cast<const SubrangeType*>(type)) {
 		return predefined_overlay_byte_copyable(range->base_type, visiting);
-	if (!visiting.insert(type).second)
+	}
+	if (!visiting.insert(type).second) {
 		// A recursive value carrier cannot be laid out without crossing a
 		// pointer, which was handled above. Do not let a malformed cycle
 		// become an emitted C++ static-assert failure.
 		return false;
+	}
 	bool result = false;
 	if (auto array = dynamic_cast<const FixedArrayType*>(type)) {
 		result = predefined_overlay_byte_copyable(array->item_type, visiting);
 	} else if (auto record = dynamic_cast<const RecordType*>(type)) {
 		result = true;
-		for (const AggregateField& field : record->fields)
+		for (const AggregateField& field : record->fields) {
 			if (!field.ty || !predefined_overlay_byte_copyable(field.ty, visiting)) {
 				result = false;
 				break;
 			}
-		if (result)
+		}
+		if (result) {
 			result = predefined_overlay_variant_byte_copyable(record->variant, visiting);
+		}
 	}
 	visiting.erase(type);
 	return result;
 }
 
 static bool predefined_overlay_compatible(const Type* target, const Type* source) {
-	if (!target || !source || (!dynamic_cast<const PackedRecordType*>(target) && !dynamic_cast<const PackedRecordType*>(source)))
+	if (!target || !source || (!dynamic_cast<const PackedRecordType*>(target) && !dynamic_cast<const PackedRecordType*>(source))) {
 		return false;
+	}
 	std::set<const Type*> visiting;
 	if (!predefined_overlay_byte_copyable(target, visiting)) {
 		return false;
@@ -704,10 +782,12 @@ bool Type::predefined_explicit_conversion_from(const Type* source) const {
 	// Explicit syntax includes every one-edge predefined implicit conversion.
 	// Calling this virtual destination's existing constructor relation does
 	// not search for an intermediate type or a source-defined operator.
-	if (!source)
+	if (!source) {
 		return false;
-	if (this == source || value_conversion_from(source))
+	}
+	if (this == source || value_conversion_from(source)) {
 		return true;
+	}
 	// Packed records are the language's byte-array overlay carrier. Admit the
 	// operation only when both layouts are known and the other carrier is
 	// recursively byte-copyable, so an invalid Pascal cast is rejected here
@@ -729,16 +809,19 @@ static int integer_widening_rank(const Type* ty) {
 		break;
 	}
 	auto it = dynamic_cast<const IntrinsicType*>(ty);
-	if (!it)
+	if (!it) {
 		return -1;
-	if (!it->rank)
+	}
+	if (!it->rank) {
 		return -1;
+	}
 	return *(it->rank);
 }
 
 static bool predefined_ordinal_type(const Type* type) {
-	if (type == &untyped_integer_type())
+	if (type == &untyped_integer_type()) {
 		return true;
+	}
 	for (;;) {
 		if (auto distinct = dynamic_cast<const DistinctType*>(type)) {
 			type = distinct->base_type;
@@ -750,8 +833,9 @@ static bool predefined_ordinal_type(const Type* type) {
 		}
 		break;
 	}
-	if (dynamic_cast<const EnumType*>(type))
+	if (dynamic_cast<const EnumType*>(type)) {
 		return true;
+	}
 	auto intrinsic = dynamic_cast<const IntrinsicType*>(type);
 	return intrinsic && intrinsic->ordinal_bounds.has_value();
 }
@@ -769,28 +853,34 @@ static bool predefined_object_reference_type(const Type* type) {
 // bounds, while real widening has different semantics.
 static int real_widening_rank(const Type* ty) {
 	ty = distinct_storage_type(ty);
-	if (ty == single_type())
+	if (ty == single_type()) {
 		return 0;
-	if (ty == double_type())
+	}
+	if (ty == double_type()) {
 		return 1;
-	if (ty == extended_type())
+	}
+	if (ty == extended_type()) {
 		return 2;
+	}
 	return -1;
 }
 
 static bool integer_like_bounds(const Type* ty, OrdinalBounds* out) {
-	if (integer_bounds(ty, out))
+	if (integer_bounds(ty, out)) {
 		return true;
+	}
 	if (auto s = dynamic_cast<const SubrangeType*>(ty)) {
 		ConstEvalContext ctx;
 		ConstEvalResult lower = s->lower_bound->const_eval(ctx);
 		ConstEvalResult upper = s->upper_bound->const_eval(ctx);
-		if (lower.kind != ConstEvalResult::Kind::Success || upper.kind != ConstEvalResult::Kind::Success)
+		if (lower.kind != ConstEvalResult::Kind::Success || upper.kind != ConstEvalResult::Kind::Success) {
 			return false;
+		}
 		auto lo = dynamic_cast<Integer*>(lower.node);
 		auto hi = dynamic_cast<Integer*>(upper.node);
-		if (!lo || !hi)
+		if (!lo || !hi) {
 			return false;
+		}
 		out->signed_type = lo->negative;
 		out->min_magnitude = lo->negative ? lo->value : 0;
 		out->max_positive = hi->negative ? 0 : hi->value;
@@ -800,8 +890,9 @@ static bool integer_like_bounds(const Type* ty, OrdinalBounds* out) {
 }
 
 static uint64_t saturating_add(uint64_t a, uint64_t b) {
-	if (a > UINT64_MAX - b)
+	if (a > UINT64_MAX - b) {
 		return UINT64_MAX;
+	}
 	return a + b;
 }
 
@@ -810,12 +901,15 @@ static uint64_t unsigned_abs_diff(uint64_t a, uint64_t b) {
 }
 
 static uint64_t ordinal_lower_bound_distance(const OrdinalBounds& a, const OrdinalBounds& b) {
-	if (a.signed_type && b.signed_type)
+	if (a.signed_type && b.signed_type) {
 		return unsigned_abs_diff(a.min_magnitude, b.min_magnitude);
-	if (a.signed_type)
+	}
+	if (a.signed_type) {
 		return a.min_magnitude;
-	if (b.signed_type)
+	}
+	if (b.signed_type) {
 		return b.min_magnitude;
+	}
 	return 0;
 }
 
@@ -830,13 +924,15 @@ static int bit_width(uint64_t value) {
 
 static int integer_conversion_cost(const Type* from, const Type* to) {
 	int rfrom = integer_widening_rank(from), rto = integer_widening_rank(to);
-	if (rfrom < 0 || rto < 0)
+	if (rfrom < 0 || rto < 0) {
 		return -1;
+	}
 
 	OrdinalBounds from_bounds;
 	OrdinalBounds to_bounds;
-	if (!integer_like_bounds(from, &from_bounds) || !integer_like_bounds(to, &to_bounds))
+	if (!integer_like_bounds(from, &from_bounds) || !integer_like_bounds(to, &to_bounds)) {
 		return -1;
+	}
 
 	// This computes the local cost of a predefined integer assignment edge.
 	// The destination constructor admits the edge only when the source is a
@@ -846,8 +942,9 @@ static int integer_conversion_cost(const Type* from, const Type* to) {
 	distance = saturating_add(distance, unsigned_abs_diff(from_bounds.max_positive, to_bounds.max_positive));
 
 	int cost = 10 + bit_width(distance) * 2;
-	if (from_bounds.signed_type != to_bounds.signed_type)
+	if (from_bounds.signed_type != to_bounds.signed_type) {
 		++cost;
+	}
 	return cost;
 }
 
@@ -860,35 +957,40 @@ static ValueConversion implicit_conversion(unsigned distance = 0) {
 }
 
 std::optional<ValueConversion> DistinctType::value_conversion_from(const Type* source) const {
-	if (!source)
+	if (!source) {
 		return std::nullopt;
+	}
 	const Type* target_storage = distinct_storage_type(base_type);
 	const Type* source_storage = distinct_storage_type(source);
-	if (source_storage == target_storage)
+	if (source_storage == target_storage) {
 		// `type Base` is a new overload identity, but FPC defines it as
 		// representation-compatible with Base and sibling distinct types.
 		return direct_conversion();
+	}
 	return target_storage->value_conversion_from(source_storage);
 }
 
 std::optional<ValueConversion> DistinctType::destination_conversion_from(const Type* source) const {
-	if (auto ordinary = value_conversion_from(source))
+	if (auto ordinary = value_conversion_from(source)) {
 		return ordinary;
+	}
 	const Type* target_storage = distinct_storage_type(base_type);
 	return target_storage->destination_conversion_from(distinct_storage_type(source));
 }
 
 bool DistinctType::predefined_explicit_conversion_from(const Type* source) const {
-	if (!source)
+	if (!source) {
 		return false;
+	}
 	const Type* target_storage = distinct_storage_type(base_type);
 	const Type* source_storage = distinct_storage_type(source);
 	return source_storage == target_storage || target_storage->predefined_explicit_conversion_from(source_storage);
 }
 
 bool DistinctType::is_subtype_of(const Type* target) const {
-	if (this == target)
+	if (this == target) {
 		return true;
+	}
 	const Type* storage = distinct_storage_type(base_type);
 	const Type* target_storage = distinct_storage_type(target);
 	return storage == target_storage || storage->is_subtype_of(target_storage);
@@ -929,38 +1031,43 @@ bool DistinctType::is_reference_type() const {
 std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* source_const) const {
 	auto source = distinct_storage_type(source_const);
 	auto target = this;
-	if (source_const != source && source == target)
+	if (source_const != source && source == target) {
 		// Exact identity was already tested by the matcher. A distinct
 		// identity over this same carrier is the FPC strong-type direct case,
 		// not an integer/real widening conversion.
 		return direct_conversion();
+	}
 	if (source == &untyped_integer_type()) {
 		// The expression matcher checks the literal's actual magnitude. At the
 		// type level it is a contextual integer value, not another nominal
 		// integer definition.
-		if (integer_widening_rank(target) >= 0)
+		if (integer_widening_rank(target) >= 0) {
 			return direct_conversion();
-		if (real_widening_rank(target) >= 0)
+		}
+		if (real_widening_rank(target) >= 0) {
 			return implicit_conversion(500 + real_widening_rank(target));
+		}
 	}
 
 	// Char is a distinct nominal ordinal family, not an unsigned integer
 	// widening source or destination. Byte(CharValue) and Char(ByteValue)
 	// remain predefined explicit casts, but neither crossing may make a
 	// numeric overload viable.
-	if (auto range = dynamic_cast<const SubrangeType*>(source); range && range->base_type == target)
+	if (auto range = dynamic_cast<const SubrangeType*>(source); range && range->base_type == target) {
 		// A subrange has distinct Pascal identity but uses its declared base
 		// representation directly. Passing it to that base formal needs no
 		// assignment operator; another containing integer formal requires one
 		// widening edge.
 		return direct_conversion();
+	}
 
 	int integer_cost = integer_conversion_cost(source, target);
-	if (integer_cost >= 0 && source->is_subtype_of(target))
+	if (integer_cost >= 0 && source->is_subtype_of(target)) {
 		// Integer assignment edges follow value-set inclusion. The reverse
 		// direction is an explicit cast, not an implicit edge which overload
 		// ranking may discover and then penalize.
 		return implicit_conversion(static_cast<unsigned>(integer_cost));
+	}
 
 	int source_real = real_widening_rank(source);
 	int target_real = real_widening_rank(target);
@@ -971,45 +1078,52 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 		unsigned distance = static_cast<unsigned>(target_real - source_real);
 		return implicit_conversion(distance);
 	}
-	if (integer_widening_rank(source) >= 0 && target_real >= 0)
+	if (integer_widening_rank(source) >= 0 && target_real >= 0) {
 		return implicit_conversion(500 + static_cast<unsigned>(target_real));
+	}
 	return std::nullopt;
 }
 
 std::optional<ValueConversion> IntrinsicType::destination_conversion_from(const Type* source) const {
-	if (auto ordinary = value_conversion_from(source))
+	if (auto ordinary = value_conversion_from(source)) {
 		return ordinary;
+	}
 
 	const int integer_cost = integer_conversion_cost(source, this);
-	if (integer_cost >= 0)
+	if (integer_cost >= 0) {
 		// A selected ordinal destination may truncate or reinterpret sign.
 		// This is the Pascal assignment boundary checked by {$R+}; it is not
 		// an implicit edge available to call matching.
 		return implicit_conversion(static_cast<unsigned>(integer_cost));
+	}
 
 	const int source_real = real_widening_rank(source);
 	const int target_real = real_widening_rank(this);
-	if (source_real >= 0 && target_real >= 0)
+	if (source_real >= 0 && target_real >= 0) {
 		// Real assignment likewise permits the selected destination to lose
 		// range or precision. make_implicit_cast owns the optional range
 		// check after this relation has admitted the store.
 		return implicit_conversion(static_cast<unsigned>(std::abs(target_real - source_real)));
+	}
 	return std::nullopt;
 }
 
 bool IntrinsicType::predefined_explicit_conversion_from(const Type* source) const {
-	if (Type::predefined_explicit_conversion_from(source))
+	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
+	}
 	// Explicit ordinal conversion is one direct width/sign operation. It is
 	// intentionally broader than nominal enum/subrange compatibility but
 	// does not make any such pair implicitly viable.
-	if (predefined_ordinal_type(this) && predefined_ordinal_type(source))
+	if (predefined_ordinal_type(this) && predefined_ordinal_type(source)) {
 		return true;
-	if (real_widening_rank(this) >= 0 && real_widening_rank(source) >= 0)
+	}
+	if (real_widening_rank(this) >= 0 && real_widening_rank(source) >= 0) {
 		// Type(value) explicitly selects the destination representation, so
 		// both real-family directions are one predefined cast even though
 		// only widening is an implicit overload edge.
 		return true;
+	}
 	// Only the address-sized integer types are direct pointer destinations.
 	// Requiring an explicit nested cast for another integer width keeps the
 	// address boundary visible and avoids a hidden pointer -> integer ->
@@ -1019,24 +1133,29 @@ bool IntrinsicType::predefined_explicit_conversion_from(const Type* source) cons
 
 std::optional<ValueConversion> ShortStringType::value_conversion_from(const Type* source) const {
 	auto string = dynamic_cast<const ShortStringType*>(source);
-	if (!string)
+	if (!string) {
 		return std::nullopt;
+	}
 	unsigned distance = static_cast<unsigned>(std::abs(static_cast<int>(capacity) - static_cast<int>(string->capacity)));
-	if (capacity == string->capacity)
+	if (capacity == string->capacity) {
 		return direct_conversion();
-	if (string->capacity > capacity)
+	}
+	if (string->capacity > capacity) {
 		// A shorter destination cannot represent every source value, so this
 		// direction requires explicit syntax rather than an implicit edge.
 		return std::nullopt;
+	}
 	return implicit_conversion(distance);
 }
 
 std::optional<ValueConversion> ShortStringType::destination_conversion_from(const Type* source) const {
-	if (auto ordinary = value_conversion_from(source))
+	if (auto ordinary = value_conversion_from(source)) {
 		return ordinary;
+	}
 	auto string = dynamic_cast<const ShortStringType*>(source);
-	if (!string)
+	if (!string) {
 		return std::nullopt;
+	}
 	// A known ShortString destination truncates excess payload according to
 	// its declared capacity. This storage operation must not make the reverse
 	// capacity direction viable during overload selection.
@@ -1053,8 +1172,9 @@ bool ShortStringType::predefined_explicit_conversion_from(const Type* source) co
 
 std::optional<ValueConversion> FixedSetType::value_conversion_from(const Type* source) const {
 	auto set = dynamic_cast<const FixedSetType*>(source);
-	if (!set || !set->is_subtype_of(this))
+	if (!set || !set->is_subtype_of(this)) {
 		return std::nullopt;
+	}
 	// Set is the powerset constructor. Widening its ordinal domain preserves
 	// every member and therefore needs no element-wise value conversion.
 	// The emitter may still copy between distinct target-specific carriers.
@@ -1064,8 +1184,9 @@ std::optional<ValueConversion> FixedSetType::value_conversion_from(const Type* s
 	// separately declared `set of Byte` and `set of Word`, but the former
 	// must win. This remains one set conversion; it does not recursively
 	// materialize or apply an element conversion.
-	if (item_type == set->item_type)
+	if (item_type == set->item_type) {
 		return direct_conversion();
+	}
 	auto item_conversion = item_type->value_conversion_from(set->item_type);
 	return direct_conversion(item_conversion ? item_conversion->distance : 0);
 }
@@ -1077,11 +1198,14 @@ bool FixedSetType::predefined_explicit_conversion_from(const Type* source) const
 }
 
 static bool interface_is_or_extends(const InterfaceType* source, const InterfaceType* target) {
-	if (source == target)
+	if (source == target) {
 		return true;
-	for (InterfaceType* parent : source->super_interfaces)
-		if (interface_is_or_extends(parent, target))
+	}
+	for (InterfaceType* parent : source->super_interfaces) {
+		if (interface_is_or_extends(parent, target)) {
 			return true;
+		}
+	}
 	return false;
 }
 
@@ -1091,67 +1215,84 @@ bool InterfaceType::is_subtype_of(const Type* target) const {
 }
 
 static bool class_implements_interface(const ClassType* source, const InterfaceType* target) {
-	for (const ClassType* current = source; current; current = current->super)
-		for (InterfaceType* implemented : current->implemented_interfaces)
-			if (interface_is_or_extends(implemented, target))
+	for (const ClassType* current = source; current; current = current->super) {
+		for (InterfaceType* implemented : current->implemented_interfaces) {
+			if (interface_is_or_extends(implemented, target)) {
 				return true;
+			}
+		}
+	}
 	return false;
 }
 
 bool ClassType::is_subtype_of(const Type* target) const {
 	if (auto target_class = dynamic_cast<const ClassType*>(target)) {
-		for (const ClassType* current = this; current; current = current->super)
-			if (current == target_class)
+		for (const ClassType* current = this; current; current = current->super) {
+			if (current == target_class) {
 				return true;
+			}
+		}
 		return false;
 	}
-	if (auto target_interface = dynamic_cast<const InterfaceType*>(target))
+	if (auto target_interface = dynamic_cast<const InterfaceType*>(target)) {
 		return class_implements_interface(this, target_interface);
+	}
 	return false;
 }
 
 bool ObjectType::is_subtype_of(const Type* target) const {
 	auto target_object = dynamic_cast<const ObjectType*>(target);
-	if (!target_object)
+	if (!target_object) {
 		return false;
-	for (const ObjectType* current = this; current; current = current->super)
-		if (current == target_object)
+	}
+	for (const ObjectType* current = this; current; current = current->super) {
+		if (current == target_object) {
 			return true;
+		}
+	}
 	return false;
 }
 
 static unsigned class_inheritance_distance(const ClassType* source, const ClassType* target) {
 	unsigned distance = 0;
-	for (const ClassType* current = source; current; current = current->super, ++distance)
-		if (current == target)
+	for (const ClassType* current = source; current; current = current->super, ++distance) {
+		if (current == target) {
 			return distance;
+		}
+	}
 	return std::numeric_limits<unsigned>::max();
 }
 
 static unsigned object_inheritance_distance(const ObjectType* source, const ObjectType* target) {
 	unsigned distance = 0;
-	for (const ObjectType* current = source; current; current = current->super, ++distance)
-		if (current == target)
+	for (const ObjectType* current = source; current; current = current->super, ++distance) {
+		if (current == target) {
 			return distance;
+		}
+	}
 	return std::numeric_limits<unsigned>::max();
 }
 
 std::optional<ValueConversion> ClassType::value_conversion_from(const Type* source) const {
 	auto source_class = dynamic_cast<const ClassType*>(source);
-	if (!source_class || !source_class->is_subtype_of(this))
+	if (!source_class || !source_class->is_subtype_of(this)) {
 		return std::nullopt;
+	}
 	return implicit_conversion(class_inheritance_distance(source_class, this));
 }
 
 bool ClassType::predefined_explicit_conversion_from(const Type* source) const {
-	if (Type::predefined_explicit_conversion_from(source))
+	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
-	if (auto source_class = dynamic_cast<const ClassType*>(source))
+	}
+	if (auto source_class = dynamic_cast<const ClassType*>(source)) {
 		return is_subtype_of(source_class) || source_class->is_subtype_of(this);
-	if (auto source_interface = dynamic_cast<const InterfaceType*>(source))
+	}
+	if (auto source_interface = dynamic_cast<const InterfaceType*>(source)) {
 		// A static interface -> class downcast has a defined adjustment only
 		// when this destination class implements that exact interface family.
 		return is_subtype_of(source_interface);
+	}
 	// Raw-pointer recovery is unchecked. The program must satisfy the same
 	// live-object, alignment, and provenance preconditions as the emitted C++
 	// pointer cast; TPCC deliberately does not try to prove them.
@@ -1159,16 +1300,19 @@ bool ClassType::predefined_explicit_conversion_from(const Type* source) const {
 }
 
 std::optional<ValueConversion> InterfaceType::value_conversion_from(const Type* source) const {
-	if (!source || !source->is_subtype_of(this))
+	if (!source || !source->is_subtype_of(this)) {
 		return std::nullopt;
+	}
 	return implicit_conversion(1);
 }
 
 bool InterfaceType::predefined_explicit_conversion_from(const Type* source) const {
-	if (Type::predefined_explicit_conversion_from(source))
+	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
-	if (auto source_interface = dynamic_cast<const InterfaceType*>(source))
+	}
+	if (auto source_interface = dynamic_cast<const InterfaceType*>(source)) {
 		return is_subtype_of(source_interface) || source_interface->is_subtype_of(this);
+	}
 	// An unrelated class/interface cross-cast is the checked `as` operation,
 	// not an unchecked predefined T(E) conversion. A raw pointer is different:
 	// it explicitly opts into the C++ object-model precondition.
@@ -1177,17 +1321,20 @@ bool InterfaceType::predefined_explicit_conversion_from(const Type* source) cons
 
 std::optional<ValueConversion> ObjectType::value_conversion_from(const Type* source) const {
 	auto source_object = dynamic_cast<const ObjectType*>(source);
-	if (!source_object || !source_object->is_subtype_of(this))
+	if (!source_object || !source_object->is_subtype_of(this)) {
 		return std::nullopt;
+	}
 	return implicit_conversion(object_inheritance_distance(source_object, this));
 }
 
 std::optional<ValueConversion> ClassRefType::value_conversion_from(const Type* source) const {
 	auto source_ref = dynamic_cast<const ClassRefType*>(source);
-	if (!source_ref)
+	if (!source_ref) {
 		return std::nullopt;
-	if (source_ref->target == target)
+	}
+	if (source_ref->target == target) {
 		return direct_conversion();
+	}
 	if (source_ref->target && source_ref->target->is_subtype_of(target)) {
 		auto source_class = dynamic_cast<const ClassType*>(source_ref->target);
 		auto target_class = dynamic_cast<const ClassType*>(target);
@@ -1198,8 +1345,9 @@ std::optional<ValueConversion> ClassRefType::value_conversion_from(const Type* s
 }
 
 bool ClassRefType::predefined_explicit_conversion_from(const Type* source) const {
-	if (Type::predefined_explicit_conversion_from(source))
+	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
+	}
 	auto source_ref = dynamic_cast<const ClassRefType*>(source);
 	return source_ref && target && source_ref->target && (target->is_subtype_of(source_ref->target) || source_ref->target->is_subtype_of(target));
 }
@@ -1207,14 +1355,17 @@ bool ClassRefType::predefined_explicit_conversion_from(const Type* source) const
 std::optional<ValueConversion> PointerType::value_conversion_from(const Type* source) const {
 	auto source_pointer = dynamic_cast<const PointerType*>(source);
 	if (source_pointer) {
-		if (source_pointer->item_type == item_type)
+		if (source_pointer->item_type == item_type) {
 			return direct_conversion();
-		if (source_pointer->is_untyped() || is_untyped())
+		}
+		if (source_pointer->is_untyped() || is_untyped()) {
 			return implicit_conversion(20);
+		}
 		auto source_object = dynamic_cast<const ObjectType*>(source_pointer->item_type);
 		auto target_object = dynamic_cast<const ObjectType*>(item_type);
-		if (source_object && target_object && source_object->is_subtype_of(target_object))
+		if (source_object && target_object && source_object->is_subtype_of(target_object)) {
 			return implicit_conversion(object_inheritance_distance(source_object, target_object));
+		}
 		return std::nullopt;
 	}
 	if (is_untyped() && (dynamic_cast<const ClassType*>(source) || dynamic_cast<const ClassRefType*>(source))) {
@@ -1236,8 +1387,9 @@ std::optional<ValueConversion> PointerType::value_conversion_from(const Type* so
 }
 
 bool PointerType::predefined_explicit_conversion_from(const Type* source) const {
-	if (Type::predefined_explicit_conversion_from(source))
+	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
+	}
 	// These are representation crossings, not subtyping or implicit
 	// conversions. The result is useful only when the source address denotes
 	// a suitably aligned live C++ object of the pointee type; no local check
@@ -1251,29 +1403,36 @@ struct FoldedOrdinalValue {
 };
 
 static std::optional<FoldedOrdinalValue> fold_ordinal_value(Node* node) {
-	if (!node)
+	if (!node) {
 		return std::nullopt;
+	}
 	ConstEvalContext ctx;
 	ConstEvalResult folded = node->const_eval(ctx);
-	if (folded.kind != ConstEvalResult::Kind::Success)
+	if (folded.kind != ConstEvalResult::Kind::Success) {
 		return std::nullopt;
-	if (auto integer = dynamic_cast<Integer*>(folded.node))
+	}
+	if (auto integer = dynamic_cast<Integer*>(folded.node)) {
 		return FoldedOrdinalValue{integer->negative, integer->value};
+	}
 	if (auto member = dynamic_cast<EnumMemberRef*>(folded.node)) {
-		if (member->value < 0)
+		if (member->value < 0) {
 			return FoldedOrdinalValue{true, static_cast<uint64_t>(-(member->value + 1)) + 1};
+		}
 		return FoldedOrdinalValue{false, static_cast<uint64_t>(member->value)};
 	}
 	return std::nullopt;
 }
 
 static int compare_folded_ordinals(const FoldedOrdinalValue& a, const FoldedOrdinalValue& b) {
-	if (a.negative != b.negative)
+	if (a.negative != b.negative) {
 		return a.negative ? -1 : 1;
-	if (a.magnitude == b.magnitude)
+	}
+	if (a.magnitude == b.magnitude) {
 		return 0;
-	if (a.negative)
+	}
+	if (a.negative) {
 		return a.magnitude > b.magnitude ? -1 : 1;
+	}
 	return a.magnitude < b.magnitude ? -1 : 1;
 }
 
@@ -1292,21 +1451,26 @@ struct OrdinalDomain {
 };
 
 static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
-	if (!type)
+	if (!type) {
 		return std::nullopt;
+	}
 	type = distinct_storage_type(type);
 	if (auto range = dynamic_cast<const SubrangeType*>(type)) {
 		auto lower = fold_ordinal_value(range->lower_bound);
 		auto upper = fold_ordinal_value(range->upper_bound);
-		if (!lower || !upper)
+		if (!lower || !upper) {
 			return std::nullopt;
-		if (dynamic_cast<const EnumType*>(range->base_type))
+		}
+		if (dynamic_cast<const EnumType*>(range->base_type)) {
 			return OrdinalDomain{OrdinalDomainFamily::Enumeration, range->base_type, *lower, *upper};
-		if (range->base_type == char_type())
+		}
+		if (range->base_type == char_type()) {
 			return OrdinalDomain{OrdinalDomainFamily::Character, char_type(), *lower, *upper};
+		}
 		OrdinalBounds bounds;
-		if (integer_bounds(range->base_type, &bounds))
+		if (integer_bounds(range->base_type, &bounds)) {
 			return OrdinalDomain{OrdinalDomainFamily::Integer, nullptr, *lower, *upper};
+		}
 		return std::nullopt;
 	}
 	if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type); intrinsic && intrinsic->rank && intrinsic->ordinal_bounds) {
@@ -1315,18 +1479,21 @@ static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
 	}
 	if (type == char_type()) {
 		OrdinalBounds bounds;
-		if (!intrinsic_ordinal_bounds(char_type(), &bounds))
+		if (!intrinsic_ordinal_bounds(char_type(), &bounds)) {
 			return std::nullopt;
+		}
 		return OrdinalDomain{OrdinalDomainFamily::Character, char_type(), FoldedOrdinalValue{false, 0}, FoldedOrdinalValue{false, bounds.max_positive}};
 	}
 	if (auto enumeration = dynamic_cast<const EnumType*>(type)) {
 		const auto* lower = enumeration->min_member();
 		const auto* upper = enumeration->max_member();
-		if (!lower || !upper)
+		if (!lower || !upper) {
 			return std::nullopt;
+		}
 		auto as_folded = [](int64_t value) {
-			if (value < 0)
+			if (value < 0) {
 				return FoldedOrdinalValue{true, static_cast<uint64_t>(-(value + 1)) + 1};
+			}
 			return FoldedOrdinalValue{false, static_cast<uint64_t>(value)};
 		};
 		return OrdinalDomain{OrdinalDomainFamily::Enumeration, type, as_folded(lower->value), as_folded(upper->value)};
@@ -1337,35 +1504,40 @@ static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
 static bool ordinal_domain_is_subset(const Type* source, const Type* target) {
 	auto source_domain = ordinal_domain(source);
 	auto target_domain = ordinal_domain(target);
-	if (!source_domain || !target_domain || source_domain->family != target_domain->family)
+	if (!source_domain || !target_domain || source_domain->family != target_domain->family) {
 		return false;
-	if (source_domain->family != OrdinalDomainFamily::Integer && source_domain->nominal_root != target_domain->nominal_root)
+	}
+	if (source_domain->family != OrdinalDomainFamily::Integer && source_domain->nominal_root != target_domain->nominal_root) {
 		return false;
+	}
 	return compare_folded_ordinals(target_domain->lower, source_domain->lower) <= 0 && compare_folded_ordinals(target_domain->upper, source_domain->upper) >= 0;
 }
 
 static bool ordinal_domains_are_compatible(const Type* a, const Type* b) {
 	auto a_domain = ordinal_domain(a);
 	auto b_domain = ordinal_domain(b);
-	if (!a_domain || !b_domain || a_domain->family != b_domain->family)
+	if (!a_domain || !b_domain || a_domain->family != b_domain->family) {
 		return false;
+	}
 	return a_domain->family == OrdinalDomainFamily::Integer || a_domain->nominal_root == b_domain->nominal_root;
 }
 } // namespace
 
 bool IntrinsicType::is_subtype_of(const Type* target) const {
-	if (this == target)
+	if (this == target) {
 		return true;
+	}
 	// Only predefined integer-family types use range subtyping. Char has an
 	// ordinal range too, but it remains a distinct nominal ordinal family.
 	return rank && ordinal_domain_is_subset(this, target);
 }
 
 std::optional<ValueConversion> EnumType::value_conversion_from(const Type* source) const {
-	if (source && ordinal_domains_are_compatible(source, this) && source->is_subtype_of(this))
+	if (source && ordinal_domains_are_compatible(source, this) && source->is_subtype_of(this)) {
 		// Only this enum's own subranges are compatible, and their complete
 		// domains are contained by the enum declaration.
 		return direct_conversion();
+	}
 	return std::nullopt;
 }
 
@@ -1383,29 +1555,34 @@ bool SubrangeType::is_subtype_of(const Type* target) const {
 }
 
 bool FixedSetType::is_subtype_of(const Type* target) const {
-	if (this == target)
+	if (this == target) {
 		return true;
+	}
 	auto set = dynamic_cast<const FixedSetType*>(target);
 	return set && item_type->is_subtype_of(set->item_type);
 }
 
 std::optional<ValueConversion> SubrangeType::value_conversion_from(const Type* source) const {
-	if (!source || !ordinal_domains_are_compatible(source, this))
+	if (!source || !ordinal_domains_are_compatible(source, this)) {
 		return std::nullopt;
+	}
 	// Contextual literals are checked against the exact endpoints before this
 	// type-level path. A runtime source has an implicit assignment edge only
 	// in the declared widening direction; the reverse operation requires
 	// explicit conversion syntax.
-	if (source->is_subtype_of(this))
+	if (source->is_subtype_of(this)) {
 		return direct_conversion();
+	}
 	return std::nullopt;
 }
 
 std::optional<ValueConversion> SubrangeType::destination_conversion_from(const Type* source) const {
-	if (auto ordinary = value_conversion_from(source))
+	if (auto ordinary = value_conversion_from(source)) {
 		return ordinary;
-	if (!source || !ordinal_domains_are_compatible(source, this))
+	}
+	if (!source || !ordinal_domains_are_compatible(source, this)) {
 		return std::nullopt;
+	}
 	// The destination declaration is already fixed, so assignment may store a
 	// wider value and let {$R+} enforce this subrange's endpoints. This is not
 	// a reverse subtype or overload-conversion edge.
@@ -1418,17 +1595,20 @@ bool SubrangeType::predefined_explicit_conversion_from(const Type* source) const
 
 std::optional<ValueConversion> RoutineType::value_conversion_from(const Type* source) const {
 	auto routine = dynamic_cast<const RoutineType*>(source);
-	if (routine && accepts_routine_value_from(routine))
+	if (routine && accepts_routine_value_from(routine)) {
 		return direct_conversion();
+	}
 	return std::nullopt;
 }
 
 bool RoutineType::same_parameter_and_result_types_as(const RoutineType* other) const {
-	if (!other || return_type != other->return_type || formals.size() != other->formals.size())
+	if (!other || return_type != other->return_type || formals.size() != other->formals.size()) {
 		return false;
+	}
 	for (size_t i = 0; i < formals.size(); ++i) {
-		if (formals[i].mode != other->formals[i].mode || !formals[i].ty->same_formal_contract_as(other->formals[i].ty))
+		if (formals[i].mode != other->formals[i].mode || !formals[i].ty->same_formal_contract_as(other->formals[i].ty)) {
 			return false;
+		}
 	}
 	return true;
 }
@@ -1438,11 +1618,14 @@ bool RoutineType::same_signature_as(const RoutineType* other) const {
 }
 
 bool RoutineType::same_overload_signature_as(const RoutineType* other) const {
-	if (!other || formals.size() != other->formals.size())
+	if (!other || formals.size() != other->formals.size()) {
 		return false;
-	for (size_t i = 0; i < formals.size(); ++i)
-		if (!formals[i].ty->same_formal_contract_as(other->formals[i].ty))
+	}
+	for (size_t i = 0; i < formals.size(); ++i) {
+		if (!formals[i].ty->same_formal_contract_as(other->formals[i].ty)) {
 			return false;
+		}
+	}
 	return true;
 }
 
@@ -1454,19 +1637,22 @@ static RoutineKind routine_value_kind(RoutineKind kind) {
 }
 
 bool RoutineType::accepts_routine_value_from(const RoutineType* source) const {
-	if (!source)
+	if (!source) {
 		return false;
+	}
 	RoutineKind source_kind = routine_value_kind(source->kind);
 	RoutineKind target_kind = routine_value_kind(kind);
-	if (source_kind != target_kind || (target_kind != ROUTINE && target_kind != METHOD))
+	if (source_kind != target_kind || (target_kind != ROUTINE && target_kind != METHOD)) {
 		return false;
+	}
 	return same_parameter_and_result_types_as(source);
 }
 
 static bool routine_data_pointer_parameter_type(const Type* type) {
 	while (auto incomplete = dynamic_cast<const IncompleteType*>(type)) {
-		if (!incomplete->resolved)
+		if (!incomplete->resolved) {
 			return false;
+		}
 		type = incomplete->resolved;
 	}
 	// These are exactly the Pascal types emitted as ordinary C++ data
@@ -1476,32 +1662,38 @@ static bool routine_data_pointer_parameter_type(const Type* type) {
 }
 
 bool RoutineType::accepts_explicit_routine_cast_from(const RoutineType* source) const {
-	if (!source)
+	if (!source) {
 		return false;
+	}
 	RoutineKind source_kind = routine_value_kind(source->kind);
 	RoutineKind target_kind = routine_value_kind(kind);
-	if (source_kind != target_kind || (target_kind != ROUTINE && target_kind != METHOD) || return_type != source->return_type || formals.size() != source->formals.size())
+	if (source_kind != target_kind || (target_kind != ROUTINE && target_kind != METHOD) || return_type != source->return_type || formals.size() != source->formals.size()) {
 		return false;
+	}
 	for (size_t i = 0; i < formals.size(); ++i) {
 		const Parameter& target = formals[i];
 		const Parameter& from = source->formals[i];
-		if (target.mode != from.mode)
+		if (target.mode != from.mode) {
 			return false;
-		if (target.ty->same_formal_contract_as(from.ty))
+		}
+		if (target.ty->same_formal_contract_as(from.ty)) {
 			continue;
+		}
 		// The GNOME/GObject callback convention relied upon by TPCC covers
 		// data pointers passed by value. A Pascal const/var/out parameter is a
 		// C++ reference to the pointer object and has additional aliasing and
 		// write-back obligations, so it deliberately remains exact.
-		if (target.mode != ParamMode::Value || !routine_data_pointer_parameter_type(target.ty) || !routine_data_pointer_parameter_type(from.ty))
+		if (target.mode != ParamMode::Value || !routine_data_pointer_parameter_type(target.ty) || !routine_data_pointer_parameter_type(from.ty)) {
 			return false;
+		}
 	}
 	return true;
 }
 
 bool RoutineType::same_cxx_parameter_list_as(const RoutineType* other) const {
-	if (!other || formals.size() != other->formals.size())
+	if (!other || formals.size() != other->formals.size()) {
 		return false;
+	}
 	auto carrier_mode = [](ParamMode mode) {
 		// `var` and `out` both emit T&. Const emits const T&, while a
 		// value parameter emits T. These are C++ signature categories,
@@ -1523,21 +1715,25 @@ bool RoutineType::same_cxx_parameter_list_as(const RoutineType* other) const {
 		auto a_open = dynamic_cast<OpenArrayType*>(a.ty);
 		auto b_open = dynamic_cast<OpenArrayType*>(b.ty);
 		if (a_open || b_open) {
-			if (!a_open || !b_open || (a.mode == ParamMode::Const) != (b.mode == ParamMode::Const) || !a_open->item_type->same_cxx_carrier_as(b_open->item_type))
+			if (!a_open || !b_open || (a.mode == ParamMode::Const) != (b.mode == ParamMode::Const) || !a_open->item_type->same_cxx_carrier_as(b_open->item_type)) {
 				return false;
+			}
 			continue;
 		}
-		if (carrier_mode(a.mode) != carrier_mode(b.mode))
+		if (carrier_mode(a.mode) != carrier_mode(b.mode)) {
 			return false;
+		}
 		if (a.ty == unknown_type() || b.ty == unknown_type()) {
 			// Omitted-type const and mutable formals lower to two explicit
 			// storage-view carriers rather than to an arbitrary T or T&.
-			if (a.ty != b.ty)
+			if (a.ty != b.ty) {
 				return false;
+			}
 			continue;
 		}
-		if (!a.ty->same_cxx_carrier_as(b.ty))
+		if (!a.ty->same_cxx_carrier_as(b.ty)) {
 			return false;
+		}
 	}
 	return true;
 }
@@ -1550,8 +1746,9 @@ bool RoutineType::same_cxx_parameter_list_as(const RoutineType* other) const {
 static std::string diagnostic_string_literal(const std::string& text) {
 	std::string r = "'";
 	for (char ch : text) {
-		if (ch == '\'')
+		if (ch == '\'') {
 			r.push_back('\'');
+		}
 		r.push_back(ch);
 	}
 	r.push_back('\'');
@@ -1577,8 +1774,9 @@ void ShortStringType::print_diagnostic_definition(ErrorLetContext* ctx, std::ost
 // the value-entry Type* edges through this helper. Do not move this discovery
 // into ErrorLetContext::index_frame().
 static void add_frame_value_type_edges(ErrorLetContext* ctx, const Frame* frame) {
-	if (!frame)
+	if (!frame) {
 		return;
+	}
 	for (const auto& item : frame->value_declarations()) {
 		ctx->add_type_edge(item.second.ty);
 	}
@@ -1593,9 +1791,11 @@ void Type::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, 
 const char* IncompleteType::diagnostic_kind() const {
 	return "incomplete";
 }
+
 void IncompleteType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(resolved);
 }
+
 void IncompleteType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1630,12 +1830,14 @@ void DistinctType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstrea
 const char* FixedArrayType::diagnostic_kind() const {
 	return "array";
 }
+
 void FixedArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(bounds);
 	ctx->add_value_edge(range.lower_bound);
 	ctx->add_value_edge(range.upper_bound);
 	ctx->add_type_edge(item_type);
 }
+
 void FixedArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1653,6 +1855,7 @@ void FixedArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostr
 	ctx->indent(out, indent + 1);
 	out << "item: " << ctx->known_type_ref(item_type);
 }
+
 void FixedArrayType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1665,9 +1868,11 @@ void FixedArrayType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstr
 const char* DynamicArrayType::diagnostic_kind() const {
 	return "dynamic array";
 }
+
 void DynamicArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(item_type);
 }
+
 void DynamicArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1677,9 +1882,11 @@ void DynamicArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::os
 const char* OpenArrayType::diagnostic_kind() const {
 	return "open array";
 }
+
 void OpenArrayType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(item_type);
 }
+
 void OpenArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1689,9 +1896,11 @@ void OpenArrayType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 const char* FixedSetType::diagnostic_kind() const {
 	return "set";
 }
+
 void FixedSetType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(item_type);
 }
+
 void FixedSetType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1701,9 +1910,11 @@ void FixedSetType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrin
 const char* TypedFileType::diagnostic_kind() const {
 	return "file";
 }
+
 void TypedFileType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(item_type);
 }
+
 void TypedFileType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1713,8 +1924,10 @@ void TypedFileType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 const char* EnumType::diagnostic_kind() const {
 	return "enum";
 }
+
 void EnumType::collect_diagnostic_edges(ErrorLetContext*) const {
 }
+
 void EnumType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "";
 	for (const auto& m : members) {
@@ -1728,24 +1941,29 @@ void EnumType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstr
 }
 
 static void collect_variant_diagnostic_edges(ErrorLetContext* ctx, const VariantPart* variant) {
-	if (!variant)
+	if (!variant) {
 		return;
-	if (variant->selector_type)
+	}
+	if (variant->selector_type) {
 		ctx->add_type_edge(variant->selector_type);
+	}
 	for (const auto& arm : variant->arms) {
-		for (const auto& field : arm.fields)
+		for (const auto& field : arm.fields) {
 			ctx->add_type_edge(field.ty);
+		}
 		collect_variant_diagnostic_edges(ctx, arm.variant);
 	}
 }
 
 static void print_variant_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent, const VariantPart* variant) {
-	if (!variant)
+	if (!variant) {
 		return;
+	}
 	ctx->indent(out, indent);
 	out << "case ";
-	if (variant->has_selector)
+	if (variant->has_selector) {
 		out << variant->selector_name << ": ";
+	}
 	out << ctx->known_type_ref(variant->selector_type) << " of\n";
 	for (size_t i = 0; i < variant->arms.size(); ++i) {
 		ctx->indent(out, indent + 1);
@@ -1761,11 +1979,13 @@ static void print_variant_diagnostic_definition(ErrorLetContext* ctx, std::ostri
 const char* RecordType::diagnostic_kind() const {
 	return "record";
 }
+
 void RecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
 	collect_variant_diagnostic_edges(ctx, variant);
 }
+
 void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->print_frame_members(out, children, indent + 1);
@@ -1773,6 +1993,7 @@ void RecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	ctx->indent(out, indent);
 	out << "end";
 }
+
 void RecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
 	out << " ... end";
 }
@@ -1780,11 +2001,13 @@ void RecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out
 const char* PackedRecordType::diagnostic_kind() const {
 	return "packed record";
 }
+
 void PackedRecordType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
 	collect_variant_diagnostic_edges(ctx, variant);
 }
+
 void PackedRecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->print_frame_members(out, children, indent + 1);
@@ -1792,6 +2015,7 @@ void PackedRecordType::print_diagnostic_definition(ErrorLetContext* ctx, std::os
 	ctx->indent(out, indent);
 	out << "end";
 }
+
 void PackedRecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
 	out << " ... end";
 }
@@ -1799,25 +2023,30 @@ void PackedRecordType::print_diagnostic_stub(ErrorLetContext*, std::ostringstrea
 const char* InterfaceType::diagnostic_kind() const {
 	return "interface";
 }
+
 void InterfaceType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
-	for (auto* i : super_interfaces)
+	for (auto* i : super_interfaces) {
 		ctx->add_type_edge(i);
+	}
 }
+
 void InterfaceType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	if (!super_interfaces.empty()) {
 		ctx->indent(out, indent + 1);
 		out << "inherits:";
-		for (auto* i : super_interfaces)
+		for (auto* i : super_interfaces) {
 			out << " " << ctx->known_type_ref(i);
+		}
 		out << "\n";
 	}
 	ctx->print_frame_members(out, children, indent + 1);
 	ctx->indent(out, indent);
 	out << "end";
 }
+
 void InterfaceType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
 	out << " ... end";
 }
@@ -1825,15 +2054,18 @@ void InterfaceType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& 
 const char* ClassType::diagnostic_kind() const {
 	return "class";
 }
+
 void ClassType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(super);
-	for (auto* i : implemented_interfaces)
+	for (auto* i : implemented_interfaces) {
 		ctx->add_type_edge(i);
+	}
 	ctx->add_value_edge(class_constructor);
 	ctx->add_value_edge(class_destructor);
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
 }
+
 void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	if (is_abstract) {
@@ -1847,8 +2079,9 @@ void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringst
 	if (!implemented_interfaces.empty()) {
 		ctx->indent(out, indent + 1);
 		out << "implements:";
-		for (auto* i : implemented_interfaces)
+		for (auto* i : implemented_interfaces) {
 			out << " " << ctx->known_type_ref(i);
+		}
 		out << "\n";
 	}
 	if (class_constructor) {
@@ -1863,6 +2096,7 @@ void ClassType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringst
 	ctx->indent(out, indent);
 	out << "end";
 }
+
 void ClassType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
 	out << " ... end";
 }
@@ -1870,14 +2104,17 @@ void ClassType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out,
 const char* ClassRefType::diagnostic_kind() const {
 	return "classref";
 }
+
 void ClassRefType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(target);
 }
+
 void ClassRefType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "target: " << ctx->known_type_ref(target);
 }
+
 void ClassRefType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1887,11 +2124,13 @@ void ClassRefType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstrea
 const char* ObjectType::diagnostic_kind() const {
 	return "object";
 }
+
 void ObjectType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(super);
 	ctx->add_frame_edge(children, DiagnosticFrameUse::AggregateMembers);
 	add_frame_value_type_edges(ctx, children);
 }
+
 void ObjectType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	if (super) {
@@ -1902,6 +2141,7 @@ void ObjectType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 	ctx->indent(out, indent);
 	out << "end";
 }
+
 void ObjectType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out, unsigned) const {
 	out << " ... end";
 }
@@ -1909,18 +2149,23 @@ void ObjectType::print_diagnostic_stub(ErrorLetContext*, std::ostringstream& out
 const char* PointerType::diagnostic_kind() const {
 	return "pointer";
 }
+
 void PointerType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
-	if (item_type)
+	if (item_type) {
 		ctx->add_type_edge(item_type);
+	}
 }
+
 void PointerType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
-	if (item_type)
+	if (item_type) {
 		out << "to: " << ctx->known_type_ref(item_type);
-	else
+	} else {
 		out << "untyped";
+	}
 }
+
 void PointerType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1930,14 +2175,17 @@ void PointerType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream
 const char* ModuleType::diagnostic_kind() const {
 	return "module";
 }
+
 void ModuleType::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_frame_edge(children, DiagnosticFrameUse::ModuleMembers);
 }
+
 void ModuleType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "details: ...";
 }
+
 void ModuleType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "\n";
 	ctx->indent(out, indent + 1);
@@ -1947,16 +2195,20 @@ void ModuleType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream&
 const char* UnitType::diagnostic_kind() const {
 	return "unit";
 }
+
 void UnitType::collect_diagnostic_edges(ErrorLetContext*) const {
 }
+
 void UnitType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {
 }
 
 const char* UntypedIntegerType::diagnostic_kind() const {
 	return "untyped_integer";
 }
+
 void UntypedIntegerType::collect_diagnostic_edges(ErrorLetContext*) const {
 }
+
 void UntypedIntegerType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {
 }
 
@@ -1990,34 +2242,38 @@ void RoutineType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostring
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "kind: ";
-	if (kind == CONSTRUCTOR)
+	if (kind == CONSTRUCTOR) {
 		out << "constructor";
-	else if (kind == CLASS_CONSTRUCTOR)
+	} else if (kind == CLASS_CONSTRUCTOR) {
 		out << "class_constructor";
-	else if (kind == CLASS_DESTRUCTOR)
+	} else if (kind == CLASS_DESTRUCTOR) {
 		out << "class_destructor";
-	else if (kind == DESTRUCTOR)
+	} else if (kind == DESTRUCTOR) {
 		out << "destructor";
-	else if (kind == METHOD)
+	} else if (kind == METHOD) {
 		out << "method";
-	else if (kind == ROUTINE)
+	} else if (kind == ROUTINE) {
 		out << "routine";
-	else
+	} else {
 		out << "class_method";
+	}
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "signature: (";
 	for (size_t i = 0; i < formals.size(); i++) {
-		if (i)
+		if (i) {
 			out << "; ";
+		}
 		const auto& p = formals[i];
 		out << param_mode_text(p.mode) << p.pas_name << ": " << ctx->known_type_ref(p.ty);
-		if (p.default_value)
+		if (p.default_value) {
 			out << " = " << ctx->known_value_ref(p.default_value);
+		}
 	}
 	out << ")";
-	if (return_type)
+	if (return_type) {
 		out << ": " << ctx->known_type_ref(return_type);
+	}
 }
 
 void RoutineType::print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {

@@ -1,18 +1,18 @@
 #pragma once
-#include <cstdio>
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <stack>
-#include <vector>
-#include <map>
-#include <optional>
-#include <string_view>
 #include "ci_less.h"
 #include "frame.h"
 #include "types.h"
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <map>
+#include <memory>
+#include <optional>
+#include <stack>
+#include <string>
+#include <string_view>
+#include <vector>
 
 class Node;
 class Mutation;
@@ -77,8 +77,7 @@ struct MatchRank {
 	// Bracket syntax has a historical direct set interpretation. Array
 	// construction is contextual and therefore loses to a viable set
 	// interpretation before ordinary per-element ranks are compared.
-	ContextualConstruction contextual_construction =
-	    ContextualConstruction::OrdinaryOrSet;
+	ContextualConstruction contextual_construction = ContextualConstruction::OrdinaryOrSet;
 	// An integer actual retains its carrier's signedness when two otherwise
 	// incomparable widening destinations are available. Identity, subtype,
 	// and direct assignment-edge direction are compared first.
@@ -109,8 +108,7 @@ struct CallableMatch {
  * must be allowed to reject an argument without emitting an error. */
 struct DeclaredConversionFailure {
 	std::vector<Callable*> candidates;
-	std::vector<std::pair<Callable*, CallableMatch>>
-	    viable;
+	std::vector<std::pair<Callable*, CallableMatch>> viable;
 	std::vector<Callable*> non_dominated;
 	bool ambiguous = false;
 };
@@ -124,7 +122,7 @@ enum class MatchFailure {
 };
 
 class ParserInputFile {
-public:
+      public:
 	FILE* input_file;
 	std::string input_file_name;
 	int input_file_line_number;
@@ -162,8 +160,7 @@ struct ScopeEntry {
 	/** Resolve one complete binding in this environment. Frame lookup already
 	 *  includes structural parents; opens_parent says whether lexical lookup
 	 *  may continue to attach another overload family. */
-	ScopeValueLookup lookup_value(
-	    const std::string& name) const;
+	ScopeValueLookup lookup_value(const std::string& name) const;
 };
 
 enum class DirectiveSwitchCategory {
@@ -209,25 +206,28 @@ class DirectiveState {
 	int packenum = 4;
 	InterfaceModel interface_model = InterfaceModel::COM;
 
-public:
+      public:
 	DirectiveState();
 	bool switch_enabled(char letter) const;
 	bool switch_supported(char letter) const;
 	void set_switch(char letter, bool enabled);
+
 	int get_packenum() const {
 		return packenum;
 	}
+
 	void set_packenum(int value) {
 		packenum = value;
 	}
+
 	LeadingTokenDirectives leading_token_directives() const {
-		return LeadingTokenDirectives{
-		    switch_enabled('q'),
-		    switch_enabled('i')};
+		return LeadingTokenDirectives{switch_enabled('q'), switch_enabled('i')};
 	}
+
 	InterfaceModel get_interface_model() const {
 		return interface_model;
 	}
+
 	void set_interface_model(InterfaceModel model) {
 		interface_model = model;
 	}
@@ -238,14 +238,13 @@ class SavedDirectiveState {
 	std::array<bool, 26> local_switches;
 	int packenum;
 
-public:
-	explicit SavedDirectiveState(
-	    const DirectiveState& state);
+      public:
+	explicit SavedDirectiveState(const DirectiveState& state);
 	void restore(DirectiveState& state) const;
 };
 
 class Parser {
-private:
+      private:
 	FILE* input_file;
 	std::string input_file_name;
 	int input_file_line_number;
@@ -258,7 +257,7 @@ private:
 	void parse_keyword(std::string s);
 	bool maybe_parse_keyword(std::string s);
 	std::vector<ParserInputFile> input_files; // TODO: stack
-	std::vector<ScopeEntry> scopes; // name-lookup stack
+	std::vector<ScopeEntry> scopes;           // name-lookup stack
 	// Declaration ownership is deliberately independent of name lookup.
 	// `uses`, `with`, and implicit Self push lookup entries only; actual
 	// declaration constructs push this stack explicitly.
@@ -277,8 +276,7 @@ private:
 	// exactly its own innermost worklist after recursive normalization and
 	// before emission.
 	// This is phase-local parser work, not source metadata on a Type or Frame.
-	std::vector<std::vector<Frame*>>
-	    type_block_deferred_aggregates;
+	std::vector<std::vector<Frame*>> type_block_deferred_aggregates;
 	// LHS name whose type expression is currently being parsed. Class parsing
 	// uses this to distinguish the one root declaration `System.TObject =
 	// class ... end` from every other bare class, which implicitly inherits
@@ -297,6 +295,7 @@ private:
 	// crossed try can perform its except/finally semantics before the actual
 	// control transfer occurs.
 	unsigned protected_try_depth = 0;
+
 	// A source loop normally gives break and continue the same protected-try
 	// target. A compiler-generated cleanup can instead wrap the loop: break
 	// leaves that cleanup region, while continue remains inside it. Keeping
@@ -306,28 +305,29 @@ private:
 		unsigned break_depth;
 		unsigned continue_depth;
 	};
-	std::vector<LoopTryTargets>
-	    loop_try_targets;
+
+	std::vector<LoopTryTargets> loop_try_targets;
 	// FPC permits bare `raise;` only in the statement sequence belonging
 	// directly to an except clause. Entering a nested try clears this even
 	// when that try occurs lexically inside an outer handler.
 	bool bare_raise_allowed = false;
+
 	// FPC assigns distinct identities to a try's protected body and to its
 	// except/finally region. A goto may remain within one identity but may not
 	// enter or leave it. Keep only label metadata required to validate forward
 	// gotos; ordinary statement emission remains single pass.
 	struct LabelExceptionState {
 		std::optional<unsigned> definition_block;
-		std::vector<std::pair<unsigned, SourceLocation>>
-		    goto_blocks;
+		std::vector<std::pair<unsigned, SourceLocation>> goto_blocks;
 	};
+
 	struct StatementControlContext {
 		unsigned next_exception_block = 0;
 		unsigned current_exception_block = 0;
 		std::map<std::string, LabelExceptionState> labels;
 	};
-	std::vector<StatementControlContext>
-	    statement_control_contexts;
+
+	std::vector<StatementControlContext> statement_control_contexts;
 	// Loop depth on entry to each currently parsed finally body. FPC permits
 	// break/continue for a loop wholly inside finally, but forbids control
 	// flow from leaving finally. Exit always leaves it.
@@ -346,8 +346,8 @@ private:
 	DirectiveState directive_state;
 	// This stack belongs to the source parser rather than an input file:
 	// include files participate in their parent's directive scope.
-	std::vector<SavedDirectiveState>
-	    saved_directive_states;
+	std::vector<SavedDirectiveState> saved_directive_states;
+
 	// One frame per open {$ifdef}/{$if}/{$ifndef}/{$ifopt}. Empty = top of
 	// file, always active. `outer` records the enclosing state at push time so
 	// $else and $elseif can restore correctly. `taken` records whether any
@@ -359,19 +359,20 @@ private:
 		bool taken;
 		bool active;
 	};
+
 	std::vector<IfdefFrame> ifdef_stack;
+
 	// True when no frame is inactive (or the stack is empty). Tokenizer drops
 	// non-directive tokens when this is false.
 	bool current_active() const {
 		return ifdef_stack.empty() || ifdef_stack.back().active;
 	}
+
 	// Interpret the body of a `{$...}` directive (without the leading `$` or
 	// trailing `}`). Handles ifdef/ifndef/if/ifopt/else/elseif/endif,
 	// define/undef, option switches, and include; other directives are
 	// consumed and ignored.
-	void handle_directive(
-	    const std::string& body,
-	    SourceLocation directive_location);
+	void handle_directive(const std::string& body, SourceLocation directive_location);
 	// Expand a `%NAME%` argument in `{$I %NAME%}` to the source text spliced
 	// at that position (a Pascal string literal for %DATE%). Only %DATE% is
 	// handled; any other name raises a parse error.
@@ -389,65 +390,30 @@ private:
 	 * leading source token. Operand parsing may encounter directives for
 	 * nested subtrees, so these builders must never reread mutable scanner
 	 * state after receiving their operands. */
-	Node* mk_arith(
-	    std::string id, Node* a, Node* b,
-	    LeadingTokenDirectives directives);
-	Node* mk_compare(
-	    std::string id, Node* a, Node* b,
-	    LeadingTokenDirectives directives);
-	Node* mk_membership(
-	    Node* item, Node* set,
-	    LeadingTokenDirectives directives);
-	Node* mk_unary_same(
-	    std::string id, Node* x,
-	    LeadingTokenDirectives directives);
+	Node* mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives directives);
+	Node* mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirectives directives);
+	Node* mk_membership(Node* item, Node* set, LeadingTokenDirectives directives);
+	Node* mk_unary_same(std::string id, Node* x, LeadingTokenDirectives directives);
 	Node* mk_assign(Node* a, Node* b);
-	std::optional<ArgumentMatch> match_argument(
-	    const Parameter& formal, Node* actual,
-	    const BuiltinDesc* builtin,
-	    size_t parameter_index,
-	    bool allow_declared_conversion = true,
-	    MatchFailure* failure = nullptr,
-	    DeclaredConversionFailure*
-	        conversion_failure = nullptr);
-	std::optional<CallableMatch>
-	match_callable_arguments(
-	    Callable* callable,
-	    const std::vector<Node*>& args,
-	    bool allow_declared_conversion = true);
-	std::optional<ArgumentMatch>
-	match_declared_conversion(
-	    Node* actual, Type* target,
-	    std::string_view operator_identifier,
-	    MatchFailure* failure,
-	    DeclaredConversionFailure*
-	        conversion_failure);
-	bool has_direct_assignment_edge(
-	    Type* source, Type* target);
-	Node* match_explicit_conversion(
-	    Node* actual, Type* target,
-	    bool implicit_fallback);
-	Node* make_implicit_cast(
-	    Node* value, Type* target);
+	std::optional<ArgumentMatch> match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion = true, MatchFailure* failure = nullptr, DeclaredConversionFailure* conversion_failure = nullptr);
+	std::optional<CallableMatch> match_callable_arguments(Callable* callable, const std::vector<Node*>& args, bool allow_declared_conversion = true);
+	std::optional<ArgumentMatch> match_declared_conversion(Node* actual, Type* target, std::string_view operator_identifier, MatchFailure* failure, DeclaredConversionFailure* conversion_failure);
+	bool has_direct_assignment_edge(Type* source, Type* target);
+	Node* match_explicit_conversion(Node* actual, Type* target, bool implicit_fallback);
+	Node* make_implicit_cast(Node* value, Type* target);
 	Node* cast(Node* a, Type* target_ty);
-	Node* cast_for_destination(
-	    Node* a, Type* target_ty);
-	Node* cast_impl(
-	    Node* a, Type* target_ty,
-	    bool allow_destination_conversion);
-	Node* resolve_routine_reference(
-	    RoutineRef* reference, RoutineType* target_ty);
-	Node* try_resolve_routine_reference(
-	    RoutineRef* reference, RoutineType* target_ty,
-	    bool* ambiguous);
-	Node* resolve_routine_code_reference(
-	    RoutineRef* reference);
+	Node* cast_for_destination(Node* a, Type* target_ty);
+	Node* cast_impl(Node* a, Type* target_ty, bool allow_destination_conversion);
+	Node* resolve_routine_reference(RoutineRef* reference, RoutineType* target_ty);
+	Node* try_resolve_routine_reference(RoutineRef* reference, RoutineType* target_ty, bool* ambiguous);
+	Node* resolve_routine_code_reference(RoutineRef* reference);
 	uint64_t next_subrange_type_number = 0;
 	std::string next_subrange_cxx_name();
 	Type* parse_subrange_type(Node* lower_bound, Node* upper_bound);
 	ClassType* lookup_implicit_tobject_superclass();
 	Node* active_function_result_lvalue(Callable* c) const;
-protected:
+
+      protected:
 	std::string input_token;
 	void parse_block_body();
 	void parse_unit_statement_sequence(bool stop_at_finalization);
@@ -464,10 +430,7 @@ protected:
 	void parse_block();
 	void parse_semicolon();
 	void maybe_parse_statement();
-	Mutation* parse_mutation_statement(
-	    std::string spelling,
-	    SourceLocation call_location,
-	    LeadingTokenDirectives directives);
+	Mutation* parse_mutation_statement(std::string spelling, SourceLocation call_location, LeadingTokenDirectives directives);
 	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
@@ -475,21 +438,16 @@ protected:
 	Node* parse_bracket_literal();
 	Node* parse_storage_initializer(Type* ty);
 	Node* resolve_lvalue(std::string name);
-	std::optional<Binding>
-	maybe_resolve_type_or_value(std::string name);
+	std::optional<Binding> maybe_resolve_type_or_value(std::string name);
 	Node* maybe_resolve_value(std::string name);
 	Node* resolve_value(std::string name);
 	Type* maybe_resolve_type(std::string name);
 	Type* resolve_type(std::string name, bool allow_forward);
-    bool maybe_parse_directive(std::string directive);
+	bool maybe_parse_directive(std::string directive);
 	void parse_directive(std::string s);
 	void parse_operator(std::string s);
-	Node* parse_value(
-	    LeadingTokenDirectives* leading_directives);
-	Node* parse_value_from_identifier(
-	    std::string id,
-	    LeadingTokenDirectives identifier_directives,
-	    LeadingTokenDirectives* leading_directives);
+	Node* parse_value(LeadingTokenDirectives* leading_directives);
+	Node* parse_value_from_identifier(std::string id, LeadingTokenDirectives identifier_directives, LeadingTokenDirectives* leading_directives);
 	Node* parse_new_or_dispose(bool is_new);
 	// Parse `inherited Name[(args)]` or anonymous `inherited;`. Returns an
 	// InheritedCall node. The enclosing routine must be a Method on a
@@ -510,14 +468,9 @@ protected:
 	 *  auto-call happens because that `(` IS the call. End-of-designator
 	 *  auto-call is the caller's decision (value context yes, lvalue no)
 	 *  via maybe_auto_call. */
-	Node* parse_designator(
-	    LeadingTokenDirectives* leading_directives = nullptr);
-	Node* parse_designator_tail(
-	    Node* result,
-	    LeadingTokenDirectives& leading_directives);
-	Node* parse_member_selection(
-	    Node* base,
-	    LeadingTokenDirectives* leading_directives);
+	Node* parse_designator(LeadingTokenDirectives* leading_directives = nullptr);
+	Node* parse_designator_tail(Node* result, LeadingTokenDirectives& leading_directives);
+	Node* parse_member_selection(Node* base, LeadingTokenDirectives* leading_directives);
 	/** Parse `LHS.RHS` in a type context. Resolves LHS through the same
 	 *  kind-dispatch as the value-context member path (UnitRef via self-bind,
 	 *  ClassType/RecordType wrapped), then looks RHS up as a TYPE in the
@@ -529,8 +482,8 @@ protected:
 	 * parse_member_selection, used by compiler-defined protocols which must
 	 * obey the same inheritance, overload, property, and receiver rules as a
 	 * source `Receiver.Name` expression. */
-	Node* maybe_bind_member(
-	    Node* receiver, const std::string& name);
+	Node* maybe_bind_member(Node* receiver, const std::string& name);
+
 	struct CustomForInResolution {
 		Node* get_enumerator;
 		Node* move_next;
@@ -538,19 +491,17 @@ protected:
 		Node* cleanup;
 		bool nullable;
 	};
+
 	/** Try the ordinary member-based for-in protocol. Null means the
 	 * collection has no GetEnumerator member and builtin iteration may be
 	 * considered; a malformed member protocol is diagnosed here. */
-	std::optional<CustomForInResolution>
-	maybe_resolve_custom_for_in(
-	    Node* collection, Node* control);
+	std::optional<CustomForInResolution> maybe_resolve_custom_for_in(Node* collection, Node* control);
 	/** If NODE is a bare callable (Callable, OverloadSet, or MemberAccess
 	 *  whose member is either) AND at least one candidate can be invoked
 	 *  parameterlessly (no formals or all formals defaulted), wrap it in a
 	 *  no-arg ProcCall via finalize_call and return that. Otherwise return
 	 *  NODE unchanged. */
-	Node* maybe_auto_call(
-	    Node* n, LeadingTokenDirectives directives);
+	Node* maybe_auto_call(Node* n, LeadingTokenDirectives directives);
 	/** True when NODE is a syntactic form assignable to via `:=`: a bare
 	 *  StorageSlot, a MemberAccess whose member is a StorageSlot, a
 	 *  Dereference, or an Index. Everything else (constants, calls,
@@ -568,37 +519,25 @@ protected:
 	bool is_supported_packed_assignment(Node* n);
 	/** Enforce the complete place boundary shared by `:=` and read/modify/write
 	 *  mutation before either construct builds its store. */
-	void validate_writable_destination(
-	    Node* target,
-	    SourceLocation error_location,
-	    std::string not_assignable_message);
-	Node* parse_expression_after_identifier(
-	    std::string id,
-	    LeadingTokenDirectives identifier_directives);
+	void validate_writable_destination(Node* target, SourceLocation error_location, std::string not_assignable_message);
+	Node* parse_expression_after_identifier(std::string id, LeadingTokenDirectives identifier_directives);
 	Node* parse_comparison();
 	Node* parse_comparison_tail(Node* result);
 	Node* parse_power();
-	Node* parse_power_tail(
-	    Node* result,
-	    LeadingTokenDirectives leading_directives);
+	Node* parse_power_tail(Node* result, LeadingTokenDirectives leading_directives);
 	Node* parse_product();
 	Node* parse_product_tail(Node* result);
 	Node* parse_subrange_bound_expression();
-	Node* parse_subrange_bound_expression_after_identifier(
-	    std::string id,
-	    LeadingTokenDirectives identifier_directives);
+	Node* parse_subrange_bound_expression_after_identifier(std::string id, LeadingTokenDirectives identifier_directives);
 	Node* parse_sum();
 	Node* parse_sum_tail(Node* result);
-	Type* parse_array_type(
-	    bool direct_formal = false);
+	Type* parse_array_type(bool direct_formal = false);
 	Type* parse_object_type();
 	Type* parse_record_type();
 	Type* parse_procedure_type();
 	Type* parse_function_type();
 	Type* parse_operator_type();
-	Type* parse_class_type(
-	    ClassType* completing_forward = nullptr,
-	    bool allow_forward_declaration = false);
+	Type* parse_class_type(ClassType* completing_forward = nullptr, bool allow_forward_declaration = false);
 	Type* parse_interface_type();
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);
@@ -618,10 +557,8 @@ protected:
 	Node* parse_property_accessor_reference(Frame* body);
 	void parse_property_declaration(Frame* body, Type* owner_type);
 	void validate_property_declaration(Property* property);
-	void validate_method_ancestor_semantics(
-	    Method* method, Frame* owner_body);
-	void validate_aggregate_declaration_semantics(
-	    Frame* owner_body);
+	void validate_method_ancestor_semantics(Method* method, Frame* owner_body);
+	void validate_aggregate_declaration_semantics(Frame* owner_body);
 	Property* default_property_for_type(Type* ty);
 	PropertyAccess* apply_property(Node* receiver, Property* property, std::vector<Node*> indexes);
 	bool property_read_is_place(PropertyAccess* access);
@@ -675,6 +612,7 @@ protected:
 	 *  already registered. Search order for the file: directory of the current
 	 *  input file, then CWD. */
 	Unit* load_or_get_unit(std::string name);
+
 	/** Result of call finalization: the concrete callee to place in
 	 *  ProcCall.callee, plus the receiver expression if the call carries one
 	 *  (method calls). receiver is null for standalone calls. */
@@ -685,25 +623,19 @@ protected:
 		// has no receiver ABI. make_call lowers it through EvaluateThen.
 		Node* qualifier_effect = nullptr;
 	};
+
 	/** Given a resolved target (Callable, OverloadSet, MemberAccess-wrapping
 	 *  either of those, or a Builtin) and parsed args, peel any MemberAccess
 	 *  to extract a receiver, run overload ranking if the target is a set,
 	 *  materialize defaults, and insert Cast coercions where needed. Errors
 	 *  on no-match, ambiguous overload, or bad args. */
-	FinalizedCall finalize_call(Node* target,
-	                           std::vector<Node*>& args,
-	                           std::string name_for_error,
-	                           SourceLocation error_location,
-	                           Type* expected_return_type = nullptr);
+	FinalizedCall finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error, SourceLocation error_location, Type* expected_return_type = nullptr);
 	/** Form the semantic application after overload selection. Constructor
 	 *  selection through a class reference becomes Construct; every other
 	 *  selected callable remains ProcCall. OVERFLOW_CHECKS was captured at
 	 *  the call construct's leading designator token, before arguments were
 	 *  parsed; only compiler-owned direct operations consume it. */
-	Node* make_call(
-	    FinalizedCall finalized,
-	    std::vector<Node*> args,
-	    LeadingTokenDirectives directives);
+	Node* make_call(FinalizedCall finalized, std::vector<Node*> args, LeadingTokenDirectives directives);
 	bool maybe_parse_plus();
 	bool maybe_parse_minus();
 	bool maybe_parse_star();
@@ -731,10 +663,8 @@ protected:
 	unsigned current_exception_block() const;
 	unsigned enter_exception_block();
 	void restore_exception_block(unsigned block);
-	void record_label_definition(
-	    const std::string& name, SourceLocation location);
-	void record_goto(
-	    const std::string& name, SourceLocation location);
+	void record_label_definition(const std::string& name, SourceLocation location);
+	void record_goto(const std::string& name, SourceLocation location);
 	/** Add/remove a lookup environment, optionally selected through an
 	 *  expression. These never change declaration ownership. */
 	void push_scope(const Frame* scope, Node* qualifier = nullptr);
@@ -754,15 +684,8 @@ protected:
 	void maybe_parse_proc_attributes();
 	RoutineType* parse_routine_signature(bool is_class, bool is_function, bool allow_of_object, RoutineKind kind, Type* owner = nullptr);
 	void parse_routine_body(Callable* target, Frame* owner_frame);
-	void parse_class_lifecycle_prototype(
-	    ClassType* owner_class, RoutineKind kind);
-	Procedure* match_or_create_procedure(
-	    const std::string& pas_name,
-	    const std::vector<std::string>& frame_names,
-	    const std::string& cxx_name,
-	    RoutineType* sig,
-	    bool had_paren, bool has_overload,
-	    bool short_form_implementation);
+	void parse_class_lifecycle_prototype(ClassType* owner_class, RoutineKind kind);
+	Procedure* match_or_create_procedure(const std::string& pas_name, const std::vector<std::string>& frame_names, const std::string& cxx_name, RoutineType* sig, bool had_paren, bool has_overload, bool short_form_implementation);
 	/** Parse `procedure NAME(...);` (is_function=false) or
 	 *  `function NAME(...): T;` (is_function=true). Attribute list (`overload;`)
 	 *  is consumed after the terminating `;`. If followed by a body, parses
@@ -776,59 +699,28 @@ protected:
 	/** Finish a parser diagnostic with its enclosing source context and the
 	 * one diagnostic graph shared by the primary message, context references,
 	 * and exactly one trailing `where` block. */
-	[[noreturn]] void emit_parse_error_at(
-	    SourceLocation loc, std::string message,
-	    ErrorLetContext& ctx);
-	[[noreturn]] void emit_fatal_error_at(
-	    SourceLocation loc, std::string message);
-	std::string complete_diagnostic_message(
-	    std::string message,
-	    ErrorLetContext& ctx) const;
-	std::string enclosing_diagnostic_references(
-	    ErrorLetContext& ctx) const;
+	[[noreturn]] void emit_parse_error_at(SourceLocation loc, std::string message, ErrorLetContext& ctx);
+	[[noreturn]] void emit_fatal_error_at(SourceLocation loc, std::string message);
+	std::string complete_diagnostic_message(std::string message, ErrorLetContext& ctx) const;
+	std::string enclosing_diagnostic_references(ErrorLetContext& ctx) const;
 	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
 	Type* raise_type_mismatch(std::string message, Type* expected, Type* got);
-	Type* raise_type_mismatch_at(SourceLocation location, std::string message,
-				     Type* expected, Type* got);
+	Type* raise_type_mismatch_at(SourceLocation location, std::string message, Type* expected, Type* got);
 	Type* raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
-	Type* raise_type_kind_mismatch_at(SourceLocation location, std::string message,
-					  const char* expected_kind, Type* got);
+	Type* raise_type_kind_mismatch_at(SourceLocation location, std::string message, const char* expected_kind, Type* got);
 	Type* raise_type_error(std::string message, Type* relevant);
-	Type* raise_type_error_at(
-	    SourceLocation location, std::string message,
-	    Type* relevant);
-	[[noreturn]] void raise_value_error(
-	    std::string message, Node* relevant);
-	[[noreturn]] void raise_value_error_at(
-	    SourceLocation location, std::string message,
-	    Node* relevant);
-	[[noreturn]] void raise_values_error(
-	    std::string message,
-	    const std::vector<std::pair<std::string, Node*>>&
-		relevant);
-	[[noreturn]] void raise_routine_reference_error(
-	    std::string message, RoutineRef* reference,
-	    Type* destination_type);
+	Type* raise_type_error_at(SourceLocation location, std::string message, Type* relevant);
+	[[noreturn]] void raise_value_error(std::string message, Node* relevant);
+	[[noreturn]] void raise_value_error_at(SourceLocation location, std::string message, Node* relevant);
+	[[noreturn]] void raise_values_error(std::string message, const std::vector<std::pair<std::string, Node*>>& relevant);
+	[[noreturn]] void raise_routine_reference_error(std::string message, RoutineRef* reference, Type* destination_type);
 	[[noreturn]] void raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
-	[[noreturn]] void raise_overload_resolution_error(SourceLocation error_location,
-	                                                  std::string name,
-	                                                  Node* receiver,
-	                                                  const std::vector<Node*>& args,
-	                                                  Type* expected_return_type,
-	                                                  const std::vector<Callable*>& candidates,
-	                                                  const std::vector<std::pair<Callable*, CallableMatch>>& viable,
-	                                                  const std::vector<Callable*>& non_dominated,
-	                                                  bool ambiguous,
-	                                                  std::string failure_description = {});
-	[[noreturn]] void raise_cxx_carrier_collision(
-	    const std::string& name, Callable* incoming,
-	    const CallableRegistration& registration);
-	[[noreturn]] void raise_callable_registration_error(
-	    const std::string& name, Callable* incoming,
-	    const CallableRegistration& registration);
+	[[noreturn]] void raise_overload_resolution_error(SourceLocation error_location, std::string name, Node* receiver, const std::vector<Node*>& args, Type* expected_return_type, const std::vector<Callable*>& candidates, const std::vector<std::pair<Callable*, CallableMatch>>& viable, const std::vector<Callable*>& non_dominated, bool ambiguous, std::string failure_description = {});
+	[[noreturn]] void raise_cxx_carrier_collision(const std::string& name, Callable* incoming, const CallableRegistration& registration);
+	[[noreturn]] void raise_callable_registration_error(const std::string& name, Callable* incoming, const CallableRegistration& registration);
 
-public:
+      public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);
 	SourceLocation current_location() const;
 	// Push a source onto the input stack and make it current. Reads one

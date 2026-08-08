@@ -10,13 +10,13 @@
 //   kBuiltins         - Pascal procedures/functions visible at the root
 //                       (Ord, Inc, Dec, ...)
 #pragma once
+#include "cst.h"
+#include "frame.h"
 #include <array>
 #include <cstdint>
 #include <optional>
 #include <string_view>
 #include <vector>
-#include "cst.h"
-#include "frame.h"
 
 struct ConstEvalContext;
 struct ConstEvalResult;
@@ -150,26 +150,24 @@ enum class BuiltinCallSiteSwitch {
 };
 
 struct BuiltinDesc {
-	std::string_view cxx_name;    // e.g. "::u_system::p_ord"
-	BuiltinConstFold const_fold;  // nullptr when this builtin is not foldable
+	std::string_view cxx_name;   // e.g. "::u_system::p_ord"
+	BuiltinConstFold const_fold; // nullptr when this builtin is not foldable
 	std::optional<TypeBoundKind> type_bound_kind = {};
 	BuiltinGenericKind generic_kind = BuiltinGenericKind::None;
 	BuiltinSyntaxKind syntax_kind = BuiltinSyntaxKind::None;
-	BuiltinCallConvention call_convention =
-	    BuiltinCallConvention::Function;
+	BuiltinCallConvention call_convention = BuiltinCallConvention::Function;
 	/** Direct calls to a finite compiler-owned operation may select a second
 	 * implementation when CALL_SITE_SWITCH is disabled even though Pascal
 	 * lookup selected the same ordinary declaration. Empty for ordinary
 	 * functions and operators whose checked/unchecked identities are
 	 * separate declarations. */
-	BuiltinCallSiteSwitch call_site_switch =
-	    BuiltinCallSiteSwitch::None;
+	BuiltinCallSiteSwitch call_site_switch = BuiltinCallSiteSwitch::None;
 	std::string_view disabled_cxx_name = {};
 };
 
 struct IntrinsicTypeDesc {
-	std::string_view pas_name;    // lowercase
-	std::string_view cxx_name;    // e.g. "::u_system::t_integer"
+	std::string_view pas_name; // lowercase
+	std::string_view cxx_name; // e.g. "::u_system::t_integer"
 };
 
 struct OrdinalBounds {
@@ -199,30 +197,20 @@ enum class IntrinsicCarrier {
 	File,
 };
 
-class IntrinsicType: public Type {
-public:
+class IntrinsicType : public Type {
+      public:
 	std::string cxx_name;
 	std::optional<int> rank;
 	std::optional<OrdinalBounds> ordinal_bounds;
 	std::optional<TypeLayout> layout;
 	std::optional<IntrinsicCarrier> carrier;
-	IntrinsicType(SourceLocation source_location,
-	              std::string cxx_name,
-	              std::optional<int> rank,
-	              std::optional<OrdinalBounds> ordinal_bounds = {},
-	              std::optional<TypeLayout> layout = {},
-	              std::optional<IntrinsicCarrier> carrier = {});
+	IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank, std::optional<OrdinalBounds> ordinal_bounds = {}, std::optional<TypeLayout> layout = {}, std::optional<IntrinsicCarrier> carrier = {});
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	std::optional<ValueConversion>
-	destination_conversion_from(
-	    const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	Type* sequence_element_type() const override;
 	Type* sequence_index_type() const override;
 	Type* sequence_length_type() const override;
@@ -232,8 +220,8 @@ public:
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-class Builtin: public Node {
-public:
+class Builtin : public Node {
+      public:
 	const BuiltinDesc* desc;
 	Builtin(const BuiltinDesc* desc);
 	const char* diagnostic_kind() const override;

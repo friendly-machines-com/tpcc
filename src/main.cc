@@ -22,8 +22,9 @@ static std::string derive_output_path(std::string input) {
 // empty for a boolean define. FPC accepts both `:=` and `=` in this position.
 static void parse_define_arg(const char* arg, std::string& sym, std::string& val) {
 	const char* p = arg;
-	while (*p && *p != ':' && *p != '=')
+	while (*p && *p != ':' && *p != '=') {
 		p++;
+	}
 	sym.assign(arg, p - arg);
 	if (*p == ':' && p[1] == '=') {
 		val.assign(p + 2);
@@ -90,8 +91,9 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "mp: no source file given (use -h for help)\n");
 		return 2;
 	}
-	if (output_path.empty())
+	if (output_path.empty()) {
 		output_path = derive_output_path(source_path);
+	}
 
 	auto slash = output_path.find_last_of('/');
 	options.output_dir = (slash == std::string::npos) ? "" : output_path.substr(0, slash);

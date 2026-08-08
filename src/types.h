@@ -1,10 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <optional>
-#include <string>
-#include <vector>
 #include <sstream>
+#include <string>
 #include <utility>
+#include <vector>
 
 class Frame;
 class Node;
@@ -39,21 +39,28 @@ struct SourceLocation {
 	int line_number = 0;
 
 	SourceLocation() = default;
-	SourceLocation(std::string file_name, int line_number)
-	    : file_name(std::move(file_name)), line_number(line_number) {}
+
+	SourceLocation(std::string file_name, int line_number) : file_name(std::move(file_name)), line_number(line_number) {
+	}
 
 	bool operator<(const SourceLocation& other) const {
-		if (file_name != other.file_name)
+		if (file_name != other.file_name) {
 			return file_name < other.file_name;
+		}
 		return line_number < other.line_number;
 	}
 
-	static SourceLocation builtin() { return SourceLocation("<builtin>", 0); }
-	static SourceLocation internal() { return SourceLocation("<internal>", 0); }
+	static SourceLocation builtin() {
+		return SourceLocation("<builtin>", 0);
+	}
+
+	static SourceLocation internal() {
+		return SourceLocation("<internal>", 0);
+	}
 };
 
 class Type {
-public:
+      public:
 	SourceLocation source_location;
 	// The one FPC-style default indexed property declared by this type.
 	// Descendant lookup walks the static type hierarchy when this is null.
@@ -86,16 +93,13 @@ public:
 	 * Typed var/out matching, routine identity, overload ranking, and C++
 	 * carrier identity must not substitute either relation for their own
 	 * rules. */
-	virtual std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const;
+	virtual std::optional<ValueConversion> value_conversion_from(const Type* source) const;
 	/** Predefined conversion used only after the destination type has already
 	 * been selected: assignment, initialization, function result, Inc/Dec
 	 * writeback, and native indexing. It may narrow and therefore request a
 	 * caller-side {$R+} check, but it is never consulted for overload
 	 * viability. Declared operator := lookup still precedes this fallback. */
-	virtual std::optional<ValueConversion>
-	destination_conversion_from(
-	    const Type* source) const;
+	virtual std::optional<ValueConversion> destination_conversion_from(const Type* source) const;
 	/** Whether source syntax `ThisType(value)` has one predefined direct
 	 * conversion edge after source-defined Explicit/Implicit contracts have
 	 * failed. This is deliberately separate from value_conversion_from():
@@ -105,61 +109,67 @@ public:
 	 * crossings, and packed overlays. Implementations must inspect only SOURCE
 	 * and this destination; applying another conversion first would turn the
 	 * language into an accidental A -> B -> C conversion search. */
-	virtual bool predefined_explicit_conversion_from(
-	    const Type* source) const;
+	virtual bool predefined_explicit_conversion_from(const Type* source) const;
 	virtual bool is_subtype_of(const Type* target) const;
 	/** Exact contract identity for a type written directly in a routine
 	 * formal. Most Pascal types use definition identity. Open arrays override
 	 * this because separately parsed `array of T` formals describe the same
 	 * call contract when their element Type* is identical, even though neither
 	 * occurrence is a storable Pascal type. */
-	virtual bool same_formal_contract_as(
-	    const Type* other) const;
+	virtual bool same_formal_contract_as(const Type* other) const;
+
 	/** Sequence operations are properties of the Pascal semantic type, not of
 	 * a C++ spelling recognized by the parser. A null element type means this
 	 * type does not support indexing/Length or built-in sequence iteration. */
 	virtual Type* sequence_element_type() const {
 		return nullptr;
 	}
+
 	// Non-null only for actual array constructors. Strings are sequences but
 	// do not become open-array storage merely because their elements are
 	// characters.
 	virtual Type* array_element_type() const {
 		return nullptr;
 	}
+
 	virtual Type* sequence_index_type() const {
 		return nullptr;
 	}
+
 	virtual Type* sequence_length_type() const {
 		return nullptr;
 	}
+
 	virtual bool sequence_is_resizable() const {
 		return false;
 	}
+
 	// True when ordinary C++ construction, copy, or destruction participates
 	// in the Pascal value's lifetime. Bytewise packed-field projection cannot
 	// safely manufacture such a value by memcpy.
 	virtual bool has_managed_lifetime() const {
 		return false;
 	}
+
 	/** Whether this type and OTHER have the same C++ type spelling.
 	 * This backend equivalence never participates in Pascal lookup,
 	 * conversion, var/out matching, or signature identity; it exists to
 	 * diagnose source overloads the current C++ lowering cannot represent.
 	 * A concrete subrange definition has its own C++ carrier and therefore
 	 * reaches this relation by ordinary Type* identity like a record or enum. */
-	bool same_cxx_carrier_as(
-	    const Type* other) const;
+	bool same_cxx_carrier_as(const Type* other) const;
 	/** Constructor-specific half of same_cxx_carrier_as(). The public wrapper
 	 * first handles Type* identity; each remaining type constructor describes
 	 * only its own C++ carrier. */
-	virtual bool same_cxx_carrier_definition_as(
-	    const Type* other) const;
+	virtual bool same_cxx_carrier_definition_as(const Type* other) const;
+
 	// True iff a variable of this type is represented in C++ emission as a
 	// pointer (i.e. emission in storage position is `t_foo*`, member access
 	// uses `->`, `nil` is a legal value). Pascal `class` and `interface` are
 	// reference types like user `^T`; `record` and `object` are not.
-	virtual bool is_reference_type() const { return false; }
+	virtual bool is_reference_type() const {
+		return false;
+	}
 };
 
 /** Placeholder created internally while parsing one type block. Sources are
@@ -168,7 +178,7 @@ public:
  *  type-block end. An explicit Pascal `TFoo = class;` instead publishes an
  *  incomplete ClassType: FPC permits its definition in a later type section,
  *  and intervening declarations already need its class identity. */
-struct IncompleteType: public Type {
+struct IncompleteType : public Type {
 	std::string name;
 	Type* resolved;
 	IncompleteType(SourceLocation source_location, std::string name);
@@ -185,26 +195,17 @@ struct IncompleteType: public Type {
  * operations use Base's family. The C++ backend therefore spells a named
  * `using` for the shared carrier while retaining this separate semantic node.
  */
-struct DistinctType: public Type {
+struct DistinctType : public Type {
 	std::string cxx_name;
 	Type* base_type;
 
-	DistinctType(
-	    SourceLocation source_location,
-	    std::string cxx_name, Type* base_type);
+	DistinctType(SourceLocation source_location, std::string cxx_name, Type* base_type);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(
-	    const Type* source) const override;
-	std::optional<ValueConversion>
-	destination_conversion_from(
-	    const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
-	bool is_subtype_of(
-	    const Type* target) const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
+	bool is_subtype_of(const Type* target) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	Type* sequence_element_type() const override;
 	Type* array_element_type() const override;
 	Type* sequence_index_type() const override;
@@ -212,27 +213,22 @@ struct DistinctType: public Type {
 	bool sequence_is_resizable() const override;
 	bool has_managed_lifetime() const override;
 	bool is_reference_type() const override;
-	void collect_diagnostic_edges(
-	    ErrorLetContext* ctx) const override;
-	void print_diagnostic_definition(
-	    ErrorLetContext* ctx, std::ostringstream& out,
-	    unsigned indent) const override;
-	void print_diagnostic_stub(
-	    ErrorLetContext* ctx, std::ostringstream& out,
-	    unsigned indent) const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** Strip one or more FPC `type Base` identities to their shared storage type.
  * This is representation inspection, not a conversion search. */
 Type* distinct_storage_type(Type* type);
-const Type* distinct_storage_type(
-    const Type* type);
+const Type* distinct_storage_type(const Type* type);
 
 struct OrdinalRange {
 	struct Value {
 		bool negative = false;
 		uint64_t magnitude = 0;
 	};
+
 	Type* index_type = nullptr;
 	Type* base_type = nullptr;
 	Node* lower_bound = nullptr;
@@ -247,48 +243,48 @@ struct OrdinalRange {
  *  255; `string[N]` is the same semantic type constructor with capacity N.
  *  Capacity is payload bytes, so the physical size is capacity + one length
  *  byte. */
-struct ShortStringType: public Type {
+struct ShortStringType : public Type {
 	uint8_t capacity;
 	ShortStringType(SourceLocation source_location, uint8_t capacity);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	std::optional<ValueConversion>
-	destination_conversion_from(
-	    const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	Type* sequence_element_type() const override;
 	Type* sequence_index_type() const override;
 	Type* sequence_length_type() const override;
+
 	bool sequence_is_resizable() const override {
 		// SetLength changes the logical length stored in byte zero; it does
 		// not change this type's compile-time payload capacity.
 		return true;
 	}
+
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-struct FixedArrayType: public Type {
+struct FixedArrayType : public Type {
 	Type* bounds;
 	Type* item_type;
 	OrdinalRange range;
 	FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type);
 	const char* diagnostic_kind() const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
+
 	Type* sequence_element_type() const override {
 		return item_type;
 	}
+
 	Type* array_element_type() const override {
 		return item_type;
 	}
+
 	Type* sequence_index_type() const override {
 		return range.base_type;
 	}
+
 	Type* sequence_length_type() const override;
 	bool has_managed_lifetime() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -298,74 +294,67 @@ struct FixedArrayType: public Type {
 
 /** A managed `array of T` value. Every constructor occurrence is a distinct
  * Pascal definition; item-carrier equality below is backend erasure only. */
-struct DynamicArrayType: public Type {
+struct DynamicArrayType : public Type {
 	Type* item_type;
-	DynamicArrayType(
-	    SourceLocation source_location,
-	    Type* item_type);
+	DynamicArrayType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
+
 	Type* sequence_element_type() const override {
 		return item_type;
 	}
+
 	Type* array_element_type() const override {
 		return item_type;
 	}
+
 	Type* sequence_index_type() const override;
 	Type* sequence_length_type() const override;
+
 	bool sequence_is_resizable() const override {
 		return true;
 	}
+
 	bool has_managed_lifetime() const override {
 		return true;
 	}
-	void collect_diagnostic_edges(
-	    ErrorLetContext* ctx) const override;
-	void print_diagnostic_definition(
-	    ErrorLetContext* ctx, std::ostringstream& out,
-	    unsigned indent) const override;
+
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 /** A directly written formal `array of T`. It is a non-owning call contract,
  * never a storage or result type. Separate occurrences correspond by exact
  * element Type* rather than by their own generative identities. */
-struct OpenArrayType: public Type {
+struct OpenArrayType : public Type {
 	Type* item_type;
-	OpenArrayType(
-	    SourceLocation source_location,
-	    Type* item_type);
+	OpenArrayType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
-	bool same_formal_contract_as(
-	    const Type* other) const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	bool same_formal_contract_as(const Type* other) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
+
 	Type* sequence_element_type() const override {
 		return item_type;
 	}
+
 	Type* array_element_type() const override {
 		return item_type;
 	}
+
 	Type* sequence_index_type() const override;
 	Type* sequence_length_type() const override;
-	void collect_diagnostic_edges(
-	    ErrorLetContext* ctx) const override;
-	void print_diagnostic_definition(
-	    ErrorLetContext* ctx, std::ostringstream& out,
-	    unsigned indent) const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-struct FixedSetType: public Type {
+struct FixedSetType : public Type {
 	Type* item_type;
 	FixedSetType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -377,12 +366,11 @@ struct FixedSetType: public Type {
  * of those three incompatible Pascal file categories from collapsing merely
  * because their runtime handles have the same size.
  */
-struct TypedFileType: public Type {
+struct TypedFileType : public Type {
 	Type* item_type;
 	TypedFileType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
@@ -412,7 +400,7 @@ struct VariantPart {
 	std::vector<VariantArm> arms;
 };
 
-struct EnumType: public Type {
+struct EnumType : public Type {
 	// C++ identifier emitted for this enum. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
 	std::string cxx_name;
@@ -421,6 +409,7 @@ struct EnumType: public Type {
 	// such as Boolean may specify another fixed carrier.
 	unsigned carrier_bits = 32;
 	bool carrier_signed = true;
+
 	struct Member {
 		std::string pas_name;
 		std::string cxx_name;
@@ -430,29 +419,23 @@ struct EnumType: public Type {
 		// following implicit C++ enumerators advance from them naturally.
 		bool explicit_value = false;
 	};
+
 	// Source order, not ordinal order. Explicit values may jump, decrease, or
 	// repeat; emission preserves declaration order while Low/High and enum
 	// index ranges query min_member()/max_member().
 	std::vector<Member> members;
 	const Member* min_member() const;
 	const Member* max_member() const;
-	EnumType(SourceLocation source_location,
-	         std::string cxx_name, std::string a,
-	         std::string b,
-	         unsigned carrier_bits = 32,
-	         bool carrier_signed = true);
+	EnumType(SourceLocation source_location, std::string cxx_name, std::string a, std::string b, unsigned carrier_bits = 32, bool carrier_signed = true);
 	EnumType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(
-	    const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-struct RecordType: public Type {
+struct RecordType : public Type {
 	Frame* children;
 	// C++ identifier emitted for this record. Empty until the containing
 	// type-block declaration assigns it (parse_type_block).
@@ -495,7 +478,7 @@ struct RecordType: public Type {
  * an unimplemented packed operation from silently entering ordinary-record
  * lowering through dynamic_cast<RecordType*>.
  */
-struct PackedRecordType: public Type {
+struct PackedRecordType : public Type {
 	Frame* children;
 	std::string cxx_name;
 	// Pascal source order. Frame is for lookup and intentionally cannot be
@@ -528,10 +511,9 @@ struct RecordLayout {
 // PACKED_CONTAINER is whether the use of the type is inside a packed container.
 std::optional<TypeLayout> type_layout(bool packed_container, Type* ty);
 std::optional<RecordLayout> record_layout(RecordType* record);
-std::optional<RecordLayout> packed_record_layout(
-    PackedRecordType* record);
+std::optional<RecordLayout> packed_record_layout(PackedRecordType* record);
 
-struct InterfaceType: public Type {
+struct InterfaceType : public Type {
 	Frame* children;
 	std::string cxx_name;
 	std::vector<InterfaceType*> super_interfaces; // FIXME: not transitive ?
@@ -541,18 +523,19 @@ struct InterfaceType: public Type {
 	InterfaceType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> super_interfaces);
 	InterfaceType(SourceLocation source_location, std::string cxx_name, Frame* children, std::vector<InterfaceType*> super_interfaces);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
-	bool is_reference_type() const override { return true; }
+
+	bool is_reference_type() const override {
+		return true;
+	}
 };
 
-struct ClassType: public Type {
+struct ClassType : public Type {
 	Frame* children;
 	std::string cxx_name;
 	std::vector<InterfaceType*> implemented_interfaces; // FIXME: not transitive ?
@@ -576,15 +559,16 @@ struct ClassType: public Type {
 	Method* class_destructor = nullptr;
 	ClassType(SourceLocation source_location, Frame* children, std::vector<InterfaceType*> implemented_interfaces, ClassType* super);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
-	bool is_reference_type() const override { return true; }
+
+	bool is_reference_type() const override {
+		return true;
+	}
 };
 
 struct ClassRefType : public Type // metaclass
@@ -594,23 +578,23 @@ struct ClassRefType : public Type // metaclass
 	Type* target;
 	std::string cxx_name;
 
-	explicit ClassRefType(SourceLocation source_location, Type* c)
-	   : Type(std::move(source_location)), target(c) {
+	explicit ClassRefType(SourceLocation source_location, Type* c) : Type(std::move(source_location)), target(c) {
 	}
+
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
-	bool is_reference_type() const override { return true; }
+
+	bool is_reference_type() const override {
+		return true;
+	}
 };
 
-struct ObjectType: public Type {
+struct ObjectType : public Type {
 	Frame* children;
 	std::string cxx_name;
 	ObjectType* super;
@@ -623,8 +607,7 @@ struct ObjectType: public Type {
 
 	ObjectType(SourceLocation source_location, Frame* children, ObjectType* super);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -632,31 +615,34 @@ struct ObjectType: public Type {
 	bool has_managed_lifetime() const override;
 };
 
-struct PointerType: public Type {
+struct PointerType : public Type {
 	// Null denotes Pascal's builtin untyped Pointer. A non-null item_type
 	// denotes the ordinary `^T` construction. Both are pointers semantically;
 	// only the untyped form lacks a readable pointee value.
 	Type* item_type;
 	std::string cxx_name;
-	PointerType(SourceLocation source_location, Type* item_type,
-	            std::string cxx_name = {});
-	bool is_untyped() const { return item_type == nullptr; }
+	PointerType(SourceLocation source_location, Type* item_type, std::string cxx_name = {});
+
+	bool is_untyped() const {
+		return item_type == nullptr;
+	}
+
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
-	bool is_reference_type() const override { return true; }
+
+	bool is_reference_type() const override {
+		return true;
+	}
 };
 
 /** The type of a Pascal `unit X;` module. Renamed from UnitType to avoid
  *  colliding with the type-theoretic UnitType (one-inhabitant type) below. */
-struct ModuleType: public Type {
+struct ModuleType : public Type {
 	Frame* children;
 	ModuleType(SourceLocation source_location, Frame* children);
 	const char* diagnostic_kind() const override;
@@ -669,7 +655,7 @@ struct ModuleType: public Type {
  *  a Pascal procedure -- procedures do return, they just return no meaningful
  *  value. Not a Pascal-visible type; a shared singleton instance is registered
  *  in the root frame under no Pascal name. Emitted as C++ `void`. */
-struct UnitType: public Type {
+struct UnitType : public Type {
 	UnitType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -681,7 +667,7 @@ struct UnitType: public Type {
  *  destinations which cannot contain it, and ranks fitting destinations from
  *  its Delphi natural constant type. Shared singleton in the root frame; not
  *  registered under any Pascal name. */
-struct UntypedIntegerType: public Type {
+struct UntypedIntegerType : public Type {
 	UntypedIntegerType(SourceLocation source_location);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -691,21 +677,14 @@ struct UntypedIntegerType: public Type {
 enum class ParamMode { Value, Var, Out, Const };
 
 struct Parameter {
-    std::string pas_name;
-    std::string cxx_name;
-    Type* ty;
-    ParamMode mode;
-    Node* default_value; // null if none
-    Parameter(std::string pas_name,
-              std::string cxx_name,
-              Type* ty,
-              ParamMode mode,
-              Node* default_value)
-        : pas_name(std::move(pas_name)),
-          cxx_name(std::move(cxx_name)),
-          ty(ty),
-          mode(mode),
-          default_value(default_value) {}
+	std::string pas_name;
+	std::string cxx_name;
+	Type* ty;
+	ParamMode mode;
+	Node* default_value; // null if none
+
+	Parameter(std::string pas_name, std::string cxx_name, Type* ty, ParamMode mode, Node* default_value) : pas_name(std::move(pas_name)), cxx_name(std::move(cxx_name)), ty(ty), mode(mode), default_value(default_value) {
+	}
 };
 
 enum RoutineKind {
@@ -719,80 +698,65 @@ enum RoutineKind {
 };
 
 class RoutineType : public Type {
-public:
+      public:
 	std::vector<Parameter> formals;
 	Type* return_type;
 	RoutineKind kind;
 
 	RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
 	/** Names and default expressions are not part of a routine's type.
 	 * Parameter modes and Type* identities are; the result is exact as well.
 	 * This shape helper deliberately leaves the representation category to
 	 * the caller, because a static class-owned Method has receiverless ROUTINE
 	 * ABI while its declaration is still class-owned. */
-	bool same_parameter_and_result_types_as(
-	    const RoutineType* other) const;
+	bool same_parameter_and_result_types_as(const RoutineType* other) const;
 	/** Exact routine-type signature, including plain versus receiver-bearing
 	 * representation. The compiler currently has one Pascal calling
 	 * convention; when conventions become source-visible they belong here. */
-	bool same_signature_as(
-	    const RoutineType* other) const;
+	bool same_signature_as(const RoutineType* other) const;
 	/** Whether two declarations under one already-selected Pascal name have
 	 * the same overload key. Delphi overload identity uses only the exact
 	 * Type* list of source-visible parameters: modes, defaults, result,
 	 * receiver category, and constructor/method kind do not distinguish it. */
-	bool same_overload_signature_as(
-	    const RoutineType* other) const;
+	bool same_overload_signature_as(const RoutineType* other) const;
 	/** Directional routine-value compatibility. CLASS_METHOD declarations
 	 * become receiver-bearing METHOD values once bound; no other declaration
 	 * category is silently reclassified. */
-	bool accepts_routine_value_from(
-	    const RoutineType* source) const;
+	bool accepts_routine_value_from(const RoutineType* source) const;
 	/** Compatibility for a user-written routine-value cast. Ordinary
 	 * assignment remains exact. An explicit cast may additionally replace a
 	 * by-value data-pointer formal with another data-pointer type when the
 	 * result, arity, modes, and plain-versus-bound representation remain exact.
 	 * The backend documents this deliberately ABI-level operation separately
 	 * because calling the retyped code pointer is not portable ISO C++20. */
-	bool accepts_explicit_routine_cast_from(
-	    const RoutineType* source) const;
+	bool accepts_explicit_routine_cast_from(const RoutineType* source) const;
 	/** C++ overload identity ignores a function result and does include the
 	 * adjusted parameter carriers. Pascal has already selected by its own
 	 * signatures before this backend-only collision check runs. */
-	bool same_cxx_parameter_list_as(
-	    const RoutineType* other) const;
-	bool same_cxx_carrier_definition_as(
-	    const Type* other) const override;
+	bool same_cxx_parameter_list_as(const RoutineType* other) const;
+	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
 class SubrangeType : public Type {
-public:
+      public:
 	// Canonical compiler-private C++ tag for this generative Pascal
 	// definition. Pascal aliases retain this tag rather than creating another
 	// carrier, exactly as aliases of named records retain one RecordType.
 	std::string cxx_name;
 	Node* lower_bound; // its type is base_type
 	Node* upper_bound; // its type is base_type
-	Type* base_type; /* NOT a subrange type */
+	Type* base_type;   /* NOT a subrange type */
 
-	SubrangeType(
-	    SourceLocation source_location,
-	    std::string cxx_name, Type* base_type,
-	    Node* lower_bound, Node* upper_bound);
+	SubrangeType(SourceLocation source_location, std::string cxx_name, Type* base_type, Node* lower_bound, Node* upper_bound);
 	const char* diagnostic_kind() const override;
-	std::optional<ValueConversion>
-	value_conversion_from(const Type* source) const override;
-	std::optional<ValueConversion>
-	destination_conversion_from(
-	    const Type* source) const override;
-	bool predefined_explicit_conversion_from(
-	    const Type* source) const override;
+	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
+	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

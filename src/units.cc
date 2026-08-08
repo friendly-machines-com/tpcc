@@ -23,8 +23,9 @@ Unit* UnitRegistry::register_new(std::string name, Frame* frame, bool is_program
 
 Unit* UnitRegistry::lookup(std::string name) const {
 	auto it = units.find(name);
-	if (it == units.end())
+	if (it == units.end()) {
 		return nullptr;
+	}
 	return it->second;
 }
 

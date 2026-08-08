@@ -134,28 +134,34 @@ std::span<const OperatorSpec> operator_catalog() {
 
 std::vector<const OperatorSpec*> operator_declaration_specs(std::string_view declaration_name, std::size_t arity) {
 	std::vector<const OperatorSpec*> result;
-	for (const OperatorSpec& spec : k_operator_catalog)
-		if (spec.declaration_name == declaration_name && spec.arity == arity)
+	for (const OperatorSpec& spec : k_operator_catalog) {
+		if (spec.declaration_name == declaration_name && spec.arity == arity) {
 			result.push_back(&spec);
+		}
+	}
 	return result;
 }
 
 bool operator_declaration_name_known(std::string_view declaration_name) {
-	for (const OperatorSpec& spec : k_operator_catalog)
-		if (spec.declaration_name == declaration_name)
+	for (const OperatorSpec& spec : k_operator_catalog) {
+		if (spec.declaration_name == declaration_name) {
 			return true;
+		}
+	}
 	return false;
 }
 
 std::optional<std::string_view> operator_invocation_identifier(OperatorInvocation invocation, std::string_view spelling, std::size_t arity, bool checks_enabled, bool logical_operands) {
 	std::optional<std::string_view> result;
 	for (const OperatorSpec& spec : k_operator_catalog) {
-		if (!spec.declaration_supported || spec.invocation != invocation || spec.invocation_spelling != spelling || spec.arity != arity || !selection_matches(spec.selection, checks_enabled, logical_operands))
+		if (!spec.declaration_supported || spec.invocation != invocation || spec.invocation_spelling != spelling || spec.arity != arity || !selection_matches(spec.selection, checks_enabled, logical_operands)) {
 			continue;
-		if (result)
+		}
+		if (result) {
 			assert(*result == spec.pascal_identifier);
-		else
+		} else {
 			result = spec.pascal_identifier;
+		}
 	}
 	return result;
 }
@@ -163,12 +169,14 @@ std::optional<std::string_view> operator_invocation_identifier(OperatorInvocatio
 std::optional<std::string_view> legacy_operator_cxx_name(std::string_view declaration_name) {
 	std::optional<std::string_view> result;
 	for (const OperatorSpec& spec : k_operator_catalog) {
-		if (spec.declaration_name != declaration_name || spec.provenance != OperatorProvenance::LegacyFpc)
+		if (spec.declaration_name != declaration_name || spec.provenance != OperatorProvenance::LegacyFpc) {
 			continue;
-		if (result)
+		}
+		if (result) {
 			assert(*result == spec.cxx_name);
-		else
+		} else {
 			result = spec.cxx_name;
+		}
 	}
 	return result;
 }

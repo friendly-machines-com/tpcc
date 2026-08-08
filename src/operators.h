@@ -59,27 +59,20 @@ std::span<const OperatorSpec> operator_catalog();
 /** All semantic rows promised by one source declaration. Legacy symbolic
  * declarations may return two rows, for example `operator +` satisfies both
  * checked and unchecked addition. */
-std::vector<const OperatorSpec*> operator_declaration_specs(
-    std::string_view declaration_name, std::size_t arity);
+std::vector<const OperatorSpec*> operator_declaration_specs(std::string_view declaration_name, std::size_t arity);
 
-bool operator_declaration_name_known(
-    std::string_view declaration_name);
+bool operator_declaration_name_known(std::string_view declaration_name);
 
 /** Translate operator syntax to the canonical Pascal identifier which the
  * parser then passes to ordinary value lookup. Multiple catalog rows may
  * describe named and legacy declaration spellings for that operation, but
  * they must agree on this identifier. Declarations are registered under the
  * same identifier, and future RTTI will enumerate that declaration name. */
-std::optional<std::string_view> operator_invocation_identifier(
-    OperatorInvocation invocation,
-    std::string_view spelling, std::size_t arity,
-    bool checks_enabled, bool logical_operands);
+std::optional<std::string_view> operator_invocation_identifier(OperatorInvocation invocation, std::string_view spelling, std::size_t arity, bool checks_enabled, bool logical_operands);
 
-std::optional<std::string_view> legacy_operator_cxx_name(
-    std::string_view declaration_name);
+std::optional<std::string_view> legacy_operator_cxx_name(std::string_view declaration_name);
 
-std::string_view implicit_operator_identifier(
-    bool range_checks);
+std::string_view implicit_operator_identifier(bool range_checks);
 
 /** Canonical declaration identifier selected by explicit typecast syntax.
  * Unlike implicit conversion, this identity is independent of {$R}. */

@@ -26,14 +26,20 @@ struct DiagnosticScope {
 };
 
 class ErrorLetContext {
-public:
+      public:
 	ErrorLetContext(const Frame* naming_frame, unsigned max_depth);
 	ErrorLetContext(std::vector<DiagnosticScope> scopes, unsigned max_depth);
 
 	std::string type_ref(const Type* ty);
 	std::string value_ref(const Node* node);
-	std::string ref(const Type* ty) { return type_ref(ty); }
-	std::string ref(const Node* node) { return value_ref(node); }
+
+	std::string ref(const Type* ty) {
+		return type_ref(ty);
+	}
+
+	std::string ref(const Node* node) {
+		return value_ref(node);
+	}
 
 	std::string notes();
 
@@ -62,7 +68,7 @@ public:
 	void indent(std::ostringstream& out, unsigned level) const;
 	void print_frame_members(std::ostringstream& out, const Frame* frame, unsigned indent_level) const;
 
-private:
+      private:
 	struct DiagnosticName {
 		std::string head;
 		std::string detail;

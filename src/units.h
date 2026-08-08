@@ -35,7 +35,7 @@ enum class UnitPhase {
  *  Programs use the same storage shape, but `is_program` prevents their local
  *  declarations from being treated as names owned by a Pascal unit namespace. */
 class Unit {
-public:
+      public:
 	std::string name;
 	std::string cxx_namespace;
 	Frame* frame;
@@ -68,10 +68,11 @@ public:
 /** Global-per-compilation map of unit name -> Unit*. Loading via `uses` goes
  *  through here so units are shared and circular deps are detectable. */
 class UnitRegistry {
-private:
+      private:
 	std::map<std::string, Unit*> units;
 	std::vector<Unit*> completed;
-public:
+
+      public:
 	/** Insert a new Unit for NAME. Aborts if NAME is already present. */
 	Unit* register_new(std::string name, Frame* frame, bool is_program = false);
 	/** Returns the Unit for NAME, or nullptr if not registered. */
@@ -79,5 +80,8 @@ public:
 	/** Record a fully parsed unit. Recursive parsing makes this the unit
 	 *  initialization order: every dependency is recorded before its user. */
 	void record_completed(Unit* unit);
-	const std::vector<Unit*>& completed_units() const { return completed; }
+
+	const std::vector<Unit*>& completed_units() const {
+		return completed;
+	}
 };

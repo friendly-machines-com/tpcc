@@ -10,7 +10,9 @@ struct CILess {
 		for (size_t i = 0; i < n; i++) {
 			int ca = std::tolower((unsigned char)a[i]);
 			int cb = std::tolower((unsigned char)b[i]);
-			if (ca != cb) return ca < cb;
+			if (ca != cb) {
+				return ca < cb;
+			}
 		}
 		return a.size() < b.size();
 	}
