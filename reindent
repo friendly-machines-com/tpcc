@@ -2,4 +2,6 @@
 
 #indent -kr -brf --tab-size 8 -ut -l180 src/parser.cc
 # TODO: SortIncludes: false
-clang-format -i
+clang-format -i src/*.cc src/*.h
+
+
