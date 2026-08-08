@@ -653,7 +653,7 @@ static constexpr std::array<DirectiveSwitchCategory, 26> directive_switch_catego
     DirectiveSwitchCategory::Unsupported,   // L
     DirectiveSwitchCategory::Unsupported,   // M; local
     DirectiveSwitchCategory::Unsupported,   // N
-    DirectiveSwitchCategory::Optimizer,     // O
+    DirectiveSwitchCategory::Optimizer,     // O; not stored by push
     DirectiveSwitchCategory::Unsupported,   // P; module
     DirectiveSwitchCategory::Local,         // Q
     DirectiveSwitchCategory::Local,         // R
