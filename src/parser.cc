@@ -639,7 +639,7 @@ static std::string compact_directive_argument(const std::string& argument) {
 }
 
 static constexpr std::array<DirectiveSwitchCategory, 26> directive_switch_categories = {
-    DirectiveSwitchCategory::RecordPacking, // A
+    DirectiveSwitchCategory::Unsupported,   // A; local
     DirectiveSwitchCategory::Unsupported,   // B; local
     DirectiveSwitchCategory::Unsupported,   // C; local
     DirectiveSwitchCategory::Unsupported,   // D; module
@@ -706,8 +706,6 @@ bool DirectiveState::switch_enabled(char letter) const {
 		return module_switches[*index];
 	case DirectiveSwitchCategory::Optimizer:
 		return optimizer_switches[*index];
-	case DirectiveSwitchCategory::RecordPacking:
-		return record_packing;
 	case DirectiveSwitchCategory::Unsupported:
 		return false;
 	}
@@ -728,20 +726,16 @@ void DirectiveState::set_switch(char letter, bool enabled) {
 	case DirectiveSwitchCategory::Optimizer:
 		optimizer_switches[*index] = enabled;
 		break;
-	case DirectiveSwitchCategory::RecordPacking:
-		record_packing = enabled;
-		break;
 	case DirectiveSwitchCategory::Unsupported:
 		break;
 	}
 }
 
-SavedDirectiveState::SavedDirectiveState(const DirectiveState& state) : local_switches(state.local_switches), record_packing(state.record_packing), packenum(state.packenum) {
+SavedDirectiveState::SavedDirectiveState(const DirectiveState& state) : local_switches(state.local_switches), packenum(state.packenum) {
 }
 
 void SavedDirectiveState::restore(DirectiveState& state) const {
 	state.local_switches = local_switches;
-	state.record_packing = record_packing;
 	state.packenum = packenum;
 }
 

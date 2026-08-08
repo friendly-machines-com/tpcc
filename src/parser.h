@@ -171,7 +171,6 @@ enum class DirectiveSwitchCategory {
 	Local,
 	Module,
 	Optimizer,
-	RecordPacking,
 };
 
 enum class InterfaceModel {
@@ -205,7 +204,6 @@ class DirectiveState {
 	std::array<bool, 26> local_switches{};
 	std::array<bool, 26> module_switches{};
 	std::array<bool, 26> optimizer_switches{};
-	bool record_packing = false;
 	// Minimum byte size for an enum carrier; range-implied growth is applied
 	// at declaration time so values that don't fit still widen the carrier.
 	int packenum = 4;
@@ -238,7 +236,6 @@ public:
 /** Exactly the PUSH/POP-scoped subset of DirectiveState. */
 class SavedDirectiveState {
 	std::array<bool, 26> local_switches;
-	bool record_packing;
 	int packenum;
 
 public:
