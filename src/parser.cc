@@ -871,7 +871,7 @@ void Parser::handle_directive(const std::string& body, SourceLocation directive_
 			emit_parse_error_at(directive_location, "$iochecks expects ON or OFF");
 		return;
 	}
-	if (name == "packenum" || name == "minenumsize" || name == "z") {
+	if (name == "packenum" || name == "minenumsize") {
 		const std::string arg = compact_directive_argument(rest);
 		int value;
 		if (arg == "normal" || arg == "default")
