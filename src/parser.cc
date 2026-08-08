@@ -4135,12 +4135,12 @@ Node* Parser::parse_product_tail(Node* result) {
 		} else if (maybe_parse_keyword("shr")) {
 			result = mk_arith("shr", result, parse_power(), operation_directives);
 		} else if (maybe_parse_keyword("as")) {
+			// FPC's `as` is a class/interface cast only (ObjFPC mode); it
+			// rejects real operands with "Class or interface type expected".
 			Type* target = parse_type_expression(false);
-			bool numeric = target == single_type() || target == double_type() || target == extended_type();
 			bool checked_reference = (dynamic_cast<ClassType*>(result->ty) || dynamic_cast<InterfaceType*>(result->ty)) && (dynamic_cast<ClassType*>(target) || dynamic_cast<InterfaceType*>(target));
-			if ((!numeric || !target->value_conversion_from(result->ty)) && !checked_reference) {
-				raise_type_mismatch("'as' requires compatible real-number "
-				                    "or class/interface types",
+			if (!checked_reference) {
+				raise_type_mismatch("'as' requires compatible class/interface types",
 				                    target, result->ty);
 			}
 			result = new Coerce(result, target);

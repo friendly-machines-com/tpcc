@@ -2,7 +2,7 @@ program single_type;
 
 const
   FoldedCast: Single = Single(1.25);
-  FoldedCoerce: Single = 2.5 as Single;
+  FoldedCoerce: Single = Single(2.5);
 
 type
   TBase = class
@@ -70,7 +70,7 @@ begin
   D := S;
   E := D;
   Casted := Single(D);
-  Coerced := E as Single;
+  Coerced := Single(E);
   Sum := S + Single(0.25);
   Product := S * Single(2.0);
   Quotient := Product / Single(2.0);
