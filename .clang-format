@@ -9,3 +9,7 @@ ReferenceAlignment: Left
 AllowShortFunctionsOnASingleLine: None
 SeparateDefinitionBlocks: Always
 MaxEmptyLinesToKeep: 1
+InsertBraces: true
+AllowShortBlocksOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
