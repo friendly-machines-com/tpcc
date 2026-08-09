@@ -33,8 +33,10 @@ static Type* call_result_type(Node* callee);
 static bool ordinal_range_for_type(Type* ty, OrdinalRange* out, std::string* error);
 static bool enum_range_has_gaps(Type* ty, const OrdinalRange& range);
 static Type* subrange_range_type(Type* ty);
+static Type* overload_rank_type(Type* type);
 static Type* integer_literal_natural_type(const Integer* literal);
 static Integer* untyped_integer_constant(Node* expression);
+static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge);
 enum class BracketIntegerPreference {
 	Array,
 	Set,
@@ -413,9 +415,6 @@ static void append_match_rank_vector(std::stringstream& sst, const std::vector<M
 			sst << ", ";
 		}
 		sst << match_tier_name(ranks[i].tier);
-		if (ranks[i].distance) {
-			sst << "+" << ranks[i].distance;
-		}
 	}
 	sst << "]";
 }
@@ -440,17 +439,50 @@ static bool callable_source_less(Callable* a, Callable* b) {
 	return false;
 }
 
-static void append_callable_source_prefix(std::stringstream& sst, Callable* c, bool is_viable) {
+static void append_callable_source_prefix(std::stringstream& sst, Callable* c, bool is_viable, bool is_ambiguous = false) {
 	const SourceLocation& loc = callable_source_location(c);
 	if (!loc.file_name.empty()) {
 		sst << loc.file_name << "(" << loc.line_number << ")";
 	}
-	if (is_viable) {
+	if (is_ambiguous) {
+		sst << "[ambiguous]";
+	} else if (is_viable) {
 		sst << "[viable]";
 	}
-	if (!loc.file_name.empty() || is_viable) {
+	if (!loc.file_name.empty() || is_viable || is_ambiguous) {
 		sst << ": ";
 	}
+}
+
+static std::string match_preference_reason(const MatchRank& preferred, Type* preferred_formal, const MatchRank& other, Type* other_formal, Node* actual, ErrorLetContext& ctx, const std::function<bool(Type*, Type*)>& direct_assignment_edge) {
+	if (preferred.tier != other.tier) {
+		return std::string(match_tier_name(preferred.tier)) + " is better than " + match_tier_name(other.tier);
+	}
+	if (preferred.contextual_construction != other.contextual_construction) {
+		return "uses the preferred contextual interpretation";
+	}
+	preferred_formal = overload_rank_type(preferred_formal);
+	other_formal = overload_rank_type(other_formal);
+	if (preferred_formal && other_formal && preferred_formal != other_formal) {
+		const bool preferred_to_other = direct_assignment_edge(preferred_formal, other_formal);
+		const bool other_to_preferred = direct_assignment_edge(other_formal, preferred_formal);
+		if (preferred_to_other != other_to_preferred) {
+			return "formal type " + ctx.type_ref(preferred_formal) + " is more specific than " + ctx.type_ref(other_formal);
+		}
+	}
+	if (preferred.integer_sign_mismatch != other.integer_sign_mismatch) {
+		if (untyped_integer_constant(actual)) {
+			return "preserves the signedness of the literal's natural integer type";
+		}
+		return "preserves the actual integer type's signedness";
+	}
+	if (preferred.distance != other.distance) {
+		if (untyped_integer_constant(actual)) {
+			return "uses the smaller fitting integer destination";
+		}
+		return "is the closer match within the same quality";
+	}
+	return "has the better per-argument match";
 }
 
 [[noreturn]] void Parser::raise_overload_resolution_error(SourceLocation error_location, std::string name, Node* receiver, const std::vector<Node*>& args, Type* expected_return_type, const std::vector<Callable*>& candidates, const std::vector<std::pair<Callable*, CallableMatch>>& viable, const std::vector<Callable*>& non_dominated, bool ambiguous, std::string failure_description) {
@@ -471,29 +503,87 @@ static void append_callable_source_prefix(std::stringstream& sst, Callable* c, b
 		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
 
-	(void)non_dominated;
-
 	std::vector<Callable*> sorted_candidates = candidates;
 	std::stable_sort(sorted_candidates.begin(), sorted_candidates.end(), callable_source_less);
 
 	sst << "\n  all candidates:";
 	for (Callable* c : sorted_candidates) {
-		const std::vector<MatchRank>* viable_ranks = nullptr;
+		const CallableMatch* viable_match = nullptr;
 		for (const auto& v : viable) {
 			if (v.first == c) {
-				viable_ranks = &v.second.ranks;
+				viable_match = &v.second;
 				break;
 			}
 		}
+		const bool ambiguous_survivor = std::ranges::find(non_dominated, c) != non_dominated.end();
 
 		sst << "\n    ";
-		append_callable_source_prefix(sst, c, viable_ranks != nullptr);
+		append_callable_source_prefix(sst, c, viable_match != nullptr, ambiguous_survivor);
 		sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
-		if (viable_ranks) {
+		if (viable_match) {
 			sst << " viable ranks ";
-			append_match_rank_vector(sst, *viable_ranks);
+			append_match_rank_vector(sst, viable_match->ranks);
 		} else {
 			sst << " not viable";
+		}
+	}
+
+	if (ambiguous && non_dominated.size() > 1) {
+		auto viable_match_for = [&](Callable* candidate) -> const CallableMatch* {
+			for (const auto& entry : viable) {
+				if (entry.first == candidate) {
+					return &entry.second;
+				}
+			}
+			return nullptr;
+		};
+
+		bool wrote_heading = false;
+		for (size_t arg_index = 0; arg_index < args.size(); ++arg_index) {
+			for (size_t first_index = 0; first_index < non_dominated.size(); ++first_index) {
+				Callable* first = non_dominated[first_index];
+				const CallableMatch* first_match = viable_match_for(first);
+				if (!first_match || arg_index >= first_match->ranks.size() || arg_index >= first_match->formal_types.size()) {
+					continue;
+				}
+				for (size_t second_index = first_index + 1; second_index < non_dominated.size(); ++second_index) {
+					Callable* second = non_dominated[second_index];
+					const CallableMatch* second_match = viable_match_for(second);
+					if (!second_match || arg_index >= second_match->ranks.size() || arg_index >= second_match->formal_types.size()) {
+						continue;
+					}
+					const auto direct_edge = [this](Type* source, Type* destination) {
+						return has_direct_assignment_edge(source, destination);
+					};
+					const bool first_better = rank_less(first_match->ranks[arg_index], first_match->formal_types[arg_index], second_match->ranks[arg_index], second_match->formal_types[arg_index], direct_edge);
+					const bool second_better = rank_less(second_match->ranks[arg_index], second_match->formal_types[arg_index], first_match->ranks[arg_index], first_match->formal_types[arg_index], direct_edge);
+					if (first_better == second_better) {
+						continue;
+					}
+					if (!wrote_heading) {
+						sst << "\n  conflicting argument preferences:";
+						wrote_heading = true;
+					}
+					Callable* preferred = first_better ? first : second;
+					const CallableMatch* preferred_match = first_better ? first_match : second_match;
+					const CallableMatch* other_match = first_better ? second_match : first_match;
+					sst << "\n    arg " << (arg_index + 1) << " prefers ";
+					const SourceLocation& preferred_location = callable_source_location(preferred);
+					if (!preferred_location.file_name.empty()) {
+						sst << preferred_location.file_name << "(" << preferred_location.line_number << ")";
+					} else {
+						sst << ctx.value_ref(preferred);
+					}
+					sst << ": "
+					    << match_preference_reason(preferred_match->ranks[arg_index],
+					                               preferred_match->formal_types[arg_index],
+					                               other_match->ranks[arg_index],
+					                               other_match->formal_types[arg_index],
+					                               args[arg_index],
+					                               ctx,
+					                               direct_edge);
+				}
+			}
 		}
 	}
 

@@ -51,4 +51,35 @@ do
 	fi
 done
 
+if ./mp -Furtl \
+	-o"$tmp/equal_ambiguous.cc" \
+	tests/overload_ranking_equal_ambiguous.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted crossed per-argument equal ranks" >&2
+	exit 1
+fi
+for required in \
+	'ambiguous overload' \
+	'[ambiguous]' \
+	'viable ranks [equal, equal]' \
+	'conflicting argument preferences:' \
+	'arg 1 prefers' \
+	'arg 2 prefers' \
+	"preserves the signedness of the literal's natural integer type"
+do
+	if ! rg -Fq "$required" "$tmp/stderr"
+	then
+		echo "incomplete equal-rank ambiguity diagnostic: $required" >&2
+		sed -n '1,220p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
+if rg -Fq 'equal+' "$tmp/stderr"
+then
+	echo "overload diagnostic exposed a raw numeric tie-breaker" >&2
+	sed -n '1,220p' "$tmp/stderr" >&2
+	exit 1
+fi
+
 echo "overload ranking tests passed"
