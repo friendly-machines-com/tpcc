@@ -38,6 +38,7 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 #include <cstdint>
 #include <cstring>
@@ -4219,6 +4220,61 @@ inline t_shortstring<Capacity> tpcc_shortstring_from_c(
 	if (stored_length != 0)
 		memcpy(result.data, s, stored_length);
 	return result;
+}
+
+inline std::error_code m_getdir_bytes(
+    std::string& bytes) {
+	std::error_code error;
+	const std::filesystem::path path =
+	    std::filesystem::current_path(error);
+	if (error)
+		return error;
+	bytes = path.native();
+	return {};
+}
+
+inline void p_getdir(
+    t_byte drive_number,
+    t_shortstring<255>& directory) {
+	// Unix has one directory tree, so the DOS drive selector has no
+	// semantic effect.
+	(void)drive_number;
+
+	std::string bytes;
+	const std::error_code error =
+	    m_getdir_bytes(bytes);
+	if (error) {
+		m_set_io_error(m_file_error_from_errno(
+		    error.value(), 3));
+		return;
+	}
+
+	if (bytes.size() > 255) {
+		// The ShortString overload must not truncate a directory name.
+		// Preserve the destination and report the TP-compatible
+		// "path not found" status, as FPC does.
+		m_set_io_error(3);
+		return;
+	}
+	directory = tpcc_shortstring_from_c(
+	    bytes.data(), bytes.size());
+}
+
+inline void p_getdir(
+    t_byte drive_number,
+    t_ansistring& directory) {
+	(void)drive_number;
+
+	std::string bytes;
+	const std::error_code error =
+	    m_getdir_bytes(bytes);
+	if (error) {
+		m_set_io_error(m_file_error_from_errno(
+		    error.value(), 3));
+		return;
+	}
+	directory = tpcc_ansistring_literal(
+	    bytes.data(), bytes.size());
 }
 
 inline t_shortstring<255> o_implicit(

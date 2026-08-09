@@ -1259,6 +1259,7 @@ static const BuiltinDesc k_builtins[] = {
         .generic_kind = BuiltinGenericKind::PointerStorage,
     },
     {"::u_system::p_freemem", nullptr},
+    {"::u_system::p_getdir", nullptr},
     {
         .cxx_name = "::u_system::p_rewrite",
         .call_site_switch = BuiltinCallSiteSwitch::Io,

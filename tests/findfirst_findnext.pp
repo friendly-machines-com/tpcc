@@ -21,6 +21,43 @@ begin
   if IncludeTrailingPathDelimiter('files\') <> 'files\/' then
     Halt(54);
 
+  if ExtractFilePath('') <> '' then
+    Halt(55);
+  if ExtractFileName('') <> '' then
+    Halt(56);
+  if ExtractFilePath('plain.dat') <> '' then
+    Halt(57);
+  if ExtractFileName('plain.dat') <> 'plain.dat' then
+    Halt(58);
+  if ExtractFilePath('files/alpha1.dat') <> 'files/' then
+    Halt(59);
+  if ExtractFileName('files/alpha1.dat') <> 'alpha1.dat' then
+    Halt(60);
+  if ExtractFilePath('/files/alpha1.dat') <> '/files/' then
+    Halt(61);
+  if ExtractFileName('/files/alpha1.dat') <> 'alpha1.dat' then
+    Halt(62);
+  if ExtractFilePath('/') <> '/' then
+    Halt(63);
+  if ExtractFileName('/') <> '' then
+    Halt(64);
+  if ExtractFilePath('files/subdir/') <> 'files/subdir/' then
+    Halt(65);
+  if ExtractFileName('files/subdir/') <> '' then
+    Halt(66);
+  if ExtractFilePath('files//name') <> 'files//' then
+    Halt(67);
+  if ExtractFileName('files//name') <> 'name' then
+    Halt(68);
+  if ExtractFilePath('files\name') <> '' then
+    Halt(69);
+  if ExtractFileName('files\name') <> 'files\name' then
+    Halt(70);
+  if ExtractFilePath('drive:name') <> '' then
+    Halt(71);
+  if ExtractFileName('drive:name') <> 'drive:name' then
+    Halt(72);
+
   Code := FindFirst('files/alpha1.dat', faAnyFile, Search);
   if Code <> 0 then
     Halt(1);

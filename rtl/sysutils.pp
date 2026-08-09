@@ -62,12 +62,47 @@ function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
 function IncludeTrailingPathDelimiter(
   const Path: AnsiString): AnsiString;
+function ExtractFileName(
+  const FileName: AnsiString): AnsiString;
+function ExtractFilePath(
+  const FileName: AnsiString): AnsiString;
 function FindFirst(const Path: AnsiString; Attr: LongInt;
   out Rslt: TSearchRec): LongInt; external name '::u_system::p_findfirst';
 function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_system::p_findnext';
 procedure FindClose(var F: TSearchRec); external name '::u_system::p_findclose';
 
 implementation
+
+function LastPathDelimiter(
+  const FileName: AnsiString): SizeInt;
+begin
+  Result := Length(FileName);
+  while Result > 0 do
+    begin
+      if FileName[Result] = '/' then
+        Break;
+      Result := Result - 1
+    end
+end;
+
+function ExtractFileName(
+  const FileName: AnsiString): AnsiString;
+var
+  Delimiter: SizeInt;
+begin
+  Delimiter := LastPathDelimiter(FileName);
+  Result := Copy(FileName, Delimiter + 1,
+    Length(FileName) - Delimiter)
+end;
+
+function ExtractFilePath(
+  const FileName: AnsiString): AnsiString;
+var
+  Delimiter: SizeInt;
+begin
+  Delimiter := LastPathDelimiter(FileName);
+  Result := Copy(FileName, 1, Delimiter)
+end;
 
 function IncludeTrailingPathDelimiter(
   const Path: AnsiString): AnsiString;

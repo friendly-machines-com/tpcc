@@ -474,6 +474,8 @@ function reallocmem(var destination: Pointer; size: PtrInt): Pointer; overload; 
 procedure freemem(value: Pointer; size: PtrUInt); overload; external name '::u_system::p_freemem';
 procedure freemem(value: Pointer; size: PtrInt); overload; external name '::u_system::p_freemem';
 function freemem(value: Pointer): PtrUInt; overload; external name '::u_system::p_freemem';
+procedure GetDir(drivenr: Byte; var dir: ShortString); overload; external name '::u_system::p_getdir';
+procedure GetDir(drivenr: Byte; var dir: AnsiString); overload; external name '::u_system::p_getdir';
 procedure assign(out f: File; const name: ShortString); external name '::u_system::p_assign';
 procedure rewrite(var f: File; recordsize: LongInt = 128); external name '::u_system::p_rewrite';
 procedure reset(var f: File; recordsize: LongInt = 128); external name '::u_system::p_reset';
