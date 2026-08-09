@@ -624,9 +624,7 @@ static ConstEvalResult fold_set_union(ConstEvalContext&, Type* result_ty, const 
 	return ConstEvalResult::success(new SetLiteral(std::move(items), result_ty));
 }
 
-static std::optional<std::vector<ConstantSetRange>> constant_set_difference_ranges(
-    std::vector<ConstantSetRange> remaining,
-    const std::vector<ConstantSetRange>& removed) {
+static std::optional<std::vector<ConstantSetRange>> constant_set_difference_ranges(std::vector<ConstantSetRange> remaining, const std::vector<ConstantSetRange>& removed) {
 	for (const ConstantSetRange& removal : removed) {
 		std::vector<ConstantSetRange> next;
 		next.reserve(remaining.size() + 1);
@@ -742,10 +740,7 @@ static ConstEvalResult fold_set_comparison(SetComparisonKind kind, const std::ve
 		result = second_only->empty();
 		break;
 	}
-	return ConstEvalResult::success(new EnumMemberRef(
-	    result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false",
-	    result ? 1 : 0,
-	    boolean_type()));
+	return ConstEvalResult::success(new EnumMemberRef(result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false", result ? 1 : 0, boolean_type()));
 }
 
 static ConstEvalResult fold_set_equal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {

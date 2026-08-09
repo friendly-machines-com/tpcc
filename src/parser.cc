@@ -552,9 +552,7 @@ static std::string match_preference_reason(const MatchRank& preferred, Type* pre
 					if (!second_match || arg_index >= second_match->ranks.size() || arg_index >= second_match->formal_types.size()) {
 						continue;
 					}
-					const auto direct_edge = [this](Type* source, Type* destination) {
-						return has_direct_assignment_edge(source, destination);
-					};
+					const auto direct_edge = [this](Type* source, Type* destination) { return has_direct_assignment_edge(source, destination); };
 					const bool first_better = rank_less(first_match->ranks[arg_index], first_match->formal_types[arg_index], second_match->ranks[arg_index], second_match->formal_types[arg_index], direct_edge);
 					const bool second_better = rank_less(second_match->ranks[arg_index], second_match->formal_types[arg_index], first_match->ranks[arg_index], first_match->formal_types[arg_index], direct_edge);
 					if (first_better == second_better) {
@@ -574,14 +572,7 @@ static std::string match_preference_reason(const MatchRank& preferred, Type* pre
 					} else {
 						sst << ctx.value_ref(preferred);
 					}
-					sst << ": "
-					    << match_preference_reason(preferred_match->ranks[arg_index],
-					                               preferred_match->formal_types[arg_index],
-					                               other_match->ranks[arg_index],
-					                               other_match->formal_types[arg_index],
-					                               args[arg_index],
-					                               ctx,
-					                               direct_edge);
+					sst << ": " << match_preference_reason(preferred_match->ranks[arg_index], preferred_match->formal_types[arg_index], other_match->ranks[arg_index], other_match->formal_types[arg_index], args[arg_index], ctx, direct_edge);
 				}
 			}
 		}
@@ -4061,9 +4052,7 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives 
 	std::vector<Node*> args{a, b};
 	OverloadResolutionPolicy policy = OverloadResolutionPolicy::Ordinary;
 	if (id == "+" || id == "-") {
-		policy = mutation_step
-		             ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep
-		             : OverloadResolutionPolicy::CommonBinaryPointerLeft;
+		policy = mutation_step ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep : OverloadResolutionPolicy::CommonBinaryPointerLeft;
 	} else if (id == "div" || id == "mod" || id == "and" || id == "or" || id == "xor") {
 		policy = OverloadResolutionPolicy::CommonIntegerBinary;
 	} else if (id == "*" || id == "/" || id == "><") {
@@ -4253,8 +4242,7 @@ Node* Parser::parse_product_tail(Node* result) {
 			Type* target = parse_type_expression(false);
 			bool checked_reference = (dynamic_cast<ClassType*>(result->ty) || dynamic_cast<InterfaceType*>(result->ty)) && (dynamic_cast<ClassType*>(target) || dynamic_cast<InterfaceType*>(target));
 			if (!checked_reference) {
-				raise_type_mismatch("'as' requires compatible real-number or class/interface types",
-				                    target, result->ty);
+				raise_type_mismatch("'as' requires compatible real-number or class/interface types", target, result->ty);
 			}
 			result = new Coerce(result, target);
 		} else if (maybe_parse_keyword("is")) {
@@ -4760,9 +4748,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	push_scope(body);
 	push_declaration_frame(body);
 	std::string visibility = "published";
-	auto at_visibility_section = [&]() {
-		return peek_directive("published") || peek_directive("public") || peek_directive("protected") || peek_directive("private") || peek_directive("strict");
-	};
+	auto at_visibility_section = [&]() { return peek_directive("published") || peek_directive("public") || peek_directive("protected") || peek_directive("private") || peek_directive("strict"); };
 	do {
 		if (peek_keyword("end")) {
 			break;
@@ -9172,12 +9158,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			// conversion by its value-domain effect, not by whether its
 			// implementation came from System, user source, or the compiler.
 			if (assignment) {
-				declared->rank.tier =
-				    assignment->kind == AssignmentConversionClass::Equal
-				        ? MatchRank::Tier::Equal
-				        : assignment->kind == AssignmentConversionClass::Narrowing
-				            ? MatchRank::Tier::ConvertNarrowing
-				            : MatchRank::Tier::Convert;
+				declared->rank.tier = assignment->kind == AssignmentConversionClass::Equal ? MatchRank::Tier::Equal : assignment->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing : MatchRank::Tier::Convert;
 				declared->rank.distance = assignment->distance;
 			}
 			return declared;
@@ -9191,11 +9172,9 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 
 	if (assignment) {
 		MatchRank rank{
-		    assignment->kind == AssignmentConversionClass::Equal
-		        ? MatchRank::Tier::Equal
-		        : assignment->kind == AssignmentConversionClass::Narrowing
-		            ? MatchRank::Tier::ConvertNarrowing
-		            : MatchRank::Tier::Convert,
+		    assignment->kind == AssignmentConversionClass::Equal       ? MatchRank::Tier::Equal
+		    : assignment->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing
+		                                                               : MatchRank::Tier::Convert,
 		    assignment->distance,
 		};
 		auto source_signed = integer_carrier_is_signed(assignment_source);
@@ -9755,9 +9734,7 @@ static bool dominates(const CallableMatch& a, const CallableMatch& b, const std:
 }
 
 static bool callable_match_has_generic(const CallableMatch& match) {
-	return std::ranges::any_of(match.ranks, [](const MatchRank& rank) {
-		return rank.tier == MatchRank::Tier::Generic;
-	});
+	return std::ranges::any_of(match.ranks, [](const MatchRank& rank) { return rank.tier == MatchRank::Tier::Generic; });
 }
 
 static MatchRank::Tier callable_match_phase(const CallableMatch& match) {

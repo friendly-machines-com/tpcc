@@ -281,7 +281,6 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 			// diagnostic explicitly references them via value_ref/add_value_edge.
 		}
 	}
-
 }
 
 ErrorLetContext::NameBase ErrorLetContext::choose_type_base(const TypeNode& n) {
