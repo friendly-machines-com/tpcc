@@ -2,7 +2,8 @@ unit sysutils;
 interface
 
 type
-  TExecuteFlags = Set of (ExecInheritsHandles);
+  TExecuteFlag = (ExecInheritsHandles);
+  TExecuteFlags = Set of TExecuteFlag;
   Exception = class(TObject)
   private
     FMessage: String;
@@ -68,11 +69,49 @@ function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boo
 function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_directoryexists';
 function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_system::p_expandfilename';
 function GetEnvironmentVariable(const Name: AnsiString): AnsiString; external name '::u_system::p_getenvironmentvariable';
+function ExecuteProcess(const Path, ComLine: AnsiString;
+  Flags: TExecuteFlags = []): Integer; overload;
+function ExecuteProcess(const Path: AnsiString;
+  const ComLine: array of AnsiString;
+  Flags: TExecuteFlags = []): Integer; overload;
 function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TSearchRec): LongInt; external name '::u_system::p_findfirst';
 function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_system::p_findnext';
 procedure FindClose(var F: TSearchRec); external name '::u_system::p_findclose';
 
 implementation
+
+function ExecuteProcessCommandLine(const Path,
+  ComLine: AnsiString): Integer;
+  external name '::u_system::p_executeprocess_commandline';
+function ExecuteProcessArguments(const Path: AnsiString;
+  const ComLine: array of AnsiString): Integer;
+  external name '::u_system::p_executeprocess_arguments';
+
+procedure RaiseExecuteProcessError(Status: Integer);
+var
+  E: EOSError;
+begin
+  E := EOSError.Create('Failed to execute process');
+  E.ErrorCode := Status;
+  raise E
+end;
+
+function ExecuteProcess(const Path, ComLine: AnsiString;
+  Flags: TExecuteFlags = []): Integer;
+begin
+  Result := ExecuteProcessCommandLine(Path, ComLine);
+  if (Result < 0) or (Result = 127) then
+    RaiseExecuteProcessError(Result)
+end;
+
+function ExecuteProcess(const Path: AnsiString;
+  const ComLine: array of AnsiString;
+  Flags: TExecuteFlags = []): Integer;
+begin
+  Result := ExecuteProcessArguments(Path, ComLine);
+  if (Result < 0) or (Result = 127) then
+    RaiseExecuteProcessError(Result)
+end;
 
 function LastPathDelimiter(
   const FileName: AnsiString): SizeInt;

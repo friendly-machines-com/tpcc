@@ -46,7 +46,9 @@
 #include <utility>
 #include <cstddef> // for std::byte
 #include <dirent.h>
+#include <spawn.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 // These must expand at the generated Pascal call site. Wrapping the compiler
@@ -2544,6 +2546,109 @@ inline t_ansistring p_getenvironmentvariable(
 		return {};
 	return tpcc_ansistring_literal(
 	    value, std::strlen(value));
+}
+
+inline bool m_executeprocess_separator(char value) {
+	return value == ' ' || value == '\t' ||
+	       value == '\n';
+}
+
+inline std::vector<std::string>
+m_executeprocess_arguments_from_command_line(
+    const t_ansistring& command_line) {
+	const std::string bytes = command_line.m_string();
+	const std::size_t nul = bytes.find('\0');
+	const std::size_t size =
+	    nul == std::string::npos ? bytes.size() : nul;
+	std::vector<std::string> result;
+	std::size_t position = 0;
+	while (position < size) {
+		while (position < size &&
+		       m_executeprocess_separator(bytes[position]))
+			++position;
+		if (position == size)
+			break;
+
+		if (bytes[position] == '"') {
+			const std::size_t start = ++position;
+			while (position < size &&
+			       bytes[position] != '"')
+				++position;
+			result.emplace_back(
+			    bytes.substr(start, position - start));
+			if (position < size)
+				++position;
+		} else {
+			const std::size_t start = position;
+			while (position < size &&
+			       !m_executeprocess_separator(
+				   bytes[position]))
+				++position;
+			result.emplace_back(
+			    bytes.substr(start, position - start));
+		}
+	}
+	return result;
+}
+
+inline t_integer m_executeprocess(
+    const t_ansistring& path,
+    std::vector<std::string> arguments) {
+	const std::string path_bytes = path.m_string();
+	arguments.insert(arguments.begin(), path_bytes);
+
+	std::vector<char*> argv;
+	argv.reserve(arguments.size() + 1);
+	for (std::string& argument : arguments)
+		argv.push_back(argument.data());
+	argv.push_back(nullptr);
+
+	pid_t pid = -1;
+	const int spawn_error = ::posix_spawn(
+	    &pid, path_bytes.c_str(), nullptr, nullptr,
+	    argv.data(), ::environ);
+	if (spawn_error != 0) {
+		return spawn_error == EAGAIN ||
+			       spawn_error == ENOMEM
+			   ? -1
+			   : 127;
+	}
+
+	int status = 0;
+	pid_t waited;
+	do {
+		waited = ::waitpid(pid, &status, 0);
+	} while (waited == -1 && errno == EINTR);
+	if (waited <= 0)
+		return -1;
+	if (WIFEXITED(status))
+		return static_cast<t_integer>(
+		    WEXITSTATUS(status));
+	return status > 0
+		   ? static_cast<t_integer>(-status)
+		   : static_cast<t_integer>(status);
+}
+
+inline t_integer p_executeprocess_commandline(
+    const t_ansistring& path,
+    const t_ansistring& command_line) {
+	return m_executeprocess(
+	    path,
+	    m_executeprocess_arguments_from_command_line(
+		command_line));
+}
+
+inline t_integer p_executeprocess_arguments(
+    const t_ansistring& path,
+    t_openarray<const t_ansistring> arguments) {
+	std::vector<std::string> bytes;
+	bytes.reserve(
+	    static_cast<std::size_t>(arguments.m_length()));
+	for (t_sizeint index = 0;
+	     index < arguments.m_length(); ++index)
+		bytes.push_back(
+		    arguments.m_data()[index].m_string());
+	return m_executeprocess(path, std::move(bytes));
 }
 
 template<std::size_t DestinationCapacity>
