@@ -28,17 +28,59 @@ type
   public
     ErrorCode: Integer;
   end;
-  TSearchRec = record // FIXME
+  TSearchRec = record
+    Time: LongInt;
+    Size: Int64;
+    Attr: LongInt;
+    Name: AnsiString;
+    ExcludeAttr: LongInt;
+    FindHandle: Pointer;
+    Mode: LongInt
   end;
+  TRawByteSearchRec = TSearchRec;
   TSystemTime = record
     Year, Month, DayOfWeek, Day, Hour, Minute, Second,  Millisecond: Word
   end;
   TProcedure = procedure;
 
+const
+  faReadOnly = $00000001;
+  faHidden = $00000002;
+  faSysFile = $00000004;
+  faVolumeId = $00000008;
+  faDirectory = $00000010;
+  faArchive = $00000020;
+  faNormal = $00000080;
+  faTemporary = $00000100;
+  faSymLink = $00000400;
+  faCompressed = $00000800;
+  faEncrypted = $00004000;
+  faVirtual = $00010000;
+  faAnyFile = $000001FF;
+
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
+function IncludeTrailingPathDelimiter(
+  const Path: AnsiString): AnsiString;
+function FindFirst(const Path: AnsiString; Attr: LongInt;
+  out Rslt: TSearchRec): LongInt; external name '::u_system::p_findfirst';
+function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_system::p_findnext';
+procedure FindClose(var F: TSearchRec); external name '::u_system::p_findclose';
 
 implementation
+
+function IncludeTrailingPathDelimiter(
+  const Path: AnsiString): AnsiString;
+var
+  Count: SizeInt;
+begin
+  Result := Path;
+  Count := Length(Result);
+  if Count = 0 then
+    Result := '/'
+  else if Result[Count] <> '/' then
+    Result := Result + '/'
+end;
 
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
 var

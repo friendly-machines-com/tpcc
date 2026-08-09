@@ -44,6 +44,8 @@
 #include <type_traits>
 #include <utility>
 #include <cstddef> // for std::byte
+#include <dirent.h>
+#include <sys/stat.h>
 
 // These must expand at the generated Pascal call site. Wrapping the compiler
 // builtins in an ordinary C++ function would insert that wrapper's frame and
@@ -2270,6 +2272,221 @@ inline t_ansistring tpcc_ansistring_literal(
 		        static_cast<unsigned char>(source[i]))};
 	result.storage.m_replace(std::move(value));
 	return result;
+}
+
+inline constexpr t_longint m_fa_read_only = 0x00000001;
+inline constexpr t_longint m_fa_hidden = 0x00000002;
+inline constexpr t_longint m_fa_system = 0x00000004;
+inline constexpr t_longint m_fa_directory = 0x00000010;
+inline constexpr t_longint m_fa_archive = 0x00000020;
+inline constexpr t_longint m_fa_symlink = 0x00000400;
+
+struct m_find_state {
+	std::string directory_name;
+	std::string pattern;
+	DIR* directory = nullptr;
+	t_longint search_attributes = 0;
+	bool exact_path = false;
+
+	~m_find_state() {
+		if (directory)
+			::closedir(directory);
+	}
+};
+
+inline bool m_find_wildcard_match(
+    const std::string& pattern,
+    const std::string& name) {
+	std::size_t pattern_position = 0;
+	std::size_t name_position = 0;
+	std::size_t star_position = std::string::npos;
+	std::size_t star_match_position = 0;
+
+	while (name_position < name.size()) {
+		if (pattern_position < pattern.size() &&
+		    (pattern[pattern_position] == '?' ||
+		     pattern[pattern_position] ==
+		         name[name_position])) {
+			++pattern_position;
+			++name_position;
+		} else if (
+		    pattern_position < pattern.size() &&
+		    pattern[pattern_position] == '*') {
+			star_position = pattern_position++;
+			star_match_position = name_position;
+		} else if (star_position != std::string::npos) {
+			pattern_position = star_position + 1;
+			name_position = ++star_match_position;
+		} else {
+			return false;
+		}
+	}
+	while (pattern_position < pattern.size() &&
+	       pattern[pattern_position] == '*')
+		++pattern_position;
+	return pattern_position == pattern.size();
+}
+
+inline std::string m_find_base_name(
+    const std::string& path) {
+	const std::size_t separator = path.rfind('/');
+	if (separator == std::string::npos)
+		return path;
+	return path.substr(separator + 1);
+}
+
+inline t_longint m_find_attributes(
+    const std::string& path,
+    const std::string& name,
+    const struct stat& information) {
+	t_longint attributes = m_fa_archive;
+	if (S_ISDIR(information.st_mode))
+		attributes |= m_fa_directory;
+	if (name.size() >= 2 &&
+	    name[0] == '.' && name[1] != '.')
+		attributes |= m_fa_hidden;
+	if ((information.st_mode & S_IWUSR) == 0)
+		attributes |= m_fa_read_only;
+	if (S_ISSOCK(information.st_mode) ||
+	    S_ISBLK(information.st_mode) ||
+	    S_ISCHR(information.st_mode) ||
+	    S_ISFIFO(information.st_mode))
+		attributes |= m_fa_system;
+	if (S_ISLNK(information.st_mode)) {
+		attributes |= m_fa_symlink;
+		struct stat target_information {};
+		if (::stat(path.c_str(),
+		           &target_information) == 0 &&
+		    S_ISDIR(target_information.st_mode))
+			attributes |= m_fa_directory;
+	}
+	return attributes;
+}
+
+template<typename SearchRecord>
+inline bool m_find_populate(
+    const std::string& path,
+    const std::string& name,
+    SearchRecord& result) {
+	auto* state = static_cast<m_find_state*>(
+	    result.p_findhandle);
+	if (!state)
+		return false;
+
+	struct stat information {};
+	const int status =
+	    (state->search_attributes & m_fa_symlink) != 0
+		? ::lstat(path.c_str(), &information)
+		: ::stat(path.c_str(), &information);
+	if (status != 0)
+		return false;
+
+	const t_longint attributes =
+	    m_find_attributes(path, name, information);
+	if ((attributes &
+	     ~state->search_attributes) != 0)
+		return false;
+
+	result.p_time = static_cast<t_longint>(
+	    information.st_mtime);
+	result.p_size = static_cast<t_int64>(
+	    information.st_size);
+	result.p_attr = attributes;
+	result.p_name = tpcc_ansistring_literal(
+	    name.data(), name.size());
+	result.p_mode = static_cast<t_longint>(
+	    information.st_mode);
+	return true;
+}
+
+template<typename SearchRecord>
+inline void p_findclose(SearchRecord& result) {
+	delete static_cast<m_find_state*>(
+	    result.p_findhandle);
+	result.p_findhandle = nullptr;
+}
+
+template<typename SearchRecord>
+inline t_longint p_findnext(SearchRecord& result) {
+	auto* state = static_cast<m_find_state*>(
+	    result.p_findhandle);
+	if (!state || state->exact_path)
+		return -1;
+
+	if (!state->directory) {
+		state->directory = ::opendir(
+		    state->directory_name.c_str());
+		if (!state->directory)
+			return -1;
+	}
+
+	while (dirent* entry =
+	           ::readdir(state->directory)) {
+		const std::string name(entry->d_name);
+		if (!m_find_wildcard_match(
+		        state->pattern, name))
+			continue;
+		if (m_find_populate(
+		        state->directory_name + name,
+		        name, result))
+			return 0;
+	}
+	return -1;
+}
+
+template<typename SearchRecord>
+inline t_longint p_findfirst(
+    const t_ansistring& path_value,
+    t_longint attributes,
+    SearchRecord& result) {
+	result.p_time = 0;
+	result.p_size = 0;
+	result.p_attr = 0;
+	result.p_name = {};
+	result.p_excludeattr = 0;
+	result.p_findhandle = nullptr;
+	result.p_mode = 0;
+
+	const std::string path = path_value.m_string();
+	if (path.empty())
+		return -1;
+
+	auto state = std::make_unique<m_find_state>();
+	state->search_attributes =
+	    attributes | m_fa_archive |
+	    m_fa_read_only;
+	result.p_findhandle = state.get();
+
+	if (path.find_first_of("*?") ==
+	    std::string::npos) {
+		state->exact_path = true;
+		if (!m_find_populate(
+		        path, m_find_base_name(path),
+		        result)) {
+			result.p_findhandle = nullptr;
+			return -1;
+		}
+		state.release();
+		return 0;
+	}
+
+	const std::size_t separator =
+	    path.rfind('/');
+	if (separator == std::string::npos) {
+		state->directory_name = "./";
+		state->pattern = path;
+	} else {
+		state->directory_name =
+		    path.substr(0, separator + 1);
+		state->pattern =
+		    path.substr(separator + 1);
+	}
+	if (p_findnext(result) == 0) {
+		state.release();
+		return 0;
+	}
+	result.p_findhandle = nullptr;
+	return -1;
 }
 
 template<std::size_t DestinationCapacity>
