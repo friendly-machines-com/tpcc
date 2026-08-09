@@ -279,13 +279,11 @@ inline t_pointer m_frame_word(
 
 inline t_pointer m_caller_frame_from_frame(
     t_pointer frame, t_pointer address) {
-	(void)address;
 	return m_frame_word(frame, 0);
 }
 
 inline t_pointer m_caller_addr_from_frame(
     t_pointer frame, t_pointer address) {
-	(void)address;
 	t_pointer stored = m_frame_word(frame, 1);
 	return stored
 		   ? __builtin_extract_return_addr(
@@ -4508,8 +4506,6 @@ inline void p_getdir(
     t_shortstring<255>& directory) {
 	// Unix has one directory tree, so the DOS drive selector has no
 	// semantic effect.
-	(void)drive_number;
-
 	std::string bytes;
 	const std::error_code error =
 	    m_getdir_bytes(bytes);
@@ -4533,8 +4529,6 @@ inline void p_getdir(
 inline void p_getdir(
     t_byte drive_number,
     t_ansistring& directory) {
-	(void)drive_number;
-
 	std::string bytes;
 	const std::error_code error =
 	    m_getdir_bytes(bytes);
@@ -6369,7 +6363,6 @@ template<typename Size>
 requires std::is_integral_v<Size>
 inline void p_freemem(
     t_pointer value, Size size) {
-	(void)m_allocation_size(size);
 	std::free(value);
 }
 

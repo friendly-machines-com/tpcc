@@ -282,7 +282,6 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 		}
 	}
 
-	(void)use;
 }
 
 ErrorLetContext::NameBase ErrorLetContext::choose_type_base(const TypeNode& n) {

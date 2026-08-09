@@ -5989,7 +5989,7 @@ void Parser::parse_label_block() {
 		// Pascal label declarations introduce statement labels, not values. For
 		// now they are validation-light because C++ also has function-local labels;
 		// emission prefixes them separately from value identifiers.
-		(void)parse_identifier();
+		parse_identifier();
 		if (!maybe_parse_comma()) {
 			break;
 		}
