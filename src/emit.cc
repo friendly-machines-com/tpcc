@@ -3033,8 +3033,7 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(slot);
 			return;
 		}
-		if (auto packed = dynamic_cast<PackedRecordType*>(m->a->ty)) {
-			(void)packed;
+		if (dynamic_cast<PackedRecordType*>(m->a->ty)) {
 			auto field = dynamic_cast<StorageSlot*>(m->b);
 			if (!field) {
 				unhandled_node("packed-record member is not a field", expr);
