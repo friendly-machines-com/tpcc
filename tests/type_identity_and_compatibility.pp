@@ -152,12 +152,6 @@ begin
     Result := 51
 end;
 
-function PickRange(Value: TRangeB): Integer; overload;
-begin
-  if Value = Value then
-    Result := 52
-end;
-
 begin
   StrongInteger := 2;
   StrongIntegerAlias := 3;
@@ -235,7 +229,7 @@ begin
     Halt(8);
   if PickRange(RangeA) <> 51 then
     Halt(11);
-  if PickRange(RangeB) <> 52 then
+  if PickRange(RangeB) <> 51 then
     Halt(12);
   if PickRange(RangeAlias) <> 51 then
     Halt(13);
