@@ -2518,6 +2518,23 @@ inline t_boolean p_fileexists(
 	return tpcc_bool_to_boolean(exists);
 }
 
+inline t_boolean p_directoryexists(
+    const t_ansistring& directory_name,
+    t_boolean follow_link) {
+	const std::string path =
+	    directory_name.m_string();
+	struct stat information {};
+	const bool exists =
+	    ::stat(path.c_str(), &information) == 0;
+	bool is_directory =
+	    exists && S_ISDIR(information.st_mode);
+	if (!exists && follow_link == p_false)
+		is_directory =
+		    ::lstat(path.c_str(), &information) == 0 &&
+		    S_ISLNK(information.st_mode);
+	return tpcc_bool_to_boolean(is_directory);
+}
+
 template<std::size_t DestinationCapacity>
 inline t_shortstring<DestinationCapacity>
 tpcc_shortstring_cast(

@@ -116,6 +116,38 @@ begin
     Halt(86);
   if not SysUtils.FileExists('files/pipe', False) then
     Halt(87);
+  if not SysUtils.DirectoryExists('files/subdir') then
+    Halt(118);
+  if not SysUtils.DirectoryExists('files/subdir', False) then
+    Halt(119);
+  if SysUtils.DirectoryExists('files/alpha1.dat') then
+    Halt(120);
+  if SysUtils.DirectoryExists('files/alpha1.dat', False) then
+    Halt(121);
+  if SysUtils.DirectoryExists('files/file-link') then
+    Halt(122);
+  if SysUtils.DirectoryExists('files/file-link', False) then
+    Halt(123);
+  if not SysUtils.DirectoryExists('files/dir-link') then
+    Halt(124);
+  if not SysUtils.DirectoryExists('files/dir-link', False) then
+    Halt(125);
+  if SysUtils.DirectoryExists('files/broken-link') then
+    Halt(126);
+  if not SysUtils.DirectoryExists('files/broken-link', False) then
+    Halt(127);
+  if SysUtils.DirectoryExists('files/missing') then
+    Halt(128);
+  if SysUtils.DirectoryExists('files/missing', False) then
+    Halt(129);
+  if SysUtils.DirectoryExists('') then
+    Halt(130);
+  if SysUtils.DirectoryExists('', False) then
+    Halt(131);
+  if SysUtils.DirectoryExists('files/pipe') then
+    Halt(132);
+  if SysUtils.DirectoryExists('files/pipe', False) then
+    Halt(133);
 
   if IncludeTrailingPathDelimiter('') <> '/' then
     Halt(50);
