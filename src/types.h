@@ -371,7 +371,6 @@ struct FixedSetType : public Type {
 	FixedSetType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
-	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
 	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	bool same_cxx_carrier_definition_as(const Type* other) const override;

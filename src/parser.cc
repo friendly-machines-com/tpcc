@@ -4152,7 +4152,7 @@ Node* Parser::parse_product_tail(Node* result) {
 			Type* target = parse_type_expression(false);
 			bool checked_reference = (dynamic_cast<ClassType*>(result->ty) || dynamic_cast<InterfaceType*>(result->ty)) && (dynamic_cast<ClassType*>(target) || dynamic_cast<InterfaceType*>(target));
 			if (!checked_reference) {
-				raise_type_mismatch("'as' requires compatible class/interface types",
+				raise_type_mismatch("'as' requires compatible real-number or class/interface types",
 				                    target, result->ty);
 			}
 			result = new Coerce(result, target);
@@ -8297,7 +8297,7 @@ static bool generic_ordinal_operation_accepts(BuiltinGenericKind kind, Type* ope
 			return !pointer->is_untyped();
 		}
 		operand = subrange_range_type(operand);
-		return dynamic_cast<EnumType*>(operand) != nullptr;
+		return dynamic_cast<EnumType*>(operand) != nullptr || operand == char_type();
 	}
 	return false;
 }
@@ -9159,12 +9159,12 @@ std::optional<CallableMatch> Parser::match_callable_arguments(Callable* callable
 		}
 	}
 	if (resolution_policy != OverloadResolutionPolicy::Ordinary && resolution_policy != OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep && builtin && builtin->generic_kind == BuiltinGenericKind::EnumOrPointerStep && !args.empty() && args[0]) {
-		// Expression arithmetic never treats an enum as an integer. The same
-		// internal relation remains available to the separately specified
-		// mutation operations, but `Enum + N` and `Enum - N` require an
-		// explicitly matching declaration.
+		// Expression arithmetic never provides predefined Enum +/- Integer or
+		// Char +/- Integer operations. The same internal relation remains
+		// available to the separately specified Inc/Dec mutation operations,
+		// while expression syntax requires an explicitly matching declaration.
 		Type* first = overload_rank_type(args[0]->ty);
-		if (dynamic_cast<EnumType*>(first)) {
+		if (dynamic_cast<EnumType*>(first) || first == char_type()) {
 			return std::nullopt;
 		}
 	}

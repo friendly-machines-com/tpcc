@@ -1221,22 +1221,6 @@ std::optional<ValueConversion> FixedSetType::value_conversion_from(const Type* s
 	return implicit_conversion(item_conversion ? item_conversion->distance : 0);
 }
 
-std::optional<ValueConversion> FixedSetType::destination_conversion_from(const Type* source) const {
-	if (auto ordinary = value_conversion_from(source)) {
-		return ordinary;
-	}
-	auto set = dynamic_cast<const FixedSetType*>(source);
-	if (!set || !is_subtype_of(set)) {
-		return std::nullopt;
-	}
-	// A fixed destination may narrow a related ordinal set domain. The
-	// selected m_set_cast preserves membership keys in the destination
-	// carrier; operator ranking sees this as the same assignment Narrowing
-	// quality as any other fixed destination.
-	auto item_conversion = item_type->assignment_conversion_from(set->item_type);
-	return implicit_conversion(item_conversion ? item_conversion->distance : 0);
-}
-
 bool FixedSetType::predefined_explicit_conversion_from(const Type* source) const {
 	// An explicit set cast preserves stored ordinal membership keys even when
 	// the item domains are not in the implicit subset relation.
