@@ -4760,6 +4760,9 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	push_scope(body);
 	push_declaration_frame(body);
 	std::string visibility = "published";
+	auto at_visibility_section = [&]() {
+		return peek_directive("published") || peek_directive("public") || peek_directive("protected") || peek_directive("private") || peek_directive("strict");
+	};
 	do {
 		if (peek_keyword("end")) {
 			break;
@@ -4813,7 +4816,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			// block.  Keep every field in Pascal declaration order so RecordType
 			// layout reconstruction and emitted C++ field order use the same
 			// authoritative sequence.
-			while (auto first_name = maybe_parse_identifier()) {
+			while (!at_visibility_section()) {
+				auto first_name = maybe_parse_identifier();
+				if (!first_name) {
+					break;
+				}
 				std::vector<std::string> member_names{*first_name};
 				while (maybe_parse_comma()) {
 					member_names.push_back(parse_identifier());

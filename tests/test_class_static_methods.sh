@@ -11,6 +11,9 @@ cd "$root"
 ./mp -Furtl -o"$tmp/class_static_methods.cc" \
 	tests/class_static_methods.pp
 
+./mp -Furtl -o"$tmp/class_var_visibility_boundary.cc" \
+	tests/class_var_visibility_boundary.pp
+
 if ! rg -q 'static .* p_staticvalue\(' \
 	"$tmp/class_static_methods.cc"
 then
