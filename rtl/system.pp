@@ -16,6 +16,7 @@ type
   Int64 = external name '::u_system::t_int64';
   Boolean = external name '::u_system::t_boolean';
   Char = external name '::u_system::t_char';
+  AnsiChar = Char;
   Single = external name '::u_system::t_single';
   Double = external name '::u_system::t_double';
   Extended = external name '::u_system::t_extended';
