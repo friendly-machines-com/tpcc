@@ -149,7 +149,8 @@ begin
 
   LongText := 'cd';
   SetLength(LongText, 1000);
-  if Length(LongText) <> 1000 then Halt(11);
+  LongText[1000] := 'z';
+  if LongText[1000] <> 'z' then Halt(11);
   SetLength(LongText, 2);
   Sum := 0;
   for Ch in LongText do Sum := Sum + Ord(Ch);

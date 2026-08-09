@@ -2711,7 +2711,10 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (auto nil = dynamic_cast<NilLiteral*>(expr)) {
 		auto routine = dynamic_cast<RoutineType*>(nil->ty);
-		if (routine && routine->kind == METHOD) {
+		if (dynamic_cast<DynamicArrayType*>(nil->ty)) {
+			emit_type_ref(nil->ty);
+			fprintf(active, "{}");
+		} else if (routine && routine->kind == METHOD) {
 			emit_type_ref(routine);
 			fprintf(active, "{}");
 		} else if (routine && routine->kind == ROUTINE) {
@@ -3391,6 +3394,12 @@ void Emitter::emit_expression(Node* expr) {
 		auto source_shortstring = dynamic_cast<ShortStringType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_shortstring = dynamic_cast<ShortStringType*>(ca->ty);
 		const bool source_ansistring = ca->a && ca->a->ty == ansistring_type();
+		if (source_shortstring && ca->ty == ansistring_type()) {
+			fprintf(active, "::u_system::o_implicit(");
+			emit_expression(ca->a);
+			fprintf(active, ", ::u_system::m_conversion_target<::u_system::t_ansistring>{})");
+			return;
+		}
 		if (target_shortstring && (source_shortstring || source_ansistring)) {
 			fprintf(active, "::u_system::tpcc_shortstring_cast<%u>(", static_cast<unsigned>(target_shortstring->capacity));
 			emit_expression(ca->a);

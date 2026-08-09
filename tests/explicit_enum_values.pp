@@ -42,5 +42,17 @@ begin
   if Ord(High(TCalculated)) <> 17 then
     Halt(7);
   if Ord(High(TCharacter)) <> 66 then
-    Halt(8)
+    Halt(8);
+  if not (Lowest < Back) then
+    Halt(9);
+  if not (Back <= Middle) then
+    Halt(10);
+  if not (Highest > Middle) then
+    Halt(11);
+  if not (Highest >= Alias) then
+    Halt(12);
+  if Highest <> Alias then
+    Halt(13);
+  if Lowest = Middle then
+    Halt(14)
 end.

@@ -70,6 +70,7 @@ struct MatchRank {
 		Exact,
 		Direct,
 		Convert,
+		ConvertNarrowing,
 		Generic,
 	};
 	Tier tier;
@@ -119,6 +120,19 @@ enum class MatchFailure {
 	PackedProjection,
 	OrdinalRequired,
 	AmbiguousConversion,
+};
+
+/** Candidate-shape restrictions applied by the shared callable resolver.
+ * Ordinary calls allow each formal coordinate to choose its own destination.
+ * Common binary operators require one formal operand type once conversion is
+ * needed; integer-only families additionally constrain that common type, and
+ * pointer +/- offset is the agreed asymmetric exception. */
+enum class OverloadResolutionPolicy {
+	Ordinary,
+	CommonBinary,
+	CommonIntegerBinary,
+	CommonBinaryPointerLeft,
+	CommonBinaryPointerLeftOrEnumStep,
 };
 
 class ParserInputFile {
@@ -390,13 +404,13 @@ class Parser {
 	 * leading source token. Operand parsing may encounter directives for
 	 * nested subtrees, so these builders must never reread mutable scanner
 	 * state after receiving their operands. */
-	Node* mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives directives);
+	Node* mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives directives, bool mutation_step = false);
 	Node* mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirectives directives);
 	Node* mk_membership(Node* item, Node* set, LeadingTokenDirectives directives);
 	Node* mk_unary_same(std::string id, Node* x, LeadingTokenDirectives directives);
 	Node* mk_assign(Node* a, Node* b);
 	std::optional<ArgumentMatch> match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion = true, MatchFailure* failure = nullptr, DeclaredConversionFailure* conversion_failure = nullptr);
-	std::optional<CallableMatch> match_callable_arguments(Callable* callable, const std::vector<Node*>& args, bool allow_declared_conversion = true);
+	std::optional<CallableMatch> match_callable_arguments(Callable* callable, const std::vector<Node*>& args, bool allow_declared_conversion = true, OverloadResolutionPolicy resolution_policy = OverloadResolutionPolicy::Ordinary);
 	std::optional<ArgumentMatch> match_declared_conversion(Node* actual, Type* target, std::string_view operator_identifier, MatchFailure* failure, DeclaredConversionFailure* conversion_failure);
 	bool has_direct_assignment_edge(Type* source, Type* target);
 	Node* match_explicit_conversion(Node* actual, Type* target, bool implicit_fallback);
@@ -629,7 +643,7 @@ class Parser {
 	 *  to extract a receiver, run overload ranking if the target is a set,
 	 *  materialize defaults, and insert Cast coercions where needed. Errors
 	 *  on no-match, ambiguous overload, or bad args. */
-	FinalizedCall finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error, SourceLocation error_location, Type* expected_return_type = nullptr);
+	FinalizedCall finalize_call(Node* target, std::vector<Node*>& args, std::string name_for_error, SourceLocation error_location, Type* expected_return_type = nullptr, OverloadResolutionPolicy resolution_policy = OverloadResolutionPolicy::Ordinary);
 	/** Form the semantic application after overload selection. Constructor
 	 *  selection through a class reference becomes Construct; every other
 	 *  selected callable remains ProcCall. OVERFLOW_CHECKS was captured at

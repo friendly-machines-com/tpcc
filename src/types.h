@@ -32,6 +32,21 @@ struct ValueConversion {
 	unsigned distance = 0;
 };
 
+/** One predefined value-assignment relation, classified for overload
+ * selection as well as fixed-destination storage. Exact Pascal Type*
+ * identity and expression-dependent contextual matches are handled by the
+ * parser before this type-only query. */
+enum class AssignmentConversionClass {
+	Direct,
+	Widening,
+	Narrowing,
+};
+
+struct AssignmentConversion {
+	AssignmentConversionClass kind;
+	unsigned distance = 0;
+};
+
 struct SourceLocation {
 	std::string file_name;
 	// Parser-created locations are 1-based. 0 means the location is unknown or
@@ -82,33 +97,37 @@ class Type {
 	// not repeat the head.
 	virtual void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const = 0;
 	virtual void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const;
-	/** Pascal type identity is exactly Type* identity. Value conversion is a
-	 * separate, directional operation owned by the destination constructor.
-	 * This is the relation used while selecting calls and operators, so it
-	 * contains only implicit edges which may affect overload viability.
-	 * Explicit casts and stores into an already-selected destination have
-	 * separate relations below. Subtyping is a
+	/** Pascal type identity is exactly Type* identity. These two legacy
+	 * relations implement the ordinary and additional narrowing portions of
+	 * predefined assignment. New semantic callers use
+	 * assignment_conversion_from(), which classifies their union; keeping the
+	 * lower-level split here lets individual types describe the extra
+	 * destination operations without giving calls and stores different
+	 * assignment languages. Explicit casts have a separate relation below.
+	 * Subtyping is a
 	 * reflexive/transitive preorder: distinct definitions such as two
 	 * occurrences of 1..10 can be mutual subtypes without becoming identical.
 	 * Typed var/out matching, routine identity, overload ranking, and C++
 	 * carrier identity must not substitute either relation for their own
 	 * rules. */
 	virtual std::optional<ValueConversion> value_conversion_from(const Type* source) const;
-	/** Predefined conversion used only after the destination type has already
-	 * been selected: assignment, initialization, function result, Inc/Dec
-	 * writeback, and native indexing. It may narrow and therefore request a
-	 * caller-side {$R+} check, but it is never consulted for overload
-	 * viability. Declared operator := lookup still precedes this fallback. */
+	/** Additional predefined assignment operations, including narrowing.
+	 * Implementations conventionally return value_conversion_from() first so
+	 * this is the complete legacy destination relation. */
 	virtual std::optional<ValueConversion> destination_conversion_from(const Type* source) const;
+	/** Complete predefined assignment compatibility and its overload quality.
+	 * This is the type-level relation shared by fixed destinations and value
+	 * formals. Declared implicit conversion operators and expression-specific
+	 * contextual construction are layered around it by the parser. */
+	std::optional<AssignmentConversion> assignment_conversion_from(const Type* source) const;
 	/** Whether source syntax `ThisType(value)` has one predefined direct
 	 * conversion edge after source-defined Explicit/Implicit contracts have
-	 * failed. This is deliberately separate from value_conversion_from():
-	 * implicit viability remains the narrower relation used by overload
-	 * selection, while explicit syntax also admits representation
-	 * operations such as ordinal truncation, related downcasts, pointer
-	 * crossings, and packed overlays. Implementations must inspect only SOURCE
-	 * and this destination; applying another conversion first would turn the
-	 * language into an accidental A -> B -> C conversion search. */
+	 * failed. This is deliberately separate from assignment compatibility:
+	 * explicit syntax additionally admits representation operations such as
+	 * ordinal casts, related downcasts, pointer crossings, and packed
+	 * overlays. Implementations must inspect only SOURCE and this
+	 * destination; applying another conversion first would turn the language
+	 * into an accidental A -> B -> C conversion search. */
 	virtual bool predefined_explicit_conversion_from(const Type* source) const;
 	virtual bool is_subtype_of(const Type* target) const;
 	/** Exact contract identity for a type written directly in a routine
@@ -352,6 +371,7 @@ struct FixedSetType : public Type {
 	FixedSetType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
 	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	bool same_cxx_carrier_definition_as(const Type* other) const override;
@@ -758,6 +778,7 @@ class SubrangeType : public Type {
 	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
 	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
+	bool same_formal_contract_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

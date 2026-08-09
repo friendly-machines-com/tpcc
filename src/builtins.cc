@@ -620,20 +620,13 @@ static ConstEvalResult fold_set_union(ConstEvalContext&, Type* result_ty, const 
 	return ConstEvalResult::success(new SetLiteral(std::move(items), result_ty));
 }
 
-static ConstEvalResult fold_set_difference(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty)) {
-		return ConstEvalResult::not_constant();
-	}
-	auto remaining = constant_set_ranges(dynamic_cast<SetLiteral*>(args[0]));
-	auto removed = constant_set_ranges(dynamic_cast<SetLiteral*>(args[1]));
-	if (!remaining || !removed) {
-		return ConstEvalResult::not_constant();
-	}
-
-	for (const ConstantSetRange& removal : *removed) {
+static std::optional<std::vector<ConstantSetRange>> constant_set_difference_ranges(
+    std::vector<ConstantSetRange> remaining,
+    const std::vector<ConstantSetRange>& removed) {
+	for (const ConstantSetRange& removal : removed) {
 		std::vector<ConstantSetRange> next;
-		next.reserve(remaining->size() + 1);
-		for (const ConstantSetRange& range : *remaining) {
+		next.reserve(remaining.size() + 1);
+		for (const ConstantSetRange& range : remaining) {
 			if (compare_constant_set_keys(removal.upper, range.lower) < 0 || compare_constant_set_keys(range.upper, removal.lower) < 0) {
 				next.push_back(range);
 				continue;
@@ -641,21 +634,126 @@ static ConstEvalResult fold_set_difference(ConstEvalContext&, Type* result_ty, c
 			if (compare_constant_set_keys(range.lower, removal.lower) < 0) {
 				auto upper = constant_set_predecessor(removal.lower);
 				if (!upper) {
-					return ConstEvalResult::not_constant();
+					return std::nullopt;
 				}
 				next.push_back(ConstantSetRange{range.lower, *upper});
 			}
 			if (compare_constant_set_keys(removal.upper, range.upper) < 0) {
 				auto lower = constant_set_successor(removal.upper);
 				if (!lower) {
-					return ConstEvalResult::not_constant();
+					return std::nullopt;
 				}
 				next.push_back(ConstantSetRange{*lower, range.upper});
 			}
 		}
-		*remaining = std::move(next);
+		remaining = std::move(next);
 	}
-	return constant_set_literal(result_ty, *remaining);
+	return remaining;
+}
+
+static ConstEvalResult fold_set_difference(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty)) {
+		return ConstEvalResult::not_constant();
+	}
+	auto first = constant_set_ranges(dynamic_cast<SetLiteral*>(args[0]));
+	auto second = constant_set_ranges(dynamic_cast<SetLiteral*>(args[1]));
+	if (!first || !second) {
+		return ConstEvalResult::not_constant();
+	}
+	auto result = constant_set_difference_ranges(*first, *second);
+	return result ? constant_set_literal(result_ty, *result) : ConstEvalResult::not_constant();
+}
+
+static ConstEvalResult fold_set_intersection(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty)) {
+		return ConstEvalResult::not_constant();
+	}
+	auto first = constant_set_ranges(dynamic_cast<SetLiteral*>(args[0]));
+	auto second = constant_set_ranges(dynamic_cast<SetLiteral*>(args[1]));
+	if (!first || !second) {
+		return ConstEvalResult::not_constant();
+	}
+	std::vector<ConstantSetRange> result;
+	for (const ConstantSetRange& left : *first) {
+		for (const ConstantSetRange& right : *second) {
+			ConstantSetRange overlap{
+			    compare_constant_set_keys(left.lower, right.lower) < 0 ? right.lower : left.lower,
+			    compare_constant_set_keys(left.upper, right.upper) < 0 ? left.upper : right.upper,
+			};
+			if (compare_constant_set_keys(overlap.lower, overlap.upper) <= 0) {
+				result.push_back(overlap);
+			}
+		}
+	}
+	return constant_set_literal(result_ty, result);
+}
+
+static ConstEvalResult fold_set_symmetric_difference(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2 || !dynamic_cast<FixedSetType*>(result_ty)) {
+		return ConstEvalResult::not_constant();
+	}
+	auto first = constant_set_ranges(dynamic_cast<SetLiteral*>(args[0]));
+	auto second = constant_set_ranges(dynamic_cast<SetLiteral*>(args[1]));
+	if (!first || !second) {
+		return ConstEvalResult::not_constant();
+	}
+	auto left_only = constant_set_difference_ranges(*first, *second);
+	auto right_only = constant_set_difference_ranges(*second, *first);
+	if (!left_only || !right_only) {
+		return ConstEvalResult::not_constant();
+	}
+	left_only->insert(left_only->end(), right_only->begin(), right_only->end());
+	return constant_set_literal(result_ty, *left_only);
+}
+
+enum class SetComparisonKind {
+	Equal,
+	Subset,
+	Superset,
+};
+
+static ConstEvalResult fold_set_comparison(SetComparisonKind kind, const std::vector<Node*>& args) {
+	if (args.size() != 2) {
+		return ConstEvalResult::not_constant();
+	}
+	auto first = constant_set_ranges(dynamic_cast<SetLiteral*>(args[0]));
+	auto second = constant_set_ranges(dynamic_cast<SetLiteral*>(args[1]));
+	if (!first || !second) {
+		return ConstEvalResult::not_constant();
+	}
+	auto first_only = constant_set_difference_ranges(*first, *second);
+	auto second_only = constant_set_difference_ranges(*second, *first);
+	if (!first_only || !second_only) {
+		return ConstEvalResult::not_constant();
+	}
+	bool result = false;
+	switch (kind) {
+	case SetComparisonKind::Equal:
+		result = first_only->empty() && second_only->empty();
+		break;
+	case SetComparisonKind::Subset:
+		result = first_only->empty();
+		break;
+	case SetComparisonKind::Superset:
+		result = second_only->empty();
+		break;
+	}
+	return ConstEvalResult::success(new EnumMemberRef(
+	    result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false",
+	    result ? 1 : 0,
+	    boolean_type()));
+}
+
+static ConstEvalResult fold_set_equal(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_set_comparison(SetComparisonKind::Equal, args);
+}
+
+static ConstEvalResult fold_set_subset(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_set_comparison(SetComparisonKind::Subset, args);
+}
+
+static ConstEvalResult fold_set_superset(ConstEvalContext&, Type*, const std::vector<Node*>& args) {
+	return fold_set_comparison(SetComparisonKind::Superset, args);
 }
 
 static ConstEvalResult fold_abs_impl(Type* result_ty, const std::vector<Node*>& args, bool checked) {
@@ -874,6 +972,49 @@ static ConstEvalResult fold_unchecked_multiply(ConstEvalContext&, Type* result_t
 		return ConstEvalResult::not_constant();
 	}
 	return fold_unchecked_integer_bits(unchecked_integer_bits(const_integer_arg(args[0])) * unchecked_integer_bits(const_integer_arg(args[1])), result_ty);
+}
+
+static ConstEvalResult fold_power(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() != 2) {
+		return ConstEvalResult::not_constant();
+	}
+	OrdinalBounds bounds;
+	if (integer_bounds(result_ty, &bounds)) {
+		const Integer* base = const_integer_arg(args[0]);
+		const Integer* exponent = const_integer_arg(args[1]);
+		if (!base || !exponent) {
+			return ConstEvalResult::not_constant();
+		}
+		if (exponent->negative) {
+			return ConstEvalResult::error("integer exponent must be nonnegative");
+		}
+		uint64_t factor = base->value;
+		uint64_t result = 1;
+		uint64_t remaining = exponent->value;
+		while (remaining != 0) {
+			if ((remaining & 1) != 0) {
+				if (factor != 0 && result > UINT64_MAX / factor) {
+					return ConstEvalResult::error("integer constant overflow");
+				}
+				result *= factor;
+			}
+			remaining >>= 1;
+			if (remaining != 0) {
+				if (factor != 0 && factor > UINT64_MAX / factor) {
+					return ConstEvalResult::error("integer constant overflow");
+				}
+				factor *= factor;
+			}
+		}
+		const bool negative = base->negative && (exponent->value & 1) != 0 && result != 0;
+		return fold_integer_result(result, negative, result_ty);
+	}
+	long double base = 0;
+	long double exponent = 0;
+	if (!const_numeric_as_long_double(args[0], &base) || !const_numeric_as_long_double(args[1], &exponent)) {
+		return ConstEvalResult::not_constant();
+	}
+	return ConstEvalResult::success(new Real(::powl(base, exponent), result_ty));
 }
 
 static ConstEvalResult fold_intdivide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -1305,6 +1446,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::o_modulus", fold_modulus},
     {"::u_system::o_leftshift", fold_leftshift},
     {"::u_system::o_rightshift", fold_rightshift},
+    {"::u_system::o_power", fold_power},
 
     {"::u_system::o_lessthan", fold_lessthan},
     {"::u_system::o_lessthanorequal", fold_lessthanorequal},
@@ -1332,11 +1474,21 @@ static const BuiltinDesc k_checked_subtract_fallback{"::u_system::o_subtract", n
 static const BuiltinDesc k_unchecked_subtract_fallback{"::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::EnumOrPointerStep};
 static const BuiltinDesc k_checked_pointer_difference_fallback{"::u_system::o_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
 static const BuiltinDesc k_unchecked_pointer_difference_fallback{"::u_system::o_unchecked_subtract", nullptr, {}, BuiltinGenericKind::PointerDifference};
-static const BuiltinDesc k_checked_set_union_fallback{"::u_system::o_add", fold_set_union, {}, BuiltinGenericKind::SetUnionOrDifference};
-static const BuiltinDesc k_unchecked_set_union_fallback{"::u_system::o_unchecked_add", fold_set_union, {}, BuiltinGenericKind::SetUnionOrDifference};
-static const BuiltinDesc k_checked_set_difference_fallback{"::u_system::o_subtract", fold_set_difference, {}, BuiltinGenericKind::SetUnionOrDifference};
-static const BuiltinDesc k_unchecked_set_difference_fallback{"::u_system::o_unchecked_subtract", fold_set_difference, {}, BuiltinGenericKind::SetUnionOrDifference};
-static const BuiltinDesc k_enum_equal_fallback{"::u_system::o_equal", fold_equal, {}, BuiltinGenericKind::EnumEquality};
+static const BuiltinDesc k_checked_set_union_fallback{"::u_system::o_add", fold_set_union, {}, BuiltinGenericKind::SetBinaryOperation};
+static const BuiltinDesc k_unchecked_set_union_fallback{"::u_system::o_unchecked_add", fold_set_union, {}, BuiltinGenericKind::SetBinaryOperation};
+static const BuiltinDesc k_checked_set_difference_fallback{"::u_system::o_subtract", fold_set_difference, {}, BuiltinGenericKind::SetBinaryOperation};
+static const BuiltinDesc k_unchecked_set_difference_fallback{"::u_system::o_unchecked_subtract", fold_set_difference, {}, BuiltinGenericKind::SetBinaryOperation};
+static const BuiltinDesc k_checked_set_intersection_fallback{"::u_system::o_multiply", fold_set_intersection, {}, BuiltinGenericKind::SetBinaryOperation};
+static const BuiltinDesc k_unchecked_set_intersection_fallback{"::u_system::o_unchecked_multiply", fold_set_intersection, {}, BuiltinGenericKind::SetBinaryOperation};
+static const BuiltinDesc k_set_symmetric_difference_fallback{"::u_system::o_symmetric_difference", fold_set_symmetric_difference, {}, BuiltinGenericKind::SetBinaryOperation};
+static const BuiltinDesc k_set_equal_fallback{"::u_system::o_equal", fold_set_equal, {}, BuiltinGenericKind::SetComparison};
+static const BuiltinDesc k_set_subset_fallback{"::u_system::o_lessthanorequal", fold_set_subset, {}, BuiltinGenericKind::SetComparison};
+static const BuiltinDesc k_set_superset_fallback{"::u_system::o_greaterthanorequal", fold_set_superset, {}, BuiltinGenericKind::SetComparison};
+static const BuiltinDesc k_enum_less_fallback{"::u_system::o_lessthan", fold_lessthan, {}, BuiltinGenericKind::EnumComparison};
+static const BuiltinDesc k_enum_less_equal_fallback{"::u_system::o_lessthanorequal", fold_lessthanorequal, {}, BuiltinGenericKind::EnumComparison};
+static const BuiltinDesc k_enum_equal_fallback{"::u_system::o_equal", fold_equal, {}, BuiltinGenericKind::EnumOrDynamicArrayEquality};
+static const BuiltinDesc k_enum_greater_fallback{"::u_system::o_greaterthan", fold_greaterthan, {}, BuiltinGenericKind::EnumComparison};
+static const BuiltinDesc k_enum_greater_equal_fallback{"::u_system::o_greaterthanorequal", fold_greaterthanorequal, {}, BuiltinGenericKind::EnumComparison};
 
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name == "::u_system::t_tmethod") {
@@ -1475,13 +1627,19 @@ const Frame& root_frame() {
 		register_step(OperatorInvocation::BinaryToken, "-", 2, true, &k_checked_subtract_fallback);
 		register_step(OperatorInvocation::BinaryToken, "-", 2, false, &k_unchecked_subtract_fallback);
 
-		// Enum equality is otherwise unspellable in system.pp. Register the
-		// omitted-formal = candidate in the root frame; the EnumEquality
-		// descriptor validates the relation after selection, so concrete
-		// System/user overloads still win normally. Records are excluded:
-		// FPC has no built-in record equality (a user `operator =` is
-		// required), so this fallback must not invent one.
-		register_step(OperatorInvocation::BinaryToken, "=", 2, true, &k_enum_equal_fallback);
+		// Same-enum equality and ordering are otherwise unspellable in
+		// system.pp. Each omitted-formal candidate is validated before
+		// ranking, while concrete System/user declarations remain ordinary
+		// candidates in the same family.
+		for (const auto& comparison : std::array{
+		         std::pair<std::string_view, const BuiltinDesc*>{"<", &k_enum_less_fallback},
+		         std::pair<std::string_view, const BuiltinDesc*>{"<=", &k_enum_less_equal_fallback},
+		         std::pair<std::string_view, const BuiltinDesc*>{"=", &k_enum_equal_fallback},
+		         std::pair<std::string_view, const BuiltinDesc*>{">", &k_enum_greater_fallback},
+		         std::pair<std::string_view, const BuiltinDesc*>{">=", &k_enum_greater_equal_fallback},
+		     }) {
+			register_step(OperatorInvocation::BinaryToken, comparison.first, 2, true, comparison.second);
+		}
 
 		// Pascal cannot declare `(set of T, set of T) -> set of T` without
 		// generic routine syntax. A set-of-unknown placeholder gives these
@@ -1499,6 +1657,9 @@ const Frame& root_frame() {
 		         SetOperation{"+", false, &k_unchecked_set_union_fallback},
 		         SetOperation{"-", true, &k_checked_set_difference_fallback},
 		         SetOperation{"-", false, &k_unchecked_set_difference_fallback},
+		         SetOperation{"*", true, &k_checked_set_intersection_fallback},
+		         SetOperation{"*", false, &k_unchecked_set_intersection_fallback},
+		         SetOperation{"><", true, &k_set_symmetric_difference_fallback},
 		     }) {
 			auto identifier = operator_invocation_identifier(OperatorInvocation::BinaryToken, operation.spelling, 2, operation.checked, false);
 			assert(identifier);
@@ -1508,6 +1669,25 @@ const Frame& root_frame() {
 			auto routine_type = new RoutineType(SourceLocation::builtin(), std::move(formals), unknown_type(), ROUTINE);
 			auto procedure = new Procedure(std::string(operation.descriptor->cxx_name), std::string(*identifier), routine_type, true);
 			procedure->builtin_desc = operation.descriptor;
+			procedure->is_external = true;
+			procedure->has_body = true;
+			auto registration = ff.register_callable(std::string(*identifier), procedure);
+			assert(registration.kind == CallableRegistration::Kind::Added);
+		}
+
+		for (const auto& comparison : std::array{
+		         std::pair<std::string_view, const BuiltinDesc*>{"=", &k_set_equal_fallback},
+		         std::pair<std::string_view, const BuiltinDesc*>{"<=", &k_set_subset_fallback},
+		         std::pair<std::string_view, const BuiltinDesc*>{">=", &k_set_superset_fallback},
+		     }) {
+			auto identifier = operator_invocation_identifier(OperatorInvocation::BinaryToken, comparison.first, 2, true, false);
+			assert(identifier);
+			std::vector<Parameter> formals;
+			formals.emplace_back("first", "p_first", generic_set, ParamMode::Const, nullptr);
+			formals.emplace_back("second", "p_second", generic_set, ParamMode::Const, nullptr);
+			auto routine_type = new RoutineType(SourceLocation::builtin(), std::move(formals), unknown_type(), ROUTINE);
+			auto procedure = new Procedure(std::string(comparison.second->cxx_name), std::string(*identifier), routine_type, true);
+			procedure->builtin_desc = comparison.second;
 			procedure->is_external = true;
 			procedure->has_body = true;
 			auto registration = ff.register_callable(std::string(*identifier), procedure);

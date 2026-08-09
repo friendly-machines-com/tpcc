@@ -15,7 +15,12 @@ for operation in \
 	'::u_system::o_unchecked_add(' \
 	'::u_system::o_unchecked_subtract(' \
 	'::u_system::o_add(' \
-	'::u_system::o_subtract('
+	'::u_system::o_subtract(' \
+	'::u_system::o_multiply(' \
+	'::u_system::o_symmetric_difference(' \
+	'::u_system::o_equal(' \
+	'::u_system::o_lessthanorequal(' \
+	'::u_system::o_greaterthanorequal('
 do
 	if ! rg -Fq "$operation" \
 		"$tmp/set_arithmetic.cc"

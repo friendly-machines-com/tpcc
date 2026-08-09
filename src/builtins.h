@@ -62,7 +62,7 @@ enum class BuiltinGenericKind {
 	// In` declarations remain ordinary candidates; this category constrains
 	// only System's omitted-type fallback and keeps it at Generic rank.
 	SetMembership,
-	// Set union and difference have the generic relation
+	// Binary set algebra has the generic relation
 	//
 	//   (a, b: set of T) -> set of T
 	//
@@ -70,7 +70,10 @@ enum class BuiltinGenericKind {
 	// carry `set of unknown` formals only to form an ordinary overload;
 	// candidate matching chooses one real set type and restores it as the
 	// omitted result after selection.
-	SetUnionOrDifference,
+	SetBinaryOperation,
+	// Set equality/subset/superset use the same unspellable common-domain
+	// operand relation, but their result is Boolean rather than that set type.
+	SetComparison,
 	// Assigned accepts object pointers, plain routine values, and method
 	// routine values. system.pp can only spell its Pointer overload.
 	Assigned,
@@ -106,16 +109,21 @@ enum class BuiltinGenericKind {
 	// merely selects the question for the otherwise unexpressible generic
 	// formal. For ShortString, logical resize does not change fixed capacity.
 	SequenceResize,
-	// Enum equality has the otherwise-unspellable generic relation
+	// Enum comparison has the otherwise-unspellable generic relation
 	//
 	//   (a, b: E) -> Boolean
 	//
 	// for every enum definition E. system.pp can only spell the concrete
-	// integer/string/pointer overloads, so this fallback accepts two operands
-	// of the same enum type (after subrange unwrap) and lowers to o_equal.
+	// integer/string/pointer overloads, so these fallbacks accept two operands
+	// of the same enum type (after subrange unwrap) for equality and ordering.
 	// Records are deliberately excluded: FPC has no built-in record equality
 	// (a user `operator =` is required), so this fallback must not invent one.
-	EnumEquality,
+	EnumComparison,
+	// Equality additionally accepts two values of one exact dynamic-array
+	// type, or that type and nil. It compares the managed buffer identity, not
+	// array contents, and does not make distinct dynamic-array definitions
+	// assignment-compatible.
+	EnumOrDynamicArrayEquality,
 };
 
 enum class BuiltinSyntaxKind {

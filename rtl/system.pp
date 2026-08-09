@@ -137,7 +137,6 @@ operator UncheckedAdd(a, b: Integer): Integer; external name '::u_system::o_unch
 operator UncheckedAdd(a, b: QWord): QWord; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: Int64): Int64; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: Extended): Extended; external name '::u_system::o_unchecked_add';
-operator UncheckedAdd(a: Char; b: Integer): Char; external name '::u_system::o_unchecked_add';
 operator Add(a, b: Byte): Integer; external name '::u_system::o_add';
 operator Add(a, b: ShortInt): Integer; external name '::u_system::o_add';
 operator Add(a, b: Word): Integer; external name '::u_system::o_add';
@@ -147,7 +146,6 @@ operator Add(a, b: Integer): Integer; external name '::u_system::o_add';
 operator Add(a, b: QWord): QWord; external name '::u_system::o_add';
 operator Add(a, b: Int64): Int64; external name '::u_system::o_add';
 operator Add(a, b: Extended): Extended; external name '::u_system::o_add';
-operator Add(a: Char; b: Integer): Char; external name '::u_system::o_add';
 
 operator UncheckedNegative(a: Cardinal): Cardinal; external name '::u_system::o_unchecked_negative';
 operator UncheckedNegative(a: Integer): Integer; external name '::u_system::o_unchecked_negative';
@@ -173,7 +171,6 @@ operator UncheckedSubtract(a, b: Integer): Integer; external name '::u_system::o
 operator UncheckedSubtract(a, b: QWord): QWord; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: Int64): Int64; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: Extended): Extended; external name '::u_system::o_unchecked_subtract';
-operator UncheckedSubtract(a: Char; b: Integer): Char; external name '::u_system::o_unchecked_subtract';
 operator Subtract(a, b: Byte): Integer; external name '::u_system::o_subtract';
 operator Subtract(a, b: ShortInt): Integer; external name '::u_system::o_subtract';
 operator Subtract(a, b: Word): Integer; external name '::u_system::o_subtract';
@@ -183,7 +180,6 @@ operator Subtract(a, b: Integer): Integer; external name '::u_system::o_subtract
 operator Subtract(a, b: QWord): QWord; external name '::u_system::o_subtract';
 operator Subtract(a, b: Int64): Int64; external name '::u_system::o_subtract';
 operator Subtract(a, b: Extended): Extended; external name '::u_system::o_subtract';
-operator Subtract(a: Char; b: Integer): Char; external name '::u_system::o_subtract';
 
 operator UncheckedMultiply(a, b: Byte): Integer; external name '::u_system::o_unchecked_multiply';
 operator UncheckedMultiply(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_multiply';
@@ -215,6 +211,15 @@ operator Divide(a, b: QWord): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Int64): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Double): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Extended): Extended; external name '::u_system::o_divide';
+
+{ Exponentiation is asymmetric: the base selects the result domain, while the
+  exponent has its own destination. It therefore does not use the homogeneous
+  arithmetic fallback. }
+operator **(Base, Exponent: Integer): Integer; external name '::u_system::o_power';
+operator **(Base: Cardinal; Exponent: Integer): Cardinal; external name '::u_system::o_power';
+operator **(Base: Int64; Exponent: Integer): Int64; external name '::u_system::o_power';
+operator **(Base: QWord; Exponent: Integer): QWord; external name '::u_system::o_power';
+operator **(Base, Exponent: Extended): Extended; external name '::u_system::o_power';
 
 operator :=(a: Char): ShortString; external name '::u_system::o_implicit';
 
@@ -414,10 +419,11 @@ function get_caller_addr(framebp: Pointer; address: CodePointer = nil): CodePoin
 function get_caller_frame(framebp: Pointer; address: CodePointer = nil): Pointer; external name 'm_get_caller_frame';
 function low(const x): Integer; external name '::u_system::p_low'; // generic intrinsic: parser supplies the type operand/result
 function high(const x): Integer; external name '::u_system::p_high'; // generic intrinsic: parser supplies the type operand/result
-// ShortString stores its length in one byte, so Pascal gives this overload a
-// Byte result. The generic fallback covers AnsiString and array families,
-// whose length result is the signed native-size type.
+// ShortString stores its length in one byte. AnsiString has a spellable exact
+// SizeInt overload so assignment-legal AnsiString -> ShortString narrowing
+// cannot intercept it; the omitted-type fallback covers array families.
 function length(const x: ShortString): Byte; overload; external name '::u_system::p_length';
+function length(const x: AnsiString): SizeInt; overload; external name '::u_system::p_length';
 function length(const x): SizeInt; overload; external name '::u_system::p_length'; // generic intrinsic
 // Omitted types express the part Pascal can declare; SetMutation metadata
 // checks the missing relationship `values: set of T; item: T`.
@@ -522,8 +528,18 @@ operator not(a: Boolean): Boolean; external name '::u_system::o_logicalnot';
 
 operator =(a, b: shortstring): Boolean; external name '::u_system::o_equal';
 operator =(a, b: ansistring): Boolean; external name '::u_system::o_equal';
+operator <(a, b: shortstring): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: ansistring): Boolean; external name '::u_system::o_lessthan';
+operator <=(a, b: shortstring): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: ansistring): Boolean; external name '::u_system::o_lessthanorequal';
+operator >(a, b: shortstring): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: ansistring): Boolean; external name '::u_system::o_greaterthan';
+operator >=(a, b: shortstring): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: ansistring): Boolean; external name '::u_system::o_greaterthanorequal';
 operator UncheckedAdd(a, b: shortstring): shortstring; external name '::u_system::o_unchecked_add';
 operator Add(a, b: shortstring): shortstring; external name '::u_system::o_add';
+operator UncheckedAdd(a, b: ansistring): ansistring; external name '::u_system::o_unchecked_add';
+operator Add(a, b: ansistring): ansistring; external name '::u_system::o_add';
 operator :=(a: shortstring): ansistring; external name '::u_system::o_implicit';
 
 procedure SetLength(var destination: AnsiString; value: SizeInt); overload; external name '::u_system::p_setlength';

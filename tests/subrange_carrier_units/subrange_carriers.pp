@@ -37,7 +37,7 @@ begin
 
   if Identify(First) <> 1 then
     Halt(1);
-  if Identify(Second) <> 2 then
+  if Identify(Second) <> 1 then
     Halt(2);
   if Identify(Alias) <> 1 then
     Halt(3);

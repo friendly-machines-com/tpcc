@@ -55,11 +55,11 @@ do
 		tests/predefined_explicit_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
-		echo "accepted invalid predefined explicit conversion: $rejection" >&2
+		echo "accepted invalid explicit conversion: $rejection" >&2
 		exit 1
 	fi
 	for required in \
-		'invalid predefined explicit conversion' \
+		'invalid explicit conversion' \
 		'expected type' \
 		'but got type'
 	do

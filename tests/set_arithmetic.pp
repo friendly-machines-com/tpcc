@@ -13,6 +13,8 @@ const
   ConstantSecond = [MarkerB..MarkerD];
   ConstantUnion = ConstantFirst + ConstantSecond;
   ConstantDifference = ConstantUnion - [MarkerB..MarkerC];
+  ConstantIntersection = ConstantFirst * ConstantSecond;
+  ConstantSymmetric = ConstantFirst >< ConstantSecond;
 
 var
   Separators: TCharSet;
@@ -103,5 +105,33 @@ begin
      not (MarkerD in ConstantDifference) or
      (MarkerB in ConstantDifference) or
      (MarkerC in ConstantDifference) then
-    Halt(9)
+    Halt(9);
+  if not (MarkerB in ConstantIntersection) or
+     (MarkerA in ConstantIntersection) then
+    Halt(10);
+  if not (MarkerA in ConstantSymmetric) or
+     not (MarkerC in ConstantSymmetric) or
+     not (MarkerD in ConstantSymmetric) or
+     (MarkerB in ConstantSymmetric) then
+    Halt(11);
+
+  Characters := ['a'..'d'] * ['c'..'f'];
+  if not ('c' in Characters) or
+     not ('d' in Characters) or
+     ('b' in Characters) or
+     ('e' in Characters) then
+    Halt(12);
+  Characters := ['a'..'c'] >< ['c'..'e'];
+  if not ('a' in Characters) or
+     not ('e' in Characters) or
+     ('c' in Characters) then
+    Halt(13);
+  if not (['a', 'b'] = ['b', 'a']) then
+    Halt(14);
+  if ['a'] <> ['a'] then
+    Halt(15);
+  if not (['a'] <= ['a', 'b']) then
+    Halt(16);
+  if not (['a', 'b'] >= ['b']) then
+    Halt(17)
 end.

@@ -1161,6 +1161,73 @@ inline t_set<T> o_subtract(
 	    first, second);
 }
 
+template<typename T>
+inline t_set<T> m_set_intersection(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	t_set<T> result;
+	for (const tpcc_set_span& left : first.spans) {
+		for (const tpcc_set_span& right : second.spans) {
+			const int64_t lower =
+			    std::max(left.lower, right.lower);
+			const int64_t upper =
+			    std::min(left.upper, right.upper);
+			if (lower <= upper)
+				result.spans.push_back(
+				    tpcc_set_span{lower, upper});
+		}
+	}
+	return result;
+}
+
+template<typename T>
+inline t_set<T> o_unchecked_multiply(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return m_set_intersection(first, second);
+}
+
+template<typename T>
+inline t_set<T> o_multiply(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return m_set_intersection(first, second);
+}
+
+template<typename T>
+inline t_set<T> o_symmetric_difference(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return m_set_union(
+	    m_set_difference(first, second),
+	    m_set_difference(second, first));
+}
+
+template<typename T>
+inline t_boolean o_equal(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return tpcc_bool_to_boolean(
+	    m_set_difference(first, second).spans.empty() &&
+	    m_set_difference(second, first).spans.empty());
+}
+
+template<typename T>
+inline t_boolean o_lessthanorequal(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return tpcc_bool_to_boolean(
+	    m_set_difference(first, second).spans.empty());
+}
+
+template<typename T>
+inline t_boolean o_greaterthanorequal(
+    const t_set<T>& first,
+    const t_set<T>& second) {
+	return tpcc_bool_to_boolean(
+	    m_set_difference(second, first).spans.empty());
+}
+
 template<typename Value, typename T>
 inline t_boolean o_in(Value value, const t_set<T>& set) {
 	const int64_t key = tpcc_set_key(value);
@@ -1660,6 +1727,10 @@ public:
 		return block ? block->values.data() : nullptr;
 	}
 
+	const void* m_identity() const noexcept {
+		return block;
+	}
+
 	void m_replace(std::vector<T> values) {
 		auto* replacement =
 		    values.empty()
@@ -1734,6 +1805,10 @@ struct t_dynamicarray {
 		// SetLength is a handle operation. Replacing the block even when the
 		// size is unchanged ensures aliases retain their original array.
 		storage.m_replace(std::move(replacement));
+	}
+
+	const void* m_identity() const noexcept {
+		return storage.m_identity();
 	}
 };
 
@@ -4279,6 +4354,36 @@ inline t_shortstring<255> o_add(
 	return m_shortstring_add(a, b);
 }
 
+inline t_ansistring m_ansistring_add(
+    const t_ansistring& a,
+    const t_ansistring& b) {
+	t_ansistring result;
+	const std::size_t a_length =
+	    static_cast<std::size_t>(a.m_length());
+	const std::size_t b_length =
+	    static_cast<std::size_t>(b.m_length());
+	std::vector<t_char> replacement(
+	    a_length + b_length + 1, t_char{0});
+	std::copy_n(a.m_data(), a_length, replacement.data());
+	std::copy_n(
+	    b.m_data(), b_length,
+	    replacement.data() + a_length);
+	result.storage.m_replace(std::move(replacement));
+	return result;
+}
+
+inline t_ansistring o_unchecked_add(
+    const t_ansistring& a,
+    const t_ansistring& b) {
+	return m_ansistring_add(a, b);
+}
+
+inline t_ansistring o_add(
+    const t_ansistring& a,
+    const t_ansistring& b) {
+	return m_ansistring_add(a, b);
+}
+
 template<typename A, typename B>
 requires
     (tpcc_is_shortstring_v<A> ||
@@ -4302,44 +4407,71 @@ inline int tpcc_stringcmp(
 	return r;
 }
 
-template<std::size_t ACapacity, std::size_t BCapacity>
+template<typename A, typename B>
+requires
+    (tpcc_is_shortstring_v<A> ||
+     std::is_same_v<A, t_ansistring>) &&
+    (tpcc_is_shortstring_v<B> ||
+     std::is_same_v<B, t_ansistring>)
 inline t_boolean o_lessthan(
-    const t_shortstring<ACapacity>& a,
-    const t_shortstring<BCapacity>& b) {
+    const A& a,
+    const B& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) < 0);
 }
 
-template<std::size_t ACapacity, std::size_t BCapacity>
+template<typename A, typename B>
+requires
+    (tpcc_is_shortstring_v<A> ||
+     std::is_same_v<A, t_ansistring>) &&
+    (tpcc_is_shortstring_v<B> ||
+     std::is_same_v<B, t_ansistring>)
 inline t_boolean o_lessthanorequal(
-    const t_shortstring<ACapacity>& a,
-    const t_shortstring<BCapacity>& b) {
+    const A& a,
+    const B& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) <= 0);
 }
 
-template<std::size_t ACapacity, std::size_t BCapacity>
+template<typename A, typename B>
+requires
+    (tpcc_is_shortstring_v<A> ||
+     std::is_same_v<A, t_ansistring>) &&
+    (tpcc_is_shortstring_v<B> ||
+     std::is_same_v<B, t_ansistring>)
 inline t_boolean o_equal(
-    const t_shortstring<ACapacity>& a,
-    const t_shortstring<BCapacity>& b) {
+    const A& a,
+    const B& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) == 0);
 }
 
+template<typename T>
 inline t_boolean o_equal(
-    const t_ansistring& a,
-    const t_ansistring& b) {
-	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) == 0);
+    const t_dynamicarray<T>& a,
+    const t_dynamicarray<T>& b) {
+	return tpcc_bool_to_boolean(
+	    a.m_identity() == b.m_identity());
 }
 
-template<std::size_t ACapacity, std::size_t BCapacity>
+template<typename A, typename B>
+requires
+    (tpcc_is_shortstring_v<A> ||
+     std::is_same_v<A, t_ansistring>) &&
+    (tpcc_is_shortstring_v<B> ||
+     std::is_same_v<B, t_ansistring>)
 inline t_boolean o_greaterthan(
-    const t_shortstring<ACapacity>& a,
-    const t_shortstring<BCapacity>& b) {
+    const A& a,
+    const B& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) > 0);
 }
 
-template<std::size_t ACapacity, std::size_t BCapacity>
+template<typename A, typename B>
+requires
+    (tpcc_is_shortstring_v<A> ||
+     std::is_same_v<A, t_ansistring>) &&
+    (tpcc_is_shortstring_v<B> ||
+     std::is_same_v<B, t_ansistring>)
 inline t_boolean o_greaterthanorequal(
-    const t_shortstring<ACapacity>& a,
-    const t_shortstring<BCapacity>& b) {
+    const A& a,
+    const B& b) {
 	return tpcc_bool_to_boolean(tpcc_stringcmp(a, b) >= 0);
 }
 
@@ -4361,6 +4493,35 @@ inline t_boolean o_lessthanorequal(t_char a, t_char b) { return tpcc_bool_to_boo
 inline t_boolean o_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value == b.value); }
 inline t_boolean o_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value > b.value); }
 inline t_boolean o_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
+
+// Pascal enumerations are nominal, but equality and ordering are defined
+// between values of one exact enum type. The parser establishes that nominal
+// identity; the C++ template merely implements the already-selected call.
+template<typename T>
+requires std::is_enum_v<T>
+inline t_boolean o_lessthan(T a, T b) {
+	return tpcc_bool_to_boolean(a < b);
+}
+template<typename T>
+requires std::is_enum_v<T>
+inline t_boolean o_lessthanorequal(T a, T b) {
+	return tpcc_bool_to_boolean(a <= b);
+}
+template<typename T>
+requires std::is_enum_v<T>
+inline t_boolean o_equal(T a, T b) {
+	return tpcc_bool_to_boolean(a == b);
+}
+template<typename T>
+requires std::is_enum_v<T>
+inline t_boolean o_greaterthan(T a, T b) {
+	return tpcc_bool_to_boolean(a > b);
+}
+template<typename T>
+requires std::is_enum_v<T>
+inline t_boolean o_greaterthanorequal(T a, T b) {
+	return tpcc_bool_to_boolean(a >= b);
+}
 
 // PChar comparisons are address comparisons, not NUL-terminated string
 // comparisons. std::less supplies the implementation's strict total pointer
@@ -4435,9 +4596,9 @@ requires requires(const T& value) {
 	value.m_length();
 }
 inline auto p_length(const T& value) {
-	// Length is one Pascal operation, but representation and exact result type
-	// belong to the carrier (for example Byte for short strings and SizeInt
-	// for dynamic arrays). The generic wrapper must not reproduce those rules.
+	// Concrete ShortString and AnsiString declarations expose their native
+	// Pascal result carriers; the generic sequence fallback uses SizeInt for
+	// array families, whose m_length() already returns SizeInt.
 	return value.m_length();
 }
 
@@ -4685,6 +4846,36 @@ TPCC_DEFINE_SHIFT_OPERATIONS(t_qword, t_qword)
 TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_single)
 TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_double)
 TPCC_DEFINE_REAL_ARITHMETIC_OPERATIONS(t_extended)
+
+template<typename T>
+requires std::is_integral_v<T>
+inline T o_power(T base, t_integer exponent) {
+	if (exponent < 0)
+		m_runtime_error(201);
+	T result = 1;
+	while (exponent != 0) {
+		if ((exponent & 1) != 0) {
+			T next;
+			if (__builtin_mul_overflow(result, base, &next))
+				m_runtime_error(215);
+			result = next;
+		}
+		exponent >>= 1;
+		if (exponent != 0) {
+			T next;
+			if (__builtin_mul_overflow(base, base, &next))
+				m_runtime_error(215);
+			base = next;
+		}
+	}
+	return result;
+}
+
+inline t_extended o_power(
+    t_extended base,
+    t_extended exponent) {
+	return ::powl(base, exponent);
+}
 
 // Floating-to-integer conversion is undefined in C++ when the finite value is
 // outside the destination range (and for NaN/infinity). Check before casting

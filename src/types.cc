@@ -18,9 +18,25 @@ std::optional<ValueConversion> Type::value_conversion_from(const Type*) const {
 }
 
 std::optional<ValueConversion> Type::destination_conversion_from(const Type* source) const {
-	// Most types have no extra known-destination representation operation.
-	// Their storage relation is exactly their ordinary implicit relation.
+	// Most types have no extra narrowing representation operation. Their
+	// complete predefined assignment relation is the ordinary relation.
 	return value_conversion_from(source);
+}
+
+std::optional<AssignmentConversion> Type::assignment_conversion_from(const Type* source) const {
+	if (auto ordinary = value_conversion_from(source)) {
+		return AssignmentConversion{
+		    ordinary->kind == ValueConversionClass::Direct ? AssignmentConversionClass::Direct : AssignmentConversionClass::Widening,
+		    ordinary->distance,
+		};
+	}
+	if (auto destination = destination_conversion_from(source)) {
+		// The ordinary relation was already absent. Any additional edge in
+		// the complete destination relation is therefore assignment-only
+		// narrowing, irrespective of the legacy ValueConversionClass spelling.
+		return AssignmentConversion{AssignmentConversionClass::Narrowing, destination->distance};
+	}
+	return std::nullopt;
 }
 
 bool Type::is_subtype_of(const Type* target) const {
@@ -1037,6 +1053,14 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 		// not an integer/real widening conversion.
 		return direct_conversion();
 	}
+	if (target == ansistring_type()) {
+		if (auto string = dynamic_cast<const ShortStringType*>(source)) {
+			// Managed AnsiString represents every ShortString payload. This
+			// is one ordinary assignment edge for every fixed capacity, not a
+			// chain through the canonical String[255] declaration.
+			return implicit_conversion(string->capacity);
+		}
+	}
 	if (source == &untyped_integer_type()) {
 		// The expression matcher checks the literal's actual magnitude. At the
 		// type level it is a contextual integer value, not another nominal
@@ -1063,18 +1087,18 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 
 	int integer_cost = integer_conversion_cost(source, target);
 	if (integer_cost >= 0 && source->is_subtype_of(target)) {
-		// Integer assignment edges follow value-set inclusion. The reverse
-		// direction is an explicit cast, not an implicit edge which overload
-		// ranking may discover and then penalize.
+		// The ordinary portion of integer assignment follows value-set
+		// inclusion. The complete assignment query classifies the reverse
+		// direction as Narrowing.
 		return implicit_conversion(static_cast<unsigned>(integer_cost));
 	}
 
 	int source_real = real_widening_rank(source);
 	int target_real = real_widening_rank(target);
 	if (source_real >= 0 && target_real >= source_real) {
-		// Real assignment follows the declared precision direction. Omitting
-		// the reverse edge keeps overload viability structural; {$R} does not
-		// manufacture a narrowing assignment operator.
+		// The ordinary portion of real assignment follows the declared
+		// precision direction. The complete query classifies the reverse
+		// direction as Narrowing; {$R} changes only its emitted check.
 		unsigned distance = static_cast<unsigned>(target_real - source_real);
 		return implicit_conversion(distance);
 	}
@@ -1092,8 +1116,8 @@ std::optional<ValueConversion> IntrinsicType::destination_conversion_from(const 
 	const int integer_cost = integer_conversion_cost(source, this);
 	if (integer_cost >= 0) {
 		// A selected ordinal destination may truncate or reinterpret sign.
-		// This is the Pascal assignment boundary checked by {$R+}; it is not
-		// an implicit edge available to call matching.
+		// This is the Pascal assignment boundary checked by {$R+} and the
+		// Narrowing tier used by value-argument matching.
 		return implicit_conversion(static_cast<unsigned>(integer_cost));
 	}
 
@@ -1152,13 +1176,19 @@ std::optional<ValueConversion> ShortStringType::destination_conversion_from(cons
 	if (auto ordinary = value_conversion_from(source)) {
 		return ordinary;
 	}
+	if (source == ansistring_type()) {
+		// AnsiString has no static capacity bound. Assignment to String[N]
+		// remains legal and is classified as Narrowing; the runtime copies at
+		// most this destination's declared capacity.
+		return implicit_conversion(256 - capacity);
+	}
 	auto string = dynamic_cast<const ShortStringType*>(source);
 	if (!string) {
 		return std::nullopt;
 	}
 	// A known ShortString destination truncates excess payload according to
-	// its declared capacity. This storage operation must not make the reverse
-	// capacity direction viable during overload selection.
+	// its declared capacity. The complete assignment query exposes this
+	// direction as Narrowing.
 	return implicit_conversion(static_cast<unsigned>(string->capacity - capacity));
 }
 
@@ -1188,7 +1218,23 @@ std::optional<ValueConversion> FixedSetType::value_conversion_from(const Type* s
 		return direct_conversion();
 	}
 	auto item_conversion = item_type->value_conversion_from(set->item_type);
-	return direct_conversion(item_conversion ? item_conversion->distance : 0);
+	return implicit_conversion(item_conversion ? item_conversion->distance : 0);
+}
+
+std::optional<ValueConversion> FixedSetType::destination_conversion_from(const Type* source) const {
+	if (auto ordinary = value_conversion_from(source)) {
+		return ordinary;
+	}
+	auto set = dynamic_cast<const FixedSetType*>(source);
+	if (!set || !is_subtype_of(set)) {
+		return std::nullopt;
+	}
+	// A fixed destination may narrow a related ordinal set domain. The
+	// selected m_set_cast preserves membership keys in the destination
+	// carrier; operator ranking sees this as the same assignment Narrowing
+	// quality as any other fixed destination.
+	auto item_conversion = item_type->assignment_conversion_from(set->item_type);
+	return implicit_conversion(item_conversion ? item_conversion->distance : 0);
 }
 
 bool FixedSetType::predefined_explicit_conversion_from(const Type* source) const {
@@ -1554,6 +1600,13 @@ bool SubrangeType::is_subtype_of(const Type* target) const {
 	return this == target || ordinal_domain_is_subset(this, target);
 }
 
+bool SubrangeType::same_formal_contract_as(const Type* other) const {
+	while (auto range = dynamic_cast<const SubrangeType*>(other)) {
+		other = range->base_type;
+	}
+	return base_type->same_formal_contract_as(other);
+}
+
 bool FixedSetType::is_subtype_of(const Type* target) const {
 	if (this == target) {
 		return true;
@@ -1567,9 +1620,8 @@ std::optional<ValueConversion> SubrangeType::value_conversion_from(const Type* s
 		return std::nullopt;
 	}
 	// Contextual literals are checked against the exact endpoints before this
-	// type-level path. A runtime source has an implicit assignment edge only
-	// in the declared widening direction; the reverse operation requires
-	// explicit conversion syntax.
+	// type-level path. This is the non-narrowing portion of the relation; the
+	// complete assignment query obtains the reverse direction below.
 	if (source->is_subtype_of(this)) {
 		return direct_conversion();
 	}
@@ -1583,9 +1635,9 @@ std::optional<ValueConversion> SubrangeType::destination_conversion_from(const T
 	if (!source || !ordinal_domains_are_compatible(source, this)) {
 		return std::nullopt;
 	}
-	// The destination declaration is already fixed, so assignment may store a
-	// wider value and let {$R+} enforce this subrange's endpoints. This is not
-	// a reverse subtype or overload-conversion edge.
+	// Assignment may store a wider value and let {$R+} enforce this
+	// subrange's endpoints. The complete assignment query exposes this as
+	// Narrowing without manufacturing a reverse subtype.
 	return implicit_conversion();
 }
 
@@ -1605,8 +1657,16 @@ bool RoutineType::same_parameter_and_result_types_as(const RoutineType* other) c
 	if (!other || return_type != other->return_type || formals.size() != other->formals.size()) {
 		return false;
 	}
+	auto overload_identity_type = [](const Type* type) {
+		while (auto range = dynamic_cast<const SubrangeType*>(type)) {
+			type = range->base_type;
+		}
+		return type;
+	};
 	for (size_t i = 0; i < formals.size(); ++i) {
-		if (formals[i].mode != other->formals[i].mode || !formals[i].ty->same_formal_contract_as(other->formals[i].ty)) {
+		const Type* left = overload_identity_type(formals[i].ty);
+		const Type* right = overload_identity_type(other->formals[i].ty);
+		if (formals[i].mode != other->formals[i].mode || !left->same_formal_contract_as(right)) {
 			return false;
 		}
 	}
@@ -1621,8 +1681,16 @@ bool RoutineType::same_overload_signature_as(const RoutineType* other) const {
 	if (!other || formals.size() != other->formals.size()) {
 		return false;
 	}
+	auto overload_identity_type = [](const Type* type) {
+		while (auto range = dynamic_cast<const SubrangeType*>(type)) {
+			type = range->base_type;
+		}
+		return type;
+	};
 	for (size_t i = 0; i < formals.size(); ++i) {
-		if (!formals[i].ty->same_formal_contract_as(other->formals[i].ty)) {
+		const Type* left = overload_identity_type(formals[i].ty);
+		const Type* right = overload_identity_type(other->formals[i].ty);
+		if (!left->same_formal_contract_as(right)) {
 			return false;
 		}
 	}

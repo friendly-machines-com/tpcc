@@ -45,13 +45,6 @@ begin
   Result.Value := Left.Value + Right
 end;
 
-operator +(Left, Right: TSmall): TBox;
-begin
-  Selected := 3;
-  if (Left = Left) and (Right = Right) then
-    Result.Value := 5
-end;
-
 function NumericKind(Value: Byte): Integer; overload;
 begin
   if Value = Value then
@@ -350,14 +343,17 @@ begin
   if MixedLiteral(LeftByte, 300) <> 46 then Halt(44);
   if MixedLiteral(LeftByte, 40000) <> 46 then Halt(45);
   SmallLeft := 2;
-  if MixedLiteral(SmallLeft, 4) <> 46 then Halt(46);
-  if MixedLiteral(SmallLeft, 200) <> 46 then Halt(47);
-  if MixedLiteral(SmallLeft, 300) <> 46 then Halt(48);
-  if MixedLiteral(SmallLeft, 40000) <> 46 then Halt(49);
+  { A subrange actual ranks as its ShortInt base, so the lossless Int64
+    candidate is considered before the narrowing Cardinal candidate. }
+  if MixedLiteral(SmallLeft, 4) <> 47 then Halt(46);
+  if MixedLiteral(SmallLeft, 200) <> 47 then Halt(47);
+  if MixedLiteral(SmallLeft, 300) <> 47 then Halt(48);
+  if MixedLiteral(SmallLeft, 40000) <> 47 then Halt(49);
 
   SmallRight := 3;
+  Selected := 0;
   Sum := SmallLeft + SmallRight;
-  if Selected <> 3 then
+  if Selected <> 0 then
     Halt(14);
   if Sum.Value <> 5 then
     Halt(15)

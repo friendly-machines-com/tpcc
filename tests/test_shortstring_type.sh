@@ -56,21 +56,28 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_pascal"
 	-o "$tmp/shortstring_type_runtime"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_runtime"
 
-if ./mp -Furtl \
-	-o"$tmp/implicit_rejected.cc" \
-	tests/ansistring_shortstring_implicit_rejected.pp \
-	>"$tmp/stdout" 2>"$tmp/stderr"
-then
-	echo "accepted implicit AnsiString-to-ShortString call conversion" >&2
-	exit 1
-fi
+./mp -Furtl \
+	-o"$tmp/implicit_narrowing.cc" \
+	tests/ansistring_shortstring_implicit.pp
 if ! rg -Fq \
-	"no matching overload for 'taketiny'" \
-	"$tmp/stderr"
+	'::u_system::tpcc_shortstring_cast<3>' \
+	"$tmp/implicit_narrowing.cc"
 then
-	echo "wrong implicit AnsiString-to-ShortString diagnostic" >&2
-	sed -n '1,120p' "$tmp/stderr" >&2
+	echo "missing implicit AnsiString-to-ShortString narrowing" >&2
 	exit 1
 fi
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/implicit_narrowing.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/implicit_narrowing"
+ASAN_OPTIONS=detect_leaks=1 "$tmp/implicit_narrowing"
 
 echo "ShortString type tests passed"

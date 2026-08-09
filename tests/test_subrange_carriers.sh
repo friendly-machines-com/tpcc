@@ -29,12 +29,25 @@ do
 	fi
 done
 
-first_signature=$(rg -F 'p_identify(' "$tmp/rangecarrier.h" | sed -n '1p')
-second_signature=$(rg -F 'p_identify(' "$tmp/rangecarrier.h" | sed -n '2p')
-if test -z "$first_signature" || test -z "$second_signature" ||
-	test "$first_signature" = "$second_signature"
+signature_count=$(rg -Fc 'p_identify(' "$tmp/rangecarrier.h")
+if test "$signature_count" -ne 1
 then
-	echo "distinct Pascal subranges did not produce distinct C++ overloads" >&2
+	echo "subrange-erased routine emitted an unexpected overload count" >&2
+	exit 1
+fi
+
+if ./mp -Furtl \
+	-o"$tmp/subrange_overload_rejected.cc" \
+	tests/subrange_overload_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted overloads distinguished only by subrange declarations" >&2
+	exit 1
+fi
+if ! rg -Fq 'both declarations have the same Pascal overload signature' "$tmp/stderr"
+then
+	echo "wrong duplicate-subrange-overload diagnostic" >&2
+	sed -n '1,120p' "$tmp/stderr" >&2
 	exit 1
 fi
 
