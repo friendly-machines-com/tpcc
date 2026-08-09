@@ -5484,8 +5484,7 @@ inline t_extended o_power(
 // Floating-to-integer conversion is undefined in C++ when the finite value is
 // outside the destination range (and for NaN/infinity). Check before casting
 // so Pascal Trunc/Round never rely on C++ undefined behavior.
-inline t_int64 tpcc_checked_real_to_int64(t_extended value, const char* operation) {
-	(void)operation;
+inline t_int64 tpcc_checked_real_to_int64(t_extended value) {
 	constexpr t_extended limit = 0x1p63L;
 	if (!__builtin_isfinite(value) || value < -limit || value >= limit)
 		m_runtime_error(201);
@@ -5493,13 +5492,13 @@ inline t_int64 tpcc_checked_real_to_int64(t_extended value, const char* operatio
 }
 
 inline t_int64 p_trunc(t_extended value) {
-	return tpcc_checked_real_to_int64(::truncl(value), "Trunc result is outside Int64 range");
+	return tpcc_checked_real_to_int64(::truncl(value));
 }
 
 inline t_int64 p_round(t_extended value) {
 	// Pascal Round follows the active floating-point rounding mode. nearbyint
 	// does likewise and therefore gives ties-to-even under the default mode.
-	return tpcc_checked_real_to_int64(::nearbyintl(value), "Round result is outside Int64 range");
+	return tpcc_checked_real_to_int64(::nearbyintl(value));
 }
 
 inline t_extended p_frac(t_extended value) {
