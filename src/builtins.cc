@@ -1438,6 +1438,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_findfirst", nullptr},
     {"::u_system::p_findnext", nullptr},
     {"::u_system::p_findclose", nullptr},
+    {"::u_system::p_fileexists", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
     {"::u_system::o_bitwiseand", fold_bitwise_and},

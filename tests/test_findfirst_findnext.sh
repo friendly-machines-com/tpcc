@@ -14,6 +14,7 @@ chmod 444 "$tmp/work/files/readonly.dat"
 mkfifo "$tmp/work/files/pipe"
 ln -s alpha1.dat "$tmp/work/files/file-link"
 ln -s subdir "$tmp/work/files/dir-link"
+ln -s missing "$tmp/work/files/broken-link"
 
 cd "$root"
 

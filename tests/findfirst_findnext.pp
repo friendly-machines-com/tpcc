@@ -10,6 +10,37 @@ var
   LastName: AnsiString;
 
 begin
+  if not SysUtils.FileExists('files/alpha1.dat') then
+    Halt(73);
+  if not SysUtils.FileExists('files/alpha1.dat', False) then
+    Halt(74);
+  if SysUtils.FileExists('') then
+    Halt(75);
+  if SysUtils.FileExists('files/missing') then
+    Halt(76);
+  if SysUtils.FileExists('files/missing', False) then
+    Halt(77);
+  if SysUtils.FileExists('files/subdir') then
+    Halt(78);
+  if SysUtils.FileExists('files/subdir', False) then
+    Halt(79);
+  if not SysUtils.FileExists('files/file-link') then
+    Halt(80);
+  if not SysUtils.FileExists('files/file-link', False) then
+    Halt(81);
+  if SysUtils.FileExists('files/dir-link') then
+    Halt(82);
+  if SysUtils.FileExists('files/dir-link', False) then
+    Halt(83);
+  if SysUtils.FileExists('files/broken-link') then
+    Halt(84);
+  if not SysUtils.FileExists('files/broken-link', False) then
+    Halt(85);
+  if not SysUtils.FileExists('files/pipe') then
+    Halt(86);
+  if not SysUtils.FileExists('files/pipe', False) then
+    Halt(87);
+
   if IncludeTrailingPathDelimiter('') <> '/' then
     Halt(50);
   if IncludeTrailingPathDelimiter('files') <> 'files/' then

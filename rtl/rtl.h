@@ -47,6 +47,7 @@
 #include <cstddef> // for std::byte
 #include <dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 // These must expand at the generated Pascal call site. Wrapping the compiler
 // builtins in an ordinary C++ function would insert that wrapper's frame and
@@ -2488,6 +2489,33 @@ inline t_longint p_findfirst(
 	}
 	result.p_findhandle = nullptr;
 	return -1;
+}
+
+inline t_boolean p_fileexists(
+    const t_ansistring& file_name,
+    t_boolean follow_link) {
+	const std::string path =
+	    file_name.m_string();
+	if (path.empty())
+		return p_false;
+
+	struct stat information {};
+	bool exists =
+	    ::access(path.c_str(), F_OK) == 0;
+	bool is_directory = false;
+	if (exists &&
+	    ::stat(path.c_str(), &information) == 0 &&
+	    S_ISDIR(information.st_mode)) {
+		exists = false;
+		is_directory = true;
+	}
+
+	if (!exists && !is_directory &&
+	    follow_link == p_false)
+		exists =
+		    ::lstat(path.c_str(), &information) == 0 &&
+		    S_ISLNK(information.st_mode);
+	return tpcc_bool_to_boolean(exists);
 }
 
 template<std::size_t DestinationCapacity>
