@@ -39,6 +39,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <ctime>
 #include <vector>
 #include <cstdint>
 #include <cstring>
@@ -2544,6 +2545,38 @@ inline t_ansistring p_getenvironmentvariable(
 		return {};
 	return tpcc_ansistring_literal(
 	    value, std::strlen(value));
+}
+
+template<typename SystemTime>
+inline void p_getlocaltime(
+    SystemTime& system_time) {
+	::timespec current{};
+	std::tm local{};
+	if (::clock_gettime(
+		CLOCK_REALTIME, &current) != 0 ||
+	    !::localtime_r(
+		&current.tv_sec, &local)) {
+		system_time = {};
+		return;
+	}
+
+	system_time.p_year =
+	    static_cast<t_word>(local.tm_year + 1900);
+	system_time.p_month =
+	    static_cast<t_word>(local.tm_mon + 1);
+	system_time.p_dayofweek =
+	    static_cast<t_word>(local.tm_wday);
+	system_time.p_day =
+	    static_cast<t_word>(local.tm_mday);
+	system_time.p_hour =
+	    static_cast<t_word>(local.tm_hour);
+	system_time.p_minute =
+	    static_cast<t_word>(local.tm_min);
+	system_time.p_second =
+	    static_cast<t_word>(local.tm_sec);
+	system_time.p_millisecond =
+	    static_cast<t_word>(
+		current.tv_nsec / 1000000);
 }
 
 inline t_integer p_fpsystem(

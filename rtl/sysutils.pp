@@ -69,6 +69,7 @@ function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boo
 function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_directoryexists';
 function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_system::p_expandfilename';
 function GetEnvironmentVariable(const Name: AnsiString): AnsiString; external name '::u_system::p_getenvironmentvariable';
+procedure GetLocalTime(var SystemTime: TSystemTime); external name '::u_system::p_getlocaltime';
 function ExecuteProcess(const Path, ComLine: AnsiString;
   Flags: TExecuteFlags = []): Integer; overload;
 function ExecuteProcess(const Path: AnsiString;
