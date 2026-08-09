@@ -8516,46 +8516,30 @@ static Integer* untyped_integer_constant(Node* expression) {
 	return integer && integer->ty == &untyped_integer_type() ? integer : nullptr;
 }
 
-static std::optional<uint64_t> integer_literal_target_distance(Type* target, const Integer* literal) {
-	if (target == integer_literal_natural_type(literal)) {
-		return uint64_t{0};
-	}
-
-	OrdinalRange::Value lower;
-	OrdinalRange::Value upper;
-	if (auto range = dynamic_cast<SubrangeType*>(target)) {
-		ConstEvalContext ctx;
-		auto lower_folded = range->lower_bound->const_eval(ctx);
-		auto upper_folded = range->upper_bound->const_eval(ctx);
-		std::string error;
-		auto classified_lower = lower_folded.kind == ConstEvalResult::Kind::Success ? classify_subrange_bound(lower_folded.node, &error) : std::nullopt;
-		auto classified_upper = upper_folded.kind == ConstEvalResult::Kind::Success ? classify_subrange_bound(upper_folded.node, &error) : std::nullopt;
-		if (!classified_lower || !classified_upper) {
-			return std::nullopt;
+static std::optional<uint64_t> integer_literal_target_preference(Type* target) {
+	// The literal remains untyped. Rank fitting destinations by Pascal's
+	// magnitude-driven predefined carrier order, rather than pretending the
+	// literal has a source carrier whose signedness must be preserved. This
+	// also orders the equal-cardinality signed/unsigned pairs without exposing
+	// a 2^32 or saturated 2^64 range size as a fictional "distance".
+	Type* carrier = overload_rank_type(target);
+	carrier = distinct_storage_type(carrier);
+	const std::array<Type*, 8> preference{{
+	    shortint_type(),
+	    byte_type(),
+	    smallint_type(),
+	    word_type(),
+	    integer_type(),
+	    cardinal_type(),
+	    int64_type(),
+	    qword_type(),
+	}};
+	for (size_t index = 0; index < preference.size(); ++index) {
+		if (carrier == preference[index]) {
+			return static_cast<uint64_t>(index);
 		}
-		lower = classified_lower->ordinal_value;
-		upper = classified_upper->ordinal_value;
-	} else {
-		OrdinalBounds bounds;
-		if (!integer_bounds(target, &bounds)) {
-			return std::nullopt;
-		}
-		lower = ordinal_value(bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0);
-		upper = ordinal_value(false, bounds.max_positive);
 	}
-
-	uint64_t width = 0;
-	if (lower.negative && !upper.negative) {
-		width = lower.magnitude > UINT64_MAX - upper.magnitude ? UINT64_MAX : lower.magnitude + upper.magnitude;
-	} else if (lower.negative) {
-		width = lower.magnitude - upper.magnitude;
-	} else {
-		width = upper.magnitude - lower.magnitude;
-	}
-	// Exact natural type is zero. Every other fitting type is ordered by its
-	// complete interval width, not the width's bit count: collapsing 20 and 31
-	// to five bits would make different formal ranges spuriously tie.
-	return width == UINT64_MAX ? UINT64_MAX : width + 1;
+	return std::nullopt;
 }
 
 static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge) {
@@ -9134,15 +9118,17 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 				return std::nullopt;
 			}
 
-			auto distance = integer_literal_target_distance(target, untyped_integer);
-			if (!distance) {
+			auto preference = integer_literal_target_preference(target);
+			if (!preference) {
 				return std::nullopt;
 			}
 			Type* natural = integer_literal_natural_type(untyped_integer);
-			MatchRank rank{target == natural ? MatchRank::Tier::Exact : MatchRank::Tier::Equal, *distance};
-			auto natural_signed = integer_carrier_is_signed(natural);
-			auto target_signed = integer_carrier_is_signed(target);
-			rank.integer_sign_mismatch = natural_signed && target_signed && *natural_signed != *target_signed;
+			MatchRank rank{target == natural ? MatchRank::Tier::Exact : MatchRank::Tier::Equal, *preference};
+			// An untyped constant has no source carrier and therefore no
+			// signedness to preserve. Its magnitude-derived natural type
+			// determines only Exact versus Equal. Applying the typed-source
+			// signedness tie-breaker here can make different arguments prefer
+			// different destinations even though every literal fits directly.
 			return ArgumentMatch{rank, new Integer(untyped_integer->value, target, untyped_integer->negative)};
 		}
 	}

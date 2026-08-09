@@ -52,21 +52,21 @@ do
 done
 
 if ./mp -Furtl \
-	-o"$tmp/equal_ambiguous.cc" \
-	tests/overload_ranking_equal_ambiguous.pp \
+	-o"$tmp/signedness_ambiguous.cc" \
+	tests/overload_ranking_signedness_ambiguous.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then
-	echo "accepted crossed per-argument equal ranks" >&2
+	echo "accepted crossed per-argument signedness preferences" >&2
 	exit 1
 fi
 for required in \
 	'ambiguous overload' \
 	'[ambiguous]' \
-	'viable ranks [equal, equal]' \
+	'viable ranks [convert, convert]' \
 	'conflicting argument preferences:' \
 	'arg 1 prefers' \
 	'arg 2 prefers' \
-	"preserves the signedness of the literal's natural integer type"
+	"preserves the actual integer type's signedness"
 do
 	if ! rg -Fq "$required" "$tmp/stderr"
 	then
@@ -75,11 +75,30 @@ do
 		exit 1
 	fi
 done
-if rg -Fq 'equal+' "$tmp/stderr"
+if rg -Fq 'convert+' "$tmp/stderr"
 then
 	echo "overload diagnostic exposed a raw numeric tie-breaker" >&2
 	sed -n '1,220p' "$tmp/stderr" >&2
 	exit 1
 fi
+
+./mp -Furtl \
+	-o"$tmp/untyped_constants.cc" \
+	tests/overload_ranking_untyped_constants.pp
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Werror \
+	-fsanitize=address,undefined \
+	-fno-sanitize-recover=all \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/untyped_constants.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/untyped_constants"
+ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/untyped_constants"
 
 echo "overload ranking tests passed"

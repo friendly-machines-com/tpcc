@@ -329,12 +329,13 @@ begin
   if LiteralNatural(4294967296) <> 36 then Halt(36);
   if LiteralNatural(9223372036854775808) <> 37 then Halt(37);
 
-  { Signedness breaks a tie only when neither destination assigns directly to
-    the other. }
+  { An untyped literal has no source signedness. Fitting destinations follow
+    the magnitude-driven carrier order, including equal-width signed/unsigned
+    pairs. Typed actuals retain the separate signedness preference. }
   if WideLiteral(4) <> 40 then Halt(38);
-  if WideLiteral(200) <> 41 then Halt(39);
-  if DistanceBeforeSign(200) <> 43 then Halt(40);
-  if EqualDistanceSign(200) <> 45 then Halt(41);
+  if WideLiteral(200) <> 40 then Halt(39);
+  if DistanceBeforeSign(200) <> 42 then Halt(40);
+  if EqualDistanceSign(200) <> 44 then Halt(41);
 
   { Cardinal assigns directly to Int64, not conversely, so it is the narrower
     common formal whenever both candidates are otherwise viable. }
