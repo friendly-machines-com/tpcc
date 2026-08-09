@@ -57,5 +57,9 @@ begin
   AnsiInput := '12x';
   Val(AnsiInput, SI32, WordCode);
   if (SI32 <> 0) or (WordCode <> 3) then
-    Halt(3)
+    Halt(3);
+  AnsiInput := '1.25';
+  Val(AnsiInput, D, WordCode);
+  if (D <> 1.25) or (WordCode <> 0) then
+    Halt(4)
 end.

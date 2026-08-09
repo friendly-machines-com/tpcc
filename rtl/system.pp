@@ -446,18 +446,24 @@ procedure str(const x: Int64; var s); overload; external name '::u_system::p_str
 procedure str(const x: QWord; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s); overload; external name '::u_system::p_str';
 procedure str(const x; var s); overload; external name '::u_system::p_str';
+procedure val(const s: ShortString; out value); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value; out code); overload; external name '::u_system::p_val';
 procedure val(const s: AnsiString; out value); overload; external name '::u_system::p_val';
 procedure val(const s: AnsiString; out value; out code); overload; external name '::u_system::p_val';
-procedure val(const s; out value); overload; external name '::u_system::p_val';
-procedure val(const s; out value; out code); overload; external name '::u_system::p_val';
 // FIXME: Real is absent because tpcc does not model its target-dependent
 // Pascal carrier yet.
-procedure val(const s; out value: Single); overload; external name '::u_system::p_val';
-procedure val(const s; out value: Single; out code); overload; external name '::u_system::p_val';
-procedure val(const s; out value: Double); overload; external name '::u_system::p_val';
-procedure val(const s; out value: Double; out code); overload; external name '::u_system::p_val';
-procedure val(const s; out value: Extended); overload; external name '::u_system::p_val';
-procedure val(const s; out value: Extended; out code); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value: Single); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value: Single; out code); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Single); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Single; out code); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value: Double); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value: Double; out code); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Double); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Double; out code); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value: Extended); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value: Extended; out code); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Extended); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Extended; out code); overload; external name '::u_system::p_val';
 // FIXME: Comp is absent because tpcc has no Pascal Comp type or carrier.
 // FIXME: Currency is absent because tpcc has no Pascal Currency type or
 // fixed-scale representation.
