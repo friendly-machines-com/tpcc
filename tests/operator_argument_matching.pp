@@ -8,6 +8,9 @@ type
   TStableMarker = record
     Value: Integer;
   end;
+  TComparable = record
+    Value: Integer;
+  end;
 
 const
   SmallConstant = 3;
@@ -27,6 +30,7 @@ var
   Real32: Single;
   SmallLeft, SmallRight: TSmall;
   StableMarker: TStableMarker;
+  ComparableLeft, ComparableRight: TComparable;
 
 operator :=(Value: Integer): TBox;
 begin
@@ -43,6 +47,11 @@ operator +(Left: TBox; Right: Integer): TBox;
 begin
   Selected := 2;
   Result.Value := Left.Value + Right
+end;
+
+operator <(Left, Right: TComparable): Boolean;
+begin
+  Result := Left.Value < Right.Value
 end;
 
 function NumericKind(Value: Byte): Integer; overload;
@@ -244,6 +253,13 @@ begin
 end;
 
 begin
+  ComparableLeft.Value := 1;
+  ComparableRight.Value := 2;
+  if not (ComparableLeft < ComparableRight) then
+    Halt(90);
+  if ComparableRight < ComparableLeft then
+    Halt(91);
+
   Box.Value := 40;
   Sum := Box + 2;
   if Selected <> 2 then

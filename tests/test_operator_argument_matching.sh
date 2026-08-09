@@ -26,4 +26,21 @@ cd "$root"
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/operator_argument_matching"
 
+if ./mp -Furtl \
+	-o"$tmp/symbol_identifier_rejected.cc" \
+	tests/symbol_identifier_rejected.pp \
+	>"$tmp/symbol_identifier_rejected.out" 2>&1
+then
+	echo "accepted an operator symbol as a procedure identifier" >&2
+	exit 1
+fi
+
+if ! rg -Fq 'error: expected identifier' \
+	"$tmp/symbol_identifier_rejected.out"
+then
+	echo "wrong symbolic-identifier diagnostic" >&2
+	cat "$tmp/symbol_identifier_rejected.out" >&2
+	exit 1
+fi
+
 echo "operator argument matching tests passed"

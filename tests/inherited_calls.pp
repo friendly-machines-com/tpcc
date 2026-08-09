@@ -19,6 +19,7 @@ type
 
   TDerived = class(TBase)
   public
+    constructor Create;
     procedure Run;
     function DefaultResult: Integer;
     class function ClassResult: Integer;
@@ -57,6 +58,11 @@ end;
 class function TBase.StaticSelect(Value: Integer): Integer;
 begin
   Result := 400 + Value
+end;
+
+constructor TDerived.Create;
+begin
+  inherited
 end;
 
 procedure TDerived.Run;

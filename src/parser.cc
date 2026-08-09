@@ -99,6 +99,23 @@ static std::unordered_set<std::string> keywords = {
     "xor", // operator
 };
 
+static bool token_is_identifier(const std::string& token) {
+	if (token.empty() || keywords.find(token) != keywords.end()) {
+		return false;
+	}
+	const auto is_letter = [](char value) {
+		return std::isalpha(static_cast<unsigned char>(value));
+	};
+	const auto is_identifier_character = [&](char value) {
+		return is_letter(value) ||
+		       std::isdigit(static_cast<unsigned char>(value)) ||
+		       value == '_';
+	};
+	return (is_letter(token.front()) || token.front() == '_') &&
+	       std::all_of(token.begin() + 1, token.end(),
+	                   is_identifier_character);
+}
+
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options) : unit_registry(unit_registry), emitter(emitter), options(options) {
 }
 
@@ -1962,10 +1979,10 @@ void Parser::maybe_parse_statement() {
 }
 
 std::optional<std::string> Parser::maybe_parse_identifier() {
-	auto result = input_token;
-	if (keywords.find(result) != keywords.end()) {
+	if (!token_is_identifier(input_token)) {
 		return {};
 	}
+	auto result = input_token;
 	consume();
 	return result;
 }
@@ -5658,14 +5675,6 @@ static bool token_continues_subrange_bound_after_primary(const std::string& toke
 	return token == "." || token == "(" || token == "[" || token == "^" || token == "**" || token == "*" || token == "/" || token == "div" || token == "mod" || token == "and" || token == "shl" || token == "shr" || token == "as" || token == "is" || token == "<<" || token == ">>" || token == "><" || token == "+" || token == "-" || token == "or" || token == "|" || token == "xor";
 }
 
-static bool token_is_identifier_start(const std::string& token) {
-	if (token.empty() || keywords.find(token) != keywords.end()) {
-		return false;
-	}
-	unsigned char first = static_cast<unsigned char>(token.front());
-	return std::isalpha(first) || token.front() == '_';
-}
-
 /** allow_forward: if true, an unresolved identifier at this parse position may
  *  become an IncompleteType, but only while parse_type_block is active. The
  *  valid starts stay explicit here: identifiers are resolved as types unless
@@ -5761,7 +5770,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		// the seed of a constant expression whose lower bound must be followed by
 		// `..`. Subrange-bound parsing deliberately stops before comparison
 		// operators so an enclosing `=` in `const X: T = ...` remains visible.
-		if (token_is_identifier_start(input_token)) {
+		if (token_is_identifier(input_token)) {
 			const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
 			std::string id = parse_identifier();
 			if (maybe_parse_period_period()) {
