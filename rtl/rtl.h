@@ -4261,6 +4261,115 @@ inline std::error_code m_getdir_bytes(
 	return {};
 }
 
+inline void m_expand_path_components(
+    const std::string& path,
+    std::size_t position,
+    std::vector<std::string>& components) {
+	while (position < path.size()) {
+		while (position < path.size() &&
+		       path[position] == '/')
+			++position;
+		const std::size_t start = position;
+		while (position < path.size() &&
+		       path[position] != '/')
+			++position;
+		if (start == position)
+			continue;
+		const std::string component =
+		    path.substr(start, position - start);
+		if (component == ".")
+			continue;
+		if (component == "..") {
+			if (!components.empty())
+				components.pop_back();
+			continue;
+		}
+		components.push_back(component);
+	}
+}
+
+inline void m_expand_rooted_path(
+    const std::string& path,
+    std::vector<std::string>& components) {
+	std::size_t position = 0;
+	while (position < path.size() &&
+	       path[position] == '/')
+		++position;
+	// FPC retains one extra leading separator for every path which starts
+	// with two or more. Treat it as a component so a leading `..` can
+	// remove it just as FPC's textual reduction does.
+	if (position >= 2)
+		components.emplace_back();
+	m_expand_path_components(
+	    path, position, components);
+}
+
+inline t_ansistring p_expandfilename(
+    const t_ansistring& file_name) {
+	std::string path = file_name.m_string();
+	for (char& character : path)
+		if (character == '\\')
+			character = '/';
+	const bool keep_trailing_separator =
+	    path.empty() || path.back() == '/';
+
+	if (!path.empty() && path[0] == '~' &&
+	    (path.size() == 1 || path[1] == '/')) {
+		const char* environment_home =
+		    std::getenv("HOME");
+		const std::string home =
+		    environment_home
+			? environment_home
+			: "";
+		if (home.empty() ||
+		    (home == "/" && path.size() > 1)) {
+			path.erase(0, 1);
+		} else if (home.back() == '/') {
+			path = home +
+			    (path.size() > 1
+			         ? path.substr(2)
+			         : "");
+		} else {
+			path = home + path.substr(1);
+		}
+	}
+
+	std::vector<std::string> components;
+	if (path.empty() || path[0] != '/') {
+		std::string current_directory;
+		if (m_getdir_bytes(current_directory))
+			current_directory = "/";
+		m_expand_rooted_path(
+		    current_directory, components);
+		m_expand_path_components(
+		    path, 0, components);
+	} else {
+		m_expand_rooted_path(path, components);
+	}
+
+	std::string result = "/";
+	for (const std::string& component :
+	     components) {
+		if (component.empty()) {
+			result.push_back('/');
+			continue;
+		}
+		if (result.back() != '/')
+			result.push_back('/');
+		result += component;
+	}
+
+	if (keep_trailing_separator) {
+		if (result.back() != '/')
+			result.push_back('/');
+	} else if (result.size() > 1 &&
+	           result.back() == '/') {
+		result.pop_back();
+	}
+	return tpcc_ansistring_literal(
+	    result.data(), result.size());
+}
+
 inline void p_getdir(
     t_byte drive_number,
     t_shortstring<255>& directory) {

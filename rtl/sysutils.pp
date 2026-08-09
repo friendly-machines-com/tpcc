@@ -60,14 +60,12 @@ const
 
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
-function IncludeTrailingPathDelimiter(
-  const Path: AnsiString): AnsiString;
-function ExtractFileName(
-  const FileName: AnsiString): AnsiString;
-function ExtractFilePath(
-  const FileName: AnsiString): AnsiString;
-function FindFirst(const Path: AnsiString; Attr: LongInt;
-  out Rslt: TSearchRec): LongInt; external name '::u_system::p_findfirst';
+function IncludeTrailingPathDelimiter(const Path: AnsiString): AnsiString;
+function ExtractFileName(const FileName: AnsiString): AnsiString;
+function ExtractFilePath(const FileName: AnsiString): AnsiString;
+function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_fileexists';
+function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_system::p_expandfilename';
+function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TSearchRec): LongInt; external name '::u_system::p_findfirst';
 function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_system::p_findnext';
 procedure FindClose(var F: TSearchRec); external name '::u_system::p_findclose';
 

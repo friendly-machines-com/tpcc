@@ -8,8 +8,54 @@ var
   Code, Count: LongInt;
   FoundOne, FoundTwo: Boolean;
   LastName: AnsiString;
+  CurrentDirectory: AnsiString;
 
 begin
+  GetDir(0, CurrentDirectory);
+  if IOResult <> 0 then
+    Halt(88);
+  if SysUtils.ExpandFileName('') <> CurrentDirectory + '/' then
+    Halt(89);
+  if SysUtils.ExpandFileName('.') <> CurrentDirectory then
+    Halt(90);
+  if SysUtils.ExpandFileName('foo') <> CurrentDirectory + '/foo' then
+    Halt(91);
+  if SysUtils.ExpandFileName('foo/') <> CurrentDirectory + '/foo/' then
+    Halt(92);
+  if SysUtils.ExpandFileName('foo/.') <> CurrentDirectory + '/foo' then
+    Halt(93);
+  if SysUtils.ExpandFileName('foo/..') <> CurrentDirectory then
+    Halt(94);
+  if SysUtils.ExpandFileName('foo/../bar') <>
+      CurrentDirectory + '/bar' then
+    Halt(95);
+  if SysUtils.ExpandFileName('/') <> '/' then
+    Halt(96);
+  if SysUtils.ExpandFileName('/foo//./bar') <> '/foo/bar' then
+    Halt(97);
+  if SysUtils.ExpandFileName('/foo/../bar') <> '/bar' then
+    Halt(98);
+  if SysUtils.ExpandFileName('/../../bar') <> '/bar' then
+    Halt(99);
+  if SysUtils.ExpandFileName('\foo\bar') <> '/foo/bar' then
+    Halt(100);
+  if SysUtils.ExpandFileName('//foo///bar') <> '//foo/bar' then
+    Halt(101);
+  if SysUtils.ExpandFileName('~') <> CurrentDirectory + '/home' then
+    Halt(102);
+  if SysUtils.ExpandFileName('~/file') <>
+      CurrentDirectory + '/home/file' then
+    Halt(103);
+  if SysUtils.ExpandFileName('~someone/file') <>
+      CurrentDirectory + '/~someone/file' then
+    Halt(104);
+  if SysUtils.ExpandFileName('C:\foo') <>
+      CurrentDirectory + '/C:/foo' then
+    Halt(105);
+  if SysUtils.ExpandFileName('missing/../still-missing') <>
+      CurrentDirectory + '/still-missing' then
+    Halt(106);
+
   if not SysUtils.FileExists('files/alpha1.dat') then
     Halt(73);
   if not SysUtils.FileExists('files/alpha1.dat', False) then

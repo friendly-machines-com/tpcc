@@ -4,7 +4,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tmp=${TMPDIR:-/tmp}/tpcc-findfirst-findnext-test.$$
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp/work/files/subdir"
+mkdir -p "$tmp/work/files/subdir" "$tmp/work/home"
 
 printf abc >"$tmp/work/files/alpha1.dat"
 printf 12345 >"$tmp/work/files/alpha2.dat"
@@ -36,6 +36,8 @@ cd "$root"
 	-o "$tmp/findfirst_findnext"
 
 cd "$tmp/work"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/findfirst_findnext"
+HOME="$tmp/work/home" \
+	ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/findfirst_findnext"
 
 echo "FindFirst/FindNext tests passed"
