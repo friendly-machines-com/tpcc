@@ -19,6 +19,7 @@ type
   AnsiChar = Char;
   Single = external name '::u_system::t_single';
   Double = external name '::u_system::t_double';
+  TDateTime = type Double;
   Extended = external name '::u_system::t_extended';
   Pointer = external name '::u_system::t_pointer';
   // TPCC supports only flat 32/64-bit targets, where code and data addresses
