@@ -5993,25 +5993,36 @@ struct tpcc_val_prefix {
 	bool negative;
 };
 
-template<std::size_t Capacity>
+template<typename T>
+inline constexpr bool tpcc_val_source_v =
+    tpcc_is_shortstring_v<T> ||
+    std::is_same_v<std::remove_cv_t<T>, t_ansistring>;
+
+template<typename Source>
+requires tpcc_val_source_v<Source>
 inline tpcc_val_prefix tpcc_val_parse_prefix(
-    const t_shortstring<Capacity>& source, t_integer& code) {
-	const std::size_t length = source.length;
+    const Source& source, t_integer& code) {
+	const std::size_t length =
+	    static_cast<std::size_t>(
+		source.m_length());
+	const t_char* data = source.m_data();
 	std::size_t position = 0;
 	while (position < length &&
-	       (source.data[position].value == ' ' || source.data[position].value == '\t'))
+	       (data[position].value == ' ' ||
+		data[position].value == '\t'))
 		++position;
 
 	bool negative = false;
 	if (position < length &&
-	    (source.data[position].value == '+' || source.data[position].value == '-')) {
-		negative = source.data[position].value == '-';
+	    (data[position].value == '+' ||
+	     data[position].value == '-')) {
+		negative = data[position].value == '-';
 		++position;
 	}
 
 	unsigned base = 10;
 	if (position < length) {
-		switch (source.data[position].value) {
+		switch (data[position].value) {
 		case '$':
 		case 'x':
 		case 'X':
@@ -6028,8 +6039,8 @@ inline tpcc_val_prefix tpcc_val_parse_prefix(
 			break;
 		case '0':
 			if (position + 1 < length &&
-			    (source.data[position + 1].value == 'x' ||
-			     source.data[position + 1].value == 'X')) {
+			    (data[position + 1].value == 'x' ||
+			     data[position + 1].value == 'X')) {
 				base = 16;
 				position += 2;
 			}
@@ -6051,21 +6062,25 @@ inline unsigned tpcc_val_digit(uint8_t character) {
 	return 16;
 }
 
-template<typename T, std::size_t Capacity>
-requires std::is_integral_v<
+template<typename Source, typename T>
+requires tpcc_val_source_v<Source> &&
+	 std::is_integral_v<
 	     typename tpcc_ordinal_storage<T>::type> &&
 	 (!std::is_same_v<
 	     typename tpcc_ordinal_storage<T>::type,
 	     bool>)
 inline void p_val(
-    const t_shortstring<Capacity>& source,
+    const Source& source,
     T& destination, t_integer& code) {
 	using traits = tpcc_ordinal_storage<T>;
 	using storage_type = typename traits::type;
 	destination = traits::make(
 	    storage_type{0});
 	tpcc_val_prefix prefix = tpcc_val_parse_prefix(source, code);
-	const std::size_t length = source.length;
+	const std::size_t length =
+	    static_cast<std::size_t>(
+		source.m_length());
+	const t_char* data = source.m_data();
 	std::size_t position = prefix.position;
 	if (position >= length)
 		return;
@@ -6089,7 +6104,8 @@ inline void p_val(
 	unsigned_type magnitude = 0;
 	bool saw_digit = false;
 	for (; position < length; ++position) {
-		const uint8_t character = source.data[position].value;
+		const uint8_t character =
+		    data[position].value;
 		if (character == 0)
 			break;
 		const unsigned digit = tpcc_val_digit(character);
@@ -6142,61 +6158,73 @@ inline void p_val(
 	code = 0;
 }
 
-template<typename T, std::size_t Capacity>
-requires std::is_floating_point_v<T>
+template<typename Source, typename T>
+requires tpcc_val_source_v<Source> &&
+	 std::is_floating_point_v<T>
 inline void p_val(
-    const t_shortstring<Capacity>& source,
+    const Source& source,
     T& destination, t_integer& code) {
 	destination = 0;
-	const std::size_t length = source.length;
+	const std::size_t length =
+	    static_cast<std::size_t>(
+		source.m_length());
+	const t_char* data = source.m_data();
 	std::size_t position = 0;
 	while (position < length &&
-	       (source.data[position].value == ' ' || source.data[position].value == '\t'))
+	       (data[position].value == ' ' ||
+		data[position].value == '\t'))
 		++position;
 
-	char text[255];
-	std::size_t text_length = 0;
-	if (position < length && source.data[position].value == '+')
+	if (position < length &&
+	    data[position].value == '+')
 		++position;
+	std::string text;
+	text.reserve(length - position);
 	for (std::size_t i = position; i < length; ++i) {
-		if (source.data[i].value == 0)
+		if (data[i].value == 0)
 			break;
-		text[text_length++] = static_cast<char>(source.data[i].value);
+		text.push_back(
+		    static_cast<char>(
+			data[i].value));
 	}
 	code = static_cast<t_integer>(position + 1);
-	if (text_length == 0)
+	if (text.empty())
 		return;
 	const std::size_t first_digit =
 	    text[0] == '-' ? 1 : 0;
-	if (first_digit >= text_length ||
+	if (first_digit >= text.size() ||
 	    !((text[first_digit] >= '0' && text[first_digit] <= '9') ||
 	      text[first_digit] == '.'))
 		return;
 
 	T parsed = 0;
 	auto [end, error] = std::from_chars(
-	    text, text + text_length, parsed, std::chars_format::general);
-	code = static_cast<t_integer>(position + (end - text) + 1);
-	if (error != std::errc() || end != text + text_length)
+	    text.data(), text.data() + text.size(),
+	    parsed, std::chars_format::general);
+	code = static_cast<t_integer>(
+	    position + (end - text.data()) + 1);
+	if (error != std::errc() ||
+	    end != text.data() + text.size())
 		return;
 	destination = parsed;
 	code = 0;
 }
 
-template<typename T, typename Code, std::size_t Capacity>
-requires ((std::is_integral_v<
+template<typename Source, typename T, typename Code>
+requires tpcc_val_source_v<Source> &&
+	 ((std::is_integral_v<
 	       typename tpcc_ordinal_storage<T>::type> &&
 	   (!std::is_same_v<
 	       typename tpcc_ordinal_storage<T>::type,
 	       bool>)) ||
-	          std::is_floating_point_v<T>) &&
-	         std::is_integral_v<
-	             typename tpcc_ordinal_storage<Code>::type> &&
-	         (!std::is_same_v<
-	             typename tpcc_ordinal_storage<Code>::type,
-	             bool>)
-inline void p_val(const t_shortstring<Capacity>& source, T& destination,
-	    tpcc_typed_storage_ref<Code> code) {
+	  std::is_floating_point_v<T>) &&
+	 std::is_integral_v<
+	     typename tpcc_ordinal_storage<Code>::type> &&
+	 (!std::is_same_v<
+	     typename tpcc_ordinal_storage<Code>::type,
+	     bool>)
+inline void p_val(const Source& source, T& destination,
+		    tpcc_typed_storage_ref<Code> code) {
 	using code_traits =
 	    tpcc_ordinal_storage<Code>;
 	using code_storage =
@@ -6204,19 +6232,20 @@ inline void p_val(const t_shortstring<Capacity>& source, T& destination,
 	t_integer parsed_code = 0;
 	p_val(source, destination, parsed_code);
 	*code.value = code_traits::make(
-	    static_cast<code_storage>(
-		parsed_code));
+		    static_cast<code_storage>(
+			parsed_code));
 }
 
-template<typename T, std::size_t Capacity>
-requires (std::is_integral_v<
-	      typename tpcc_ordinal_storage<T>::type> &&
-	  (!std::is_same_v<
-	      typename tpcc_ordinal_storage<T>::type,
-	      bool>)) ||
-	         std::is_floating_point_v<T>
+template<typename Source, typename T>
+requires tpcc_val_source_v<Source> &&
+	 ((std::is_integral_v<
+	       typename tpcc_ordinal_storage<T>::type> &&
+	   (!std::is_same_v<
+	       typename tpcc_ordinal_storage<T>::type,
+	       bool>)) ||
+	  std::is_floating_point_v<T>)
 inline void p_val(
-    const t_shortstring<Capacity>& source, T& destination) {
+    const Source& source, T& destination) {
 	t_integer code = 0;
 	p_val(source, destination, code);
 }

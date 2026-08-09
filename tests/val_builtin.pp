@@ -9,6 +9,7 @@ var
   Code: Integer;
   LongCode: LongInt;
   ByteCode: Byte;
+  WordCode: Word;
   SI8: ShortInt;
   SI16: SmallInt;
   SI32: LongInt;
@@ -22,6 +23,7 @@ var
   D: Double;
   E: Extended;
   Input: TSmallText;
+  AnsiInput: AnsiString;
 
 begin
   Val('-8', SI8, Code);
@@ -46,5 +48,14 @@ begin
   Input := '1234';
   Val(Input, SI32, Code);
   if (SI32 <> 1234) or (Code <> 0) then
-    Halt(1)
+    Halt(1);
+
+  AnsiInput := '5678';
+  Val(AnsiInput, SI32, WordCode);
+  if (SI32 <> 5678) or (WordCode <> 0) then
+    Halt(2);
+  AnsiInput := '12x';
+  Val(AnsiInput, SI32, WordCode);
+  if (SI32 <> 0) or (WordCode <> 3) then
+    Halt(3)
 end.

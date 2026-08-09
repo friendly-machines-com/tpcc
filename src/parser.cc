@@ -10173,8 +10173,12 @@ Node* Parser::make_call(FinalizedCall finalized, std::vector<Node*> args, Leadin
 		if (args.size() != 2 && args.size() != 3) {
 			raise_parse_error("internal error: selected Val declaration has invalid arity");
 		}
-		if (!dynamic_cast<ShortStringType*>(args[0] ? args[0]->ty : nullptr)) {
-			raise_type_kind_mismatch("Val source", "ShortString", args[0] ? args[0]->ty : nullptr);
+		Type* source_type = args[0] ? args[0]->ty : nullptr;
+		if (!dynamic_cast<ShortStringType*>(source_type) &&
+		    source_type != ansistring_type()) {
+			raise_type_kind_mismatch(
+			    "Val source", "ShortString or AnsiString",
+			    source_type);
 		}
 
 		const ValDestinationFamily family = val_destination_family(args[1] ? args[1]->ty : nullptr);

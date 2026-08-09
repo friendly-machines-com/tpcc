@@ -70,5 +70,18 @@ int main() {
 	if (integer != 17)
 		return EXIT_FAILURE;
 
+	std::string long_invalid(300, ' ');
+	long_invalid.push_back('z');
+	::u_system::t_ansistring ansi_source =
+	    ::u_system::tpcc_ansistring_literal(
+		long_invalid.data(), long_invalid.size());
+	::u_system::t_word word_code = 0;
+	::u_system::p_val(
+	    ansi_source,
+	    integer,
+	    ::u_system::tpcc_make_storage_ref(word_code));
+	if (integer != 0 || word_code != 301)
+		return EXIT_FAILURE;
+
 	return EXIT_SUCCESS;
 }
