@@ -63,6 +63,7 @@ function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
 function IncludeTrailingPathDelimiter(const Path: AnsiString): AnsiString;
 function ExtractFileName(const FileName: AnsiString): AnsiString;
 function ExtractFilePath(const FileName: AnsiString): AnsiString;
+function ChangeFileExt(const FileName, Extension: AnsiString): AnsiString;
 function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_fileexists';
 function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_directoryexists';
 function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_system::p_expandfilename';
@@ -102,6 +103,27 @@ var
 begin
   Delimiter := LastPathDelimiter(FileName);
   Result := Copy(FileName, 1, Delimiter)
+end;
+
+function ChangeFileExt(const FileName, Extension: AnsiString): AnsiString;
+var
+  Index: SizeInt;
+  StartsFileName: Boolean;
+begin
+  Index := Length(FileName);
+  while (Index > 0) and not ((FileName[Index] = '.') or (FileName[Index] in AllowDirectorySeparators)) do
+    Index := Index - 1;
+
+  if (Index = 0) or (FileName[Index] <> '.') then
+    Index := Length(FileName) + 1
+  else
+    begin
+      StartsFileName := (Index = 1) or (FileName[Index - 1] in AllowDirectorySeparators);
+      if StartsFileName then
+        Index := Length(FileName) + 1
+    end;
+
+  Result := Copy(FileName, 1, Index - 1) + Extension
 end;
 
 function IncludeTrailingPathDelimiter(
