@@ -2546,6 +2546,15 @@ inline t_ansistring p_getenvironmentvariable(
 	    value, std::strlen(value));
 }
 
+inline t_integer p_fpsystem(
+    const t_ansistring& command) {
+	if (command.m_length() == 0)
+		return 1;
+	const std::string bytes = command.m_string();
+	return static_cast<t_integer>(
+	    ::system(bytes.c_str()));
+}
+
 inline bool m_executeprocess_separator(char value) {
 	return value == ' ' || value == '\t' ||
 	       value == '\n';
