@@ -4685,13 +4685,9 @@ inline void p_prefetch(tpcc_const_storage_ref memory) {
 #if defined(__clang__)
 #if __has_builtin(__builtin_prefetch)
 	__builtin_prefetch(memory.data, 0, 0);
-#else
-	(void)memory;
 #endif
 #elif defined(__GNUC__)
 	__builtin_prefetch(memory.data, 0, 0);
-#else
-	(void)memory;
 #endif
 }
 
