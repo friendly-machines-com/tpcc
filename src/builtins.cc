@@ -1264,6 +1264,12 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_freemem", nullptr},
     {"::u_system::p_getdir", nullptr},
     {
+        .cxx_name = "::u_system::p_rmdir",
+        .call_site_switch = BuiltinCallSiteSwitch::Io,
+        .disabled_cxx_name = "::u_system::m_unchecked_rmdir",
+    },
+    {"::u_system::m_unchecked_rmdir", nullptr},
+    {
         .cxx_name = "::u_system::p_rewrite",
         .call_site_switch = BuiltinCallSiteSwitch::Io,
         .disabled_cxx_name = "::u_system::m_unchecked_rewrite",

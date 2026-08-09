@@ -4431,6 +4431,61 @@ inline void p_getdir(
 	    bytes.data(), bytes.size());
 }
 
+inline t_word m_rmdir_error_from_errno(
+    int error) {
+	switch (error) {
+	case ENAMETOOLONG:
+		return 3;
+	case EROFS:
+	case EEXIST:
+	case ENOTEMPTY:
+	case EACCES:
+	case EPERM:
+	case EBUSY:
+	case ENOTDIR:
+	case EISDIR:
+		return 5;
+	default:
+		return m_file_error_from_errno(
+		    error,
+		    error != 0
+			? static_cast<t_word>(error)
+			: static_cast<t_word>(5));
+	}
+}
+
+template<typename PascalString>
+inline t_word m_do_rmdir(
+    const PascalString& directory) {
+	const std::string path =
+	    directory.m_string();
+	if (path.empty())
+		return 0;
+	if (path == ".")
+		return 16;
+	errno = 0;
+	if (::rmdir(path.c_str()) == 0)
+		return 0;
+	return m_rmdir_error_from_errno(errno);
+}
+
+template<typename PascalString>
+inline void p_rmdir(
+    const PascalString& directory) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_rmdir(directory));
+}
+
+template<typename PascalString>
+inline void m_unchecked_rmdir(
+    const PascalString& directory) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_rmdir(directory));
+}
+
 inline t_shortstring<255> o_implicit(
     t_char value,
     m_conversion_target<t_shortstring<255>>) {
