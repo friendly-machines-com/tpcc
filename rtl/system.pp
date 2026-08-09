@@ -75,6 +75,7 @@ const
   MaxSmallint = $7fff;
   MaxInt = MaxSmallint;
   AllowDirectorySeparators: TSysCharSet = ['\', '/'];
+  DirectorySeparator: Char = '/';
   DriveSeparator = '';
 
 var
