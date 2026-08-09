@@ -30,11 +30,11 @@ bool eval_directive_expr(const std::string& expr, const std::map<std::string, st
 	auto require_bool = [&](int64_t v, const char* where) -> bool {
 		if (v == 0) {
 			return false;
-		}
-		if (v == 1) {
+		} else if (v == 1) {
 			return true;
+		} else {
+			throw DirectiveExprError{std::string("non-boolean value ") + std::to_string(v) + " where boolean required (" + where + ") in {$if ...}"};
 		}
-		throw DirectiveExprError{std::string("non-boolean value ") + std::to_string(v) + " where boolean required (" + where + ") in {$if ...}"};
 	};
 	auto lookup_ident = [&](const std::string& name) -> int64_t {
 		auto it = defines.find(name);
@@ -64,8 +64,7 @@ bool eval_directive_expr(const std::string& expr, const std::map<std::string, st
 			}
 			p++;
 			return v;
-		}
-		if (p < expr.size() && (isdigit((unsigned char)expr[p]) || (expr[p] == '-' && p + 1 < expr.size() && isdigit((unsigned char)expr[p + 1])))) {
+		} else if (p < expr.size() && (isdigit((unsigned char)expr[p]) || (expr[p] == '-' && p + 1 < expr.size() && isdigit((unsigned char)expr[p + 1])))) {
 			size_t q = p;
 			if (expr[q] == '-') {
 				q++;
@@ -80,37 +79,37 @@ bool eval_directive_expr(const std::string& expr, const std::map<std::string, st
 			}
 			p = q;
 			return v;
-		}
-		std::string w = peek_word();
-		std::string lw = lower(w);
-		if (lw == "not") {
-			p += w.size();
-			return require_bool(parse_term(), "operand of 'not'") ? 0 : 1;
-		}
-		if (lw == "defined") {
-			p += w.size();
-			skip_ws();
-			if (p >= expr.size() || expr[p] != '(') {
-				throw DirectiveExprError{"expected '(' after 'defined' in {$if ...}"};
+		} else {
+			std::string w = peek_word();
+			std::string lw = lower(w);
+			if (lw == "not") {
+				p += w.size();
+				return require_bool(parse_term(), "operand of 'not'") ? 0 : 1;
+			} else if (lw == "defined") {
+				p += w.size();
+				skip_ws();
+				if (p >= expr.size() || expr[p] != '(') {
+					throw DirectiveExprError{"expected '(' after 'defined' in {$if ...}"};
+				}
+				p++;
+				std::string sym = peek_word();
+				if (sym.empty()) {
+					throw DirectiveExprError{"expected identifier in defined(...)"};
+				}
+				p += sym.size();
+				skip_ws();
+				if (p >= expr.size() || expr[p] != ')') {
+					throw DirectiveExprError{"missing ')' in defined(...)"};
+				}
+				p++;
+				return defines.count(sym) > 0 ? 1 : 0;
+			} else if (!w.empty()) {
+				p += w.size();
+				return lookup_ident(w);
+			} else {
+				throw DirectiveExprError{"unrecognised token in {$if ...}: '" + expr.substr(p) + "'"};
 			}
-			p++;
-			std::string sym = peek_word();
-			if (sym.empty()) {
-				throw DirectiveExprError{"expected identifier in defined(...)"};
-			}
-			p += sym.size();
-			skip_ws();
-			if (p >= expr.size() || expr[p] != ')') {
-				throw DirectiveExprError{"missing ')' in defined(...)"};
-			}
-			p++;
-			return defines.count(sym) > 0 ? 1 : 0;
 		}
-		if (!w.empty()) {
-			p += w.size();
-			return lookup_ident(w);
-		}
-		throw DirectiveExprError{"unrecognised token in {$if ...}: '" + expr.substr(p) + "'"};
 	};
 	auto parse_cmp = [&]() -> int64_t {
 		int64_t a = parse_term();

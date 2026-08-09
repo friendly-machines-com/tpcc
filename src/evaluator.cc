@@ -34,8 +34,7 @@ ConstEvalResult const_convert_integer(uint64_t magnitude, bool negative, Type*, 
 ConstEvalResult const_convert_string(const std::string& value, Type* to_ty) {
 	if (auto target = dynamic_cast<ShortStringType*>(to_ty)) {
 		return ConstEvalResult::success(new String(value.substr(0, target->capacity), to_ty));
-	}
-	if (to_ty == ansistring_type()) {
+	} else if (to_ty == ansistring_type()) {
 		return ConstEvalResult::success(new String(value, to_ty));
 	}
 	return ConstEvalResult::error("constant string conversion has a non-string target");
@@ -97,8 +96,7 @@ ConstEvalResult const_eval_type_bound(TypeBoundKind kind, Type* ty) {
 	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		ConstEvalContext ctx;
 		return (kind == TypeBoundKind::Low ? s->lower_bound : s->upper_bound)->const_eval(ctx);
-	}
-	if (auto e = dynamic_cast<EnumType*>(ty)) {
+	} else if (auto e = dynamic_cast<EnumType*>(ty)) {
 		const auto* member = kind == TypeBoundKind::Low ? e->min_member() : e->max_member();
 		if (!member) {
 			return ConstEvalResult::error("low/high of empty enum type");

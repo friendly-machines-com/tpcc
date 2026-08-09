@@ -286,14 +286,11 @@ void ErrorLetContext::index_frame(const Frame* frame, DiagnosticFrameUse use) {
 ErrorLetContext::NameBase ErrorLetContext::choose_type_base(const TypeNode& n) {
 	if (!n.type_names.empty()) {
 		return NameBase{name_component(n.type_names.front(), n.kind.c_str()), ""};
-	}
-	if (!n.value_names.empty()) {
+	} else if (!n.value_names.empty()) {
 		return NameBase{name_component("typeof_" + n.value_names.front(), n.kind.c_str()), ""};
-	}
-	if (!n.member_names.empty()) {
+	} else if (!n.member_names.empty()) {
 		return NameBase{name_component("member_" + n.member_names.front(), n.kind.c_str()), ""};
-	}
-	if (auto rt = dynamic_cast<const RoutineType*>(n.ty)) {
+	} else if (auto rt = dynamic_cast<const RoutineType*>(n.ty)) {
 		// Hard-coded inline special case: routine type variables are named by
 		// their signature. Keep this structured as head + detail so uniqueness
 		// suffixes belong to the diagnostic variable head (`routine#2(...)`), not
@@ -337,35 +334,30 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 				return NameBase{name_component(render_name_display(ait->second.name) + "." + member, n.kind.c_str()), ""};
 			}
 		}
-	}
-	if (auto ix = dynamic_cast<const Index*>(n.node)) {
+	} else if (auto ix = dynamic_cast<const Index*>(n.node)) {
 		auto ait = value_nodes.find(ix->a);
 		auto bit = value_nodes.find(ix->b);
 		if (ait != value_nodes.end() && ait->second.name.assigned && bit != value_nodes.end() && bit->second.name.assigned) {
 			return NameBase{name_component(render_name_display(ait->second.name) + "[" + render_name_display(bit->second.name) + "]", n.kind.c_str()), ""};
 		}
-	}
-	if (auto d = dynamic_cast<const Dereference*>(n.node)) {
+	} else if (auto d = dynamic_cast<const Dereference*>(n.node)) {
 		auto ait = value_nodes.find(d->a);
 		if (ait != value_nodes.end() && ait->second.name.assigned) {
 			return NameBase{name_component(render_name_display(ait->second.name) + "^", n.kind.c_str()), ""};
 		}
-	}
-	if (auto c = dynamic_cast<const Cast*>(n.node)) {
+	} else if (auto c = dynamic_cast<const Cast*>(n.node)) {
 		auto ait = value_nodes.find(c->a);
 		auto tit = type_nodes.find(c->ty);
 		if (ait != value_nodes.end() && ait->second.name.assigned && tit != type_nodes.end() && tit->second.name.assigned) {
 			return NameBase{name_component(render_name_display(tit->second.name) + "(" + render_name_display(ait->second.name) + ")", n.kind.c_str()), ""};
 		}
-	}
-	if (auto tb = dynamic_cast<const TypeBound*>(n.node)) {
+	} else if (auto tb = dynamic_cast<const TypeBound*>(n.node)) {
 		auto tit = type_nodes.find(tb->operand_type);
 		if (tit != type_nodes.end() && tit->second.name.assigned) {
 			std::string fn = tb->kind == TypeBoundKind::Low ? "low" : "high";
 			return NameBase{name_component(fn + "(" + render_name_display(tit->second.name) + ")", n.kind.c_str()), ""};
 		}
-	}
-	if (auto pc = dynamic_cast<const ProcCall*>(n.node)) {
+	} else if (auto pc = dynamic_cast<const ProcCall*>(n.node)) {
 		auto callee_it = value_nodes.find(pc->callee);
 		if (callee_it != value_nodes.end() && callee_it->second.name.assigned) {
 			std::string rendered;
@@ -429,8 +421,7 @@ no_proc_call_name:
 		if (!c->cxx_name.empty()) {
 			return NameBase{name_component(c->cxx_name, n.kind.c_str()), ""};
 		}
-	}
-	if (auto s = dynamic_cast<const StorageSlot*>(n.node)) {
+	} else if (auto s = dynamic_cast<const StorageSlot*>(n.node)) {
 		if (!s->cxx_name.empty()) {
 			return NameBase{name_component(s->cxx_name, n.kind.c_str()), ""};
 		}

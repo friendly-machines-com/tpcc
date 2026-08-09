@@ -41,29 +41,21 @@ static std::string type_cxx_name(const Type* type, const std::string& local_name
 static std::string named_type_local_cxx_name(Type* type) {
 	if (auto d = dynamic_cast<DistinctType*>(type)) {
 		return d->cxx_name;
-	}
-	if (auto s = dynamic_cast<SubrangeType*>(type)) {
+	} else if (auto s = dynamic_cast<SubrangeType*>(type)) {
 		return s->cxx_name;
-	}
-	if (auto r = dynamic_cast<RecordType*>(type)) {
+	} else if (auto r = dynamic_cast<RecordType*>(type)) {
 		return r->cxx_name;
-	}
-	if (auto r = dynamic_cast<PackedRecordType*>(type)) {
+	} else if (auto r = dynamic_cast<PackedRecordType*>(type)) {
 		return r->cxx_name;
-	}
-	if (auto c = dynamic_cast<ClassType*>(type)) {
+	} else if (auto c = dynamic_cast<ClassType*>(type)) {
 		return c->cxx_name;
-	}
-	if (auto c = dynamic_cast<ClassRefType*>(type)) {
+	} else if (auto c = dynamic_cast<ClassRefType*>(type)) {
 		return c->cxx_name;
-	}
-	if (auto i = dynamic_cast<InterfaceType*>(type)) {
+	} else if (auto i = dynamic_cast<InterfaceType*>(type)) {
 		return i->cxx_name;
-	}
-	if (auto o = dynamic_cast<ObjectType*>(type)) {
+	} else if (auto o = dynamic_cast<ObjectType*>(type)) {
 		return o->cxx_name;
-	}
-	if (auto e = dynamic_cast<EnumType*>(type)) {
+	} else if (auto e = dynamic_cast<EnumType*>(type)) {
 		return e->cxx_name;
 	}
 	return "";
@@ -201,11 +193,11 @@ void Emitter::emit_static_member_declaration(StorageSlot* slot) {
 		fprintf(active, ";\n");
 		fprintf(active, "\t\treturn m_value;\n");
 		fprintf(active, "\t}\n");
-		return;
+	} else {
+		fprintf(active, "inline static ");
+		emit_type_ref(slot->ty);
+		fprintf(active, " %s{};\n", slot->cxx_name.c_str());
 	}
-	fprintf(active, "inline static ");
-	emit_type_ref(slot->ty);
-	fprintf(active, " %s{};\n", slot->cxx_name.c_str());
 }
 
 // Apply the backend prefix to a Pascal value identifier. Operator tokens
@@ -420,20 +412,14 @@ void Emitter::emit_type_dependencies(Type* root, bool inspect_definition) {
 			Node* value = declaration.second.value;
 			if (auto slot = dynamic_cast<StorageSlot*>(value)) {
 				visit(slot->ty, inspect_nested_definition(slot->ty));
-				continue;
-			}
-			if (auto property = dynamic_cast<Property*>(value)) {
+			} else if (auto property = dynamic_cast<Property*>(value)) {
 				visit(property->ty, inspect_nested_definition(property->ty));
 				for (Type* index : property->index_types) {
 					visit(index, inspect_nested_definition(index));
 				}
-				continue;
-			}
-			if (auto callable = dynamic_cast<Callable*>(value)) {
+			} else if (auto callable = dynamic_cast<Callable*>(value)) {
 				visit(callable->ty, false);
-				continue;
-			}
-			if (auto overloads = dynamic_cast<OverloadSet*>(value)) {
+			} else if (auto overloads = dynamic_cast<OverloadSet*>(value)) {
 				for (Callable* callable : overloads->members) {
 					visit(callable->ty, false);
 				}
@@ -447,77 +433,48 @@ void Emitter::emit_type_dependencies(Type* root, bool inspect_definition) {
 		}
 		if (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
 			visit(incomplete->resolved, inspect);
-			return;
-		}
-		if (auto subrange = dynamic_cast<SubrangeType*>(ty)) {
+		} else if (auto subrange = dynamic_cast<SubrangeType*>(ty)) {
 			visit(subrange->base_type, false);
 			emit_subrange_definition(subrange);
-			return;
-		}
-		if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
+		} else if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
 			visit(array->bounds, inspect_nested_definition(array->bounds));
 			visit(array->item_type, inspect_nested_definition(array->item_type));
-			return;
-		}
-		if (auto array = dynamic_cast<DynamicArrayType*>(ty)) {
+		} else if (auto array = dynamic_cast<DynamicArrayType*>(ty)) {
 			visit(array->item_type, inspect_nested_definition(array->item_type));
-			return;
-		}
-		if (auto array = dynamic_cast<OpenArrayType*>(ty)) {
+		} else if (auto array = dynamic_cast<OpenArrayType*>(ty)) {
 			visit(array->item_type, inspect_nested_definition(array->item_type));
-			return;
-		}
-		if (auto set = dynamic_cast<FixedSetType*>(ty)) {
+		} else if (auto set = dynamic_cast<FixedSetType*>(ty)) {
 			visit(set->item_type, inspect_nested_definition(set->item_type));
-			return;
-		}
-		if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
+		} else if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
 			visit(distinct->base_type, inspect_nested_definition(distinct->base_type));
-			return;
-		}
-		if (auto file = dynamic_cast<TypedFileType*>(ty)) {
+		} else if (auto file = dynamic_cast<TypedFileType*>(ty)) {
 			visit(file->item_type, inspect_nested_definition(file->item_type));
-			return;
-		}
-		if (auto pointer = dynamic_cast<PointerType*>(ty)) {
+		} else if (auto pointer = dynamic_cast<PointerType*>(ty)) {
 			if (!pointer->is_untyped()) {
 				visit(pointer->item_type, inspect_nested_definition(pointer->item_type));
 			}
-			return;
-		}
-		if (auto routine = dynamic_cast<RoutineType*>(ty)) {
+		} else if (auto routine = dynamic_cast<RoutineType*>(ty)) {
 			visit(routine->return_type, inspect_nested_definition(routine->return_type));
 			for (const auto& formal : routine->formals) {
 				visit(formal.ty, inspect_nested_definition(formal.ty));
 			}
-			return;
-		}
-		if (!inspect) {
-			return;
-		}
-		if (auto record = dynamic_cast<RecordType*>(ty)) {
-			for (const auto& field : record->fields) {
-				visit(field.ty, inspect_nested_definition(field.ty));
+		} else if (inspect) {
+			if (auto record = dynamic_cast<RecordType*>(ty)) {
+				for (const auto& field : record->fields) {
+					visit(field.ty, inspect_nested_definition(field.ty));
+				}
+				visit_variant(record->variant);
+				visit_frame(record->children);
+			} else if (auto record = dynamic_cast<PackedRecordType*>(ty)) {
+				visit_variant(record->variant);
+				visit_frame(record->children);
+			} else if (auto record = dynamic_cast<ClassType*>(ty)) {
+				visit_frame(record->children);
+			} else if (auto record = dynamic_cast<InterfaceType*>(ty)) {
+				visit_frame(record->children);
+			} else if (auto record = dynamic_cast<ObjectType*>(ty)) {
+				visit_frame(record->children);
 			}
-			visit_variant(record->variant);
-			visit_frame(record->children);
-			return;
-		}
-		if (auto record = dynamic_cast<PackedRecordType*>(ty)) {
-			visit_variant(record->variant);
-			visit_frame(record->children);
-			return;
-		}
-		if (auto record = dynamic_cast<ClassType*>(ty)) {
-			visit_frame(record->children);
-			return;
-		}
-		if (auto record = dynamic_cast<InterfaceType*>(ty)) {
-			visit_frame(record->children);
-			return;
-		}
-		if (auto record = dynamic_cast<ObjectType*>(ty)) {
-			visit_frame(record->children);
 		}
 	};
 	visit(root, inspect_definition);
@@ -681,17 +638,13 @@ void Emitter::emit_main_epilogue(bool has_program_class_destructors) {
 static std::string owner_cxx_name(Type* owner) {
 	if (auto r = dynamic_cast<RecordType*>(owner)) {
 		return r->cxx_name;
-	}
-	if (auto r = dynamic_cast<PackedRecordType*>(owner)) {
+	} else if (auto r = dynamic_cast<PackedRecordType*>(owner)) {
 		return r->cxx_name;
-	}
-	if (auto c = dynamic_cast<ClassType*>(owner)) {
+	} else if (auto c = dynamic_cast<ClassType*>(owner)) {
 		return c->cxx_name;
-	}
-	if (auto i = dynamic_cast<InterfaceType*>(owner)) {
+	} else if (auto i = dynamic_cast<InterfaceType*>(owner)) {
 		return i->cxx_name;
-	}
-	if (auto o = dynamic_cast<ObjectType*>(owner)) {
+	} else if (auto o = dynamic_cast<ObjectType*>(owner)) {
 		return o->cxx_name;
 	}
 	return "";
@@ -985,29 +938,25 @@ void Emitter::emit_statement(Node* stmt) {
 	}
 	if (dynamic_cast<ConstructorFail*>(stmt)) {
 		fprintf(active, "\tthrow ::u_system::tpcc_constructor_fail{};\n");
-		return;
-	}
-	if (auto raise = dynamic_cast<Raise*>(stmt)) {
+	} else if (auto raise = dynamic_cast<Raise*>(stmt)) {
 		if (!raise->object) {
 			fprintf(active, "\tthrow;\n");
-			return;
-		}
-		fprintf(active, "\t::u_system::m_raise_pascal(");
-		emit_expression(raise->object);
-		if (raise->address) {
-			fprintf(active, ", ");
-			emit_expression(raise->address);
-			fprintf(active, ", ");
-			if (raise->frame) {
-				emit_expression(raise->frame);
-			} else {
-				fprintf(active, "nullptr");
+		} else {
+			fprintf(active, "\t::u_system::m_raise_pascal(");
+			emit_expression(raise->object);
+			if (raise->address) {
+				fprintf(active, ", ");
+				emit_expression(raise->address);
+				fprintf(active, ", ");
+				if (raise->frame) {
+					emit_expression(raise->frame);
+				} else {
+					fprintf(active, "nullptr");
+				}
 			}
+			fprintf(active, ");\n");
 		}
-		fprintf(active, ");\n");
-		return;
-	}
-	if (auto mutation = dynamic_cast<Mutation*>(stmt)) {
+	} else if (auto mutation = dynamic_cast<Mutation*>(stmt)) {
 		// The aliases make every runtime component of the Pascal place stable
 		// before its getter/read runs. The final store remains an ordinary
 		// Assign node on purpose: its existing property setters, packed
@@ -1026,26 +975,38 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(active, "\t");
 		emit_statement(mutation->assignment);
 		fprintf(active, "\t}();\n");
-		return;
-	}
-	if (auto a = dynamic_cast<Assign*>(stmt)) {
-		if (auto member = dynamic_cast<MemberAccess*>(a->a)) {
-			if (auto view = dynamic_cast<Cast*>(member->a)) {
-				auto field = dynamic_cast<StorageSlot*>(member->b);
-				auto routine = dynamic_cast<RoutineType*>(view->a ? view->a->ty : nullptr);
-				bool is_code = field == tmethod_code_field();
-				bool is_data = field == tmethod_data_field();
-				if (view->ty == tmethod_type() && field && routine && routine->kind == METHOD && (is_code || is_data)) {
-					fprintf(active, is_code ? "\t::u_system::m_store_tmethod_code(" : "\t::u_system::m_store_tmethod_data(");
-					emit_writable_expression(view->a);
-					fprintf(active, ", ");
-					emit_expression(a->b);
-					fprintf(active, ");\n");
-					return;
-				}
-			}
+	} else if (auto a = dynamic_cast<Assign*>(stmt)) {
+		auto member = dynamic_cast<MemberAccess*>(a->a);
+		auto method_view = member ? dynamic_cast<Cast*>(member->a) : nullptr;
+		auto method_field = method_view ? dynamic_cast<StorageSlot*>(member->b) : nullptr;
+		auto method_routine = method_view ? dynamic_cast<RoutineType*>(method_view->a ? method_view->a->ty : nullptr) : nullptr;
+		bool method_code = method_field == tmethod_code_field();
+		bool method_data = method_field == tmethod_data_field();
+		bool method_component = method_view && method_view->ty == tmethod_type() && method_field && method_routine && method_routine->kind == METHOD && (method_code || method_data);
+
+		auto writable_cast = dynamic_cast<Cast*>(a->a);
+
+		PropertyAccess* indexed_property = dynamic_cast<PropertyAccess*>(a->a);
+		Node* indexed_receiver = indexed_property ? indexed_property->receiver : nullptr;
+		Node* indexed_argument = indexed_property && indexed_property->indexes.size() == 1 ? indexed_property->indexes.front() : nullptr;
+		if (auto index = dynamic_cast<Index*>(a->a)) {
+			indexed_receiver = index->a;
+			indexed_argument = index->b;
 		}
-		if (auto cast = dynamic_cast<Cast*>(a->a)) {
+		auto indexed_member = indexed_receiver ? dynamic_cast<MemberAccess*>(indexed_receiver) : nullptr;
+		auto indexed_overlay = indexed_member ? dynamic_cast<Cast*>(indexed_member->a) : nullptr;
+		auto indexed_packed = indexed_overlay ? dynamic_cast<PackedRecordType*>(indexed_overlay->ty) : nullptr;
+
+		auto property = dynamic_cast<PropertyAccess*>(a->a);
+		bool packed_member = member && dynamic_cast<PackedRecordType*>(member->a->ty);
+
+		if (method_component) {
+			fprintf(active, method_code ? "\t::u_system::m_store_tmethod_code(" : "\t::u_system::m_store_tmethod_data(");
+			emit_writable_expression(method_view->a);
+			fprintf(active, ", ");
+			emit_expression(a->b);
+			fprintf(active, ");\n");
+		} else if (writable_cast) {
 			// An assignable explicit ordinal cast is a same-sized view of an
 			// existing Pascal place. Keep it out of ordinary C++ cast syntax:
 			// a static_cast expression is not an lvalue, and reinterpret_cast
@@ -1053,83 +1014,66 @@ void Emitter::emit_statement(Node* stmt) {
 			// the target value into a real source-carrier value, then assigns
 			// that value through the typed storage view.
 			fprintf(active, "\t::u_system::tpcc_store_writable_cast<");
-			emit_type_ref(cast->ty);
+			emit_type_ref(writable_cast->ty);
 			fprintf(active, ">(");
-			emit_storage_ref(cast->a);
+			emit_storage_ref(writable_cast->a);
 			fprintf(active, ", static_cast<");
-			emit_type_ref(cast->ty);
+			emit_type_ref(writable_cast->ty);
 			fprintf(active, ">(");
 			emit_expression(a->b);
 			fprintf(active, "));\n");
-			return;
-		}
-		// Writable packed overlay, array-field element:
-		//
-		//   TPacked(source).bytes[index] := rhs
-		//
-		// The parser has already proved SOURCE is an assignable place. Bind it
-		// once, copy into an aligned nominal carrier, update a copied array
-		// field, put that field back, then synchronously copy the entire carrier
-		// back to SOURCE. No reference to packed bytes is ever formed and no
-		// temporary view can lose a delayed write.
-		PropertyAccess* indexed_property = dynamic_cast<PropertyAccess*>(a->a);
-		Node* indexed_receiver = indexed_property ? indexed_property->receiver : nullptr;
-		Node* indexed_argument = indexed_property && indexed_property->indexes.size() == 1 ? indexed_property->indexes.front() : nullptr;
-		if (auto ix = dynamic_cast<Index*>(a->a)) {
-			indexed_receiver = ix->a;
-			indexed_argument = ix->b;
-		}
-		if (indexed_receiver && indexed_argument) {
-			if (auto m = dynamic_cast<MemberAccess*>(indexed_receiver)) {
-				if (auto overlay = dynamic_cast<Cast*>(m->a)) {
-					if (auto packed = dynamic_cast<PackedRecordType*>(overlay->ty)) {
-						auto field = dynamic_cast<StorageSlot*>(m->b);
-						if (!field) {
-							unhandled_node("packed overlay array target is not a field", m);
-						}
-						if (packed->cxx_name.empty()) {
-							unhandled_type("anonymous packed overlay", packed);
-						}
-						fprintf(active, "\t[&]() {\n");
-						fprintf(active, "\t\tauto&& tpcc_overlay_source = ");
-						emit_expression(overlay->a);
-						fprintf(active, ";\n");
-						fprintf(active, "\t\tusing tpcc_overlay_source_type = "
-						                "std::remove_cvref_t<decltype(tpcc_overlay_source)>;\n");
-						fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<tpcc_"
-						                "overlay_source_type>, \"packed overlay source must be "
-						                "trivially copyable\");\n");
-						fprintf(active,
-						        "\t\tstatic_assert(sizeof(tpcc_overlay_source_type) == "
-						        "%s::m_storage_size, \"packed overlay size mismatch\");\n",
-						        packed->cxx_name.c_str());
-						fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
-						fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), "
-						                "std::addressof(tpcc_overlay_source), "
-						                "sizeof(tpcc_overlay_source));\n");
-						fprintf(active, "\t\tauto tpcc_overlay_field = tpcc_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
-						const char* index_name = "::u_system::p_index";
-						if (indexed_property) {
-							auto builtin = dynamic_cast<Builtin*>(indexed_property->property->write_accessor);
-							if (builtin && builtin->desc && builtin->desc->cxx_name == "::u_system::m_unchecked_index") {
-								index_name = "::u_system::m_unchecked_index";
-							}
-						}
-						fprintf(active, "\t\t%s(tpcc_overlay_field, ", index_name);
-						emit_expression(indexed_argument);
-						fprintf(active, ") = ");
-						emit_expression(a->b);
-						fprintf(active, ";\n");
-						fprintf(active, "\t\ttpcc_overlay_value.m_set_%s(tpcc_overlay_field);\n", field->cxx_name.c_str());
-						fprintf(active, "\t\tstd::memcpy(std::addressof(tpcc_overlay_source), "
-						                "tpcc_overlay_value.m_data(), sizeof(tpcc_overlay_source));\n");
-						fprintf(active, "\t}();\n");
-						return;
-					}
+		} else if (indexed_argument && indexed_packed) {
+			// Writable packed overlay, array-field element:
+			//
+			//   TPacked(source).bytes[index] := rhs
+			//
+			// The parser has already proved SOURCE is an assignable place. Bind
+			// it once, copy into an aligned nominal carrier, update a copied
+			// array field, put that field back, then synchronously copy the
+			// entire carrier back to SOURCE. No reference to packed bytes is
+			// ever formed and no temporary view can lose a delayed write.
+			auto field = dynamic_cast<StorageSlot*>(indexed_member->b);
+			if (!field) {
+				unhandled_node("packed overlay array target is not a field", indexed_member);
+			}
+			if (indexed_packed->cxx_name.empty()) {
+				unhandled_type("anonymous packed overlay", indexed_packed);
+			}
+			fprintf(active, "\t[&]() {\n");
+			fprintf(active, "\t\tauto&& tpcc_overlay_source = ");
+			emit_expression(indexed_overlay->a);
+			fprintf(active, ";\n");
+			fprintf(active, "\t\tusing tpcc_overlay_source_type = "
+			                "std::remove_cvref_t<decltype(tpcc_overlay_source)>;\n");
+			fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<tpcc_"
+			                "overlay_source_type>, \"packed overlay source must be "
+			                "trivially copyable\");\n");
+			fprintf(active,
+			        "\t\tstatic_assert(sizeof(tpcc_overlay_source_type) == "
+			        "%s::m_storage_size, \"packed overlay size mismatch\");\n",
+			        indexed_packed->cxx_name.c_str());
+			fprintf(active, "\t\t%s tpcc_overlay_value{};\n", indexed_packed->cxx_name.c_str());
+			fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), "
+			                "std::addressof(tpcc_overlay_source), "
+			                "sizeof(tpcc_overlay_source));\n");
+			fprintf(active, "\t\tauto tpcc_overlay_field = tpcc_overlay_value.m_get_%s();\n", field->cxx_name.c_str());
+			const char* index_name = "::u_system::p_index";
+			if (indexed_property) {
+				auto builtin = dynamic_cast<Builtin*>(indexed_property->property->write_accessor);
+				if (builtin && builtin->desc && builtin->desc->cxx_name == "::u_system::m_unchecked_index") {
+					index_name = "::u_system::m_unchecked_index";
 				}
 			}
-		}
-		if (auto property = dynamic_cast<PropertyAccess*>(a->a)) {
+			fprintf(active, "\t\t%s(tpcc_overlay_field, ", index_name);
+			emit_expression(indexed_argument);
+			fprintf(active, ") = ");
+			emit_expression(a->b);
+			fprintf(active, ";\n");
+			fprintf(active, "\t\ttpcc_overlay_value.m_set_%s(tpcc_overlay_field);\n", field->cxx_name.c_str());
+			fprintf(active, "\t\tstd::memcpy(std::addressof(tpcc_overlay_source), "
+			                "tpcc_overlay_value.m_data(), sizeof(tpcc_overlay_source));\n");
+			fprintf(active, "\t}();\n");
+		} else if (property) {
 			Node* accessor = property->property->write_accessor;
 			if (!accessor) {
 				unhandled_node("assignment to read-only property", property);
@@ -1149,9 +1093,7 @@ void Emitter::emit_statement(Node* stmt) {
 				fprintf(active, "%s = ", field->cxx_name.c_str());
 				emit_expression(a->b);
 				fprintf(active, ";\n");
-				return;
-			}
-			if (auto setter = dynamic_cast<Callable*>(accessor)) {
+			} else if (auto setter = dynamic_cast<Callable*>(accessor)) {
 				if (auto dereference = dynamic_cast<Dereference*>(property->receiver)) {
 					emit_expression(dereference->a);
 					fprintf(active, "->");
@@ -1171,9 +1113,7 @@ void Emitter::emit_statement(Node* stmt) {
 				}
 				emit_expression(a->b);
 				fprintf(active, ");\n");
-				return;
-			}
-			if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
+			} else if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
 				fprintf(active, "%.*s(", (int)builtin->desc->cxx_name.size(), builtin->desc->cxx_name.data());
 				emit_expression(property->receiver);
 				for (Node* index : property->indexes) {
@@ -1183,66 +1123,61 @@ void Emitter::emit_statement(Node* stmt) {
 				fprintf(active, ") = ");
 				emit_expression(a->b);
 				fprintf(active, ";\n");
-				return;
+			} else {
+				unhandled_node("unsupported property write accessor", accessor);
 			}
-			unhandled_node("unsupported property write accessor", accessor);
-		}
-		if (auto m = dynamic_cast<MemberAccess*>(a->a)) {
-			if (dynamic_cast<PackedRecordType*>(m->a->ty)) {
-				if (!dynamic_cast<StorageSlot*>(m->b)) {
-					unhandled_node("packed-record assignment target is not a field", a->a);
+		} else if (packed_member) {
+			if (!dynamic_cast<StorageSlot*>(member->b)) {
+				unhandled_node("packed-record assignment target is not a field", a->a);
+			}
+			if (auto overlay = dynamic_cast<Cast*>(member->a)) {
+				auto packed = static_cast<PackedRecordType*>(overlay->ty);
+				if (packed->cxx_name.empty()) {
+					unhandled_type("anonymous packed overlay", packed);
 				}
-				if (auto overlay = dynamic_cast<Cast*>(m->a)) {
-					auto packed = static_cast<PackedRecordType*>(overlay->ty);
-					if (packed->cxx_name.empty()) {
-						unhandled_type("anonymous packed overlay", packed);
-					}
-					auto field = static_cast<StorageSlot*>(m->b);
-					fprintf(active, "\t[&]() {\n");
-					fprintf(active, "\t\tauto&& tpcc_overlay_source = ");
-					emit_expression(overlay->a);
-					fprintf(active, ";\n");
-					fprintf(active, "\t\tusing tpcc_overlay_source_type = "
-					                "std::remove_cvref_t<decltype(tpcc_overlay_source)>;\n");
-					fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<tpcc_overlay_source_"
-					                "type>, \"packed overlay source must be trivially copyable\");\n");
-					fprintf(active,
-					        "\t\tstatic_assert(sizeof(tpcc_overlay_source_type) == "
-					        "%s::m_storage_size, \"packed overlay size mismatch\");\n",
-					        packed->cxx_name.c_str());
-					fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
-					fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), "
-					                "std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source));\n");
-					fprintf(active, "\t\ttpcc_overlay_value.m_set_%s(", field->cxx_name.c_str());
-					emit_expression(a->b);
-					fprintf(active, ");\n");
-					fprintf(active, "\t\tstd::memcpy(std::addressof(tpcc_overlay_source), "
-					                "tpcc_overlay_value.m_data(), sizeof(tpcc_overlay_source));\n");
-					fprintf(active, "\t}();\n");
-					return;
-				}
-				fprintf(active, "\t");
-				if (auto d = dynamic_cast<Dereference*>(m->a)) {
-					emit_expression(d->a);
-					fprintf(active, "->");
-				} else {
-					emit_expression(m->a);
-					fprintf(active, ".");
-				}
-				fprintf(active, "m_set_%s(", static_cast<StorageSlot*>(m->b)->cxx_name.c_str());
+				auto field = static_cast<StorageSlot*>(member->b);
+				fprintf(active, "\t[&]() {\n");
+				fprintf(active, "\t\tauto&& tpcc_overlay_source = ");
+				emit_expression(overlay->a);
+				fprintf(active, ";\n");
+				fprintf(active, "\t\tusing tpcc_overlay_source_type = "
+				                "std::remove_cvref_t<decltype(tpcc_overlay_source)>;\n");
+				fprintf(active, "\t\tstatic_assert(std::is_trivially_copyable_v<tpcc_overlay_source_"
+				                "type>, \"packed overlay source must be trivially copyable\");\n");
+				fprintf(active,
+				        "\t\tstatic_assert(sizeof(tpcc_overlay_source_type) == "
+				        "%s::m_storage_size, \"packed overlay size mismatch\");\n",
+				        packed->cxx_name.c_str());
+				fprintf(active, "\t\t%s tpcc_overlay_value{};\n", packed->cxx_name.c_str());
+				fprintf(active, "\t\tstd::memcpy(tpcc_overlay_value.m_data(), "
+				                "std::addressof(tpcc_overlay_source), sizeof(tpcc_overlay_source));\n");
+				fprintf(active, "\t\ttpcc_overlay_value.m_set_%s(", field->cxx_name.c_str());
 				emit_expression(a->b);
 				fprintf(active, ");\n");
-				return;
+				fprintf(active, "\t\tstd::memcpy(std::addressof(tpcc_overlay_source), "
+				                "tpcc_overlay_value.m_data(), sizeof(tpcc_overlay_source));\n");
+				fprintf(active, "\t}();\n");
+			} else {
+				fprintf(active, "\t");
+				if (auto dereference = dynamic_cast<Dereference*>(member->a)) {
+					emit_expression(dereference->a);
+					fprintf(active, "->");
+				} else {
+					emit_expression(member->a);
+					fprintf(active, ".");
+				}
+				fprintf(active, "m_set_%s(", static_cast<StorageSlot*>(member->b)->cxx_name.c_str());
+				emit_expression(a->b);
+				fprintf(active, ");\n");
 			}
+		} else {
+			fprintf(active, "\t");
+			emit_expression(a->a);
+			fprintf(active, " = ");
+			emit_expression(a->b);
+			fprintf(active, ";\n");
 		}
-		fprintf(active, "\t");
-		emit_expression(a->a);
-		fprintf(active, " = ");
-		emit_expression(a->b);
-		fprintf(active, ";\n");
-		return;
-	}
-	if (auto write = dynamic_cast<WriteCall*>(stmt)) {
+	} else if (auto write = dynamic_cast<WriteCall*>(stmt)) {
 		if (!write->lowering_builtin_desc) {
 			unhandled_node("Write/WriteLn has no selected RTL implementation", write);
 		}
@@ -1260,9 +1195,7 @@ void Emitter::emit_statement(Node* stmt) {
 			need_comma = true;
 		}
 		fprintf(active, ");\n");
-		return;
-	}
-	if (auto str = dynamic_cast<StrCall*>(stmt)) {
+	} else if (auto str = dynamic_cast<StrCall*>(stmt)) {
 		if (str->formatted.precision) {
 			// The parser currently rejects this branch. Keeping the CST edge
 			// and an explicit backend guard makes the future real formatter a
@@ -1275,9 +1208,7 @@ void Emitter::emit_statement(Node* stmt) {
 		fprintf(active, ", ");
 		emit_writable_expression(str->destination);
 		fprintf(active, ");\n");
-		return;
-	}
-	if (auto val = dynamic_cast<ValCall*>(stmt)) {
+	} else if (auto val = dynamic_cast<ValCall*>(stmt)) {
 		fprintf(active, "\t::u_system::p_val(");
 		emit_expression(val->source);
 		fprintf(active, ", ");
@@ -1297,15 +1228,11 @@ void Emitter::emit_statement(Node* stmt) {
 			}
 		}
 		fprintf(active, ");\n");
-		return;
-	}
-	if (auto pc = dynamic_cast<ProcCall*>(stmt)) {
+	} else if (auto pc = dynamic_cast<ProcCall*>(stmt)) {
 		fprintf(active, "\t");
 		emit_expression(pc);
 		fprintf(active, ";\n");
-		return;
-	}
-	if (auto r = dynamic_cast<Return*>(stmt)) {
+	} else if (auto r = dynamic_cast<Return*>(stmt)) {
 		if (r->try_depth != 0) {
 			fprintf(active, "\tthrow ::u_system::tpcc_return_transfer<");
 			emit_type_ref(r->a ? r->a->ty : &unit_type());
@@ -1323,34 +1250,32 @@ void Emitter::emit_statement(Node* stmt) {
 			}
 			fprintf(active, ";\n");
 		}
-		return;
-	}
-	if (auto ic = dynamic_cast<InheritedCall*>(stmt)) {
+	} else if (auto ic = dynamic_cast<InheritedCall*>(stmt)) {
 		// `dropped` is set by the parser when the call would be redundant in
 		// C++ (destructor-in-destructor auto-chains). Emit nothing.
-		if (ic->dropped) {
-			return;
-		}
-		auto m = dynamic_cast<Method*>(ic->resolved);
-		if (!m || !m->owner_class) {
-			unhandled_node("inherited target is not a method", stmt);
-		}
-		// Qualified-id `Parent::X(args)` -- C++ implicit-this injection makes
-		// this a member call on `this`. See InheritedCall's docstring in cst.h.
-		fprintf(active, "\t%s::%s(", inherited_owner_cxx_reference_name(m).c_str(), callable_cxx_name(ic->resolved).c_str());
-		for (size_t i = 0; i < ic->args.size(); i++) {
-			if (i > 0) {
-				fprintf(active, ", ");
+		if (!ic->dropped) {
+			auto m = dynamic_cast<Method*>(ic->resolved);
+			if (!m || !m->owner_class) {
+				unhandled_node("inherited target is not a method", stmt);
 			}
-			emit_expression(ic->args[i]);
+			// Qualified-id `Parent::X(args)` -- C++ implicit-this injection
+			// makes this a member call on `this`. See InheritedCall's
+			// docstring in cst.h.
+			fprintf(active, "\t%s::%s(", inherited_owner_cxx_reference_name(m).c_str(), callable_cxx_name(ic->resolved).c_str());
+			for (size_t i = 0; i < ic->args.size(); i++) {
+				if (i > 0) {
+					fprintf(active, ", ");
+				}
+				emit_expression(ic->args[i]);
+			}
+			fprintf(active, ");\n");
 		}
-		fprintf(active, ");\n");
-		return;
+	} else {
+		// Any other expression: evaluate and discard.
+		fprintf(active, "\t");
+		emit_expression(stmt);
+		fprintf(active, ";\n");
 	}
-	// Any other expression: evaluate and discard.
-	fprintf(active, "\t");
-	emit_expression(stmt);
-	fprintf(active, ";\n");
 }
 
 void Emitter::emit_with_prologue(std::string alias_cxx_name, Node* target) {
@@ -1650,9 +1575,9 @@ void Emitter::emit_loop_control(bool is_break, unsigned try_depth, unsigned targ
 	}
 	if (try_depth == target_try_depth) {
 		fprintf(active, is_break ? "\tbreak;\n" : "\tcontinue;\n");
-		return;
+	} else {
+		fprintf(active, "\tthrow ::u_system::tpcc_loop_transfer{%u, %u, %s};\n", try_depth, target_try_depth, is_break ? "true" : "false");
 	}
-	fprintf(active, "\tthrow ::u_system::tpcc_loop_transfer{%u, %u, %s};\n", try_depth, target_try_depth, is_break ? "true" : "false");
 }
 
 void Emitter::emit_formal_parameter(const Parameter& formal, bool with_name) {
@@ -1713,16 +1638,16 @@ void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Posi
 	}
 	if (pos == Position::DeclarationFormalsOnly) {
 		emit_formal_parameters(ty, true, conversion_target);
-		return;
+	} else {
+		if (!cxx_destructor) {
+			emit_type_ref(ty->return_type);
+			fprintf(active, " ");
+		} else if (ty->return_type != &unit_type()) {
+			unhandled_type("non-unit return type on destructor is not allowed", ty);
+		}
+		fprintf(active, "%s%s", owner_qualifier.c_str(), cxx_text.c_str());
+		emit_formal_parameters(ty, true, conversion_target);
 	}
-	if (!cxx_destructor) {
-		emit_type_ref(ty->return_type);
-		fprintf(active, " ");
-	} else if (ty->return_type != &unit_type()) {
-		unhandled_type("non-unit return type on destructor is not allowed", ty);
-	}
-	fprintf(active, "%s%s", owner_qualifier.c_str(), cxx_text.c_str());
-	emit_formal_parameters(ty, true, conversion_target);
 }
 
 void Emitter::emit_callable_signature(Callable* c, Position pos, std::string owner_qualifier) {
@@ -1748,23 +1673,23 @@ void Emitter::emit_procedure_open(Callable* c, bool nested_lambda) {
 			emit_type_ref(c->ty->return_type);
 			fprintf(active, " p_result;\n");
 		}
-		return;
-	}
-	std::string qualifier;
-	if (auto m = dynamic_cast<Method*>(c)) {
-		if (m->owner_class) {
-			qualifier = owner_cxx_name(m->owner_class) + "::";
-			if (c->ty->kind == CLASS_METHOD || c->ty->kind == CLASS_CONSTRUCTOR || c->ty->kind == CLASS_DESTRUCTOR) {
-				qualifier += "m_meta::";
+	} else {
+		std::string qualifier;
+		if (auto m = dynamic_cast<Method*>(c)) {
+			if (m->owner_class) {
+				qualifier = owner_cxx_name(m->owner_class) + "::";
+				if (c->ty->kind == CLASS_METHOD || c->ty->kind == CLASS_CONSTRUCTOR || c->ty->kind == CLASS_DESTRUCTOR) {
+					qualifier += "m_meta::";
+				}
 			}
 		}
-	}
-	emit_callable_signature(c, Position::Definition, qualifier);
-	fprintf(active, " {\n");
-	if (c->ty->return_type != &unit_type()) { // function
-		fprintf(active, "\t");
-		emit_type_ref(c->ty->return_type);
-		fprintf(active, " p_result;\n");
+		emit_callable_signature(c, Position::Definition, qualifier);
+		fprintf(active, " {\n");
+		if (c->ty->return_type != &unit_type()) { // function
+			fprintf(active, "\t");
+			emit_type_ref(c->ty->return_type);
+			fprintf(active, " p_result;\n");
+		}
 	}
 }
 
@@ -2126,33 +2051,32 @@ void Emitter::emit_record_variant_decl(VariantPart* variant, unsigned indent, un
 		emit_type_ref(variant->selector_type);
 		fprintf(active, " %s;\n", variant->selector_cxx_name.c_str());
 	}
-	if (variant->arms.empty()) {
-		return;
-	}
-	for (size_t arm_index = 0; arm_index < variant->arms.size(); ++arm_index) {
+	if (!variant->arms.empty()) {
+		for (size_t arm_index = 0; arm_index < variant->arms.size(); ++arm_index) {
+			emit_indent();
+			fprintf(active, "struct %s {\n", variant_arm_type_name(depth, arm_index).c_str());
+			for (const auto& field : variant->arms[arm_index].fields) {
+				for (unsigned i = 0; i < indent + 1; ++i) {
+					fputc('\t', active);
+				}
+				emit_type_ref(field.ty);
+				fprintf(active, " %s;\n", field.slot->cxx_name.c_str());
+			}
+			emit_record_variant_decl(variant->arms[arm_index].variant, indent + 1, depth + 1);
+			emit_indent();
+			fprintf(active, "};\n");
+		}
 		emit_indent();
-		fprintf(active, "struct %s {\n", variant_arm_type_name(depth, arm_index).c_str());
-		for (const auto& field : variant->arms[arm_index].fields) {
+		fprintf(active, "union m_variant_type {\n");
+		for (size_t arm_index = 0; arm_index < variant->arms.size(); ++arm_index) {
 			for (unsigned i = 0; i < indent + 1; ++i) {
 				fputc('\t', active);
 			}
-			emit_type_ref(field.ty);
-			fprintf(active, " %s;\n", field.slot->cxx_name.c_str());
+			fprintf(active, "%s m_arm_%zu;\n", variant_arm_type_name(depth, arm_index).c_str(), arm_index);
 		}
-		emit_record_variant_decl(variant->arms[arm_index].variant, indent + 1, depth + 1);
 		emit_indent();
-		fprintf(active, "};\n");
+		fprintf(active, "} m_variant;\n");
 	}
-	emit_indent();
-	fprintf(active, "union m_variant_type {\n");
-	for (size_t arm_index = 0; arm_index < variant->arms.size(); ++arm_index) {
-		for (unsigned i = 0; i < indent + 1; ++i) {
-			fputc('\t', active);
-		}
-		fprintf(active, "%s m_arm_%zu;\n", variant_arm_type_name(depth, arm_index).c_str(), arm_index);
-	}
-	emit_indent();
-	fprintf(active, "} m_variant;\n");
 }
 
 void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p) {
@@ -2268,15 +2192,11 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(active, "using %s = ", cxx_name.c_str());
 		emit_type_ref(distinct->base_type);
 		fprintf(active, ";\n");
-		return;
-	}
-	if (dynamic_cast<RoutineType*>(ty)) {
+	} else if (dynamic_cast<RoutineType*>(ty)) {
 		fprintf(active, "using %s = ", cxx_name.c_str());
 		emit_type_ref(ty);
 		fprintf(active, ";\n");
-		return;
-	}
-	if (auto e = dynamic_cast<EnumType*>(ty)) {
+	} else if (auto e = dynamic_cast<EnumType*>(ty)) {
 		// Pascal default is UNSCOPED enums: member identifiers leak into
 		// the surrounding scope (where the type is declared) so a use like
 		// `c := Red` resolves without qualification. C++ models this with
@@ -2285,9 +2205,7 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		fprintf(active, "\n");
 		emit_enum_decl(e);
 		fprintf(active, ";\n");
-		return;
-	}
-	if (auto p = dynamic_cast<PackedRecordType*>(ty)) {
+	} else if (auto p = dynamic_cast<PackedRecordType*>(ty)) {
 		fprintf(active, "\n");
 		emit_packed_record_decl(cxx_name, p);
 		fprintf(active, ";\n");
@@ -2301,9 +2219,7 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 		        "static_assert(std::is_trivially_copyable_v<%s>, \"packed-record carrier must be trivially "
 		        "copyable\");\n",
 		        cxx_name.c_str());
-		return;
-	}
-	if (dynamic_cast<RecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<ObjectType*>(ty) || dynamic_cast<InterfaceType*>(ty)) {
+	} else if (dynamic_cast<RecordType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<ObjectType*>(ty) || dynamic_cast<InterfaceType*>(ty)) {
 		fprintf(active, "\n");
 		emit_aggregate_decl(cxx_name, ty);
 		fprintf(active, ";\n");
@@ -2391,7 +2307,6 @@ void Emitter::emit_type_definition(std::string cxx_name, Type* ty) {
 			fprintf(active, "static_assert(sizeof(%s) == %llu, \"ordinary-record total size mismatch\");\n", cxx_name.c_str(), (unsigned long long)layout->type.size);
 			fprintf(active, "static_assert(alignof(%s) == %llu, \"ordinary-record alignment mismatch\");\n", cxx_name.c_str(), (unsigned long long)layout->type.alignment);
 		}
-		return;
 	}
 }
 
@@ -2431,127 +2346,124 @@ void Emitter::emit_routine_reference(RoutineRef* reference) {
 		} else {
 			fprintf(active, "&%s", node_cxx_name(procedure, callable_cxx_name(procedure)).c_str());
 		}
-		return;
-	}
-
-	auto method = dynamic_cast<Method*>(reference->resolved);
-	if (!method) {
-		unhandled_node("routine reference resolved to neither procedure nor method", reference);
-	}
-	if (method->is_static) {
-		if (reference->receiver || method->ty->kind != ROUTINE) {
-			unhandled_node("static method routine reference retained a receiver", reference);
-		}
-		std::string owner = owner_cxx_reference_name(method->owner_class);
-		if (owner.empty()) {
-			unhandled_type("static method routine reference owner has no C++ name", method->owner_class);
-		}
-		if (reference->code_only) {
-			fprintf(active, "::u_system::m_function_to_code_pointer(static_cast<");
-			emit_type_ref(method->ty->return_type);
-			fprintf(active, " (*)");
-			emit_formal_parameters(method->ty, false, nullptr);
-			fprintf(active, ">(&%s::%s))", owner.c_str(), callable_cxx_name(method).c_str());
-		} else {
-			fprintf(active, "&%s::%s", owner.c_str(), callable_cxx_name(method).c_str());
-		}
-		return;
-	}
-	if (!reference->receiver || (method->ty->kind != METHOD && method->ty->kind != CLASS_METHOD)) {
-		unhandled_node("method routine reference is not receiver-bearing", reference);
-	}
-	std::string owner = owner_cxx_reference_name(method->owner_class);
-	if (owner.empty()) {
-		unhandled_type("method routine reference owner has no C++ name", method->owner_class);
-	}
-	if (method->ty->kind == CLASS_METHOD) {
-		owner += "::m_meta";
-	}
-
-	if (method->builtin_desc && method->builtin_desc->call_convention == BuiltinCallConvention::ReceiverFirst) {
-		// A receiver-first RTL method has no C++ pointer-to-member. Bind the
-		// same external function and receiver into the ordinary two-word
-		// Pascal method value; its adapter preserves the method ABI seen by
-		// callers of `procedure of object`.
-		fprintf(active, "::u_system::m_bind_receiver_function<static_cast<");
-		emit_type_ref(method->ty->return_type);
-		fprintf(active, " (*)(%s*", owner.c_str());
-		for (const Parameter& formal : method->ty->formals) {
-			fprintf(active, ", ");
-			emit_formal_parameter(formal, false);
-		}
-		fprintf(active, ")>(&%.*s)>(", (int)method->builtin_desc->cxx_name.size(), method->builtin_desc->cxx_name.data());
-		if (reference->receiver->ty && reference->receiver->ty->is_reference_type()) {
-			emit_expression(reference->receiver);
-		} else {
-			fprintf(active, "std::addressof(");
-			emit_expression(reference->receiver);
-			fprintf(active, ")");
-		}
-		fprintf(active, ")");
-		if (reference->code_only) {
-			fprintf(active, ".p_code");
-		}
-		return;
-	}
-
-	fprintf(active, "::u_system::m_bind_method<static_cast<");
-	emit_type_ref(method->ty->return_type);
-	fprintf(active, " (%s::*)", owner.c_str());
-	emit_formal_parameters(method->ty, false, nullptr);
-	fprintf(active, ">(&%s::%s)>(", owner.c_str(), callable_cxx_name(method).c_str());
-	if (method->ty->kind == CLASS_METHOD) {
-		if (auto classref = dynamic_cast<ClassRefType*>(reference->receiver->ty)) {
-			auto target = dynamic_cast<ClassType*>(classref->target);
-			if (!target || target->cxx_name.empty()) {
-				unhandled_type("class-method routine-reference target", classref->target);
-			}
-			fprintf(active, "static_cast<%s::m_meta*>(", type_cxx_name(target, target->cxx_name).c_str());
-			emit_expression(reference->receiver);
-			fprintf(active, ")");
-		} else if (dynamic_cast<ClassType*>(reference->receiver->ty)) {
-			emit_expression(reference->receiver);
-			fprintf(active, "->m_classref()");
-		} else {
-			unhandled_type("class-method routine-reference receiver", reference->receiver->ty);
-		}
-	} else if (reference->receiver->ty && reference->receiver->ty->is_reference_type()) {
-		emit_expression(reference->receiver);
 	} else {
-		fprintf(active, "std::addressof(");
-		emit_expression(reference->receiver);
-		fprintf(active, ")");
-	}
-	fprintf(active, ")");
-	if (reference->code_only) {
-		fprintf(active, ".p_code");
+		auto method = dynamic_cast<Method*>(reference->resolved);
+		if (!method) {
+			unhandled_node("routine reference resolved to neither procedure nor method", reference);
+		}
+		if (method->is_static) {
+			if (reference->receiver || method->ty->kind != ROUTINE) {
+				unhandled_node("static method routine reference retained a receiver", reference);
+			}
+			std::string owner = owner_cxx_reference_name(method->owner_class);
+			if (owner.empty()) {
+				unhandled_type("static method routine reference owner has no C++ name", method->owner_class);
+			}
+			if (reference->code_only) {
+				fprintf(active, "::u_system::m_function_to_code_pointer(static_cast<");
+				emit_type_ref(method->ty->return_type);
+				fprintf(active, " (*)");
+				emit_formal_parameters(method->ty, false, nullptr);
+				fprintf(active, ">(&%s::%s))", owner.c_str(), callable_cxx_name(method).c_str());
+			} else {
+				fprintf(active, "&%s::%s", owner.c_str(), callable_cxx_name(method).c_str());
+			}
+		} else {
+			if (!reference->receiver || (method->ty->kind != METHOD && method->ty->kind != CLASS_METHOD)) {
+				unhandled_node("method routine reference is not receiver-bearing", reference);
+			}
+			std::string owner = owner_cxx_reference_name(method->owner_class);
+			if (owner.empty()) {
+				unhandled_type("method routine reference owner has no C++ name", method->owner_class);
+			}
+			if (method->ty->kind == CLASS_METHOD) {
+				owner += "::m_meta";
+			}
+
+			if (method->builtin_desc && method->builtin_desc->call_convention == BuiltinCallConvention::ReceiverFirst) {
+				// A receiver-first RTL method has no C++ pointer-to-member.
+				// Bind the same external function and receiver into the ordinary
+				// two-word Pascal method value; its adapter preserves the method
+				// ABI seen by callers of `procedure of object`.
+				fprintf(active, "::u_system::m_bind_receiver_function<static_cast<");
+				emit_type_ref(method->ty->return_type);
+				fprintf(active, " (*)(%s*", owner.c_str());
+				for (const Parameter& formal : method->ty->formals) {
+					fprintf(active, ", ");
+					emit_formal_parameter(formal, false);
+				}
+				fprintf(active, ")>(&%.*s)>(", (int)method->builtin_desc->cxx_name.size(), method->builtin_desc->cxx_name.data());
+				if (reference->receiver->ty && reference->receiver->ty->is_reference_type()) {
+					emit_expression(reference->receiver);
+				} else {
+					fprintf(active, "std::addressof(");
+					emit_expression(reference->receiver);
+					fprintf(active, ")");
+				}
+				fprintf(active, ")");
+				if (reference->code_only) {
+					fprintf(active, ".p_code");
+				}
+			} else {
+				fprintf(active, "::u_system::m_bind_method<static_cast<");
+				emit_type_ref(method->ty->return_type);
+				fprintf(active, " (%s::*)", owner.c_str());
+				emit_formal_parameters(method->ty, false, nullptr);
+				fprintf(active, ">(&%s::%s)>(", owner.c_str(), callable_cxx_name(method).c_str());
+				if (method->ty->kind == CLASS_METHOD) {
+					if (auto classref = dynamic_cast<ClassRefType*>(reference->receiver->ty)) {
+						auto target = dynamic_cast<ClassType*>(classref->target);
+						if (!target || target->cxx_name.empty()) {
+							unhandled_type("class-method routine-reference target", classref->target);
+						}
+						fprintf(active, "static_cast<%s::m_meta*>(", type_cxx_name(target, target->cxx_name).c_str());
+						emit_expression(reference->receiver);
+						fprintf(active, ")");
+					} else if (dynamic_cast<ClassType*>(reference->receiver->ty)) {
+						emit_expression(reference->receiver);
+						fprintf(active, "->m_classref()");
+					} else {
+						unhandled_type("class-method routine-reference receiver", reference->receiver->ty);
+					}
+				} else if (reference->receiver->ty && reference->receiver->ty->is_reference_type()) {
+					emit_expression(reference->receiver);
+				} else {
+					fprintf(active, "std::addressof(");
+					emit_expression(reference->receiver);
+					fprintf(active, ")");
+				}
+				fprintf(active, ")");
+				if (reference->code_only) {
+					fprintf(active, ".p_code");
+				}
+			}
+		}
 	}
 }
 
 void Emitter::emit_writable_expression(Node* expr) {
 	auto property = dynamic_cast<PropertyAccess*>(expr);
-	if (!property) {
-		emit_expression(expr);
-		return;
-	}
-	auto builtin = dynamic_cast<Builtin*>(property->property->write_accessor);
+	auto builtin = property ? dynamic_cast<Builtin*>(property->property->write_accessor) : nullptr;
 	if (!builtin) {
-		// Field-backed properties already emit their underlying place through
+		// A non-property expression is already an ordinary writable place.
+		// Field-backed properties likewise emit their underlying place through
 		// the normal expression path. Method-backed properties are not
 		// referenceable and therefore cannot reach this function.
 		emit_expression(expr);
-		return;
+	} else {
+		fprintf(active, "%.*s(", (int)builtin->desc->cxx_name.size(), builtin->desc->cxx_name.data());
+		emit_expression(property->receiver);
+		for (Node* index : property->indexes) {
+			fprintf(active, ", ");
+			emit_expression(index);
+		}
+		fprintf(active, ")");
 	}
-	fprintf(active, "%.*s(", (int)builtin->desc->cxx_name.size(), builtin->desc->cxx_name.data());
-	emit_expression(property->receiver);
-	for (Node* index : property->indexes) {
-		fprintf(active, ", ");
-		emit_expression(index);
-	}
-	fprintf(active, ")");
 }
 
 void Emitter::emit_storage_ref(Node* expr) {
+	auto property = dynamic_cast<PropertyAccess*>(expr);
+	auto builtin = property ? dynamic_cast<Builtin*>(property->property->write_accessor) : nullptr;
 	if (auto dereference = dynamic_cast<Dereference*>(expr); dereference && dereference->ty == unknown_type()) {
 		if (auto address = dynamic_cast<AddrOf*>(dereference->a)) {
 			// Pascal `(@place)^` is the original place. This matters for
@@ -2559,59 +2471,53 @@ void Emitter::emit_storage_ref(Node* expr) {
 			// view, so taking the address of that carrier would point at
 			// compiler bookkeeping rather than the caller's bytes.
 			emit_storage_ref(address->a);
-			return;
-		}
-		fprintf(active, "::u_system::tpcc_dereference_storage(");
-		emit_expression(dereference->a);
-		fprintf(active, ")");
-		return;
-	}
-	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
-		if (auto builtin = dynamic_cast<Builtin*>(property->property->write_accessor)) {
-			const bool unchecked = builtin->desc && builtin->desc->cxx_name == "::u_system::m_unchecked_index";
-			fprintf(active, unchecked ? "::u_system::m_unchecked_storage_ref(" : "::u_system::tpcc_make_storage_ref(");
-			emit_expression(property->receiver);
-			for (Node* index : property->indexes) {
-				fprintf(active, ", ");
-				emit_expression(index);
-			}
+		} else {
+			fprintf(active, "::u_system::tpcc_dereference_storage(");
+			emit_expression(dereference->a);
 			fprintf(active, ")");
-			return;
 		}
+	} else if (builtin) {
+		const bool unchecked = builtin->desc && builtin->desc->cxx_name == "::u_system::m_unchecked_index";
+		fprintf(active, unchecked ? "::u_system::m_unchecked_storage_ref(" : "::u_system::tpcc_make_storage_ref(");
+		emit_expression(property->receiver);
+		for (Node* index : property->indexes) {
+			fprintf(active, ", ");
+			emit_expression(index);
+		}
+		fprintf(active, ")");
+	} else {
+		fprintf(active, "::u_system::tpcc_make_storage_ref(");
+		emit_writable_expression(expr);
+		fprintf(active, ")");
 	}
-	fprintf(active, "::u_system::tpcc_make_storage_ref(");
-	emit_writable_expression(expr);
-	fprintf(active, ")");
 }
 
 void Emitter::emit_const_storage_ref(Node* expr) {
+	auto property = dynamic_cast<PropertyAccess*>(expr);
+	auto builtin = property ? dynamic_cast<Builtin*>(property->property->read_accessor) : nullptr;
 	if (auto dereference = dynamic_cast<Dereference*>(expr); dereference && dereference->ty == unknown_type()) {
 		if (auto address = dynamic_cast<AddrOf*>(dereference->a)) {
 			emit_const_storage_ref(address->a);
-			return;
+		} else {
+			fprintf(active, "::u_system::tpcc_make_const_storage_ref("
+			                "::u_system::tpcc_dereference_storage(");
+			emit_expression(dereference->a);
+			fprintf(active, "))");
 		}
-		fprintf(active, "::u_system::tpcc_make_const_storage_ref("
-		                "::u_system::tpcc_dereference_storage(");
-		emit_expression(dereference->a);
-		fprintf(active, "))");
-		return;
-	}
-	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
-		if (auto builtin = dynamic_cast<Builtin*>(property->property->read_accessor)) {
-			const bool unchecked = builtin->desc && builtin->desc->cxx_name == "::u_system::m_unchecked_index";
-			fprintf(active, unchecked ? "::u_system::m_unchecked_const_storage_ref(" : "::u_system::tpcc_make_const_storage_ref(");
-			emit_expression(property->receiver);
-			for (Node* index : property->indexes) {
-				fprintf(active, ", ");
-				emit_expression(index);
-			}
-			fprintf(active, ")");
-			return;
+	} else if (builtin) {
+		const bool unchecked = builtin->desc && builtin->desc->cxx_name == "::u_system::m_unchecked_index";
+		fprintf(active, unchecked ? "::u_system::m_unchecked_const_storage_ref(" : "::u_system::tpcc_make_const_storage_ref(");
+		emit_expression(property->receiver);
+		for (Node* index : property->indexes) {
+			fprintf(active, ", ");
+			emit_expression(index);
 		}
+		fprintf(active, ")");
+	} else {
+		fprintf(active, "::u_system::tpcc_make_const_storage_ref(");
+		emit_expression(expr);
+		fprintf(active, ")");
 	}
-	fprintf(active, "::u_system::tpcc_make_const_storage_ref(");
-	emit_expression(expr);
-	fprintf(active, ")");
 }
 
 void Emitter::emit_call_arguments(RoutineType* call_ty, const std::vector<Node*>& args) {
@@ -2665,51 +2571,36 @@ void Emitter::emit_expression(Node* expr) {
 	}
 	if (dynamic_cast<BuiltinEnumeratorCurrent*>(expr)) {
 		fprintf(active, "tpcc_for_enumerator.m_current()");
-		return;
-	}
-	if (auto view = dynamic_cast<OpenArrayConstView*>(expr)) {
+	} else if (auto view = dynamic_cast<OpenArrayConstView*>(expr)) {
 		fprintf(active, "::u_system::m_openarray_const_view(");
 		emit_expression(view->a);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto view = dynamic_cast<OpenArrayMutableView*>(expr)) {
+	} else if (auto view = dynamic_cast<OpenArrayMutableView*>(expr)) {
 		fprintf(active, "::u_system::m_openarray_mutable_view(");
 		emit_writable_expression(view->a);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto view = dynamic_cast<OpenArrayOutView*>(expr)) {
+	} else if (auto view = dynamic_cast<OpenArrayOutView*>(expr)) {
 		fprintf(active, "::u_system::m_openarray_out_view(");
 		emit_writable_expression(view->a);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto copy = dynamic_cast<OpenArrayValueCopy*>(expr)) {
+	} else if (auto copy = dynamic_cast<OpenArrayValueCopy*>(expr)) {
 		fprintf(active, "::u_system::m_openarray_value_copy(");
 		emit_expression(copy->a);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto sequence = dynamic_cast<EvaluateThen*>(expr)) {
+	} else if (auto sequence = dynamic_cast<EvaluateThen*>(expr)) {
 		fprintf(active, "(static_cast<void>(");
 		emit_expression(sequence->a);
 		fprintf(active, "), ");
 		emit_expression(sequence->b);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto class_reference = dynamic_cast<ClassRefValue*>(expr)) {
+	} else if (auto class_reference = dynamic_cast<ClassRefValue*>(expr)) {
 		if (!class_reference->target || class_reference->target->cxx_name.empty()) {
 			unhandled_node("class-reference value has unnamed target", class_reference);
 		}
 		fprintf(active, "%s::p_classtype()", type_cxx_name(class_reference->target, class_reference->target->cxx_name).c_str());
-		return;
-	}
-	if (dynamic_cast<TypeMemberQualifier*>(expr)) {
+	} else if (dynamic_cast<TypeMemberQualifier*>(expr)) {
 		unhandled_node("type member qualifier reached value emission", expr);
-	}
-	if (auto nil = dynamic_cast<NilLiteral*>(expr)) {
+	} else if (auto nil = dynamic_cast<NilLiteral*>(expr)) {
 		auto routine = dynamic_cast<RoutineType*>(nil->ty);
 		if (dynamic_cast<DynamicArrayType*>(nil->ty)) {
 			emit_type_ref(nil->ty);
@@ -2724,9 +2615,7 @@ void Emitter::emit_expression(Node* expr) {
 		} else {
 			fprintf(active, "nullptr");
 		}
-		return;
-	}
-	if (auto c = dynamic_cast<Integer*>(expr)) {
+	} else if (auto c = dynamic_cast<Integer*>(expr)) {
 		if (dynamic_cast<SubrangeType*>(c->ty)) {
 			// A contextual literal already has its selected Pascal subrange
 			// Type*. Construct that exact carrier through the same ordinal
@@ -2738,22 +2627,20 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ">(");
 			emit_integer_literal(active, c->value, c->negative);
 			fprintf(active, ")");
-			return;
+		} else {
+			Type* ordinal_type = c->ty;
+			const bool wrapped_ordinal = ordinal_type == char_type() || dynamic_cast<EnumType*>(ordinal_type);
+			if (wrapped_ordinal) {
+				fprintf(active, "static_cast<");
+				emit_type_ref(c->ty);
+				fprintf(active, ">(");
+			}
+			emit_integer_literal(active, c->value, c->negative);
+			if (wrapped_ordinal) {
+				fprintf(active, ")");
+			}
 		}
-		Type* ordinal_type = c->ty;
-		const bool wrapped_ordinal = ordinal_type == char_type() || dynamic_cast<EnumType*>(ordinal_type);
-		if (wrapped_ordinal) {
-			fprintf(active, "static_cast<");
-			emit_type_ref(c->ty);
-			fprintf(active, ">(");
-		}
-		emit_integer_literal(active, c->value, c->negative);
-		if (wrapped_ordinal) {
-			fprintf(active, ")");
-		}
-		return;
-	}
-	if (auto r = dynamic_cast<Real*>(expr)) {
+	} else if (auto r = dynamic_cast<Real*>(expr)) {
 		long double inf = std::numeric_limits<long double>::infinity();
 		if (r->value != r->value) {
 			fprintf(active, "std::numeric_limits<");
@@ -2770,17 +2657,13 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "%.*Lg", std::numeric_limits<long double>::max_digits10, r->value);
 			fprintf(active, ")");
 		}
-		return;
-	}
-	if (auto s = dynamic_cast<String*>(expr)) {
+	} else if (auto s = dynamic_cast<String*>(expr)) {
 		if (s->ty == char_type()) {
 			if (s->value.size() != 1) {
 				unhandled_node("Char literal does not contain exactly one byte", s);
 			}
 			fprintf(active, "static_cast<::u_system::t_char>(static_cast<uint8_t>(%u))", static_cast<unsigned>(static_cast<unsigned char>(s->value[0])));
-			return;
-		}
-		if (s->ty == ansistring_type()) {
+		} else if (s->ty == ansistring_type()) {
 			// This is the final value after contextual construction or constant
 			// evaluation, not another unary conversion operation.
 			fprintf(active, "::u_system::tpcc_ansistring_literal(");
@@ -2790,22 +2673,20 @@ void Emitter::emit_expression(Node* expr) {
 			}
 			fputc('"', active);
 			fprintf(active, ", %zu)", s->value.size());
-			return;
+		} else {
+			auto shortstring = dynamic_cast<ShortStringType*>(s->ty);
+			if (!shortstring) {
+				unhandled_node("non-Char string literal has non-ShortString type", s);
+			}
+			fprintf(active, "::u_system::tpcc_shortstring_from_c<%u>(", static_cast<unsigned>(shortstring->capacity));
+			fputc('"', active);
+			for (unsigned char ch : s->value) {
+				fprintf(active, "\\%03o", static_cast<unsigned>(ch));
+			}
+			fputc('"', active);
+			fprintf(active, ", %zu)", s->value.size());
 		}
-		auto shortstring = dynamic_cast<ShortStringType*>(s->ty);
-		if (!shortstring) {
-			unhandled_node("non-Char string literal has non-ShortString type", s);
-		}
-		fprintf(active, "::u_system::tpcc_shortstring_from_c<%u>(", static_cast<unsigned>(shortstring->capacity));
-		fputc('"', active);
-		for (unsigned char ch : s->value) {
-			fprintf(active, "\\%03o", static_cast<unsigned>(ch));
-		}
-		fputc('"', active);
-		fprintf(active, ", %zu)", s->value.size());
-		return;
-	}
-	if (auto literal = dynamic_cast<BracketLiteral*>(expr)) {
+	} else if (auto literal = dynamic_cast<BracketLiteral*>(expr)) {
 		if (!literal->default_array_type) {
 			unhandled_node("unresolved bracket constructor reached emission", literal);
 		}
@@ -2825,9 +2706,7 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(literal->items[i].lower);
 		}
 		fprintf(active, "}}");
-		return;
-	}
-	if (auto a = dynamic_cast<ArrayLiteral*>(expr)) {
+	} else if (auto a = dynamic_cast<ArrayLiteral*>(expr)) {
 		Type* item_type = nullptr;
 		if (auto dynamic = dynamic_cast<DynamicArrayType*>(a->ty)) {
 			item_type = dynamic->item_type;
@@ -2848,9 +2727,7 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(a->elements[i]);
 		}
 		fprintf(active, "})");
-		return;
-	}
-	if (auto a = dynamic_cast<FixedArrayLiteral*>(expr)) {
+	} else if (auto a = dynamic_cast<FixedArrayLiteral*>(expr)) {
 		fprintf(active, "{{");
 		for (size_t i = 0; i < a->elements.size(); i++) {
 			if (i > 0) {
@@ -2859,9 +2736,7 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(a->elements[i]);
 		}
 		fprintf(active, "}}");
-		return;
-	}
-	if (auto record = dynamic_cast<RecordLiteral*>(expr)) {
+	} else if (auto record = dynamic_cast<RecordLiteral*>(expr)) {
 		Type* record_type = record->ty;
 		const bool packed = dynamic_cast<PackedRecordType*>(record_type);
 		if (!packed && !dynamic_cast<RecordType*>(record_type)) {
@@ -2871,47 +2746,44 @@ void Emitter::emit_expression(Node* expr) {
 		if (record->fields.empty()) {
 			emit_type_ref(record_type);
 			fprintf(active, "{}");
-			return;
-		}
-
-		// Pass the recursively-emitted field expressions as lambda
-		// arguments. A captureless lambda is valid both at namespace scope
-		// and inside a routine, while still allowing a local field
-		// expression to be evaluated at the call site.
-		fprintf(active, "[](");
-		for (size_t i = 0; i < record->fields.size(); ++i) {
-			if (i) {
-				fprintf(active, ", ");
-			}
-			emit_type_ref(record->fields[i].slot->ty);
-			fprintf(active, " tpcc_field_%zu", i);
-		}
-		fprintf(active, ") { ");
-		emit_type_ref(record_type);
-		fprintf(active, " tpcc_record{}; ");
-		for (size_t i = 0; i < record->fields.size(); ++i) {
-			StorageSlot* slot = record->fields[i].slot;
-			if (packed) {
-				fprintf(active, "tpcc_record.m_set_%s(tpcc_field_%zu); ", slot->cxx_name.c_str(), i);
-			} else {
-				fprintf(active, "tpcc_record.");
-				if (auto path = record_variant_path(record_type, slot)) {
-					fprintf(active, "%s", path->c_str());
+		} else {
+			// Pass the recursively-emitted field expressions as lambda
+			// arguments. A captureless lambda is valid both at namespace
+			// scope and inside a routine, while still allowing a local field
+			// expression to be evaluated at the call site.
+			fprintf(active, "[](");
+			for (size_t i = 0; i < record->fields.size(); ++i) {
+				if (i) {
+					fprintf(active, ", ");
 				}
-				fprintf(active, "%s = tpcc_field_%zu; ", slot->cxx_name.c_str(), i);
+				emit_type_ref(record->fields[i].slot->ty);
+				fprintf(active, " tpcc_field_%zu", i);
 			}
-		}
-		fprintf(active, "return tpcc_record; }(");
-		for (size_t i = 0; i < record->fields.size(); ++i) {
-			if (i) {
-				fprintf(active, ", ");
+			fprintf(active, ") { ");
+			emit_type_ref(record_type);
+			fprintf(active, " tpcc_record{}; ");
+			for (size_t i = 0; i < record->fields.size(); ++i) {
+				StorageSlot* slot = record->fields[i].slot;
+				if (packed) {
+					fprintf(active, "tpcc_record.m_set_%s(tpcc_field_%zu); ", slot->cxx_name.c_str(), i);
+				} else {
+					fprintf(active, "tpcc_record.");
+					if (auto path = record_variant_path(record_type, slot)) {
+						fprintf(active, "%s", path->c_str());
+					}
+					fprintf(active, "%s = tpcc_field_%zu; ", slot->cxx_name.c_str(), i);
+				}
 			}
-			emit_expression(record->fields[i].value);
+			fprintf(active, "return tpcc_record; }(");
+			for (size_t i = 0; i < record->fields.size(); ++i) {
+				if (i) {
+					fprintf(active, ", ");
+				}
+				emit_expression(record->fields[i].value);
+			}
+			fprintf(active, ")");
 		}
-		fprintf(active, ")");
-		return;
-	}
-	if (auto set = dynamic_cast<SetLiteral*>(expr)) {
+	} else if (auto set = dynamic_cast<SetLiteral*>(expr)) {
 		auto set_type = dynamic_cast<FixedSetType*>(set->ty);
 		if (!set_type || set_type->item_type == unknown_type()) {
 			unhandled_node("set literal has no contextual item type", set);
@@ -2937,40 +2809,26 @@ void Emitter::emit_expression(Node* expr) {
 			}
 		}
 		fprintf(active, "})");
-		return;
-	}
-	if (auto constant = dynamic_cast<ConstantDecl*>(expr)) {
+	} else if (auto constant = dynamic_cast<ConstantDecl*>(expr)) {
 		emit_expression(constant->initializer);
-		return;
-	}
-	if (auto s = dynamic_cast<StorageSlot*>(expr)) {
+	} else if (auto s = dynamic_cast<StorageSlot*>(expr)) {
 		if (s->kind == StorageSlot::Kind::StaticMember) {
 			fprintf(active, "%s::%s", owner_cxx_reference_name(s->owner_type).c_str(), s->cxx_name.c_str());
 			if (s->initializer) {
 				fprintf(active, "()");
 			}
-			return;
+		} else {
+			fprintf(active, "%s", node_cxx_name(s, s->cxx_name).c_str());
 		}
-		fprintf(active, "%s", node_cxx_name(s, s->cxx_name).c_str());
-		return;
-	}
-	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
+	} else if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
 		fprintf(active, "%s", node_cxx_name(e, e->cxx_name).c_str());
-		return;
-	}
-	if (auto b = dynamic_cast<Builtin*>(expr)) {
+	} else if (auto b = dynamic_cast<Builtin*>(expr)) {
 		fprintf(active, "%.*s", (int)b->desc->cxx_name.size(), b->desc->cxx_name.data());
-		return;
-	}
-	if (auto reference = dynamic_cast<RoutineRef*>(expr)) {
+	} else if (auto reference = dynamic_cast<RoutineRef*>(expr)) {
 		emit_routine_reference(reference);
-		return;
-	}
-	if (auto c = dynamic_cast<Callable*>(expr)) {
+	} else if (auto c = dynamic_cast<Callable*>(expr)) {
 		fprintf(active, "%s", node_cxx_name(c, c->cxx_name).c_str());
-		return;
-	}
-	if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
+	} else if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
 		Node* accessor = property->property->read_accessor;
 		if (!accessor) {
 			unhandled_node("read from write-only property", property);
@@ -2984,9 +2842,7 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, property->receiver->ty && property->receiver->ty->is_reference_type() ? "->" : ".");
 			}
 			fprintf(active, "%s", field->cxx_name.c_str());
-			return;
-		}
-		if (auto getter = dynamic_cast<Callable*>(accessor)) {
+		} else if (auto getter = dynamic_cast<Callable*>(accessor)) {
 			if (auto dereference = dynamic_cast<Dereference*>(property->receiver)) {
 				emit_expression(dereference->a);
 				fprintf(active, "->");
@@ -3002,9 +2858,7 @@ void Emitter::emit_expression(Node* expr) {
 				emit_expression(property->indexes[i]);
 			}
 			fprintf(active, ")");
-			return;
-		}
-		if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
+		} else if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
 			fprintf(active, "%.*s(", (int)builtin->desc->cxx_name.size(), builtin->desc->cxx_name.data());
 			emit_expression(property->receiver);
 			for (Node* index : property->indexes) {
@@ -3012,28 +2866,21 @@ void Emitter::emit_expression(Node* expr) {
 				emit_expression(index);
 			}
 			fprintf(active, ")");
-			return;
+		} else {
+			unhandled_node("unsupported property read accessor", accessor);
 		}
-		unhandled_node("unsupported property read accessor", accessor);
-	}
-	if (auto m = dynamic_cast<MemberAccess*>(expr)) {
+	} else if (auto m = dynamic_cast<MemberAccess*>(expr)) {
 		if (dynamic_cast<UnitRef*>(m->a)) {
 			// A unit is a static declaration environment, not an object
 			// receiver. The selected declaration already carries its owning
 			// unit, so the ordinary owned-name emitter produces
 			// `::u_unit::member`.
 			emit_expression(m->b);
-			return;
-		}
-		if (auto constant = dynamic_cast<ConstantDecl*>(m->b)) {
+		} else if (auto constant = dynamic_cast<ConstantDecl*>(m->b)) {
 			emit_expression(constant);
-			return;
-		}
-		if (auto slot = dynamic_cast<StorageSlot*>(m->b); slot && slot->kind == StorageSlot::Kind::StaticMember) {
+		} else if (auto slot = dynamic_cast<StorageSlot*>(m->b); slot && slot->kind == StorageSlot::Kind::StaticMember) {
 			emit_expression(slot);
-			return;
-		}
-		if (dynamic_cast<PackedRecordType*>(m->a->ty)) {
+		} else if (dynamic_cast<PackedRecordType*>(m->a->ty)) {
 			auto field = dynamic_cast<StorageSlot*>(m->b);
 			if (!field) {
 				unhandled_node("packed-record member is not a field", expr);
@@ -3046,30 +2893,29 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, ".");
 			}
 			fprintf(active, "m_get_%s()", field->cxx_name.c_str());
-			return;
-		}
-		// Use `->` when the container is (a) an explicit Dereference (collapse
-		// `(*ptr).member` to `ptr->member`) or (b) a reference-typed lvalue
-		// (Pascal `class`, `interface`, or `^T` -- all pointers in C++).
-		if (auto d = dynamic_cast<Dereference*>(m->a)) {
-			emit_expression(d->a);
-			fprintf(active, "->");
-		} else if (m->a->ty && m->a->ty->is_reference_type()) {
-			emit_expression(m->a);
-			fprintf(active, "->");
 		} else {
-			emit_expression(m->a);
-			fprintf(active, ".");
-		}
-		if (auto slot = dynamic_cast<StorageSlot*>(m->b)) {
-			if (auto path = record_variant_path(m->a->ty, slot)) {
-				fprintf(active, "%s", path->c_str());
+			// Use `->` when the container is (a) an explicit Dereference
+			// (collapse `(*ptr).member` to `ptr->member`) or (b) a
+			// reference-typed lvalue (Pascal `class`, `interface`, or `^T`
+			// -- all pointers in C++).
+			if (auto d = dynamic_cast<Dereference*>(m->a)) {
+				emit_expression(d->a);
+				fprintf(active, "->");
+			} else if (m->a->ty && m->a->ty->is_reference_type()) {
+				emit_expression(m->a);
+				fprintf(active, "->");
+			} else {
+				emit_expression(m->a);
+				fprintf(active, ".");
 			}
+			if (auto slot = dynamic_cast<StorageSlot*>(m->b)) {
+				if (auto path = record_variant_path(m->a->ty, slot)) {
+					fprintf(active, "%s", path->c_str());
+				}
+			}
+			emit_expression(m->b);
 		}
-		emit_expression(m->b);
-		return;
-	}
-	if (auto o = dynamic_cast<ShortCircuitOperation*>(expr)) {
+	} else if (auto o = dynamic_cast<ShortCircuitOperation*>(expr)) {
 		// C++ &&/|| supply the required left-to-right short circuit, but their
 		// result type is C++ bool. The CST result is Pascal Boolean, whose enum
 		// carrier deliberately does not accept an implicit bool conversion.
@@ -3088,25 +2934,19 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		emit_expression(o->b);
 		fprintf(active, ")))");
-		return;
-	}
-	if (auto equal = dynamic_cast<RoutineEqual*>(expr)) {
+	} else if (auto equal = dynamic_cast<RoutineEqual*>(expr)) {
 		fprintf(active, "::u_system::m_equal(");
 		emit_expression(equal->a);
 		fprintf(active, ", ");
 		emit_expression(equal->b);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto ix = dynamic_cast<Index*>(expr)) {
+	} else if (auto ix = dynamic_cast<Index*>(expr)) {
 		fprintf(active, "::u_system::p_index(");
 		emit_expression(ix->a);
 		fprintf(active, ", ");
 		emit_expression(ix->b);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto allocation = dynamic_cast<NewValue*>(expr)) {
+	} else if (auto allocation = dynamic_cast<NewValue*>(expr)) {
 		if (!allocation->allocated_type) {
 			unhandled_node("typed New without allocated type", allocation);
 		}
@@ -3114,25 +2954,23 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "::u_system::m_new_value<");
 			emit_type_ref(allocation->allocated_type);
 			fprintf(active, ">()");
-			return;
+		} else {
+			Method* initializer = allocation->initializer;
+			if (!initializer->owner_class || initializer->ty->kind != CONSTRUCTOR) {
+				unhandled_node("invalid old-object initializer", allocation);
+			}
+			std::string owner = owner_cxx_reference_name(initializer->owner_class);
+			fprintf(active, "::u_system::m_new_object<");
+			emit_type_ref(allocation->allocated_type);
+			fprintf(active, ", static_cast<");
+			emit_type_ref(initializer->ty->return_type);
+			fprintf(active, " (%s::*)", owner.c_str());
+			emit_formal_parameters(initializer->ty, false, nullptr);
+			fprintf(active, ">(&%s::%s)>(", owner.c_str(), callable_cxx_name(initializer).c_str());
+			emit_call_arguments(initializer->ty, allocation->args);
+			fprintf(active, ")");
 		}
-		Method* initializer = allocation->initializer;
-		if (!initializer->owner_class || initializer->ty->kind != CONSTRUCTOR) {
-			unhandled_node("invalid old-object initializer", allocation);
-		}
-		std::string owner = owner_cxx_reference_name(initializer->owner_class);
-		fprintf(active, "::u_system::m_new_object<");
-		emit_type_ref(allocation->allocated_type);
-		fprintf(active, ", static_cast<");
-		emit_type_ref(initializer->ty->return_type);
-		fprintf(active, " (%s::*)", owner.c_str());
-		emit_formal_parameters(initializer->ty, false, nullptr);
-		fprintf(active, ">(&%s::%s)>(", owner.c_str(), callable_cxx_name(initializer).c_str());
-		emit_call_arguments(initializer->ty, allocation->args);
-		fprintf(active, ")");
-		return;
-	}
-	if (auto disposal = dynamic_cast<DisposeValue*>(expr)) {
+	} else if (auto disposal = dynamic_cast<DisposeValue*>(expr)) {
 		if (!disposal->pointer) {
 			unhandled_node("Dispose without pointer", disposal);
 		}
@@ -3140,24 +2978,22 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "::u_system::m_dispose_value(");
 			emit_expression(disposal->pointer);
 			fprintf(active, ")");
-			return;
+		} else {
+			Method* finalizer = disposal->finalizer;
+			if (!finalizer->owner_class || finalizer->ty->kind != DESTRUCTOR) {
+				unhandled_node("invalid old-object finalizer", disposal);
+			}
+			std::string owner = owner_cxx_reference_name(finalizer->owner_class);
+			fprintf(active, "::u_system::m_dispose_object<"
+			                "static_cast<");
+			emit_type_ref(finalizer->ty->return_type);
+			fprintf(active, " (%s::*)", owner.c_str());
+			emit_formal_parameters(finalizer->ty, false, nullptr);
+			fprintf(active, ">(&%s::%s)>(", owner.c_str(), callable_cxx_name(finalizer).c_str());
+			emit_expression(disposal->pointer);
+			fprintf(active, ")");
 		}
-		Method* finalizer = disposal->finalizer;
-		if (!finalizer->owner_class || finalizer->ty->kind != DESTRUCTOR) {
-			unhandled_node("invalid old-object finalizer", disposal);
-		}
-		std::string owner = owner_cxx_reference_name(finalizer->owner_class);
-		fprintf(active, "::u_system::m_dispose_object<"
-		                "static_cast<");
-		emit_type_ref(finalizer->ty->return_type);
-		fprintf(active, " (%s::*)", owner.c_str());
-		emit_formal_parameters(finalizer->ty, false, nullptr);
-		fprintf(active, ">(&%s::%s)>(", owner.c_str(), callable_cxx_name(finalizer).c_str());
-		emit_expression(disposal->pointer);
-		fprintf(active, ")");
-		return;
-	}
-	if (auto construct = dynamic_cast<Construct*>(expr)) {
+	} else if (auto construct = dynamic_cast<Construct*>(expr)) {
 		auto result_type = dynamic_cast<ClassType*>(construct->ty);
 		Method* initializer = construct->initializer;
 		if (!result_type || !initializer || !initializer->owner_class) {
@@ -3178,9 +3014,7 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		emit_call_arguments(initializer->ty, construct->args);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto pc = dynamic_cast<ProcCall*>(expr)) {
+	} else if (auto pc = dynamic_cast<ProcCall*>(expr)) {
 		auto callable = dynamic_cast<Callable*>(pc->callee);
 		if (pc->lowering_builtin_desc) {
 			if (pc->receiver || !callable) {
@@ -3194,9 +3028,7 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "%.*s(", static_cast<int>(pc->lowering_builtin_desc->cxx_name.size()), pc->lowering_builtin_desc->cxx_name.data());
 			emit_call_arguments(callable->ty, pc->args);
 			fprintf(active, ")");
-			return;
-		}
-		if (auto method = dynamic_cast<Method*>(pc->callee); method && method->is_static) {
+		} else if (auto method = dynamic_cast<Method*>(pc->callee); method && method->is_static) {
 			if (pc->receiver || method->ty->kind != ROUTINE) {
 				unhandled_node("static method call retained a receiver", pc);
 			}
@@ -3207,9 +3039,7 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "%s::%s(", owner.c_str(), callable_cxx_name(method).c_str());
 			emit_call_arguments(method->ty, pc->args);
 			fprintf(active, ")");
-			return;
-		}
-		if (pc->receiver && callable && callable->builtin_desc && callable->builtin_desc->call_convention == BuiltinCallConvention::ReceiverFirst) {
+		} else if (pc->receiver && callable && callable->builtin_desc && callable->builtin_desc->call_convention == BuiltinCallConvention::ReceiverFirst) {
 			// Do not enter a C++ member function to implement this Pascal
 			// method. In particular, `nil.Free` must reach the nil-safe RTL
 			// operation without first forming `nil->p_free()`. Passing the
@@ -3221,112 +3051,97 @@ void Emitter::emit_expression(Node* expr) {
 			}
 			emit_call_arguments(callable->ty, pc->args);
 			fprintf(active, ")");
-			return;
-		}
-		const bool initializer_application = pc->receiver && callable && callable->ty->kind == CONSTRUCTOR;
-		if (initializer_application) {
-			fprintf(active, "::u_system::m_invoke_initializer"
-			                "([&]() { ");
-		}
-		if (pc->receiver) {
-			auto receiver = pc->receiver;
-			bool done = false;
-			if (auto method = dynamic_cast<Method*>(pc->callee)) {
-				if (method->ty->kind == CLASS_METHOD) {
-					if (auto classref = dynamic_cast<ClassRefType*>(receiver->ty)) {
-						auto target = dynamic_cast<ClassType*>(classref->target);
-						if (!target || target->cxx_name.empty()) {
-							unhandled_type("class-method class-reference target", classref->target);
+		} else {
+			const bool initializer_application = pc->receiver && callable && callable->ty->kind == CONSTRUCTOR;
+			if (initializer_application) {
+				fprintf(active, "::u_system::m_invoke_initializer"
+				                "([&]() { ");
+			}
+			if (pc->receiver) {
+				auto receiver = pc->receiver;
+				bool done = false;
+				if (auto method = dynamic_cast<Method*>(pc->callee)) {
+					if (method->ty->kind == CLASS_METHOD) {
+						if (auto classref = dynamic_cast<ClassRefType*>(receiver->ty)) {
+							auto target = dynamic_cast<ClassType*>(classref->target);
+							if (!target || target->cxx_name.empty()) {
+								unhandled_type("class-method class-reference target", classref->target);
+							}
+							fprintf(active, "static_cast<%s::m_meta*>(", type_cxx_name(target, target->cxx_name).c_str());
+							emit_expression(receiver);
+							fprintf(active, ")->");
+						} else if (dynamic_cast<ClassType*>(receiver->ty)) {
+							emit_expression(receiver);
+							fprintf(active, "->m_classref()->");
+						} else {
+							unhandled_type("class-method receiver", receiver->ty);
 						}
-						fprintf(active, "static_cast<%s::m_meta*>(", type_cxx_name(target, target->cxx_name).c_str());
-						emit_expression(receiver);
-						fprintf(active, ")->");
-					} else if (dynamic_cast<ClassType*>(receiver->ty)) {
-						emit_expression(receiver);
-						fprintf(active, "->m_classref()->");
-					} else {
-						unhandled_type("class-method receiver", receiver->ty);
+						done = true;
 					}
-					done = true;
+				}
+
+				// Same `->` conditions as MemberAccess: explicit Dereference
+				// of a pointer, or a reference-typed receiver (method `this`
+				// slot for a class, or any `^T`-typed lvalue).
+				if (done) {
+				} else if (auto d = dynamic_cast<Dereference*>(receiver)) {
+					emit_expression(d->a);
+					fprintf(active, "->");
+				} else if (receiver->ty && receiver->ty->is_reference_type()) {
+					emit_expression(receiver);
+					fprintf(active, "->");
+				} else {
+					emit_expression(receiver);
+					fprintf(active, ".");
 				}
 			}
-
-			// Same `->` conditions as MemberAccess: explicit Dereference of a
-			// pointer, or a reference-typed receiver (method `this` slot for a
-			// class, or any `^T`-typed lvalue).
-			if (done) {
-			} else if (auto d = dynamic_cast<Dereference*>(receiver)) {
-				emit_expression(d->a);
-				fprintf(active, "->");
-			} else if (receiver->ty && receiver->ty->is_reference_type()) {
-				emit_expression(receiver);
-				fprintf(active, "->");
+			if (auto c = dynamic_cast<Callable*>(pc->callee)) {
+				fprintf(active, "%s(", node_cxx_name(c, callable_cxx_name(c)).c_str());
 			} else {
-				emit_expression(receiver);
-				fprintf(active, ".");
+				emit_expression(pc->callee);
+				fprintf(active, "(");
+			}
+			RoutineType* call_ty = callable ? callable->ty : dynamic_cast<RoutineType*>(pc->callee->ty);
+			emit_call_arguments(call_ty, pc->args);
+			if (callable && callable->is_conversion_operator()) {
+				if (!pc->args.empty()) {
+					fprintf(active, ", ");
+				}
+				fprintf(active, "::u_system::m_conversion_target<");
+				emit_type_ref(callable->ty->return_type);
+				fprintf(active, ">{}");
+			}
+			fprintf(active, ")");
+			if (initializer_application) {
+				fprintf(active, "; })");
 			}
 		}
-		if (auto c = dynamic_cast<Callable*>(pc->callee)) {
-			fprintf(active, "%s(", node_cxx_name(c, callable_cxx_name(c)).c_str());
-		} else {
-			emit_expression(pc->callee);
-			fprintf(active, "(");
-		}
-		RoutineType* call_ty = nullptr;
-		if (callable) {
-			call_ty = callable->ty;
-		} else {
-			call_ty = dynamic_cast<RoutineType*>(pc->callee->ty);
-		}
-		emit_call_arguments(call_ty, pc->args);
-		if (callable && callable->is_conversion_operator()) {
-			if (!pc->args.empty()) {
-				fprintf(active, ", ");
-			}
-			fprintf(active, "::u_system::m_conversion_target<");
-			emit_type_ref(callable->ty->return_type);
-			fprintf(active, ">{}");
-		}
-		fprintf(active, ")");
-		if (initializer_application) {
-			fprintf(active, "; })");
-		}
-		return;
-	}
-	if (auto bound = dynamic_cast<ValueBound*>(expr)) {
+	} else if (auto bound = dynamic_cast<ValueBound*>(expr)) {
 		fprintf(active, bound->kind == TypeBoundKind::Low ? "::u_system::p_low(" : "::u_system::p_high(");
 		emit_expression(bound->a);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto tb = dynamic_cast<TypeBound*>(expr)) {
+	} else if (auto tb = dynamic_cast<TypeBound*>(expr)) {
 		if (auto range = dynamic_cast<SubrangeType*>(tb->operand_type)) {
 			// Subranges erase to their base C++ carrier, so p_low<T>() and
 			// p_high<T>() would describe the carrier rather than the Pascal
 			// destination. Emit the declaration's actual constant bounds.
 			emit_expression(tb->kind == TypeBoundKind::Low ? range->lower_bound : range->upper_bound);
-			return;
-		}
-		if (auto enum_type = dynamic_cast<EnumType*>(tb->operand_type)) {
+		} else if (auto enum_type = dynamic_cast<EnumType*>(tb->operand_type)) {
 			const auto* member = tb->kind == TypeBoundKind::Low ? enum_type->min_member() : enum_type->max_member();
 			if (!member) {
 				unhandled_node("low/high of empty enum type", tb);
 			}
 			fprintf(active, "%s", type_cxx_name(enum_type, member->cxx_name).c_str());
-			return;
+		} else {
+			fprintf(active, tb->kind == TypeBoundKind::Low ? "::u_system::p_low<" : "::u_system::p_high<");
+			emit_type_ref(tb->operand_type);
+			fprintf(active, ">()");
 		}
-		fprintf(active, tb->kind == TypeBoundKind::Low ? "::u_system::p_low<" : "::u_system::p_high<");
-		emit_type_ref(tb->operand_type);
-		fprintf(active, ">()");
-		return;
-	}
-	if (auto size = dynamic_cast<SizeOf*>(expr)) {
+	} else if (auto size = dynamic_cast<SizeOf*>(expr)) {
 		fprintf(active, "static_cast<::u_system::t_sizeint>(sizeof(");
 		emit_type_ref(size->operand_type);
 		fprintf(active, "))");
-		return;
-	}
-	if (auto ca = dynamic_cast<Cast*>(expr)) {
+	} else if (auto ca = dynamic_cast<Cast*>(expr)) {
 		auto real_type = [](Type* type) {
 			type = distinct_storage_type(type);
 			return type == single_type() || type == double_type() || type == extended_type();
@@ -3346,29 +3161,54 @@ void Emitter::emit_expression(Node* expr) {
 			OrdinalBounds bounds;
 			return type == char_type() || dynamic_cast<EnumType*>(type) || integer_bounds(type, &bounds);
 		};
+		const bool real_conversion = ca->a && real_type(ca->a->ty) && real_type(ca->ty);
+		const bool ordinal_conversion = ca->a && ordinal_type(ca->a->ty) && ordinal_type(ca->ty);
+		auto source_set = dynamic_cast<FixedSetType*>(ca->a ? ca->a->ty : nullptr);
+		auto target_set = dynamic_cast<FixedSetType*>(ca->ty);
+		auto source_shortstring = dynamic_cast<ShortStringType*>(ca->a ? ca->a->ty : nullptr);
+		auto target_shortstring = dynamic_cast<ShortStringType*>(ca->ty);
+		const bool source_ansistring = ca->a && ca->a->ty == ansistring_type();
+		auto target_pointer = dynamic_cast<PointerType*>(ca->ty);
+		const bool target_pointer_integer = ca->ty == ptrint_type() || ca->ty == ptruint_type();
+		auto source_pointer = dynamic_cast<PointerType*>(ca->a ? ca->a->ty : nullptr);
+		const bool source_object_reference = ca->a && (dynamic_cast<ClassType*>(ca->a->ty) || dynamic_cast<InterfaceType*>(ca->a->ty));
+		const bool target_object_reference = dynamic_cast<ClassType*>(ca->ty) || dynamic_cast<InterfaceType*>(ca->ty);
+		OrdinalBounds source_integer_bounds;
+		Type* source_integer_type = ca->a ? ca->a->ty : nullptr;
+		const bool source_integer_wrapper = dynamic_cast<SubrangeType*>(source_integer_type) != nullptr;
+		while (auto range = dynamic_cast<SubrangeType*>(source_integer_type)) {
+			source_integer_type = range->base_type;
+		}
+		const bool source_integer = ca->a && (source_integer_type == &untyped_integer_type() || integer_bounds(source_integer_type, &source_integer_bounds));
+		const bool pointer_conversion = (source_pointer && (target_pointer || target_pointer_integer || target_object_reference)) || (source_object_reference && (target_pointer || target_pointer_integer)) || (source_integer && target_pointer);
+		auto source_routine = dynamic_cast<RoutineType*>(ca->a ? ca->a->ty : nullptr);
+		auto target_routine = dynamic_cast<RoutineType*>(ca->ty);
+		auto source_classref = dynamic_cast<ClassRefType*>(ca->a ? ca->a->ty : nullptr);
+		auto target_classref = dynamic_cast<ClassRefType*>(ca->ty);
+		auto target_packed = dynamic_cast<PackedRecordType*>(ca->ty);
+		auto source_packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr);
+
 		if (dynamic_cast<RangeCheckedCast*>(ca)) {
-			if (ca->a && real_type(ca->a->ty) && real_type(ca->ty)) {
+			if (real_conversion) {
 				fprintf(active, "::u_system::m_range_checked_real_cast<");
 				emit_type_ref(ca->ty);
 				fprintf(active, ">(");
 				emit_expression(ca->a);
 				fprintf(active, ")");
-				return;
+			} else {
+				TypeBound lower(TypeBoundKind::Low, ca->ty);
+				TypeBound upper(TypeBoundKind::High, ca->ty);
+				fprintf(active, "::u_system::m_range_checked_ordinal_cast<");
+				emit_type_ref(ca->ty);
+				fprintf(active, ">(");
+				emit_expression(ca->a);
+				fprintf(active, ", ");
+				emit_expression(&lower);
+				fprintf(active, ", ");
+				emit_expression(&upper);
+				fprintf(active, ")");
 			}
-			TypeBound lower(TypeBoundKind::Low, ca->ty);
-			TypeBound upper(TypeBoundKind::High, ca->ty);
-			fprintf(active, "::u_system::m_range_checked_ordinal_cast<");
-			emit_type_ref(ca->ty);
-			fprintf(active, ">(");
-			emit_expression(ca->a);
-			fprintf(active, ", ");
-			emit_expression(&lower);
-			fprintf(active, ", ");
-			emit_expression(&upper);
-			fprintf(active, ")");
-			return;
-		}
-		if (ca->a && real_type(ca->a->ty) && real_type(ca->ty)) {
+		} else if (real_conversion) {
 			// Explicit real casts and {$R-} implicit narrowing are unchecked
 			// Pascal conversions, but direct C++ floating narrowing is
 			// undefined when a finite source exceeds the target range. The RTL
@@ -3378,9 +3218,7 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ">(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
-			return;
-		}
-		if (ca->a && ordinal_type(ca->a->ty) && ordinal_type(ca->ty)) {
+		} else if (ordinal_conversion) {
 			// Both explicit ordinal casts and {$R-} implicit conversions
 			// are representation operations. The RTL path gives them
 			// defined modulo/bit behavior instead of relying on C++'s
@@ -3390,36 +3228,21 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ">(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
-			return;
-		}
-		auto source_set = dynamic_cast<FixedSetType*>(ca->a ? ca->a->ty : nullptr);
-		auto target_set = dynamic_cast<FixedSetType*>(ca->ty);
-		if (source_set && target_set) {
+		} else if (source_set && target_set) {
 			fprintf(active, "::u_system::m_set_cast<");
 			emit_type_ref(target_set->item_type);
 			fprintf(active, ">(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
-			return;
-		}
-		auto source_shortstring = dynamic_cast<ShortStringType*>(ca->a ? ca->a->ty : nullptr);
-		auto target_shortstring = dynamic_cast<ShortStringType*>(ca->ty);
-		const bool source_ansistring = ca->a && ca->a->ty == ansistring_type();
-		if (source_shortstring && ca->ty == ansistring_type()) {
+		} else if (source_shortstring && ca->ty == ansistring_type()) {
 			fprintf(active, "::u_system::o_implicit(");
 			emit_expression(ca->a);
 			fprintf(active, ", ::u_system::m_conversion_target<::u_system::t_ansistring>{})");
-			return;
-		}
-		if (target_shortstring && (source_shortstring || source_ansistring)) {
+		} else if (target_shortstring && (source_shortstring || source_ansistring)) {
 			fprintf(active, "::u_system::tpcc_shortstring_cast<%u>(", static_cast<unsigned>(target_shortstring->capacity));
 			emit_expression(ca->a);
 			fprintf(active, ")");
-			return;
-		}
-		auto target_pointer = dynamic_cast<PointerType*>(ca->ty);
-		const bool target_pointer_integer = ca->ty == ptrint_type() || ca->ty == ptruint_type();
-		if (source_ansistring && (target_pointer || target_pointer_integer)) {
+		} else if (source_ansistring && (target_pointer || target_pointer_integer)) {
 			if (target_pointer && target_pointer->is_untyped()) {
 				fprintf(active, "(");
 				emit_expression(ca->a);
@@ -3431,19 +3254,7 @@ void Emitter::emit_expression(Node* expr) {
 				emit_expression(ca->a);
 				fprintf(active, ").m_pointer())");
 			}
-			return;
-		}
-		auto source_pointer = dynamic_cast<PointerType*>(ca->a ? ca->a->ty : nullptr);
-		const bool source_object_reference = ca->a && (dynamic_cast<ClassType*>(ca->a->ty) || dynamic_cast<InterfaceType*>(ca->a->ty));
-		const bool target_object_reference = dynamic_cast<ClassType*>(ca->ty) || dynamic_cast<InterfaceType*>(ca->ty);
-		OrdinalBounds source_integer_bounds;
-		Type* source_integer_type = ca->a ? ca->a->ty : nullptr;
-		const bool source_integer_wrapper = dynamic_cast<SubrangeType*>(source_integer_type) != nullptr;
-		while (auto range = dynamic_cast<SubrangeType*>(source_integer_type)) {
-			source_integer_type = range->base_type;
-		}
-		const bool source_integer = ca->a && (source_integer_type == &untyped_integer_type() || integer_bounds(source_integer_type, &source_integer_bounds));
-		if ((source_pointer && (target_pointer || target_pointer_integer || target_object_reference)) || (source_object_reference && (target_pointer || target_pointer_integer)) || (source_integer && target_pointer)) {
+		} else if (pointer_conversion) {
 			// Pascal explicit casts expose the pointer representation.
 			// C++ static_cast cannot express integer/pointer crossings,
 			// arbitrary typed-pointer reinterpretation, or recovery of a
@@ -3466,11 +3277,7 @@ void Emitter::emit_expression(Node* expr) {
 				emit_expression(ca->a);
 			}
 			fprintf(active, ")");
-			return;
-		}
-		auto source_routine = dynamic_cast<RoutineType*>(ca->a ? ca->a->ty : nullptr);
-		auto target_routine = dynamic_cast<RoutineType*>(ca->ty);
-		if (source_routine && target_routine) {
+		} else if (source_routine && target_routine) {
 			// The parser has limited this explicit operation to one
 			// unchanged routine-value representation with exact result,
 			// arity, and modes; only by-value data-pointer formal types may
@@ -3482,25 +3289,17 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ">(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
-			return;
-		}
-		if (source_routine && source_routine->kind == METHOD && ca->ty == tmethod_type()) {
+		} else if (source_routine && source_routine->kind == METHOD && ca->ty == tmethod_type()) {
 			fprintf(active, "::u_system::m_method_to_tmethod(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
-			return;
-		}
-		if (ca->a && ca->a->ty == tmethod_type() && target_routine && target_routine->kind == METHOD) {
+		} else if (ca->a && ca->a->ty == tmethod_type() && target_routine && target_routine->kind == METHOD) {
 			fprintf(active, "::u_system::m_tmethod_to_method<");
 			emit_function_type(target_routine);
 			fprintf(active, ">(");
 			emit_expression(ca->a);
 			fprintf(active, ")");
-			return;
-		}
-		auto source_classref = dynamic_cast<ClassRefType*>(ca->a ? ca->a->ty : nullptr);
-		auto target_classref = dynamic_cast<ClassRefType*>(ca->ty);
-		if (source_classref && target_classref) {
+		} else if (source_classref && target_classref) {
 			auto source_class = dynamic_cast<ClassType*>(source_classref->target);
 			auto target_class = dynamic_cast<ClassType*>(target_classref->target);
 			if (!source_class || !target_class || source_class->cxx_name.empty() || target_class->cxx_name.empty()) {
@@ -3512,11 +3311,9 @@ void Emitter::emit_expression(Node* expr) {
 			        type_cxx_name(target_class, target_class->cxx_name).c_str(), type_cxx_name(target_class, target_class->cxx_name).c_str(), type_cxx_name(source_class, source_class->cxx_name).c_str());
 			emit_expression(ca->a);
 			fprintf(active, ")))");
-			return;
-		}
-		if (auto packed = dynamic_cast<PackedRecordType*>(ca->ty)) {
-			if (packed->cxx_name.empty()) {
-				unhandled_type("anonymous packed overlay", packed);
+		} else if (target_packed) {
+			if (target_packed->cxx_name.empty()) {
+				unhandled_type("anonymous packed overlay", target_packed);
 			}
 			fprintf(active, "([&]() { const auto& tpcc_overlay_source = ");
 			emit_expression(ca->a);
@@ -3527,14 +3324,12 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active,
 			        "static_assert(sizeof(tpcc_overlay_source_type) == %s::m_storage_size, \"packed "
 			        "overlay size mismatch\"); ",
-			        packed->cxx_name.c_str());
-			fprintf(active, "%s tpcc_overlay_value{}; ", packed->cxx_name.c_str());
+			        target_packed->cxx_name.c_str());
+			fprintf(active, "%s tpcc_overlay_value{}; ", target_packed->cxx_name.c_str());
 			fprintf(active, "std::memcpy(tpcc_overlay_value.m_data(), std::addressof(tpcc_overlay_source), "
 			                "sizeof(tpcc_overlay_source)); ");
 			fprintf(active, "return tpcc_overlay_value; }())");
-			return;
-		}
-		if (auto packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr)) {
+		} else if (source_packed) {
 			fprintf(active, "([&]() { const auto& tpcc_overlay_source = ");
 			emit_expression(ca->a);
 			fprintf(active, "; ");
@@ -3546,21 +3341,19 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active,
 			        "static_assert(sizeof(tpcc_overlay_target_type) == %s::m_storage_size, \"packed "
 			        "overlay size mismatch\"); ",
-			        packed->cxx_name.c_str());
+			        source_packed->cxx_name.c_str());
 			fprintf(active, "tpcc_overlay_target_type tpcc_overlay_value{}; ");
 			fprintf(active, "std::memcpy(std::addressof(tpcc_overlay_value), tpcc_overlay_source.m_data(), "
 			                "sizeof(tpcc_overlay_value)); ");
 			fprintf(active, "return tpcc_overlay_value; }())");
-			return;
+		} else {
+			fprintf(active, "static_cast<");
+			emit_type_ref(ca->ty);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
 		}
-		fprintf(active, "static_cast<");
-		emit_type_ref(ca->ty);
-		fprintf(active, ">(");
-		emit_expression(ca->a);
-		fprintf(active, ")");
-		return;
-	}
-	if (auto co = dynamic_cast<Coerce*>(expr)) {
+	} else if (auto co = dynamic_cast<Coerce*>(expr)) {
 		bool numeric = co->target_type == single_type() || co->target_type == double_type() || co->target_type == extended_type();
 		bool real_source = co->a && (co->a->ty == single_type() || co->a->ty == double_type() || co->a->ty == extended_type());
 		if (numeric && real_source) {
@@ -3572,24 +3365,20 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ">(");
 			emit_expression(co->a);
 			fprintf(active, ")");
-			return;
+		} else {
+			fprintf(active, numeric ? "static_cast<" : "dynamic_cast<");
+			emit_type_ref(co->target_type);
+			fprintf(active, ">(");
+			emit_expression(co->a);
+			fprintf(active, ")");
 		}
-		fprintf(active, numeric ? "static_cast<" : "dynamic_cast<");
-		emit_type_ref(co->target_type);
-		fprintf(active, ">(");
-		emit_expression(co->a);
-		fprintf(active, ")");
-		return;
-	}
-	if (auto co = dynamic_cast<CoerceCheck*>(expr)) {
+	} else if (auto co = dynamic_cast<CoerceCheck*>(expr)) {
 		fprintf(active, "::u_system::tpcc_bool_to_boolean(dynamic_cast<");
 		emit_type_ref(co->target_type);
 		fprintf(active, ">(");
 		emit_expression(co->a);
 		fprintf(active, ") != nullptr)");
-		return;
-	}
-	if (auto address = dynamic_cast<AddrOf*>(expr)) {
+	} else if (auto address = dynamic_cast<AddrOf*>(expr)) {
 		// Pascal has no const-qualified pointer type: @Place has semantic type
 		// ^T even when Place is currently viewed through a const formal. Spell
 		// that cv removal explicitly instead of relying on an ill-formed C++
@@ -3600,19 +3389,15 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, ">(std::addressof(");
 		emit_writable_expression(address->a);
 		fprintf(active, "))");
-		return;
-	}
-	if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
+	} else if (auto u = dynamic_cast<UnaryOperation*>(expr)) {
 		if (const char* op = cxx_unary_operator(u)) {
 			if (auto dereference = dynamic_cast<Dereference*>(u); dereference && dereference->ty == unknown_type()) {
 				unhandled_node("untyped pointer dereference used as a value", dereference);
 			}
 			fprintf(active, "%s", op);
 			emit_expression(u->a);
-			return;
 		}
-	}
-	if (auto ic = dynamic_cast<InheritedCall*>(expr)) {
+	} else if (auto ic = dynamic_cast<InheritedCall*>(expr)) {
 		if (ic->dropped) {
 			unhandled_node("dropped inherited in expression context (destructor has no value)", expr);
 		}
@@ -3628,9 +3413,9 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(ic->args[i]);
 		}
 		fprintf(active, ")");
-		return;
+	} else {
+		unhandled_node("emit_expression", expr);
 	}
-	unhandled_node("emit_expression", expr);
 }
 
 void Emitter::emit_template_value_arg(Node* expr) {
@@ -3643,13 +3428,11 @@ void Emitter::emit_template_value_arg(Node* expr) {
 		fprintf(active, ">(");
 		emit_integer_literal(active, i->value, i->negative);
 		fprintf(active, ")");
-		return;
-	}
-	if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
+	} else if (auto e = dynamic_cast<EnumMemberRef*>(expr)) {
 		fprintf(active, "%s", node_cxx_name(e, e->cxx_name).c_str());
-		return;
+	} else {
+		unhandled_node("emit_template_value_arg", expr);
 	}
-	unhandled_node("emit_template_value_arg", expr);
 }
 
 void Emitter::emit_aggregate_member_fields(const std::vector<AggregateField>& fields) {
@@ -3672,52 +3455,36 @@ void Emitter::emit_type_ref(Type* ty) {
 			unhandled_type("distinct type has no generated C++ name", distinct);
 		}
 		fprintf(active, "%s", type_cxx_name(distinct, distinct->cxx_name).c_str());
-		return;
-	}
-	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+	} else if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		if (s->cxx_name.empty()) {
 			unhandled_type("subrange has no generated C++ carrier name", s);
 		}
 		fprintf(active, "%s", type_cxx_name(s, s->cxx_name).c_str());
-		return;
-	}
-	if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
+	} else if (auto it = dynamic_cast<IntrinsicType*>(ty)) {
 		fprintf(active, "%.*s", (int)it->cxx_name.size(), it->cxx_name.data());
-		return;
-	}
-	if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
+	} else if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
 		fprintf(active, "::u_system::t_shortstring<%u>", static_cast<unsigned>(shortstring->capacity));
-		return;
-	}
-	if (dynamic_cast<UnitType*>(ty)) {
+	} else if (dynamic_cast<UnitType*>(ty)) {
 		fprintf(active, "void");
-		return;
-	}
-	if (auto r = dynamic_cast<RecordType*>(ty)) {
+	} else if (auto r = dynamic_cast<RecordType*>(ty)) {
 		if (r->cxx_name.empty()) {
 			emit_aggregate_decl("", ty);
 		} else {
 			fprintf(active, "%s", type_cxx_name(r, r->cxx_name).c_str());
 		}
-		return;
-	}
-	if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
+	} else if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
 		if (r->cxx_name.empty()) {
 			unhandled_type("anonymous packed record type reference", ty);
 		}
 		fprintf(active, "%s", type_cxx_name(r, r->cxx_name).c_str());
-		return;
-	}
-	if (auto c = dynamic_cast<ClassType*>(ty)) {
+	} else if (auto c = dynamic_cast<ClassType*>(ty)) {
 		if (c->cxx_name.empty()) {
 			emit_aggregate_decl("", ty);
 		} else {
 			fprintf(active, "%s", type_cxx_name(c, c->cxx_name).c_str());
 		}
 		fprintf(active, "*");
-		return;
-	}
-	if (auto r = dynamic_cast<ClassRefType*>(ty)) {
+	} else if (auto r = dynamic_cast<ClassRefType*>(ty)) {
 		ty = r->target;
 		if (auto c = dynamic_cast<ClassType*>(ty)) {
 			if (c->cxx_name.empty()) {
@@ -3728,26 +3495,20 @@ void Emitter::emit_type_ref(Type* ty) {
 			unhandled_type("emit_type_ref", ty);
 		}
 		fprintf(active, "*");
-		return;
-	}
-	if (auto c = dynamic_cast<InterfaceType*>(ty)) {
+	} else if (auto c = dynamic_cast<InterfaceType*>(ty)) {
 		if (c->cxx_name.empty()) {
 			emit_aggregate_decl("", ty);
 		} else {
 			fprintf(active, "%s", type_cxx_name(c, c->cxx_name).c_str());
 		}
 		fprintf(active, "*");
-		return;
-	}
-	if (auto o = dynamic_cast<ObjectType*>(ty)) {
+	} else if (auto o = dynamic_cast<ObjectType*>(ty)) {
 		if (o->cxx_name.empty()) {
 			emit_aggregate_decl("", ty);
 		} else {
 			fprintf(active, "%s", type_cxx_name(o, o->cxx_name).c_str());
 		}
-		return;
-	}
-	if (auto e = dynamic_cast<EnumType*>(ty)) {
+	} else if (auto e = dynamic_cast<EnumType*>(ty)) {
 		// Anonymous inline enum (`var x: (A, B, C);`): emit the full
 		// declaration inline so the member constants exist at this use
 		// site. Two different anonymous enums share no type identity in
@@ -3758,9 +3519,7 @@ void Emitter::emit_type_ref(Type* ty) {
 		} else {
 			fprintf(active, "%s", type_cxx_name(e, e->cxx_name).c_str());
 		}
-		return;
-	}
-	if (auto p = dynamic_cast<PointerType*>(ty)) {
+	} else if (auto p = dynamic_cast<PointerType*>(ty)) {
 		if (p->is_untyped()) {
 			if (p->cxx_name.empty()) {
 				unhandled_type("untyped pointer has no C++ carrier", p);
@@ -3770,27 +3529,19 @@ void Emitter::emit_type_ref(Type* ty) {
 			emit_type_ref(p->item_type);
 			fprintf(active, "*");
 		}
-		return;
-	}
-	if (auto f = dynamic_cast<TypedFileType*>(ty)) {
+	} else if (auto f = dynamic_cast<TypedFileType*>(ty)) {
 		fprintf(active, "::u_system::t_typedfile<");
 		emit_type_ref(f->item_type);
 		fprintf(active, ">");
-		return;
-	}
-	if (auto a = dynamic_cast<DynamicArrayType*>(ty)) {
+	} else if (auto a = dynamic_cast<DynamicArrayType*>(ty)) {
 		fprintf(active, "::u_system::t_dynamicarray<");
 		emit_type_ref(a->item_type);
 		fprintf(active, ">");
-		return;
-	}
-	if (auto a = dynamic_cast<OpenArrayType*>(ty)) {
+	} else if (auto a = dynamic_cast<OpenArrayType*>(ty)) {
 		fprintf(active, "::u_system::t_openarray<");
 		emit_type_ref(a->item_type);
 		fprintf(active, ">");
-		return;
-	}
-	if (auto rt = dynamic_cast<RoutineType*>(ty)) {
+	} else if (auto rt = dynamic_cast<RoutineType*>(ty)) {
 		if (rt->kind == METHOD) {
 			fprintf(active, "::u_system::m_method<");
 		} else if (rt->kind == ROUTINE) {
@@ -3800,15 +3551,11 @@ void Emitter::emit_type_ref(Type* ty) {
 		}
 		emit_function_type(rt);
 		fprintf(active, ">");
-		return;
-	}
-	if (auto s = dynamic_cast<FixedSetType*>(ty)) {
+	} else if (auto s = dynamic_cast<FixedSetType*>(ty)) {
 		fprintf(active, "::u_system::t_set<");
 		emit_type_ref(s->item_type);
 		fprintf(active, ">");
-		return;
-	}
-	if (auto s = dynamic_cast<FixedArrayType*>(ty)) {
+	} else if (auto s = dynamic_cast<FixedArrayType*>(ty)) {
 		emit_type_ref(fixedarray_type());
 		fprintf(active, "<");
 		emit_type_ref(s->item_type);
@@ -3817,7 +3564,7 @@ void Emitter::emit_type_ref(Type* ty) {
 		fprintf(active, ", ");
 		emit_template_value_arg(s->range.lower_bound);
 		fprintf(active, ">");
-		return;
+	} else {
+		unhandled_type("emit_type_ref", ty);
 	}
-	unhandled_type("emit_type_ref", ty);
 }

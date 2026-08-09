@@ -735,14 +735,12 @@ struct ConstantOrdinal {
 static std::optional<ConstantOrdinal> constant_ordinal(Node* node) {
 	if (auto integer = dynamic_cast<Integer*>(node)) {
 		return ConstantOrdinal{integer->negative, integer->value};
-	}
-	if (auto member = dynamic_cast<EnumMemberRef*>(node)) {
+	} else if (auto member = dynamic_cast<EnumMemberRef*>(node)) {
 		if (member->value < 0) {
 			return ConstantOrdinal{true, static_cast<uint64_t>(-(member->value + 1)) + 1};
 		}
 		return ConstantOrdinal{false, static_cast<uint64_t>(member->value)};
-	}
-	if (auto character = dynamic_cast<String*>(node); character && character->ty == char_type() && character->value.size() == 1) {
+	} else if (auto character = dynamic_cast<String*>(node); character && character->ty == char_type() && character->value.size() == 1) {
 		return ConstantOrdinal{false, static_cast<unsigned char>(character->value.front())};
 	}
 	return std::nullopt;
@@ -772,11 +770,9 @@ static std::optional<long double> const_real_cast(long double value, Type* targe
 	};
 	if (target == single_type()) {
 		return convert.template operator()<float>();
-	}
-	if (target == double_type()) {
+	} else if (target == double_type()) {
 		return convert.template operator()<double>();
-	}
-	if (target == extended_type()) {
+	} else if (target == extended_type()) {
 		return value;
 	}
 	return std::nullopt;
@@ -855,28 +851,29 @@ ConstEvalResult RangeCheckedCast::const_eval(ConstEvalContext& ctx) const {
 			return ConstEvalResult::error("real constant out of range for target type");
 		}
 		return Cast::const_eval(ctx);
+	} else {
+		auto ordinal = constant_ordinal(value.node);
+		if (!ordinal) {
+			return Cast::const_eval(ctx);
+		}
+		ConstEvalResult lower = const_eval_type_bound(TypeBoundKind::Low, ty);
+		ConstEvalResult upper = const_eval_type_bound(TypeBoundKind::High, ty);
+		if (lower.kind != ConstEvalResult::Kind::Success) {
+			return lower;
+		}
+		if (upper.kind != ConstEvalResult::Kind::Success) {
+			return upper;
+		}
+		auto lower_ordinal = constant_ordinal(lower.node);
+		auto upper_ordinal = constant_ordinal(upper.node);
+		if (!lower_ordinal || !upper_ordinal) {
+			return ConstEvalResult::error("range-checked conversion has non-ordinal bounds");
+		}
+		if (compare_constant_ordinals(*ordinal, *lower_ordinal) < 0 || compare_constant_ordinals(*ordinal, *upper_ordinal) > 0) {
+			return ConstEvalResult::error("integer constant out of range for target type");
+		}
+		return const_explicit_ordinal_cast(ordinal->magnitude, ordinal->negative, ty);
 	}
-	auto ordinal = constant_ordinal(value.node);
-	if (!ordinal) {
-		return Cast::const_eval(ctx);
-	}
-	ConstEvalResult lower = const_eval_type_bound(TypeBoundKind::Low, ty);
-	ConstEvalResult upper = const_eval_type_bound(TypeBoundKind::High, ty);
-	if (lower.kind != ConstEvalResult::Kind::Success) {
-		return lower;
-	}
-	if (upper.kind != ConstEvalResult::Kind::Success) {
-		return upper;
-	}
-	auto lower_ordinal = constant_ordinal(lower.node);
-	auto upper_ordinal = constant_ordinal(upper.node);
-	if (!lower_ordinal || !upper_ordinal) {
-		return ConstEvalResult::error("range-checked conversion has non-ordinal bounds");
-	}
-	if (compare_constant_ordinals(*ordinal, *lower_ordinal) < 0 || compare_constant_ordinals(*ordinal, *upper_ordinal) > 0) {
-		return ConstEvalResult::error("integer constant out of range for target type");
-	}
-	return const_explicit_ordinal_cast(ordinal->magnitude, ordinal->negative, ty);
 }
 
 const char* ExplicitCast::diagnostic_kind() const {
@@ -890,13 +887,11 @@ ConstEvalResult ExplicitCast::const_eval(ConstEvalContext& ctx) const {
 	}
 	if (auto integer = dynamic_cast<Integer*>(value.node)) {
 		return const_explicit_ordinal_cast(integer->value, integer->negative, ty);
-	}
-	if (auto member = dynamic_cast<EnumMemberRef*>(value.node)) {
+	} else if (auto member = dynamic_cast<EnumMemberRef*>(value.node)) {
 		const bool negative = member->value < 0;
 		const uint64_t magnitude = negative ? static_cast<uint64_t>(-(member->value + 1)) + 1 : static_cast<uint64_t>(member->value);
 		return const_explicit_ordinal_cast(magnitude, negative, ty);
-	}
-	if (auto character = dynamic_cast<String*>(value.node); character && character->ty == char_type() && character->value.size() == 1) {
+	} else if (auto character = dynamic_cast<String*>(value.node); character && character->ty == char_type() && character->value.size() == 1) {
 		return const_explicit_ordinal_cast(static_cast<unsigned char>(character->value.front()), false, ty);
 	}
 	return Cast::const_eval(ctx);

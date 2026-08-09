@@ -28,13 +28,11 @@ static void parse_define_arg(const char* arg, std::string& sym, std::string& val
 	sym.assign(arg, p - arg);
 	if (*p == ':' && p[1] == '=') {
 		val.assign(p + 2);
-		return;
-	}
-	if (*p == '=') {
+	} else if (*p == '=') {
 		val.assign(p + 1);
-		return;
+	} else {
+		val.clear();
 	}
-	val.clear();
 }
 
 static void print_help() {
@@ -58,33 +56,27 @@ int main(int argc, char* argv[]) {
 			if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
 				print_help();
 				return 0;
-			}
-			if (a[1] == 'd' && a[2]) {
+			} else if (a[1] == 'd' && a[2]) {
 				std::string sym, val;
 				parse_define_arg(a + 2, sym, val);
 				options.defines[sym] = val;
-				continue;
-			}
-			if (a[1] == 'F' && a[2] == 'u' && a[3]) {
+			} else if (a[1] == 'F' && a[2] == 'u' && a[3]) {
 				options.unit_search_paths.emplace_back(a + 3);
-				continue;
-			}
-			if (a[1] == 'F' && a[2] == 'i' && a[3]) {
+			} else if (a[1] == 'F' && a[2] == 'i' && a[3]) {
 				options.include_search_paths.emplace_back(a + 3);
-				continue;
-			}
-			if (a[1] == 'o' && a[2]) {
+			} else if (a[1] == 'o' && a[2]) {
 				output_path = a + 2;
-				continue;
+			} else {
+				fprintf(stderr, "mp: unrecognized option '%s' (use -h for supported options)\n", a);
+				return 2;
 			}
-			fprintf(stderr, "mp: unrecognized option '%s' (use -h for supported options)\n", a);
-			return 2;
+		} else {
+			if (!source_path.empty()) {
+				fprintf(stderr, "mp: multiple source files given; only one supported\n");
+				return 2;
+			}
+			source_path = a;
 		}
-		if (!source_path.empty()) {
-			fprintf(stderr, "mp: multiple source files given; only one supported\n");
-			return 2;
-		}
-		source_path = a;
 	}
 
 	if (source_path.empty()) {

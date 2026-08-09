@@ -29,8 +29,7 @@ std::optional<AssignmentConversion> Type::assignment_conversion_from(const Type*
 		    ordinary->kind == ValueConversionClass::Direct ? AssignmentConversionClass::Equal : AssignmentConversionClass::Widening,
 		    ordinary->distance,
 		};
-	}
-	if (auto destination = destination_conversion_from(source)) {
+	} else if (auto destination = destination_conversion_from(source)) {
 		// The ordinary relation was already absent. Any additional edge in
 		// the complete destination relation is therefore assignment-only
 		// narrowing, irrespective of the legacy ValueConversionClass spelling.
@@ -599,73 +598,59 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 	if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
 		// FPC's `type Base` changes Pascal identity, not storage layout.
 		return type_layout_impl(packed_container, distinct->base_type, visiting);
-	}
-	if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty)) {
+	} else if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty)) {
 		return intrinsic->layout;
-	}
-	if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
+	} else if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
 		return TypeLayout{static_cast<uint64_t>(shortstring->capacity) + 1, 1};
-	}
-	if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
+	} else if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
 		auto layout = packed_record_layout_impl(packed, visiting);
 		return layout ? std::optional<TypeLayout>{layout->type} : std::nullopt;
-	}
-	if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
+	} else if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
 		auto item = type_layout_impl(packed_container, array->item_type, visiting);
+		if (!item) {
+			return std::nullopt;
+		}
 		if (packed_container && item->alignment != 1) {
 			fprintf(stderr, "error: item with alignment != 1 is not allowed inside a packed record.\n");
 			abort();
-		}
-		if (!item) {
-			return std::nullopt;
 		}
 		uint64_t size;
 		if (!checked_multiply_u64(item->size, array->range.length, &size)) {
 			return std::nullopt;
 		}
 		return TypeLayout{size, item->alignment};
-	}
-	if (auto subrange = dynamic_cast<SubrangeType*>(ty)) {
+	} else if (auto subrange = dynamic_cast<SubrangeType*>(ty)) {
 		// The emitted carrier is deliberately one base-type member, with
 		// generated static assertions enforcing identical size and alignment.
 		// Packed-record layout can therefore keep using the Pascal storage
 		// layout without duplicating a C++ ABI calculator here.
 		return type_layout_impl(packed_container, subrange->base_type, visiting);
-	}
-	if (auto enumeration = dynamic_cast<EnumType*>(ty)) {
+	} else if (auto enumeration = dynamic_cast<EnumType*>(ty)) {
 		uint64_t bytes = enumeration->carrier_bits / 8;
 		return enumeration->carrier_bits != 0 && enumeration->carrier_bits % 8 == 0 ? std::optional<TypeLayout>{TypeLayout{bytes, bytes}} : std::nullopt;
-	}
-	if (packed_container) {
+	} else if (packed_container) {
 		// The others are not allowed inside packed records.
 		return std::nullopt;
-	}
-	// A dynamic array stores one shared-buffer handle, independent of its
-	// element type or current length. An open array is the non-owning
-	// data-and-count descriptor passed by open-array formals.
-	if (dynamic_cast<DynamicArrayType*>(ty)) {
+	} else if (dynamic_cast<DynamicArrayType*>(ty)) {
+		// A dynamic array stores one shared-buffer handle, independent of its
+		// element type or current length.
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
-	}
-	if (dynamic_cast<OpenArrayType*>(ty)) {
+	} else if (dynamic_cast<OpenArrayType*>(ty)) {
+		// An open array is the non-owning data-and-count descriptor passed by
+		// open-array formals.
 		return TypeLayout{16, 8}; // FIXME: target-dependent, impl-dependent
-	}
-	if (dynamic_cast<FixedSetType*>(ty)) {
+	} else if (dynamic_cast<FixedSetType*>(ty)) {
 		return TypeLayout{24, 8}; // FIXME: target-dependent, impl-dependent
-	}
-	if (dynamic_cast<TypedFileType*>(ty)) {
+	} else if (dynamic_cast<TypedFileType*>(ty)) {
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
-	}
-	if (dynamic_cast<PointerType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ClassRefType*>(ty)) {
+	} else if (dynamic_cast<PointerType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ClassRefType*>(ty)) {
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
-	}
-	if (auto record = dynamic_cast<RecordType*>(ty)) {
+	} else if (auto record = dynamic_cast<RecordType*>(ty)) {
 		auto layout = record_layout_impl(record, visiting);
 		return layout ? std::optional<TypeLayout>{layout->type} : std::nullopt;
-	}
-	if (auto object = dynamic_cast<ObjectType*>(ty)) {
+	} else if (auto object = dynamic_cast<ObjectType*>(ty)) {
 		return object_layout_impl(object, visiting);
-	}
-	if (auto routine = dynamic_cast<RoutineType*>(ty)) {
+	} else if (auto routine = dynamic_cast<RoutineType*>(ty)) {
 		if (routine->kind == METHOD) {
 			return TypeLayout{16, 8}; // FIXME: target-dependent
 		}
@@ -744,11 +729,9 @@ static bool predefined_overlay_byte_copyable(const Type* type, std::set<const Ty
 		case IntrinsicCarrier::File:
 			return false;
 		}
-	}
-	if (dynamic_cast<const ShortStringType*>(type) || dynamic_cast<const EnumType*>(type) || dynamic_cast<const PointerType*>(type) || dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type) || dynamic_cast<const ClassRefType*>(type) || dynamic_cast<const RoutineType*>(type) || dynamic_cast<const PackedRecordType*>(type)) {
+	} else if (dynamic_cast<const ShortStringType*>(type) || dynamic_cast<const EnumType*>(type) || dynamic_cast<const PointerType*>(type) || dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type) || dynamic_cast<const ClassRefType*>(type) || dynamic_cast<const RoutineType*>(type) || dynamic_cast<const PackedRecordType*>(type)) {
 		return true;
-	}
-	if (auto range = dynamic_cast<const SubrangeType*>(type)) {
+	} else if (auto range = dynamic_cast<const SubrangeType*>(type)) {
 		return predefined_overlay_byte_copyable(range->base_type, visiting);
 	}
 	if (!visiting.insert(type).second) {
@@ -871,11 +854,9 @@ static int real_widening_rank(const Type* ty) {
 	ty = distinct_storage_type(ty);
 	if (ty == single_type()) {
 		return 0;
-	}
-	if (ty == double_type()) {
+	} else if (ty == double_type()) {
 		return 1;
-	}
-	if (ty == extended_type()) {
+	} else if (ty == extended_type()) {
 		return 2;
 	}
 	return -1;
@@ -1047,62 +1028,51 @@ bool DistinctType::is_reference_type() const {
 std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* source_const) const {
 	auto source = distinct_storage_type(source_const);
 	auto target = this;
+	auto source_string = dynamic_cast<const ShortStringType*>(source);
+	auto source_range = dynamic_cast<const SubrangeType*>(source);
+	int integer_cost = integer_conversion_cost(source, target);
+	int source_real = real_widening_rank(source);
+	int target_real = real_widening_rank(target);
 	if (source_const != source && source == target) {
 		// Exact identity was already tested by the matcher. A distinct
 		// identity over this same carrier is the FPC strong-type direct case,
 		// not an integer/real widening conversion.
 		return direct_conversion();
-	}
-	if (target == ansistring_type()) {
-		if (auto string = dynamic_cast<const ShortStringType*>(source)) {
-			// Managed AnsiString represents every ShortString payload. This
-			// is one ordinary assignment edge for every fixed capacity, not a
-			// chain through the canonical String[255] declaration.
-			return implicit_conversion(string->capacity);
-		}
-	}
-	if (source == &untyped_integer_type()) {
+	} else if (target == ansistring_type() && source_string) {
+		// Managed AnsiString represents every ShortString payload. This is one
+		// ordinary assignment edge for every fixed capacity, not a chain
+		// through the canonical String[255] declaration.
+		return implicit_conversion(source_string->capacity);
+	} else if (source == &untyped_integer_type() && integer_widening_rank(target) >= 0) {
 		// The expression matcher checks the literal's actual magnitude. At the
 		// type level it is a contextual integer value, not another nominal
 		// integer definition.
-		if (integer_widening_rank(target) >= 0) {
-			return direct_conversion();
-		}
-		if (real_widening_rank(target) >= 0) {
-			return implicit_conversion(500 + real_widening_rank(target));
-		}
-	}
-
-	// Char is a distinct nominal ordinal family, not an unsigned integer
-	// widening source or destination. Byte(CharValue) and Char(ByteValue)
-	// remain predefined explicit casts, but neither crossing may make a
-	// numeric overload viable.
-	if (auto range = dynamic_cast<const SubrangeType*>(source); range && range->base_type == target) {
+		return direct_conversion();
+	} else if (source == &untyped_integer_type() && target_real >= 0) {
+		return implicit_conversion(500 + target_real);
+	} else if (source_range && source_range->base_type == target) {
+		// Char is a distinct nominal ordinal family, not an unsigned integer
+		// widening source or destination. Byte(CharValue) and Char(ByteValue)
+		// remain predefined explicit casts, but neither crossing may make a
+		// numeric overload viable.
+		//
 		// A subrange has distinct Pascal identity but uses its declared base
 		// representation directly. Passing it to that base formal needs no
 		// assignment operator; another containing integer formal requires one
 		// widening edge.
 		return direct_conversion();
-	}
-
-	int integer_cost = integer_conversion_cost(source, target);
-	if (integer_cost >= 0 && source->is_subtype_of(target)) {
+	} else if (integer_cost >= 0 && source->is_subtype_of(target)) {
 		// The ordinary portion of integer assignment follows value-set
 		// inclusion. The complete assignment query classifies the reverse
 		// direction as Narrowing.
 		return implicit_conversion(static_cast<unsigned>(integer_cost));
-	}
-
-	int source_real = real_widening_rank(source);
-	int target_real = real_widening_rank(target);
-	if (source_real >= 0 && target_real >= source_real) {
+	} else if (source_real >= 0 && target_real >= source_real) {
 		// The ordinary portion of real assignment follows the declared
 		// precision direction. The complete query classifies the reverse
 		// direction as Narrowing; {$R} changes only its emitted check.
 		unsigned distance = static_cast<unsigned>(target_real - source_real);
 		return implicit_conversion(distance);
-	}
-	if (integer_widening_rank(source) >= 0 && target_real >= 0) {
+	} else if (integer_widening_rank(source) >= 0 && target_real >= 0) {
 		return implicit_conversion(500 + static_cast<unsigned>(target_real));
 	}
 	return std::nullopt;
@@ -1111,19 +1081,12 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 std::optional<ValueConversion> IntrinsicType::destination_conversion_from(const Type* source) const {
 	if (auto ordinary = value_conversion_from(source)) {
 		return ordinary;
-	}
-
-	const int integer_cost = integer_conversion_cost(source, this);
-	if (integer_cost >= 0) {
+	} else if (const int integer_cost = integer_conversion_cost(source, this); integer_cost >= 0) {
 		// A selected ordinal destination may truncate or reinterpret sign.
 		// This is the Pascal assignment boundary checked by {$R+} and the
 		// Narrowing tier used by value-argument matching.
 		return implicit_conversion(static_cast<unsigned>(integer_cost));
-	}
-
-	const int source_real = real_widening_rank(source);
-	const int target_real = real_widening_rank(this);
-	if (source_real >= 0 && target_real >= 0) {
+	} else if (const int source_real = real_widening_rank(source), target_real = real_widening_rank(this); source_real >= 0 && target_real >= 0) {
 		// Real assignment likewise permits the selected destination to lose
 		// range or precision. make_implicit_cast owns the optional range
 		// check after this relation has admitted the store.
@@ -1135,14 +1098,12 @@ std::optional<ValueConversion> IntrinsicType::destination_conversion_from(const 
 bool IntrinsicType::predefined_explicit_conversion_from(const Type* source) const {
 	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
-	}
-	// Explicit ordinal conversion is one direct width/sign operation. It is
-	// intentionally broader than nominal enum/subrange compatibility but
-	// does not make any such pair implicitly viable.
-	if (predefined_ordinal_type(this) && predefined_ordinal_type(source)) {
+	} else if (predefined_ordinal_type(this) && predefined_ordinal_type(source)) {
+		// Explicit ordinal conversion is one direct width/sign operation. It is
+		// intentionally broader than nominal enum/subrange compatibility but
+		// does not make any such pair implicitly viable.
 		return true;
-	}
-	if (real_widening_rank(this) >= 0 && real_widening_rank(source) >= 0) {
+	} else if (real_widening_rank(this) >= 0 && real_widening_rank(source) >= 0) {
 		// Type(value) explicitly selects the destination representation, so
 		// both real-family directions are one predefined cast even though
 		// only widening is an implicit overload edge.
@@ -1163,33 +1124,30 @@ std::optional<ValueConversion> ShortStringType::value_conversion_from(const Type
 	unsigned distance = static_cast<unsigned>(std::abs(static_cast<int>(capacity) - static_cast<int>(string->capacity)));
 	if (capacity == string->capacity) {
 		return direct_conversion();
-	}
-	if (string->capacity > capacity) {
+	} else if (string->capacity > capacity) {
 		// A shorter destination cannot represent every source value, so this
 		// direction requires explicit syntax rather than an implicit edge.
 		return std::nullopt;
+	} else {
+		return implicit_conversion(distance);
 	}
-	return implicit_conversion(distance);
 }
 
 std::optional<ValueConversion> ShortStringType::destination_conversion_from(const Type* source) const {
 	if (auto ordinary = value_conversion_from(source)) {
 		return ordinary;
-	}
-	if (source == ansistring_type()) {
+	} else if (source == ansistring_type()) {
 		// AnsiString has no static capacity bound. Assignment to String[N]
 		// remains legal and is classified as Narrowing; the runtime copies at
 		// most this destination's declared capacity.
 		return implicit_conversion(256 - capacity);
+	} else if (auto string = dynamic_cast<const ShortStringType*>(source)) {
+		// A known ShortString destination truncates excess payload according
+		// to its declared capacity. The complete assignment query exposes this
+		// direction as Narrowing.
+		return implicit_conversion(static_cast<unsigned>(string->capacity - capacity));
 	}
-	auto string = dynamic_cast<const ShortStringType*>(source);
-	if (!string) {
-		return std::nullopt;
-	}
-	// A known ShortString destination truncates excess payload according to
-	// its declared capacity. The complete assignment query exposes this
-	// direction as Narrowing.
-	return implicit_conversion(static_cast<unsigned>(string->capacity - capacity));
+	return std::nullopt;
 }
 
 bool ShortStringType::predefined_explicit_conversion_from(const Type* source) const {
@@ -1263,8 +1221,7 @@ bool ClassType::is_subtype_of(const Type* target) const {
 			}
 		}
 		return false;
-	}
-	if (auto target_interface = dynamic_cast<const InterfaceType*>(target)) {
+	} else if (auto target_interface = dynamic_cast<const InterfaceType*>(target)) {
 		return class_implements_interface(this, target_interface);
 	}
 	return false;
@@ -1314,11 +1271,9 @@ std::optional<ValueConversion> ClassType::value_conversion_from(const Type* sour
 bool ClassType::predefined_explicit_conversion_from(const Type* source) const {
 	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
-	}
-	if (auto source_class = dynamic_cast<const ClassType*>(source)) {
+	} else if (auto source_class = dynamic_cast<const ClassType*>(source)) {
 		return is_subtype_of(source_class) || source_class->is_subtype_of(this);
-	}
-	if (auto source_interface = dynamic_cast<const InterfaceType*>(source)) {
+	} else if (auto source_interface = dynamic_cast<const InterfaceType*>(source)) {
 		// A static interface -> class downcast has a defined adjustment only
 		// when this destination class implements that exact interface family.
 		return is_subtype_of(source_interface);
@@ -1339,8 +1294,7 @@ std::optional<ValueConversion> InterfaceType::value_conversion_from(const Type* 
 bool InterfaceType::predefined_explicit_conversion_from(const Type* source) const {
 	if (Type::predefined_explicit_conversion_from(source)) {
 		return true;
-	}
-	if (auto source_interface = dynamic_cast<const InterfaceType*>(source)) {
+	} else if (auto source_interface = dynamic_cast<const InterfaceType*>(source)) {
 		return is_subtype_of(source_interface) || source_interface->is_subtype_of(this);
 	}
 	// An unrelated class/interface cross-cast is the checked `as` operation,
@@ -1364,8 +1318,7 @@ std::optional<ValueConversion> ClassRefType::value_conversion_from(const Type* s
 	}
 	if (source_ref->target == target) {
 		return direct_conversion();
-	}
-	if (source_ref->target && source_ref->target->is_subtype_of(target)) {
+	} else if (source_ref->target && source_ref->target->is_subtype_of(target)) {
 		auto source_class = dynamic_cast<const ClassType*>(source_ref->target);
 		auto target_class = dynamic_cast<const ClassType*>(target);
 		unsigned distance = source_class && target_class ? class_inheritance_distance(source_class, target_class) : 1;
@@ -1387,18 +1340,17 @@ std::optional<ValueConversion> PointerType::value_conversion_from(const Type* so
 	if (source_pointer) {
 		if (source_pointer->item_type == item_type) {
 			return direct_conversion();
-		}
-		if (source_pointer->is_untyped() || is_untyped()) {
+		} else if (source_pointer->is_untyped() || is_untyped()) {
 			return implicit_conversion(20);
+		} else {
+			auto source_object = dynamic_cast<const ObjectType*>(source_pointer->item_type);
+			auto target_object = dynamic_cast<const ObjectType*>(item_type);
+			if (source_object && target_object && source_object->is_subtype_of(target_object)) {
+				return implicit_conversion(object_inheritance_distance(source_object, target_object));
+			}
+			return std::nullopt;
 		}
-		auto source_object = dynamic_cast<const ObjectType*>(source_pointer->item_type);
-		auto target_object = dynamic_cast<const ObjectType*>(item_type);
-		if (source_object && target_object && source_object->is_subtype_of(target_object)) {
-			return implicit_conversion(object_inheritance_distance(source_object, target_object));
-		}
-		return std::nullopt;
-	}
-	if (is_untyped() && (dynamic_cast<const ClassType*>(source) || dynamic_cast<const ClassRefType*>(source))) {
+	} else if (is_untyped() && (dynamic_cast<const ClassType*>(source) || dynamic_cast<const ClassRefType*>(source))) {
 		// A Pascal class instance and metaclass are already pointer-valued
 		// references, so an API which explicitly asks for predefined untyped
 		// Pointer may retain that opaque reference without a runtime
@@ -1443,8 +1395,7 @@ static std::optional<FoldedOrdinalValue> fold_ordinal_value(Node* node) {
 	}
 	if (auto integer = dynamic_cast<Integer*>(folded.node)) {
 		return FoldedOrdinalValue{integer->negative, integer->value};
-	}
-	if (auto member = dynamic_cast<EnumMemberRef*>(folded.node)) {
+	} else if (auto member = dynamic_cast<EnumMemberRef*>(folded.node)) {
 		if (member->value < 0) {
 			return FoldedOrdinalValue{true, static_cast<uint64_t>(-(member->value + 1)) + 1};
 		}
@@ -1502,19 +1453,16 @@ static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
 			return OrdinalDomain{OrdinalDomainFamily::Integer, nullptr, *lower, *upper};
 		}
 		return std::nullopt;
-	}
-	if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type); intrinsic && intrinsic->rank && intrinsic->ordinal_bounds) {
+	} else if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type); intrinsic && intrinsic->rank && intrinsic->ordinal_bounds) {
 		const OrdinalBounds& bounds = *intrinsic->ordinal_bounds;
 		return OrdinalDomain{OrdinalDomainFamily::Integer, nullptr, FoldedOrdinalValue{bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0}, FoldedOrdinalValue{false, bounds.max_positive}};
-	}
-	if (type == char_type()) {
+	} else if (type == char_type()) {
 		OrdinalBounds bounds;
 		if (!intrinsic_ordinal_bounds(char_type(), &bounds)) {
 			return std::nullopt;
 		}
 		return OrdinalDomain{OrdinalDomainFamily::Character, char_type(), FoldedOrdinalValue{false, 0}, FoldedOrdinalValue{false, bounds.max_positive}};
-	}
-	if (auto enumeration = dynamic_cast<const EnumType*>(type)) {
+	} else if (auto enumeration = dynamic_cast<const EnumType*>(type)) {
 		const auto* lower = enumeration->min_member();
 		const auto* upper = enumeration->max_member();
 		if (!lower || !upper) {

@@ -86,8 +86,7 @@ Type* Frame::lookup_type(std::string name) const {
 bool callable_binding_opens_parent(Node* binding) {
 	if (auto callable = dynamic_cast<Callable*>(binding)) {
 		return callable->has_overload_directive;
-	}
-	if (auto overloads = dynamic_cast<OverloadSet*>(binding)) {
+	} else if (auto overloads = dynamic_cast<OverloadSet*>(binding)) {
 		for (Callable* callable : overloads->members) {
 			if (callable->has_overload_directive) {
 				return true;
@@ -141,8 +140,7 @@ Node* Frame::lookup_value(std::string name) const {
 	}
 	if (callables.empty()) {
 		return nullptr;
-	}
-	if (callables.size() == 1) {
+	} else if (callables.size() == 1) {
 		return callables.front();
 	}
 	return new OverloadSet(std::move(callables));
@@ -163,12 +161,12 @@ void Frame::rebind_value_type(std::string name, Type* ty) {
 	Node* node = *value;
 	if (auto callable = dynamic_cast<Callable*>(node)) {
 		assert(!ty || (callable->ty && callable->ty->return_type == ty));
-		return;
-	}
-	if (node->ty) {
-		assert(!ty || node->ty == ty);
 	} else {
-		node->ty = ty;
+		if (node->ty) {
+			assert(!ty || node->ty == ty);
+		} else {
+			node->ty = ty;
+		}
 	}
 }
 
@@ -329,8 +327,7 @@ CallableRegistration Frame::collect_callable(std::string name, Callable* c) {
 		auto set = new OverloadSet(std::vector<Callable*>{ec, c});
 		iter->second = Binding{std::in_place_type<Node*>, set};
 		return {CallableRegistration::Kind::Added};
-	}
-	if (auto os = dynamic_cast<OverloadSet*>(existing)) {
+	} else if (auto os = dynamic_cast<OverloadSet*>(existing)) {
 		os->members.push_back(c);
 		return {CallableRegistration::Kind::Added};
 	}

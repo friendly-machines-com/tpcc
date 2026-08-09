@@ -265,8 +265,7 @@ static bool const_numeric_as_long_double(Node* n, long double* out) {
 			*out = -*out;
 		}
 		return true;
-	}
-	if (auto r = dynamic_cast<const Real*>(n)) {
+	} else if (auto r = dynamic_cast<const Real*>(n)) {
 		*out = r->value;
 		return true;
 	}
@@ -287,8 +286,7 @@ static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const s
 	}
 	if (const Integer* value = const_integer_arg(args[0])) {
 		return fold_integer_result(value->value, value->negative, result_ty);
-	}
-	if (const auto* value = dynamic_cast<const String*>(args[0])) {
+	} else if (const auto* value = dynamic_cast<const String*>(args[0])) {
 		return const_convert_string(value->value, result_ty);
 	}
 	return ConstEvalResult::not_constant();
@@ -346,11 +344,9 @@ static std::optional<ConstantOrdinalCarrier> constant_ordinal_carrier(Type* type
 			high_bit >>= 1;
 		} while (high_bit != 0);
 		return ConstantOrdinalCarrier{bits, bounds.signed_type};
-	}
-	if (type == char_type()) {
+	} else if (type == char_type()) {
 		return ConstantOrdinalCarrier{8, false};
-	}
-	if (auto enumeration = dynamic_cast<EnumType*>(type)) {
+	} else if (auto enumeration = dynamic_cast<EnumType*>(type)) {
 		return ConstantOrdinalCarrier{enumeration->carrier_bits, enumeration->carrier_signed};
 	}
 	return std::nullopt;
@@ -359,13 +355,11 @@ static std::optional<ConstantOrdinalCarrier> constant_ordinal_carrier(Type* type
 static std::optional<std::pair<bool, uint64_t>> constant_ordinal_value(Node* value) {
 	if (auto integer = dynamic_cast<Integer*>(value)) {
 		return std::pair{integer->negative, integer->value};
-	}
-	if (auto member = dynamic_cast<EnumMemberRef*>(value)) {
+	} else if (auto member = dynamic_cast<EnumMemberRef*>(value)) {
 		const bool negative = member->value < 0;
 		const uint64_t magnitude = negative ? static_cast<uint64_t>(-(member->value + 1)) + 1 : static_cast<uint64_t>(member->value);
 		return std::pair{negative, magnitude};
-	}
-	if (auto character = dynamic_cast<String*>(value); character && character->ty == char_type() && character->value.size() == 1) {
+	} else if (auto character = dynamic_cast<String*>(value); character && character->ty == char_type() && character->value.size() == 1) {
 		return std::pair{false, static_cast<uint64_t>(static_cast<unsigned char>(character->value.front()))};
 	}
 	return std::nullopt;
@@ -477,8 +471,7 @@ static ConstEvalResult fold_assigned(ConstEvalContext&, Type*, const std::vector
 	}
 	if (dynamic_cast<NilLiteral*>(args[0])) {
 		return ConstEvalResult::success(new EnumMemberRef("::u_system::t_boolean::p_false", 0, boolean_type()));
-	}
-	if (dynamic_cast<AddrOf*>(args[0]) || dynamic_cast<RoutineRef*>(args[0])) {
+	} else if (dynamic_cast<AddrOf*>(args[0]) || dynamic_cast<RoutineRef*>(args[0])) {
 		return ConstEvalResult::success(new EnumMemberRef("::u_system::t_boolean::p_true", 1, boolean_type()));
 	}
 	return ConstEvalResult::not_constant();
@@ -761,18 +754,19 @@ static ConstEvalResult fold_abs_impl(Type* result_ty, const std::vector<Node*>& 
 	}
 	if (auto real = dynamic_cast<Real*>(args[0])) {
 		return ConstEvalResult::success(new Real(::fabsl(real->value), result_ty));
+	} else {
+		auto value = constant_ordinal_value(args[0]);
+		auto carrier = constant_ordinal_carrier(result_ty);
+		if (!value || !carrier) {
+			return ConstEvalResult::not_constant();
+		}
+		const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
+		if (checked && value->first && carrier->signed_type && raw == (uint64_t{1} << (carrier->bits - 1))) {
+			return ConstEvalResult::error("integer constant overflow");
+		}
+		const uint64_t absolute = value->first ? (uint64_t{0} - raw) & constant_ordinal_mask(carrier->bits) : raw;
+		return const_explicit_ordinal_cast(absolute, false, result_ty);
 	}
-	auto value = constant_ordinal_value(args[0]);
-	auto carrier = constant_ordinal_carrier(result_ty);
-	if (!value || !carrier) {
-		return ConstEvalResult::not_constant();
-	}
-	const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
-	if (checked && value->first && carrier->signed_type && raw == (uint64_t{1} << (carrier->bits - 1))) {
-		return ConstEvalResult::error("integer constant overflow");
-	}
-	const uint64_t absolute = value->first ? (uint64_t{0} - raw) & constant_ordinal_mask(carrier->bits) : raw;
-	return const_explicit_ordinal_cast(absolute, false, result_ty);
 }
 
 static ConstEvalResult fold_abs(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -1080,8 +1074,7 @@ static ConstEvalResult fold_length(ConstEvalContext&, Type* result_ty, const std
 	}
 	if (auto string = dynamic_cast<String*>(args[0])) {
 		return ConstEvalResult::success(new Integer(string->value.size(), result_ty));
-	}
-	if (auto array = dynamic_cast<FixedArrayType*>(args[0]->ty)) {
+	} else if (auto array = dynamic_cast<FixedArrayType*>(args[0]->ty)) {
 		return ConstEvalResult::success(new Integer(array->range.length, result_ty));
 	}
 	return ConstEvalResult::not_constant();
@@ -1525,14 +1518,12 @@ static const BuiltinDesc k_enum_greater_equal_fallback{"::u_system::o_greatertha
 Type* lookup_builtin_type(std::string cxx_name) {
 	if (cxx_name == "::u_system::t_tmethod") {
 		return tmethod_type();
-	}
-	// FIXME: A 32-bit -P target must map the signed names to LongInt and the
-	// unsigned names to LongWord. They are aliases, so lookup returns the
-	// canonical Type* rather than manufacturing four nominal intrinsics.
-	if (cxx_name == "::u_system::t_ptrint" || cxx_name == "::u_system::t_sizeint") {
+	} else if (cxx_name == "::u_system::t_ptrint" || cxx_name == "::u_system::t_sizeint") {
+		// FIXME: A 32-bit -P target must map the signed names to LongInt and the
+		// unsigned names to LongWord. They are aliases, so lookup returns the
+		// canonical Type* rather than manufacturing four nominal intrinsics.
 		return int64_type();
-	}
-	if (cxx_name == "::u_system::t_ptruint" || cxx_name == "::u_system::t_sizeuint") {
+	} else if (cxx_name == "::u_system::t_ptruint" || cxx_name == "::u_system::t_sizeuint") {
 		return qword_type();
 	}
 	for (auto t : k_all_intrinsics) {
