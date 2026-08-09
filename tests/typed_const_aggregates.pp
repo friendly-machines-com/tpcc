@@ -24,6 +24,9 @@ type
     Present: LongInt;
     Omitted: LongInt;
   end;
+  TManaged = record
+    Text: AnsiString;
+  end;
 
 const
   Outer: TOuter = (
@@ -43,6 +46,9 @@ const
   );
   Partial: TPartial = (
     Present: 9
+  );
+  Managed: TManaged = (
+    Text: 'folded implicit string conversion'
   );
 
 function NextCounter: LongInt;
@@ -90,5 +96,7 @@ begin
   if NextCounter <> 1 then
     Halt(15);
   if NextCounter <> 2 then
-    Halt(16)
+    Halt(16);
+  if Managed.Text <> 'folded implicit string conversion' then
+    Halt(17)
 end.

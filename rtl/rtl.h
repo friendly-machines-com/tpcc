@@ -2260,6 +2260,18 @@ static_assert(
 static_assert(
     alignof(t_ansistring) == alignof(void*));
 
+inline t_ansistring tpcc_ansistring_from_c(
+    const char* source, std::size_t length) {
+	t_ansistring result;
+	std::vector<t_char> value(length + 1, t_char{0});
+	for (std::size_t i = 0; i < length; ++i)
+		value[i] = t_char{
+		    static_cast<uint8_t>(
+		        static_cast<unsigned char>(source[i]))};
+	result.storage.m_replace(std::move(value));
+	return result;
+}
+
 template<std::size_t DestinationCapacity>
 inline t_shortstring<DestinationCapacity>
 tpcc_shortstring_cast(

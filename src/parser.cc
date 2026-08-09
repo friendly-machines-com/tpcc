@@ -9157,21 +9157,25 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	} else {
 		assignment = target->assignment_conversion_from(assignment_source);
 	}
-	if (assignment && assignment->kind != AssignmentConversionClass::Narrowing) {
-		MatchRank rank{
-		    assignment->kind == AssignmentConversionClass::Equal ? MatchRank::Tier::Equal : MatchRank::Tier::Convert,
-		    assignment->distance,
-		};
-		auto source_signed = integer_carrier_is_signed(assignment_source);
-		auto target_signed = integer_carrier_is_signed(target);
-		rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;
-		return ArgumentMatch{rank, make_implicit_cast(actual, target)};
-	}
 
 	if (allow_declared_conversion) {
 		MatchFailure local_failure = MatchFailure::Incompatible;
 		MatchFailure* declared_failure = failure ? failure : &local_failure;
 		if (auto declared = match_declared_conversion(actual, target, implicit_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure)) {
+			// A declaration implements the same source-to-result conversion edge
+			// classified by the predefined relation. It produces a value and does
+			// not perform the eventual assignment store. Rank that selected
+			// conversion by its value-domain effect, not by whether its
+			// implementation came from System, user source, or the compiler.
+			if (assignment) {
+				declared->rank.tier =
+				    assignment->kind == AssignmentConversionClass::Equal
+				        ? MatchRank::Tier::Equal
+				        : assignment->kind == AssignmentConversionClass::Narrowing
+				            ? MatchRank::Tier::ConvertNarrowing
+				            : MatchRank::Tier::Convert;
+				declared->rank.distance = assignment->distance;
+			}
 			return declared;
 		}
 		// An ambiguous ordinary conversion is a failure at its own quality;
@@ -9181,8 +9185,15 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		}
 	}
 
-	if (assignment && assignment->kind == AssignmentConversionClass::Narrowing) {
-		MatchRank rank{MatchRank::Tier::ConvertNarrowing, assignment->distance};
+	if (assignment) {
+		MatchRank rank{
+		    assignment->kind == AssignmentConversionClass::Equal
+		        ? MatchRank::Tier::Equal
+		        : assignment->kind == AssignmentConversionClass::Narrowing
+		            ? MatchRank::Tier::ConvertNarrowing
+		            : MatchRank::Tier::Convert,
+		    assignment->distance,
+		};
 		auto source_signed = integer_carrier_is_signed(assignment_source);
 		auto target_signed = integer_carrier_is_signed(target);
 		rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;

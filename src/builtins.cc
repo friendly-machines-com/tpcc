@@ -278,16 +278,25 @@ static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Ty
 }
 
 static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	// system.pp's predefined integer operator := declarations are pure
-	// representation conversions. Explicit Type(constant) syntax selects the
-	// same declaration, so its declaration-local RTL implementation must
-	// retain the constant expression instead of turning it into a runtime
-	// call. User conversion bodies do not carry this o_implicit descriptor.
-	if (args.size() != 1 || !const_integer_arg(args[0])) {
+	// system.pp's predefined operator := declarations are pure unary
+	// conversions: they produce RESULT_TY and do not perform a store. A constant
+	// call must evaluate the same selected declaration as a runtime call; user
+	// conversion bodies do not carry this o_implicit descriptor.
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
 	}
-	const Integer* value = const_integer_arg(args[0]);
-	return fold_integer_result(value->value, value->negative, result_ty);
+	if (const Integer* value = const_integer_arg(args[0])) {
+		return fold_integer_result(value->value, value->negative, result_ty);
+	}
+	if (const auto* value = dynamic_cast<const String*>(args[0])) {
+		if (auto target = dynamic_cast<ShortStringType*>(result_ty)) {
+			return ConstEvalResult::success(new String(value->value.substr(0, target->capacity), result_ty));
+		}
+		if (result_ty == ansistring_type()) {
+			return ConstEvalResult::success(new String(value->value, result_ty));
+		}
+	}
+	return ConstEvalResult::not_constant();
 }
 
 static uint64_t unchecked_integer_bits(const Integer* value) {
