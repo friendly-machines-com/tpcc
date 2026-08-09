@@ -37,6 +37,10 @@ begin
     Halt(7);
   if not (DirectorySeparator in AllowDirectorySeparators) then
     Halt(8);
+  if PathSeparator <> ':' then
+    Halt(9);
+  if PathSeparator in AllowDirectorySeparators then
+    Halt(10);
   if Pos(DriveSeparator, 'abc') <> 0 then
     Halt(5);
   RuntimeDriveSeparator := DriveSeparator;

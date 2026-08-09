@@ -77,6 +77,7 @@ const
   AllowDirectorySeparators: TSysCharSet = ['\', '/'];
   DirectorySeparator: Char = '/';
   DriveSeparator = '';
+  PathSeparator: Char = ':';
 
 var
   // RunError stores its error number in this RTL variable before terminating.
