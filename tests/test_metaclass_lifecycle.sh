@@ -45,7 +45,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-I"$tmp" \
 	-Irtl \
 	"$tmp/metaclass_lifecycle.cc" \

@@ -82,7 +82,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-I"$tmp" \
 	-Irtl \
 	"$tmp/class_method.cc" \

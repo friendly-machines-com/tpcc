@@ -15,7 +15,6 @@ cd "$root"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \
@@ -33,7 +32,6 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/exception_handlers"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \

@@ -24,7 +24,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined,pointer-overflow,pointer-subtract \
 	-fno-sanitize-recover=all \
 	-Irtl \

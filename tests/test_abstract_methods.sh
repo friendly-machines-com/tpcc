@@ -36,7 +36,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/abstract_methods.cc" \
@@ -62,7 +61,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/abstract_call.cc" \

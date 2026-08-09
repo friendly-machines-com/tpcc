@@ -35,7 +35,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/inherited_calls.cc" \

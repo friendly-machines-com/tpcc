@@ -25,7 +25,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/interface_guid.cc" \

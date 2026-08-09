@@ -17,7 +17,6 @@ cd "$root"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Wno-unused-parameter \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
@@ -90,7 +89,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \

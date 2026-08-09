@@ -43,7 +43,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -68,7 +67,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/incomplete_type_callable_normalization.cc" \

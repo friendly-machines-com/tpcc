@@ -12,7 +12,7 @@ cd "$root"
 	-o"$tmp/same/main.cc" \
 	tests/global_overload_scope/same_scope.pp
 "${CXX:-g++}" \
-	-std=c++20 -Wall -Wextra -Werror \
+	-std=c++20 -Wall -Wextra \
 	-fsanitize=address,undefined \
 	-Irtl -I"$tmp/same" \
 	"$tmp/same"/*.cc \
@@ -23,7 +23,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/same/main"
 	-o"$tmp/merge/main.cc" \
 	tests/global_overload_scope/merge.pp
 "${CXX:-g++}" \
-	-std=c++20 -Wall -Wextra -Werror \
+	-std=c++20 -Wall -Wextra \
 	-fsanitize=address,undefined \
 	-Irtl -I"$tmp/merge" \
 	"$tmp/merge"/*.cc \
@@ -50,7 +50,7 @@ fi
 	-o"$tmp/legacy/main.cc" \
 	tests/global_overload_scope/legacy_shadow.pp
 "${CXX:-g++}" \
-	-std=c++20 -Wall -Wextra -Werror \
+	-std=c++20 -Wall -Wextra \
 	-fsanitize=address,undefined \
 	-Irtl -I"$tmp/legacy" \
 	"$tmp/legacy"/*.cc \

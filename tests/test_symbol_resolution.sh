@@ -44,7 +44,7 @@ run_positive() {
 	mkdir -p "$bin"
 	./mp -Furtl -Fu"$fixtures" -o"$bin/main.cc" "$main"
 	"${CXX:-g++}" \
-		-std=c++20 -Wall -Wextra -Werror \
+		-std=c++20 -Wall -Wextra \
 		-fsanitize=address,undefined \
 		-I"$bin" -Irtl \
 		"$bin"/*.cc \

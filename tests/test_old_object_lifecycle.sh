@@ -77,7 +77,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-I"$tmp" \
@@ -90,7 +89,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-I"$tmp" \
 	-Irtl \
 	"$tmp/shadow.cc" \

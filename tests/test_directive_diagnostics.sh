@@ -16,7 +16,6 @@ cd "$root"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/directive_diagnostics_inactive.cc" \

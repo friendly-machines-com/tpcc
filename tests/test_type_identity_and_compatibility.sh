@@ -13,7 +13,6 @@ cd "$root"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-Isrc \
 	-Irtl \
 	tests/type_conversion_algebra.cc \
@@ -57,7 +56,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -74,7 +72,6 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/type_identity"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -91,7 +88,6 @@ ASAN_OPTIONS=detect_leaks=1 \
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \

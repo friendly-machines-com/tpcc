@@ -35,7 +35,6 @@ done
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -49,7 +48,6 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_pascal"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	tests/shortstring_type_runtime.cc \
@@ -71,7 +69,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \

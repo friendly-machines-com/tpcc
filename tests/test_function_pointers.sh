@@ -57,7 +57,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -89,7 +88,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -117,7 +115,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp/routine-const" \

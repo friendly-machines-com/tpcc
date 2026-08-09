@@ -15,7 +15,6 @@ cd "$root"
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \

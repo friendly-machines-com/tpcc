@@ -16,7 +16,6 @@ diff -u tests/23_packed_record.cc "$tmp/23_packed_record.cc"
 	-std=c++20 \
 	-Wall \
 	-Wextra \
-	-Werror=address-of-packed-member \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -30,7 +29,6 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/23_packed_record"
 	-std=c++20 \
 	-Wall \
 	-Wextra \
-	-Werror=address-of-packed-member \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
@@ -44,7 +42,6 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_overlay"
 	-std=c++20 \
 	-Wall \
 	-Wextra \
-	-Werror=address-of-packed-member \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \

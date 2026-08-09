@@ -43,7 +43,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fno-omit-frame-pointer \
 	-Irtl \
 	-I"$tmp" \

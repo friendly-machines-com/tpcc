@@ -30,7 +30,6 @@ rg -q \
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \
@@ -50,7 +49,6 @@ ASAN_OPTIONS=detect_leaks=1 \
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \

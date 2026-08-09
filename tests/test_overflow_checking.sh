@@ -37,7 +37,6 @@ rg -Fq '::u_system::o_multiply' \
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \

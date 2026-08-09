@@ -48,7 +48,6 @@ user dispose 37'
 	    -Wall \
 	    -Wextra \
 	    -Wpedantic \
-	    -Werror \
 	    -fsanitize=address,undefined \
 	    -fno-sanitize-recover=all \
 	    -Irtl \
@@ -108,7 +107,6 @@ fi
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \

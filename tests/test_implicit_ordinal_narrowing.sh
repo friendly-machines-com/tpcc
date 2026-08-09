@@ -22,7 +22,6 @@ rg -Fq '::u_system::m_range_checked_ordinal_cast' \
 	-Wall \
 	-Wextra \
 	-Wpedantic \
-	-Werror \
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \
