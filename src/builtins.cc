@@ -1450,6 +1450,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_fileexists", nullptr},
     {"::u_system::p_directoryexists", nullptr},
     {"::u_system::p_expandfilename", nullptr},
+    {"::u_system::p_getenvironmentvariable", nullptr},
     // TODO: Delphi has operators "explicit", "implicit".
 
     {"::u_system::o_bitwiseand", fold_bitwise_and},

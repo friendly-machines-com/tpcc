@@ -66,6 +66,7 @@ function ExtractFilePath(const FileName: AnsiString): AnsiString;
 function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_fileexists';
 function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_directoryexists';
 function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_system::p_expandfilename';
+function GetEnvironmentVariable(const Name: AnsiString): AnsiString; external name '::u_system::p_getenvironmentvariable';
 function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TSearchRec): LongInt; external name '::u_system::p_findfirst';
 function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_system::p_findnext';
 procedure FindClose(var F: TSearchRec); external name '::u_system::p_findclose';

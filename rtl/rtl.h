@@ -2535,6 +2535,17 @@ inline t_boolean p_directoryexists(
 	return tpcc_bool_to_boolean(is_directory);
 }
 
+inline t_ansistring p_getenvironmentvariable(
+    const t_ansistring& name) {
+	const std::string bytes = name.m_string();
+	const char* value =
+	    std::getenv(bytes.c_str());
+	if (!value)
+		return {};
+	return tpcc_ansistring_literal(
+	    value, std::strlen(value));
+}
+
 template<std::size_t DestinationCapacity>
 inline t_shortstring<DestinationCapacity>
 tpcc_shortstring_cast(
