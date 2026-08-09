@@ -9,6 +9,7 @@ var
   FoundOne, FoundTwo: Boolean;
   LastName: AnsiString;
   CurrentDirectory: AnsiString;
+  ParentDirectory: AnsiString;
 
 begin
   GetDir(0, CurrentDirectory);
@@ -55,6 +56,35 @@ begin
   if SysUtils.ExpandFileName('missing/../still-missing') <>
       CurrentDirectory + '/still-missing' then
     Halt(106);
+  ParentDirectory := ExtractFilePath(CurrentDirectory);
+  if Length(ParentDirectory) > 1 then
+    ParentDirectory := Copy(ParentDirectory, 1,
+      Length(ParentDirectory) - 1);
+  if SysUtils.ExpandFileName('..') <> ParentDirectory then
+    Halt(107);
+  if SysUtils.ExpandFileName('../') <> ParentDirectory + '/' then
+    Halt(108);
+  if SysUtils.ExpandFileName('//') <> '//' then
+    Halt(109);
+  if SysUtils.ExpandFileName('///') <> '//' then
+    Halt(110);
+  if SysUtils.ExpandFileName('//foo/..') <> '/' then
+    Halt(111);
+  if SysUtils.ExpandFileName('//foo/../') <> '//' then
+    Halt(112);
+  if SysUtils.ExpandFileName('//../bar') <> '/bar' then
+    Halt(113);
+  if SysUtils.ExpandFileName('...') <>
+      CurrentDirectory + '/...' then
+    Halt(114);
+  if SysUtils.ExpandFileName('./') <> CurrentDirectory + '/' then
+    Halt(115);
+  if SysUtils.ExpandFileName('a//b///') <>
+      CurrentDirectory + '/a/b/' then
+    Halt(116);
+  if SysUtils.ExpandFileName('a/.../b') <>
+      CurrentDirectory + '/a/.../b' then
+    Halt(117);
 
   if not SysUtils.FileExists('files/alpha1.dat') then
     Halt(73);

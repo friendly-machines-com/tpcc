@@ -1200,6 +1200,9 @@ static ConstEvalResult fold_pos(ConstEvalContext&, Type* result_ty, const std::v
 	if (!needle || !haystack) {
 		return ConstEvalResult::not_constant();
 	}
+	if (needle->value.empty()) {
+		return fold_integer_result(0, false, result_ty);
+	}
 	std::size_t found = haystack->value.find(needle->value);
 	uint64_t pascal_index = found == std::string::npos ? 0 : static_cast<uint64_t>(found + 1);
 	return fold_integer_result(pascal_index, false, result_ty);

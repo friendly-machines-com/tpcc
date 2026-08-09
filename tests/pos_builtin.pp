@@ -37,7 +37,7 @@ begin
       N := 0;
       N := 1 div N
     end;
-  if FoldedEmpty <> 1 then
+  if FoldedEmpty <> 0 then
     begin
       N := 0;
       N := 1 div N
