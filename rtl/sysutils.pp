@@ -70,6 +70,9 @@ function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True
 function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_system::p_expandfilename';
 function GetEnvironmentVariable(const Name: AnsiString): AnsiString; external name '::u_system::p_getenvironmentvariable';
 procedure GetLocalTime(var SystemTime: TSystemTime); external name '::u_system::p_getlocaltime';
+function FileDateToDateTime(FileDate: LongInt): TDateTime; external name '::u_system::p_filedatetodatetime';
+procedure DecodeDate(Date: TDateTime; out Year, Month, Day: Word); external name '::u_system::p_decodedate';
+procedure DecodeTime(Time: TDateTime; out Hour, Minute, Second, Millisecond: Word); external name '::u_system::p_decodetime';
 function ExecuteProcess(const Path, ComLine: AnsiString;
   Flags: TExecuteFlags = []): Integer; overload;
 function ExecuteProcess(const Path: AnsiString;

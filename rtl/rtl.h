@@ -19,6 +19,7 @@
 #include <array>
 #include <bit>
 #include <charconv>
+#include <chrono>
 #include <cerrno>
 #include <cmath>
 #include <cstddef>
@@ -2577,6 +2578,116 @@ inline void p_getlocaltime(
 	system_time.p_millisecond =
 	    static_cast<t_word>(
 		current.tv_nsec / 1000000);
+}
+
+inline t_double p_filedatetodatetime(
+    t_integer file_date) {
+	const std::time_t epoch_seconds =
+	    static_cast<std::time_t>(file_date);
+	std::tm local{};
+	if (!::localtime_r(&epoch_seconds, &local))
+		throw std::system_error(
+		    errno,
+		    std::generic_category(),
+		    "localtime_r");
+
+	const std::chrono::sys_days local_date{
+	    std::chrono::year{local.tm_year + 1900} /
+	    std::chrono::month{
+		static_cast<unsigned>(local.tm_mon + 1)} /
+	    std::chrono::day{
+		static_cast<unsigned>(local.tm_mday)}};
+	const std::chrono::sys_days date_time_epoch{
+	    std::chrono::year{1899} /
+	    std::chrono::month{12} /
+	    std::chrono::day{30}};
+	const t_double whole_days =
+	    static_cast<t_double>(
+		(local_date - date_time_epoch).count());
+	const t_double seconds =
+	    static_cast<t_double>(
+		(local.tm_hour * 60 + local.tm_min) * 60 +
+		local.tm_sec);
+	return whole_days + seconds / 86400.0;
+}
+
+inline void p_decodedate(
+    t_double date_time,
+    t_word& year,
+    t_word& month,
+    t_word& day) {
+	constexpr t_longint date_delta = 693594;
+	constexpr t_double max_date_time =
+	    2958465.99999999;
+	constexpr t_double half_millisecond =
+	    1.0 / (86400000.0 * 2.0);
+
+	if (date_time <= -date_delta) {
+		year = 0;
+		month = 0;
+		day = 0;
+	} else {
+		t_double adjusted =
+		    date_time > 0
+			? date_time + half_millisecond
+			: date_time - half_millisecond;
+		if (adjusted > max_date_time)
+			adjusted = max_date_time;
+
+		const auto whole_days =
+		    static_cast<t_longint>(
+			::trunc(adjusted));
+		const std::chrono::sys_days date_time_epoch{
+		    std::chrono::year{1899} /
+		    std::chrono::month{12} /
+		    std::chrono::day{30}};
+		const std::chrono::year_month_day decoded{
+		    date_time_epoch +
+		    std::chrono::days{whole_days}};
+		year = static_cast<t_word>(
+		    static_cast<int>(decoded.year()));
+		month = static_cast<t_word>(
+		    static_cast<unsigned>(decoded.month()));
+		day = static_cast<t_word>(
+		    static_cast<unsigned>(decoded.day()));
+	}
+}
+
+inline void p_decodetime(
+    t_double date_time,
+    t_word& hour,
+    t_word& minute,
+    t_word& second,
+    t_word& millisecond) {
+	constexpr t_int64 milliseconds_per_day =
+	    86400000;
+	const t_int64 rounded_milliseconds =
+	    static_cast<t_int64>(
+		::round(
+		    date_time *
+		    static_cast<t_double>(
+			milliseconds_per_day)));
+	const t_qword absolute_milliseconds =
+	    rounded_milliseconds < 0
+		? static_cast<t_qword>(
+		      -rounded_milliseconds)
+		: static_cast<t_qword>(
+		      rounded_milliseconds);
+	t_longword time =
+	    static_cast<t_longword>(
+		absolute_milliseconds %
+		milliseconds_per_day);
+
+	hour = static_cast<t_word>(
+	    time / 3600000);
+	time %= 3600000;
+	minute = static_cast<t_word>(
+	    time / 60000);
+	time %= 60000;
+	second = static_cast<t_word>(
+	    time / 1000);
+	millisecond = static_cast<t_word>(
+	    time % 1000);
 }
 
 inline t_integer p_fpsystem(
