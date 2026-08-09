@@ -4558,7 +4558,7 @@ inline t_longint p_pos(
 	    static_cast<std::size_t>(
 		haystack.m_length());
 	if (needle_length == 0)
-		return 1;
+		return 0;
 	if (needle_length > haystack_length)
 		return 0;
 	const std::size_t last =
