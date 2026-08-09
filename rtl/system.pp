@@ -74,6 +74,7 @@ const
   MaxLongint = $7fffffff;
   MaxSmallint = $7fff;
   MaxInt = MaxSmallint;
+  AllowDirectorySeparators: TSysCharSet = ['\', '/'];
 
 var
   // RunError stores its error number in this RTL variable before terminating.

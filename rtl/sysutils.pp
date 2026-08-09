@@ -79,7 +79,7 @@ begin
   Result := Length(FileName);
   while Result > 0 do
     begin
-      if FileName[Result] = '/' then
+      if FileName[Result] in AllowDirectorySeparators then
         Break;
       Result := Result - 1
     end
@@ -113,7 +113,7 @@ begin
   Count := Length(Result);
   if Count = 0 then
     Result := '/'
-  else if Result[Count] <> '/' then
+  else if not (Result[Count] in AllowDirectorySeparators) then
     Result := Result + '/'
 end;
 

@@ -24,6 +24,12 @@ begin
 end;
 
 begin
+  if not ('/' in AllowDirectorySeparators) then
+    Halt(1);
+  if not ('\' in AllowDirectorySeparators) then
+    Halt(2);
+  if '.' in AllowDirectorySeparators then
+    Halt(3);
   ShowDirectory(0);
   ShowDirectory(217);
   ShowAnsiDirectory(0);

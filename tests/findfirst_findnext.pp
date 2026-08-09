@@ -18,7 +18,7 @@ begin
     Halt(52);
   if IncludeTrailingPathDelimiter('/') <> '/' then
     Halt(53);
-  if IncludeTrailingPathDelimiter('files\') <> 'files\/' then
+  if IncludeTrailingPathDelimiter('files\') <> 'files\' then
     Halt(54);
 
   if ExtractFilePath('') <> '' then
@@ -49,9 +49,9 @@ begin
     Halt(67);
   if ExtractFileName('files//name') <> 'name' then
     Halt(68);
-  if ExtractFilePath('files\name') <> '' then
+  if ExtractFilePath('files\name') <> 'files\' then
     Halt(69);
-  if ExtractFileName('files\name') <> 'files\name' then
+  if ExtractFileName('files\name') <> 'name' then
     Halt(70);
   if ExtractFilePath('drive:name') <> '' then
     Halt(71);
