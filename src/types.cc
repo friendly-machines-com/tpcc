@@ -26,7 +26,7 @@ std::optional<ValueConversion> Type::destination_conversion_from(const Type* sou
 std::optional<AssignmentConversion> Type::assignment_conversion_from(const Type* source) const {
 	if (auto ordinary = value_conversion_from(source)) {
 		return AssignmentConversion{
-		    ordinary->kind == ValueConversionClass::Direct ? AssignmentConversionClass::Direct : AssignmentConversionClass::Widening,
+		    ordinary->kind == ValueConversionClass::Direct ? AssignmentConversionClass::Equal : AssignmentConversionClass::Widening,
 		    ordinary->distance,
 		};
 	}

@@ -68,7 +68,7 @@ struct MatchRank {
 	};
 	enum class Tier {
 		Exact,
-		Direct,
+		Equal,
 		Convert,
 		ConvertNarrowing,
 		Generic,

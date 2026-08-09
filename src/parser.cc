@@ -394,8 +394,8 @@ static const char* match_tier_name(MatchRank::Tier tier) {
 	switch (tier) {
 	case MatchRank::Tier::Exact:
 		return "exact";
-	case MatchRank::Tier::Direct:
-		return "direct";
+	case MatchRank::Tier::Equal:
+		return "equal";
 	case MatchRank::Tier::Convert:
 		return "convert";
 	case MatchRank::Tier::ConvertNarrowing:
@@ -8702,7 +8702,7 @@ static std::optional<ArgumentMatch> contextual_subrange_constant_match(const Par
 	if (compare_ordinal_value(bound->ordinal_value, range.lower_ordinal) < 0 || compare_ordinal_value(bound->ordinal_value, range.upper_ordinal) > 0) {
 		return std::nullopt;
 	}
-	return ArgumentMatch{{MatchRank::Tier::Direct, 0}, new Cast(bound->node, subrange)};
+	return ArgumentMatch{{MatchRank::Tier::Equal, 0}, new Cast(bound->node, subrange)};
 }
 
 std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion, MatchFailure* failure, DeclaredConversionFailure* conversion_failure) {
@@ -8714,7 +8714,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	Integer* untyped_integer = untyped_integer_constant(actual);
 
 	if (builtin && builtin->generic_kind == BuiltinGenericKind::Assigned && parameter_index == 0 && (dynamic_cast<RoutineType*>(source) || (source && source->is_reference_type()))) {
-		return ArgumentMatch{{MatchRank::Tier::Direct, 0}, actual};
+		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, actual};
 	}
 
 	if (target == unknown_type()) {
@@ -8846,7 +8846,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 
 		Type* item_type = target_set ? target_set->item_type : target_dynamic ? target_dynamic->item_type : target_open->item_type;
 		Parameter item_formal("", "", item_type, ParamMode::Value, nullptr);
-		MatchRank combined{MatchRank::Tier::Direct, 0};
+		MatchRank combined{MatchRank::Tier::Equal, 0};
 		if (!target_set) {
 			combined.contextual_construction = MatchRank::ContextualConstruction::Array;
 		}
@@ -8946,7 +8946,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			converted = new OpenArrayValueCopy(actual, target);
 			break;
 		}
-		return ArgumentMatch{{MatchRank::Tier::Direct, 0}, converted};
+		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, converted};
 	}
 
 	if (formal.mode == ParamMode::Var || formal.mode == ParamMode::Out) {
@@ -8970,19 +8970,19 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			// deliberately retains Base's storage identity for var/out.
 			// This is a language relation of DistinctType, not a general
 			// relaxation to equal-looking C++ carriers.
-			return ArgumentMatch{{MatchRank::Tier::Direct, 0}, actual};
+			return ArgumentMatch{{MatchRank::Tier::Equal, 0}, actual};
 		}
 		if (builtin && builtin->generic_kind == BuiltinGenericKind::PointerStorage && target == pointer_type() && dynamic_cast<PointerType*>(source)) {
 			// GetMem(out Pointer, ...) and ReAllocMem(var Pointer, ...)
 			// explicitly operate on raw pointer storage. Keeping that contract
 			// in builtin metadata prevents an RTL exception from weakening
 			// every typed mutable-reference parameter in the language.
-			return ArgumentMatch{{MatchRank::Tier::Direct, 0}, actual};
+			return ArgumentMatch{{MatchRank::Tier::Equal, 0}, actual};
 		}
 		if (builtin && builtin->generic_kind == BuiltinGenericKind::ValOutput && parameter_index == 1 && formal.mode == ParamMode::Out) {
 			auto range = dynamic_cast<SubrangeType*>(source);
 			if (range && range->base_type == target) {
-				return ArgumentMatch{{MatchRank::Tier::Direct, 0}, actual};
+				return ArgumentMatch{{MatchRank::Tier::Equal, 0}, actual};
 			}
 		}
 		return std::nullopt;
@@ -8991,7 +8991,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	if (dynamic_cast<NilLiteral*>(actual) && (target->is_reference_type() || dynamic_cast<RoutineType*>(target))) {
 		auto value = new NilLiteral();
 		value->ty = target;
-		return ArgumentMatch{{MatchRank::Tier::Direct, 0}, value};
+		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, value};
 	}
 
 	if (auto reference = dynamic_cast<RoutineRef*>(actual)) {
@@ -9007,7 +9007,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			}
 			return std::nullopt;
 		}
-		return ArgumentMatch{{MatchRank::Tier::Direct, 0}, resolved};
+		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, resolved};
 	}
 
 	if (auto literal = dynamic_cast<String*>(actual); literal && dynamic_cast<ShortStringType*>(target)) {
@@ -9015,7 +9015,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		// ShortString context, including that context's capacity. Return a
 		// candidate-local node: changing the shared literal would let whichever
 		// overload is examined first alter every later candidate.
-		return ArgumentMatch{{MatchRank::Tier::Direct, 0}, new String(literal->value, target)};
+		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, new String(literal->value, target)};
 	}
 
 	if (auto literal = dynamic_cast<Real*>(actual); literal && real_range_rank(target) >= 0) {
@@ -9027,7 +9027,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		if (target == literal->ty) {
 			return ArgumentMatch{{MatchRank::Tier::Exact, 0}, actual};
 		}
-		return ArgumentMatch{{MatchRank::Tier::Direct, 0}, make_implicit_cast(actual, target)};
+		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, make_implicit_cast(actual, target)};
 	}
 
 	if (source == target) {
@@ -9049,7 +9049,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 				return std::nullopt;
 			}
 			Type* natural = integer_literal_natural_type(untyped_integer);
-			MatchRank rank{target == natural ? MatchRank::Tier::Exact : MatchRank::Tier::Direct, *distance};
+			MatchRank rank{target == natural ? MatchRank::Tier::Exact : MatchRank::Tier::Equal, *distance};
 			auto natural_signed = integer_carrier_is_signed(natural);
 			auto target_signed = integer_carrier_is_signed(target);
 			rank.integer_sign_mismatch = natural_signed && target_signed && *natural_signed != *target_signed;
@@ -9076,7 +9076,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	}
 	if (assignment && assignment->kind != AssignmentConversionClass::Narrowing) {
 		MatchRank rank{
-		    assignment->kind == AssignmentConversionClass::Direct ? MatchRank::Tier::Direct : MatchRank::Tier::Convert,
+		    assignment->kind == AssignmentConversionClass::Equal ? MatchRank::Tier::Equal : MatchRank::Tier::Convert,
 		    assignment->distance,
 		};
 		auto source_signed = integer_carrier_is_signed(assignment_source);
@@ -9687,7 +9687,7 @@ static bool pointer_offset_formals(Callable* callable, OverloadResolutionPolicy 
 }
 
 static bool candidate_admitted_in_phase(Callable* callable, const CallableMatch& match, MatchRank::Tier phase, OverloadResolutionPolicy policy) {
-	if (policy == OverloadResolutionPolicy::Ordinary || phase == MatchRank::Tier::Exact || phase == MatchRank::Tier::Direct) {
+	if (policy == OverloadResolutionPolicy::Ordinary || phase == MatchRank::Tier::Exact || phase == MatchRank::Tier::Equal) {
 		return true;
 	}
 	if (phase != MatchRank::Tier::Convert && phase != MatchRank::Tier::ConvertNarrowing) {

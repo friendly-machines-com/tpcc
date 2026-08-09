@@ -37,7 +37,7 @@ struct ValueConversion {
  * identity and expression-dependent contextual matches are handled by the
  * parser before this type-only query. */
 enum class AssignmentConversionClass {
-	Direct,
+	Equal,
 	Widening,
 	Narrowing,
 };
