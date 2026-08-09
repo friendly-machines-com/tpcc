@@ -9091,12 +9091,16 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, resolved};
 	}
 
-	if (auto literal = dynamic_cast<String*>(actual); literal && dynamic_cast<ShortStringType*>(target)) {
-		// A quoted literal is constructed directly in its selected
-		// ShortString context, including that context's capacity. Return a
-		// candidate-local node: changing the shared literal would let whichever
-		// overload is examined first alter every later candidate.
-		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, new String(literal->value, target)};
+	if (auto literal = dynamic_cast<String*>(actual); literal && (dynamic_cast<ShortStringType*>(target) || target == ansistring_type())) {
+		// A quoted literal is constructed directly in its selected string
+		// context. This is not a unary conversion call: no source string value
+		// has been materialized yet. Return a candidate-local, fully converted
+		// value so testing one overload cannot alter another candidate.
+		ConstEvalResult converted = const_convert_string(literal->value, target);
+		if (converted.kind != ConstEvalResult::Kind::Success) {
+			return std::nullopt;
+		}
+		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, converted.node};
 	}
 
 	if (auto literal = dynamic_cast<Real*>(actual); literal && real_range_rank(target) >= 0) {

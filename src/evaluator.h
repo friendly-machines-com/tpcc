@@ -41,4 +41,5 @@ struct ConstEvalResult {
 
 ConstEvalResult const_convert_integer(uint64_t magnitude, bool negative, Type* from_ty, Type* to_ty);
 ConstEvalResult const_explicit_ordinal_cast(uint64_t magnitude, bool negative, Type* to_ty);
+ConstEvalResult const_convert_string(const std::string& value, Type* to_ty);
 ConstEvalResult const_eval_type_bound(TypeBoundKind kind, Type* ty);

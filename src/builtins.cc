@@ -289,12 +289,7 @@ static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const s
 		return fold_integer_result(value->value, value->negative, result_ty);
 	}
 	if (const auto* value = dynamic_cast<const String*>(args[0])) {
-		if (auto target = dynamic_cast<ShortStringType*>(result_ty)) {
-			return ConstEvalResult::success(new String(value->value.substr(0, target->capacity), result_ty));
-		}
-		if (result_ty == ansistring_type()) {
-			return ConstEvalResult::success(new String(value->value, result_ty));
-		}
+		return const_convert_string(value->value, result_ty);
 	}
 	return ConstEvalResult::not_constant();
 }
@@ -913,6 +908,13 @@ static bool add_u64_checked(uint64_t a, uint64_t b, uint64_t* out) {
 }
 
 static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& args, bool subtract) {
+	if (!subtract && args.size() == 2) {
+		auto left = dynamic_cast<String*>(args[0]);
+		auto right = dynamic_cast<String*>(args[1]);
+		if (left && right) {
+			return const_convert_string(left->value + right->value, result_ty);
+		}
+	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
 	}
@@ -945,6 +947,13 @@ static ConstEvalResult fold_subtract(ConstEvalContext&, Type* result_ty, const s
 }
 
 static ConstEvalResult fold_unchecked_add_sub(Type* result_ty, const std::vector<Node*>& args, bool subtract) {
+	if (!subtract && args.size() == 2) {
+		auto left = dynamic_cast<String*>(args[0]);
+		auto right = dynamic_cast<String*>(args[1]);
+		if (left && right) {
+			return const_convert_string(left->value + right->value, result_ty);
+		}
+	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
 	}

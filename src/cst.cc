@@ -828,6 +828,12 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 			}
 		}
 	}
+	if (auto string = dynamic_cast<String*>(r.node)) {
+		ConstEvalResult converted = const_convert_string(string->value, ty);
+		if (converted.kind != ConstEvalResult::Kind::Error) {
+			return converted;
+		}
+	}
 	return ConstEvalResult::not_constant();
 }
 

@@ -26,9 +26,17 @@ type
   end;
   TManaged = record
     Text: AnsiString;
+    Embedded: AnsiString;
+    LongText: AnsiString;
+    Narrowed: String[3];
   end;
 
 const
+  LongManaged =
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789');
   Outer: TOuter = (
     Items: (
       (Id: 7; Numbers: (10, 20, 30); Flags: [FlagA, FlagC]),
@@ -48,7 +56,14 @@ const
     Present: 9
   );
   Managed: TManaged = (
-    Text: 'folded implicit string conversion'
+    { Add remains a ShortString-valued operation here. Assigning its constant
+      result selects System's unary ShortString -> AnsiString conversion. }
+    Text: 'folded implicit ' + 'string conversion';
+    Embedded: 'A'#0'BCD';
+    LongText: LongManaged;
+    { Add is AnsiString-valued, so this exercises the compiler-defined
+      narrowing conversion rather than contextual literal construction. }
+    Narrowed: AnsiString('abc') + AnsiString('def')
   );
 
 function NextCounter: LongInt;
@@ -61,6 +76,9 @@ end;
 
 var
   OuterAddress: ^TOuter;
+  RuntimeShort: ShortString;
+  RuntimeAnsi: AnsiString;
+  RuntimeNarrowed: String[3];
 
 begin
   if Outer.Items[0].Id <> 7 then
@@ -98,5 +116,39 @@ begin
   if NextCounter <> 2 then
     Halt(16);
   if Managed.Text <> 'folded implicit string conversion' then
-    Halt(17)
+    Halt(17);
+  if Length(Managed.Embedded) <> 5 then
+    Halt(18);
+  if (Managed.Embedded[1] <> 'A') or
+     (Ord(Managed.Embedded[2]) <> 0) or
+     (Managed.Embedded[5] <> 'D') then
+    Halt(19);
+  if Length(Managed.LongText) <> 320 then
+    Halt(20);
+  if (Managed.LongText[256] <> '5') or
+     (Managed.LongText[320] <> '9') then
+    Halt(21);
+  if Managed.Narrowed <> 'abc' then
+    Halt(22);
+
+  RuntimeShort := 'folded implicit ' + 'string conversion';
+  RuntimeAnsi := RuntimeShort;
+  if RuntimeAnsi <> Managed.Text then
+    Halt(23);
+
+  RuntimeAnsi := 'A'#0'BCD';
+  if RuntimeAnsi <> Managed.Embedded then
+    Halt(24);
+
+  RuntimeAnsi :=
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
+    AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789');
+  if RuntimeAnsi <> Managed.LongText then
+    Halt(25);
+
+  RuntimeNarrowed := AnsiString('abc') + AnsiString('def');
+  if RuntimeNarrowed <> Managed.Narrowed then
+    Halt(26)
 end.

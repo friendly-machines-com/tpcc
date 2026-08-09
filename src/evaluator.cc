@@ -31,6 +31,16 @@ ConstEvalResult const_convert_integer(uint64_t magnitude, bool negative, Type*, 
 	return integer_result(magnitude, negative, to_ty);
 }
 
+ConstEvalResult const_convert_string(const std::string& value, Type* to_ty) {
+	if (auto target = dynamic_cast<ShortStringType*>(to_ty)) {
+		return ConstEvalResult::success(new String(value.substr(0, target->capacity), to_ty));
+	}
+	if (to_ty == ansistring_type()) {
+		return ConstEvalResult::success(new String(value, to_ty));
+	}
+	return ConstEvalResult::error("constant string conversion has a non-string target");
+}
+
 ConstEvalResult const_explicit_ordinal_cast(uint64_t magnitude, bool negative, Type* to_ty) {
 	Type* carrier = to_ty;
 	while (auto range = dynamic_cast<SubrangeType*>(carrier)) {

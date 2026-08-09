@@ -2260,7 +2260,7 @@ static_assert(
 static_assert(
     alignof(t_ansistring) == alignof(void*));
 
-inline t_ansistring tpcc_ansistring_from_c(
+inline t_ansistring tpcc_ansistring_literal(
     const char* source, std::size_t length) {
 	t_ansistring result;
 	std::vector<t_char> value(length + 1, t_char{0});
