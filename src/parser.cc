@@ -8658,17 +8658,6 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			}
 		}
 		if (builtin && builtin->generic_kind == BuiltinGenericKind::ValOutput) {
-			if (parameter_index == 0 && !dynamic_cast<ShortStringType*>(source)) {
-				if (auto literal = dynamic_cast<String*>(actual)) {
-					// A one-character Pascal literal is initially Char.
-					// Val supplies the ShortString context which turns the
-					// same source spelling into a string value.
-					actual = new String(literal->value, shortstring_type());
-					source = shortstring_type();
-				} else {
-					return std::nullopt;
-				}
-			}
 			if (parameter_index == 1 && val_destination_family(source) != ValDestinationFamily::Integer && val_destination_family(source) != ValDestinationFamily::EnumerationTodo) {
 				// Concrete Single/Double/Extended overloads are ranked
 				// independently. Enumeration reaches the semantic handler
