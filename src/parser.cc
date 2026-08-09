@@ -2753,7 +2753,7 @@ Node* Parser::parse_value(LeadingTokenDirectives* leading_directives) {
 			consume();
 		} while (!input_token.empty() && (input_token.front() == '\'' || input_token.front() == '#'));
 		Type* literal_type = s.size() == 1 ? char_type() : shortstring_type();
-		return new String(std::move(s), literal_type);
+		return new String(std::move(s), literal_type, true);
 	}
 	const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
 	return parse_value_from_identifier(parse_identifier(), identifier_directives, leading_directives);
@@ -9091,7 +9091,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, resolved};
 	}
 
-	if (auto literal = dynamic_cast<String*>(actual); literal && (dynamic_cast<ShortStringType*>(target) || target == ansistring_type())) {
+	if (auto literal = dynamic_cast<String*>(actual); literal && literal->contextual_literal && (dynamic_cast<ShortStringType*>(target) || target == ansistring_type())) {
 		// A quoted literal is constructed directly in its selected string
 		// context. This is not a unary conversion call: no source string value
 		// has been materialized yet. Return a candidate-local, fully converted

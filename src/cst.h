@@ -556,7 +556,11 @@ class Integer : public Node {
 class String : public Node {
       public:
 	std::string value;
-	String(std::string value, Type* ty);
+	// True only for source literal syntax and untyped constant aliases which
+	// preserve that syntax's contextual construction. Results produced by
+	// conversion or another folded operation are committed typed values.
+	bool contextual_literal;
+	String(std::string value, Type* ty, bool contextual_literal = false);
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

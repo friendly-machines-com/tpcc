@@ -190,7 +190,7 @@ Integer::Integer(uint64_t value, Type* ty, bool negative, bool based_literal) {
 	this->ty = ty;
 }
 
-String::String(std::string value, Type* ty) {
+String::String(std::string value, Type* ty, bool contextual_literal) : contextual_literal(contextual_literal) {
 	this->value = std::move(value);
 	this->ty = ty;
 }
@@ -1001,7 +1001,7 @@ const char* String::diagnostic_kind() const {
 }
 
 ConstEvalResult String::const_eval(ConstEvalContext&) const {
-	return ConstEvalResult::success(new String(value, ty));
+	return ConstEvalResult::success(new String(value, ty, contextual_literal));
 }
 
 void String::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
