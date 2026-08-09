@@ -3266,11 +3266,9 @@ static Type* call_result_type(Node* callee) {
 static bool node_is_bare_callable(Node* n) {
 	if (!n) {
 		return false;
-	}
-	if (dynamic_cast<Callable*>(n) || dynamic_cast<OverloadSet*>(n)) {
+	} else if (dynamic_cast<Callable*>(n) || dynamic_cast<OverloadSet*>(n)) {
 		return true;
-	}
-	if (auto ma = dynamic_cast<MemberAccess*>(n)) {
+	} else if (auto ma = dynamic_cast<MemberAccess*>(n)) {
 		return dynamic_cast<Callable*>(ma->b) || dynamic_cast<OverloadSet*>(ma->b);
 	}
 	return false;
@@ -3285,8 +3283,7 @@ Node* Parser::maybe_auto_call(Node* n, LeadingTokenDirectives directives) {
 			raise_value_error("write-only property '" + property->property->pas_name + "' cannot be read", property->property);
 		}
 		return n;
-	}
-	if (!node_is_bare_callable(n)) {
+	} else if (!node_is_bare_callable(n)) {
 		return n;
 	}
 	// finalize_call handles the empty-args case: for a Callable it checks
@@ -4532,41 +4529,39 @@ void Parser::validate_method_ancestor_semantics(Method* method, Frame* owner_bod
 	auto inspect_ancestor_binding = [&](Node* binding) {
 		auto inspect = [&](Callable* callable) {
 			auto ancestor = dynamic_cast<Method*>(callable);
-			if (!ancestor || (ancestor->virtual_kind == Method::VirtualKind::None && !ancestor->is_final)) {
-				return;
-			}
-			bool exact_signature = method->ty->same_signature_as(ancestor->ty) && method->is_static == ancestor->is_static;
-			auto raise_ancestor_error = [&](std::string message) {
-				ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
-				std::stringstream sst;
-				sst << message << "\n  method: " << ctx.value_ref(method) << "\n  ancestor: " << ctx.value_ref(ancestor);
-				emit_parse_error_at(callable_source_location(method), sst.str(), ctx);
-			};
-			if (exact_signature && !method->is_static) {
-				override_target_found = true;
-				if (ancestor->is_final) {
-					raise_ancestor_error("method '" + pas_name + "' overrides a final method");
+			if (ancestor && (ancestor->virtual_kind != Method::VirtualKind::None || ancestor->is_final)) {
+				bool exact_signature = method->ty->same_signature_as(ancestor->ty) && method->is_static == ancestor->is_static;
+				auto raise_ancestor_error = [&](std::string message) {
+					ErrorLetContext ctx = make_error_let_context_from_scopes(scopes, 4);
+					std::stringstream sst;
+					sst << message << "\n  method: " << ctx.value_ref(method) << "\n  ancestor: " << ctx.value_ref(ancestor);
+					emit_parse_error_at(callable_source_location(method), sst.str(), ctx);
+				};
+				if (exact_signature && !method->is_static) {
+					override_target_found = true;
+					if (ancestor->is_final) {
+						raise_ancestor_error("method '" + pas_name + "' overrides a final method");
+					}
+				}
+				if (cxx_callable_signatures_collide(method, ancestor)) {
+					bool intended_override = exact_signature && ((old_object_method && method->virtual_kind != Method::VirtualKind::None) || (!old_object_method && method->virtual_kind == Method::VirtualKind::Override));
+					if (!intended_override) {
+						// C++ virtual overriding is based on the emitted name
+						// and carrier signature even when Pascal selected a
+						// distinct signature or requested a fresh virtual
+						// slot. This check runs only after recursive type-block
+						// normalization: otherwise an old self/forward
+						// placeholder and its resolved Type* would manufacture
+						// the very distinction diagnosed here. Old-style
+						// objects are the exception to the spelling rule:
+						// repeating `virtual` on the exact declaration is
+						// their normal override syntax.
+						raise_ancestor_error("method '" + pas_name +
+						                     "' would accidentally override an "
+						                     "ancestor after C++ carrier erasure");
+					}
 				}
 			}
-			if (!cxx_callable_signatures_collide(method, ancestor)) {
-				return;
-			}
-			bool intended_override = exact_signature && ((old_object_method && method->virtual_kind != Method::VirtualKind::None) || (!old_object_method && method->virtual_kind == Method::VirtualKind::Override));
-			if (intended_override) {
-				return;
-			}
-			// C++ virtual overriding is based on the emitted name and
-			// carrier signature even when Pascal selected a distinct
-			// signature or requested a fresh virtual slot. This check
-			// runs only after recursive type-block normalization:
-			// otherwise an old self/forward placeholder and its resolved
-			// Type* would manufacture the very distinction diagnosed
-			// here. Old-style objects are the exception to the spelling
-			// rule: repeating `virtual` on the exact declaration is their
-			// normal override syntax.
-			raise_ancestor_error("method '" + pas_name +
-			                     "' would accidentally override an "
-			                     "ancestor after C++ carrier erasure");
 		};
 		if (auto callable = dynamic_cast<Callable*>(binding)) {
 			inspect(callable);
@@ -6818,8 +6813,7 @@ struct TypeBlockResolver {
 		// validate_storage_type correctly stops at the reference carrier.
 		if (auto class_type = dynamic_cast<ClassType*>(ty)) {
 			return validate_aggregate_storage(class_type->children);
-		}
-		if (auto interface_type = dynamic_cast<InterfaceType*>(ty)) {
+		} else if (auto interface_type = dynamic_cast<InterfaceType*>(ty)) {
 			return validate_aggregate_storage(interface_type->children);
 		}
 		return validate_storage_type(ty);
@@ -7768,34 +7762,33 @@ Procedure* Parser::match_or_create_procedure(const std::string& pas_name, const 
 
 	Procedure* target = nullptr;
 	auto consider_existing = [&](Node* node) {
-		if (!node || target) {
-			return;
-		}
-		if (auto ec = dynamic_cast<Callable*>(node)) {
-			if (ec->pas_name == pas_name && (short_form_implementation || sig_matches(ec)) && !ec->has_body && has_every_frame_binding(ec)) {
-				target = attach_to(ec);
-			}
-		} else if (auto os = dynamic_cast<OverloadSet*>(node)) {
-			if (short_form_implementation) {
-				Callable* pick = nullptr;
-				for (auto* m : os->members) {
-					if (m->pas_name == pas_name && !m->has_body && has_every_frame_binding(m)) {
-						if (pick) {
-							raise_values_error("ambiguous short-form impl", {{"candidate 1", pick}, {"candidate 2", m}});
+		if (node && !target) {
+			if (auto ec = dynamic_cast<Callable*>(node)) {
+				if (ec->pas_name == pas_name && (short_form_implementation || sig_matches(ec)) && !ec->has_body && has_every_frame_binding(ec)) {
+					target = attach_to(ec);
+				}
+			} else if (auto os = dynamic_cast<OverloadSet*>(node)) {
+				if (short_form_implementation) {
+					Callable* pick = nullptr;
+					for (auto* m : os->members) {
+						if (m->pas_name == pas_name && !m->has_body && has_every_frame_binding(m)) {
+							if (pick) {
+								raise_values_error("ambiguous short-form impl", {{"candidate 1", pick}, {"candidate 2", m}});
+							}
+							pick = m;
 						}
-						pick = m;
 					}
-				}
-				if (pick) {
-					target = attach_to(pick);
-				}
-			} else {
-				for (auto* m : os->members) {
-					if (!m->has_body && sig_matches(m) && has_every_frame_binding(m)) {
-						if (target) {
-							raise_values_error("ambiguous overload match", {{"candidate 1", target}, {"candidate 2", m}});
+					if (pick) {
+						target = attach_to(pick);
+					}
+				} else {
+					for (auto* m : os->members) {
+						if (!m->has_body && sig_matches(m) && has_every_frame_binding(m)) {
+							if (target) {
+								raise_values_error("ambiguous overload match", {{"candidate 1", target}, {"candidate 2", m}});
+							}
+							target = attach_to(m);
 						}
-						target = attach_to(m);
 					}
 				}
 			}
@@ -9776,8 +9769,7 @@ Node* Parser::cast_impl(Node* a, Type* target_ty, bool allow_destination_convers
 static std::vector<Callable*> routine_reference_candidates(Node* candidates_node) {
 	if (auto callable = dynamic_cast<Callable*>(candidates_node)) {
 		return {callable};
-	}
-	if (auto overloads = dynamic_cast<OverloadSet*>(candidates_node)) {
+	} else if (auto overloads = dynamic_cast<OverloadSet*>(candidates_node)) {
 		return overloads->members;
 	}
 	return {};

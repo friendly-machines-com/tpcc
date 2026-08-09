@@ -307,18 +307,15 @@ ErrorLetContext::NameBase ErrorLetContext::choose_value_base(const ValueNode& n)
 	// the ordinary definition-before-use graph.
 	if (auto unit = dynamic_cast<const UnitRef*>(n.node); unit && unit->unit && !unit->unit->name.empty()) {
 		return NameBase{name_component(unit->unit->name, n.kind.c_str()), ""};
-	}
-
-	if (!n.value_names.empty()) {
+	} else if (!n.value_names.empty()) {
 		return NameBase{name_component(n.value_names.front(), n.kind.c_str()), ""};
-	}
-
-	// Derived expressions usually have no direct Frame entry. Give common
-	// selector/conversion intrinsics source-shaped diagnostic-local names from
-	// already-discovered operands. This is graph-local naming only: it neither
-	// mutates IR nor parses rendered output strings. Values are named in
-	// postorder, so operand names are normally assigned before their user.
-	if (auto ma = dynamic_cast<const MemberAccess*>(n.node)) {
+	} else if (auto ma = dynamic_cast<const MemberAccess*>(n.node)) {
+		// Derived expressions usually have no direct Frame entry. Give common
+		// selector/conversion intrinsics source-shaped diagnostic-local names
+		// from already-discovered operands. This is graph-local naming only: it
+		// neither mutates IR nor parses rendered output strings. Values are
+		// named in postorder, so operand names are normally assigned before
+		// their user.
 		auto ait = value_nodes.find(ma->a);
 		auto bit = value_nodes.find(ma->b);
 		if (ait != value_nodes.end() && ait->second.name.assigned && bit != value_nodes.end()) {
