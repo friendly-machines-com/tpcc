@@ -656,7 +656,7 @@ static constexpr std::array<DirectiveSwitchCategory, 26> directive_switch_catego
     DirectiveSwitchCategory::Unsupported, // E; module
     DirectiveSwitchCategory::Unsupported, // F
     DirectiveSwitchCategory::Unsupported, // G; local
-    DirectiveSwitchCategory::Unsupported, // H; local
+    DirectiveSwitchCategory::Local,       // H
     DirectiveSwitchCategory::Local,       // I
     DirectiveSwitchCategory::Unsupported, // J; local
     DirectiveSwitchCategory::Unsupported, // K
@@ -903,6 +903,17 @@ void Parser::handle_directive(const std::string& body, SourceLocation directive_
 			directive_state.set_switch('i', false);
 		} else {
 			emit_parse_error_at(directive_location, "$iochecks expects ON or OFF");
+		}
+		return;
+	}
+	if (name == "longstrings") {
+		const std::string setting = compact_directive_argument(rest);
+		if (setting == "on") {
+			directive_state.set_switch('h', true);
+		} else if (setting == "off") {
+			directive_state.set_switch('h', false);
+		} else {
+			emit_parse_error_at(directive_location, "$longstrings expects ON or OFF");
 		}
 		return;
 	}
@@ -5686,9 +5697,14 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 	} else if (maybe_parse_circumflex()) {
 		return new PointerType(current_location(), parse_type_expression(true));
 	} else if (peek_keyword("string")) {
+		// $H controls only an unqualified String token. Capture its state
+		// before consuming the token: consume() also processes following
+		// directives, and `String {$H+};` must retain the String meaning in
+		// effect where the token itself occurred.
+		const bool long_strings = directive_state.switch_enabled('h');
 		parse_keyword("string");
 		if (!maybe_parse_opening_bracket()) {
-			return shortstring_type();
+			return long_strings ? ansistring_type() : shortstring_type();
 		}
 		Node* capacity_expression = parse_expression();
 		parse_closing_bracket();
