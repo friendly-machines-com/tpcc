@@ -37,6 +37,32 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/23_packed_record"
 	-o "$tmp/packed_overlay"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_overlay"
 
+./mp -Furtl \
+	-o"$tmp/packed_array_field_write.cc" \
+	tests/packed_array_field_write.pp
+for required in \
+	'auto tpcc_packed_field = tpcc_packed_value.m_get_p_data();' \
+	'::u_system::p_index(tpcc_packed_field,' \
+	'tpcc_packed_value.m_set_p_data(tpcc_packed_field);'
+do
+	if ! rg -Fq "$required" "$tmp/packed_array_field_write.cc"
+	then
+		echo "missing indexed packed-field copyback: $required" >&2
+		exit 1
+	fi
+done
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/packed_array_field_write.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/packed_array_field_write"
+ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_array_field_write"
+
 ./mp -Furtl -o"$tmp/packed_variant.cc" tests/packed_variant.pp
 "${CXX:-g++}" \
 	-std=c++20 \

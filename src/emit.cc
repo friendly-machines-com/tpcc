@@ -995,7 +995,7 @@ void Emitter::emit_statement(Node* stmt) {
 		}
 		auto indexed_member = indexed_receiver ? dynamic_cast<MemberAccess*>(indexed_receiver) : nullptr;
 		auto indexed_overlay = indexed_member ? dynamic_cast<Cast*>(indexed_member->a) : nullptr;
-		auto indexed_packed = indexed_overlay ? dynamic_cast<PackedRecordType*>(indexed_overlay->ty) : nullptr;
+		auto indexed_packed = indexed_member ? dynamic_cast<PackedRecordType*>(indexed_member->a->ty) : nullptr;
 
 		auto property = dynamic_cast<PropertyAccess*>(a->a);
 		bool packed_member = member && dynamic_cast<PackedRecordType*>(member->a->ty);
@@ -1022,6 +1022,35 @@ void Emitter::emit_statement(Node* stmt) {
 			fprintf(active, ">(");
 			emit_expression(a->b);
 			fprintf(active, "));\n");
+		} else if (indexed_argument && indexed_packed && !indexed_overlay) {
+			// A packed field is a value-returning bytewise projection.  Update
+			// an indexed component in an aligned local field value, then put
+			// the complete field back so the write reaches the packed carrier.
+			// Fixed arrays admitted into packed records have already been
+			// restricted by layout to alignment-one element carriers.
+			auto field = dynamic_cast<StorageSlot*>(indexed_member->b);
+			if (!field) {
+				unhandled_node("indexed packed-record target is not a field", indexed_member);
+			}
+			const char* index_name = "::u_system::p_index";
+			if (indexed_property) {
+				auto builtin = dynamic_cast<Builtin*>(indexed_property->property->write_accessor);
+				if (builtin && builtin->desc && builtin->desc->cxx_name == "::u_system::m_unchecked_index") {
+					index_name = "::u_system::m_unchecked_index";
+				}
+			}
+			fprintf(active, "\t[&]() {\n");
+			fprintf(active, "\t\tauto&& tpcc_packed_value = ");
+			emit_expression(indexed_member->a);
+			fprintf(active, ";\n");
+			fprintf(active, "\t\tauto tpcc_packed_field = tpcc_packed_value.m_get_%s();\n", field->cxx_name.c_str());
+			fprintf(active, "\t\t%s(tpcc_packed_field, ", index_name);
+			emit_expression(indexed_argument);
+			fprintf(active, ") = ");
+			emit_expression(a->b);
+			fprintf(active, ";\n");
+			fprintf(active, "\t\ttpcc_packed_value.m_set_%s(tpcc_packed_field);\n", field->cxx_name.c_str());
+			fprintf(active, "\t}();\n");
 		} else if (indexed_argument && indexed_packed) {
 			// Writable packed overlay, array-field element:
 			//

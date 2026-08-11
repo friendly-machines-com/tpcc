@@ -536,9 +536,9 @@ class Parser {
 	 *  the path: a pointer read from packed storage may still designate an
 	 *  ordinary object elsewhere. */
 	bool contains_packed_projection(Node* n);
-	/** The initial packed lowering can write a direct packed field when its
-	 *  carrier is itself a stable assignable place.  Deeper projections need
-	 *  the future copy-in/copy-back Place machinery. */
+	/** Packed lowering can write a direct field or one indexed component of
+	 *  that field when the packed carrier is a stable assignable place.
+	 *  Projections crossing another packed field still need nested copyback. */
 	bool is_supported_packed_assignment(Node* n);
 	/** Enforce the complete place boundary shared by `:=` and read/modify/write
 	 *  mutation before either construct builds its store. */

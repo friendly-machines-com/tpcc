@@ -3828,15 +3828,19 @@ bool Parser::is_supported_packed_assignment(Node* n) {
 		if (!ma || !ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty)) {
 			return false;
 		}
-		auto overlay = dynamic_cast<Cast*>(ma->a);
-		return overlay && is_assignable(overlay->a) && !contains_packed_projection(overlay->a);
+		if (auto overlay = dynamic_cast<Cast*>(ma->a)) {
+			return is_assignable(overlay->a) && !contains_packed_projection(overlay->a);
+		}
+		return is_assignable(ma->a) && !contains_packed_projection(ma->a);
 	} else if (auto property = dynamic_cast<PropertyAccess*>(n)) {
 		auto ma = dynamic_cast<MemberAccess*>(property->receiver);
 		if (!ma || !ma->a || !dynamic_cast<PackedRecordType*>(ma->a->ty)) {
 			return false;
 		}
-		auto overlay = dynamic_cast<Cast*>(ma->a);
-		return overlay && is_assignable(overlay->a) && !contains_packed_projection(overlay->a);
+		if (auto overlay = dynamic_cast<Cast*>(ma->a)) {
+			return is_assignable(overlay->a) && !contains_packed_projection(overlay->a);
+		}
+		return is_assignable(ma->a) && !contains_packed_projection(ma->a);
 	}
 	return false;
 }
