@@ -21,6 +21,7 @@ cd "$root"
 	src/frame.o \
 	src/types.o \
 	src/evaluator.o \
+	src/numeric_constants.o \
 	src/builtins.o \
 	src/operators.o \
 	src/units.o \
