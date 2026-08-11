@@ -3,6 +3,7 @@
 #include "cst.h"
 #include "evaluator.h"
 #include "frame.h"
+#include "numeric_constants.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
@@ -264,6 +265,9 @@ UnitType::UnitType(SourceLocation source_location) : Type(std::move(source_locat
 }
 
 UntypedIntegerType::UntypedIntegerType(SourceLocation source_location) : Type(std::move(source_location)) {
+}
+
+UntypedRealType::UntypedRealType(SourceLocation source_location) : Type(std::move(source_location)) {
 }
 
 RoutineType::RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind) : Type(std::move(source_location)) {
@@ -847,21 +851,6 @@ static bool predefined_object_reference_type(const Type* type) {
 	return dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type);
 }
 
-// Pascal real-family widening order. Keep this independent from the integer
-// rank stored on IntrinsicType: those ranks describe ordinal overloads and
-// bounds, while real widening has different semantics.
-static int real_widening_rank(const Type* ty) {
-	ty = distinct_storage_type(ty);
-	if (ty == single_type()) {
-		return 0;
-	} else if (ty == double_type()) {
-		return 1;
-	} else if (ty == extended_type()) {
-		return 2;
-	}
-	return -1;
-}
-
 static bool integer_like_bounds(const Type* ty, OrdinalBounds* out) {
 	if (integer_bounds(ty, out)) {
 		return true;
@@ -1031,8 +1020,8 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 	auto source_string = dynamic_cast<const ShortStringType*>(source);
 	auto source_range = dynamic_cast<const SubrangeType*>(source);
 	int integer_cost = integer_conversion_cost(source, target);
-	int source_real = real_widening_rank(source);
-	int target_real = real_widening_rank(target);
+	int source_real = real_semantic_rank(source);
+	int target_real = real_semantic_rank(target);
 	if (source_const != source && source == target) {
 		// Exact identity was already tested by the matcher. A distinct
 		// identity over this same carrier is the FPC strong-type direct case,
@@ -1050,6 +1039,11 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 		return direct_conversion();
 	} else if (source == &untyped_integer_type() && target_real >= 0) {
 		return implicit_conversion(500 + target_real);
+	} else if (source == &untyped_real_type() && target_real >= 0) {
+		// The expression matcher owns exact decimal materialization and its
+		// candidate-local quality. At type level this merely records that an
+		// origin may acquire any visible concrete real destination.
+		return direct_conversion();
 	} else if (source_range && source_range->base_type == target) {
 		// Char is a distinct nominal ordinal family, not an unsigned integer
 		// widening source or destination. Byte(CharValue) and Char(ByteValue)
@@ -1086,7 +1080,7 @@ std::optional<ValueConversion> IntrinsicType::destination_conversion_from(const 
 		// This is the Pascal assignment boundary checked by {$R+} and the
 		// Narrowing tier used by value-argument matching.
 		return implicit_conversion(static_cast<unsigned>(integer_cost));
-	} else if (const int source_real = real_widening_rank(source), target_real = real_widening_rank(this); source_real >= 0 && target_real >= 0) {
+	} else if (const int source_real = real_semantic_rank(source), target_real = real_semantic_rank(this); source_real >= 0 && target_real >= 0) {
 		// Real assignment likewise permits the selected destination to lose
 		// range or precision. make_implicit_cast owns the optional range
 		// check after this relation has admitted the store.
@@ -1103,7 +1097,7 @@ bool IntrinsicType::predefined_explicit_conversion_from(const Type* source) cons
 		// intentionally broader than nominal enum/subrange compatibility but
 		// does not make any such pair implicitly viable.
 		return true;
-	} else if (real_widening_rank(this) >= 0 && real_widening_rank(source) >= 0) {
+	} else if (real_semantic_rank(this) >= 0 && real_semantic_rank(source) >= 0) {
 		// Type(value) explicitly selects the destination representation, so
 		// both real-family directions are one predefined cast even though
 		// only widening is an implicit overload edge.
@@ -2210,6 +2204,16 @@ void UntypedIntegerType::collect_diagnostic_edges(ErrorLetContext*) const {
 }
 
 void UntypedIntegerType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {
+}
+
+const char* UntypedRealType::diagnostic_kind() const {
+	return "untyped_real";
+}
+
+void UntypedRealType::collect_diagnostic_edges(ErrorLetContext*) const {
+}
+
+void UntypedRealType::print_diagnostic_definition(ErrorLetContext*, std::ostringstream&, unsigned) const {
 }
 
 static const char* param_mode_text(ParamMode mode) {

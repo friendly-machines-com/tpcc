@@ -16,6 +16,8 @@ int main() {
 
 	bool saw_initialize = false;
 	for (const OperatorSpec& spec : operator_catalog()) {
+		assert(spec.invocation_spelling != "<>");
+		assert(spec.declaration_name != "notequal");
 		if (spec.declaration_name != "initialize")
 			continue;
 		saw_initialize = true;

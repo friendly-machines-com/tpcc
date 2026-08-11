@@ -1,6 +1,7 @@
 #include "evaluator.h"
 #include "builtins.h"
 #include "cst.h"
+#include "numeric_constants.h"
 #include "types.h"
 #include <string>
 
@@ -19,14 +20,19 @@ static ConstEvalResult integer_result(uint64_t magnitude, bool negative, Type* t
 	return ConstEvalResult::success(new Integer(magnitude, ty, negative));
 }
 
-static long double integer_to_real(uint64_t magnitude, bool negative) {
-	long double d = static_cast<long double>(magnitude);
-	return negative ? -d : d;
-}
-
 ConstEvalResult const_convert_integer(uint64_t magnitude, bool negative, Type*, Type* to_ty) {
-	if (to_ty == single_type() || to_ty == double_type() || to_ty == extended_type()) {
-		return ConstEvalResult::success(new Real(integer_to_real(magnitude, negative), to_ty));
+	if (is_real_semantic_type(to_ty)) {
+		DecimalOrigin origin;
+		origin.negative = negative;
+		origin.digits = std::to_string(magnitude);
+		origin.exponent10 = 0;
+		RealMaterialization converted = materialize_decimal_origin(origin, to_ty);
+		if (converted.kind == RealMaterializationKind::OutOfRange) {
+			return ConstEvalResult::error("integer constant out of range for real target type");
+		}
+		if (converted.kind != RealMaterializationKind::InvalidTarget) {
+			return ConstEvalResult::success(new Real(converted.value, to_ty));
+		}
 	}
 	return integer_result(magnitude, negative, to_ty);
 }

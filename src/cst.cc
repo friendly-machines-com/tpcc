@@ -200,6 +200,10 @@ Real::Real(long double value, Type* ty) {
 	this->ty = ty;
 }
 
+Real::Real(DecimalOrigin origin) : origin(std::move(origin)) {
+	this->ty = &untyped_real_type();
+}
+
 FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty) : elements(std::move(elements)) {
 	this->ty = ty;
 }
@@ -759,42 +763,6 @@ static int compare_constant_ordinals(const ConstantOrdinal& left, const Constant
 	return left.magnitude < right.magnitude ? -1 : 1;
 }
 
-static std::optional<long double> const_real_cast(long double value, Type* target) {
-	auto convert = [value]<typename Target>() {
-		const long double maximum = static_cast<long double>(std::numeric_limits<Target>::max());
-		if (__builtin_isfinite(value) && (value < -maximum || value > maximum)) {
-			const long double infinity = static_cast<long double>(std::numeric_limits<Target>::infinity());
-			return __builtin_signbit(value) ? -infinity : infinity;
-		}
-		return static_cast<long double>(static_cast<Target>(value));
-	};
-	if (target == single_type()) {
-		return convert.template operator()<float>();
-	} else if (target == double_type()) {
-		return convert.template operator()<double>();
-	} else if (target == extended_type()) {
-		return value;
-	}
-	return std::nullopt;
-}
-
-static bool real_constant_out_of_range(long double value, Type* target) {
-	if (!__builtin_isfinite(value)) {
-		return false;
-	}
-	long double maximum = 0;
-	if (target == single_type()) {
-		maximum = static_cast<long double>(std::numeric_limits<float>::max());
-	} else if (target == double_type()) {
-		maximum = static_cast<long double>(std::numeric_limits<double>::max());
-	} else if (target == extended_type()) {
-		maximum = std::numeric_limits<long double>::max();
-	} else {
-		return false;
-	}
-	return value < -maximum || value > maximum;
-}
-
 ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult r = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (r.kind != ConstEvalResult::Kind::Success) {
@@ -817,8 +785,16 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 		}
 	}
 	if (auto real = dynamic_cast<Real*>(r.node)) {
-		if ((real->ty == single_type() || real->ty == double_type() || real->ty == extended_type()) && (ty == single_type() || ty == double_type() || ty == extended_type())) {
-			auto converted = const_real_cast(real->value, ty);
+		if (real->is_origin() && is_real_semantic_type(ty)) {
+			RealMaterialization converted = materialize_decimal_origin(*real->origin, ty);
+			if (converted.kind == RealMaterializationKind::OutOfRange) {
+				return ConstEvalResult::error("real constant out of range for target type");
+			}
+			if (converted.kind != RealMaterializationKind::InvalidTarget) {
+				return ConstEvalResult::success(new Real(converted.value, ty));
+			}
+		} else if (is_real_semantic_type(real->ty) && is_real_semantic_type(ty)) {
+			auto converted = round_typed_real(real->value, ty);
 			if (converted) {
 				return ConstEvalResult::success(new Real(*converted, ty));
 			}
@@ -847,7 +823,12 @@ ConstEvalResult RangeCheckedCast::const_eval(ConstEvalContext& ctx) const {
 		return value;
 	}
 	if (auto real = dynamic_cast<Real*>(value.node)) {
-		if (real_constant_out_of_range(real->value, ty)) {
+		if (real->is_origin()) {
+			RealMaterialization converted = materialize_decimal_origin(*real->origin, ty);
+			if (converted.kind == RealMaterializationKind::OutOfRange) {
+				return ConstEvalResult::error("real constant out of range for target type");
+			}
+		} else if (typed_real_out_of_range(real->value, ty)) {
 			return ConstEvalResult::error("real constant out of range for target type");
 		}
 		return Cast::const_eval(ctx);
@@ -1012,11 +993,18 @@ const char* Real::diagnostic_kind() const {
 }
 
 ConstEvalResult Real::const_eval(ConstEvalContext&) const {
+	if (origin) {
+		return ConstEvalResult::success(new Real(*origin));
+	}
 	return ConstEvalResult::success(new Real(value, ty));
 }
 
 void Real::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "real " << std::setprecision(std::numeric_limits<long double>::max_digits10) << value << " : " << ctx->known_type_ref(ty);
+	if (origin) {
+		out << "real_origin " << decimal_origin_text(*origin) << " : " << ctx->known_type_ref(ty);
+	} else {
+		out << "real " << std::setprecision(std::numeric_limits<long double>::max_digits10) << value << " : " << ctx->known_type_ref(ty);
+	}
 }
 
 const char* FixedArrayLiteral::diagnostic_kind() const {

@@ -19,6 +19,7 @@ type
   AnsiChar = Char;
   Single = external name '::u_system::t_single';
   Double = external name '::u_system::t_double';
+  Real = type Double;
   TDateTime = type Double;
   Extended = external name '::u_system::t_extended';
   Pointer = external name '::u_system::t_pointer';
@@ -134,6 +135,8 @@ operator :=(a: Cardinal): QWord; external name '::u_system::o_implicit';
 // The parser chooses one of these ordinary operator families before overload
 // resolution. Keeping both rows explicit also lets user-defined arithmetic
 // make the same checked/unchecked promise as System arithmetic.
+// Each homogeneous real row contributes its formal type as a common-domain
+// proposal.
 operator UncheckedAdd(a, b: Byte): Integer; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: Word): Integer; external name '::u_system::o_unchecked_add';
@@ -142,6 +145,8 @@ operator UncheckedAdd(a, b: Cardinal): Cardinal; external name '::u_system::o_un
 operator UncheckedAdd(a, b: Integer): Integer; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: QWord): QWord; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: Int64): Int64; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: Single): Single; external name '::u_system::o_unchecked_add';
+operator UncheckedAdd(a, b: Double): Double; external name '::u_system::o_unchecked_add';
 operator UncheckedAdd(a, b: Extended): Extended; external name '::u_system::o_unchecked_add';
 operator Add(a, b: Byte): Integer; external name '::u_system::o_add';
 operator Add(a, b: ShortInt): Integer; external name '::u_system::o_add';
@@ -151,6 +156,8 @@ operator Add(a, b: Cardinal): Cardinal; external name '::u_system::o_add';
 operator Add(a, b: Integer): Integer; external name '::u_system::o_add';
 operator Add(a, b: QWord): QWord; external name '::u_system::o_add';
 operator Add(a, b: Int64): Int64; external name '::u_system::o_add';
+operator Add(a, b: Single): Single; external name '::u_system::o_add';
+operator Add(a, b: Double): Double; external name '::u_system::o_add';
 operator Add(a, b: Extended): Extended; external name '::u_system::o_add';
 
 operator UncheckedNegative(a: Cardinal): Cardinal; external name '::u_system::o_unchecked_negative';
@@ -176,6 +183,8 @@ operator UncheckedSubtract(a, b: Cardinal): Cardinal; external name '::u_system:
 operator UncheckedSubtract(a, b: Integer): Integer; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: QWord): QWord; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: Int64): Int64; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: Single): Single; external name '::u_system::o_unchecked_subtract';
+operator UncheckedSubtract(a, b: Double): Double; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: Extended): Extended; external name '::u_system::o_unchecked_subtract';
 operator Subtract(a, b: Byte): Integer; external name '::u_system::o_subtract';
 operator Subtract(a, b: ShortInt): Integer; external name '::u_system::o_subtract';
@@ -185,6 +194,8 @@ operator Subtract(a, b: Cardinal): Cardinal; external name '::u_system::o_subtra
 operator Subtract(a, b: Integer): Integer; external name '::u_system::o_subtract';
 operator Subtract(a, b: QWord): QWord; external name '::u_system::o_subtract';
 operator Subtract(a, b: Int64): Int64; external name '::u_system::o_subtract';
+operator Subtract(a, b: Single): Single; external name '::u_system::o_subtract';
+operator Subtract(a, b: Double): Double; external name '::u_system::o_subtract';
 operator Subtract(a, b: Extended): Extended; external name '::u_system::o_subtract';
 
 operator UncheckedMultiply(a, b: Byte): Integer; external name '::u_system::o_unchecked_multiply';
@@ -195,6 +206,8 @@ operator UncheckedMultiply(a, b: Cardinal): Cardinal; external name '::u_system:
 operator UncheckedMultiply(a, b: Integer): Integer; external name '::u_system::o_unchecked_multiply';
 operator UncheckedMultiply(a, b: QWord): QWord; external name '::u_system::o_unchecked_multiply';
 operator UncheckedMultiply(a, b: Int64): Int64; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: Single): Single; external name '::u_system::o_unchecked_multiply';
+operator UncheckedMultiply(a, b: Double): Double; external name '::u_system::o_unchecked_multiply';
 operator UncheckedMultiply(a, b: Extended): Extended; external name '::u_system::o_unchecked_multiply';
 operator Multiply(a, b: Byte): Integer; external name '::u_system::o_multiply';
 operator Multiply(a, b: ShortInt): Integer; external name '::u_system::o_multiply';
@@ -204,6 +217,8 @@ operator Multiply(a, b: Cardinal): Cardinal; external name '::u_system::o_multip
 operator Multiply(a, b: Integer): Integer; external name '::u_system::o_multiply';
 operator Multiply(a, b: QWord): QWord; external name '::u_system::o_multiply';
 operator Multiply(a, b: Int64): Int64; external name '::u_system::o_multiply';
+operator Multiply(a, b: Single): Single; external name '::u_system::o_multiply';
+operator Multiply(a, b: Double): Double; external name '::u_system::o_multiply';
 operator Multiply(a, b: Extended): Extended; external name '::u_system::o_multiply';
 
 // FIXME: FPC uses Double, Delphi uses Extended
@@ -215,6 +230,7 @@ operator Divide(a, b: Cardinal): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Integer): Double; external name '::u_system::o_divide';
 operator Divide(a, b: QWord): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Int64): Double; external name '::u_system::o_divide';
+operator Divide(a, b: Single): Single; external name '::u_system::o_divide';
 operator Divide(a, b: Double): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Extended): Extended; external name '::u_system::o_divide';
 
@@ -254,6 +270,8 @@ operator =(a, b: Pointer): Boolean; external name '::u_system::o_equal';
 // comparison; a more specific custom Equal overload wins by normal ranking.
 operator =(a, b: TObject): Boolean; external name '::u_system::o_equal';
 
+// Relational rows mirror the arithmetic domains so both families use the same
+// common-domain relation.
 operator <(a, b: Byte): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: ShortInt): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Word): Boolean; external name '::u_system::o_lessthan';
@@ -262,6 +280,8 @@ operator <(a, b: Cardinal): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Integer): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: QWord): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Int64): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Single): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Double): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Extended): Boolean; external name '::u_system::o_lessthan';
 
 operator <=(a, b: Byte): Boolean; external name '::u_system::o_lessthanorequal';
@@ -272,6 +292,8 @@ operator <=(a, b: Cardinal): Boolean; external name '::u_system::o_lessthanorequ
 operator <=(a, b: Integer): Boolean; external name '::u_system::o_lessthanorequal';
 operator <=(a, b: QWord): Boolean; external name '::u_system::o_lessthanorequal';
 operator <=(a, b: Int64): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Single): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Double): Boolean; external name '::u_system::o_lessthanorequal';
 operator <=(a, b: Extended): Boolean; external name '::u_system::o_lessthanorequal';
 
 operator =(a, b: Byte): Boolean; external name '::u_system::o_equal';
@@ -282,6 +304,8 @@ operator =(a, b: Cardinal): Boolean; external name '::u_system::o_equal';
 operator =(a, b: Integer): Boolean; external name '::u_system::o_equal';
 operator =(a, b: QWord): Boolean; external name '::u_system::o_equal';
 operator =(a, b: Int64): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Single): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Double): Boolean; external name '::u_system::o_equal';
 operator =(a, b: Extended): Boolean; external name '::u_system::o_equal';
 
 operator >(a, b: Byte): Boolean; external name '::u_system::o_greaterthan';
@@ -292,6 +316,8 @@ operator >(a, b: Cardinal): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: Integer): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: QWord): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: Int64): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Single): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Double): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: Extended): Boolean; external name '::u_system::o_greaterthan';
 
 operator >=(a, b: Byte): Boolean; external name '::u_system::o_greaterthanorequal';
@@ -302,6 +328,8 @@ operator >=(a, b: Cardinal): Boolean; external name '::u_system::o_greaterthanor
 operator >=(a, b: Integer): Boolean; external name '::u_system::o_greaterthanorequal';
 operator >=(a, b: QWord): Boolean; external name '::u_system::o_greaterthanorequal';
 operator >=(a, b: Int64): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Single): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Double): Boolean; external name '::u_system::o_greaterthanorequal';
 operator >=(a, b: Extended): Boolean; external name '::u_system::o_greaterthanorequal';
 
 operator UncheckedIntDivide(a, b: Byte): Integer; external name '::u_system::o_unchecked_intdivide';

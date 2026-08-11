@@ -43,8 +43,6 @@ constexpr OperatorSpec k_operator_catalog[] = {
     // Comparisons.
     {"equal", "=", 2, I::BinaryToken, S::Always, "&op_Equality", "o_equal", true, P::Delphi, true},
     {"=", "=", 2, I::BinaryToken, S::Always, "&op_Equality", "o_operator_equal", true, P::LegacyFpc, true},
-    {"notequal", "<>", 2, I::BinaryToken, S::Always, "&op_Inequality", "o_notequal", true, P::Delphi, true},
-    {"<>", "<>", 2, I::BinaryToken, S::Always, "&op_Inequality", "o_operator_not_equal", true, P::LegacyFpc, true},
     {"greaterthan", ">", 2, I::BinaryToken, S::Always, "&op_GreaterThan", "o_greaterthan", true, P::Delphi, true},
     {">", ">", 2, I::BinaryToken, S::Always, "&op_GreaterThan", "o_operator_greater", true, P::LegacyFpc, true},
     {"greaterthanorequal", ">=", 2, I::BinaryToken, S::Always, "&op_GreaterThanOrEqual", "o_greaterthanorequal", true, P::Delphi, true},

@@ -2023,12 +2023,14 @@ Node* Parser::maybe_parse_numeral() {
 			consume();
 			return lit;
 		} else {
-			long double value;
-			auto [ptr, ec] = std::from_chars(input, input + input_size, value, std::chars_format::general);
-			if (ec != std::errc() || ptr != input + input_size) {
-				raise_parse_error("malformed real numeral: " + input_token);
+			// Preserve the exact source value so the eventual formal type can
+			// materialize both a literal and an untyped const alias identically.
+			std::string error;
+			auto origin = parse_decimal_origin(std::string_view(input, input_size), &error);
+			if (!origin) {
+				raise_parse_error("malformed real numeral: " + input_token + ": " + error);
 			}
-			auto lit = new Real(value, extended_type());
+			auto lit = new Real(std::move(*origin));
 			consume();
 			return lit;
 		}
@@ -2341,6 +2343,29 @@ static BuiltinSyntaxKind syntax_kind_for_builtin(Node* n) {
 }
 
 static bool is_integer_semantic_type(Type* ty);
+
+static Type* natural_real_origin_type(Node* value) {
+	auto real = dynamic_cast<Real*>(value);
+	if (!real || !real->is_origin()) {
+		return nullptr;
+	}
+	const std::array<Type*, 3> candidates{{single_type(), double_type(), extended_type()}};
+	Type* widest_viable = nullptr;
+	// A syntax form such as SizeOf(value) or Write(value) has no formal
+	// parameter to materialize an origin. Use the same value rule as overload
+	// selection: the smallest exact domain, otherwise the most informative
+	// finite domain.
+	for (Type* candidate : candidates) {
+		RealMaterialization materialized = materialize_decimal_origin(*real->origin, candidate);
+		if (materialized.kind == RealMaterializationKind::Exact) {
+			return candidate;
+		}
+		if (materialized.kind == RealMaterializationKind::Rounded) {
+			widest_viable = candidate;
+		}
+	}
+	return widest_viable;
+}
 
 enum class StrValueFamily {
 	Integer,
@@ -2892,6 +2917,12 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 						// default Pascal carrier.
 						if (formatted.value->ty == &untyped_integer_type()) {
 							formatted.value = cast(formatted.value, integer_type());
+						} else if (formatted.value->ty == &untyped_real_type()) {
+							Type* natural = natural_real_origin_type(formatted.value);
+							if (!natural) {
+								raise_value_error("real Write/WriteLn value is outside every predefined real domain", formatted.value);
+							}
+							formatted.value = cast(formatted.value, natural);
 						}
 						if (formatted.precision && formatted.value->ty != single_type() && formatted.value->ty != double_type() && formatted.value->ty != extended_type()) {
 							raise_type_kind_mismatch("a second Write/WriteLn colon qualifier", "real", formatted.value->ty);
@@ -2926,6 +2957,13 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 				operand_type = parse_type_expression(false);
 			} else {
 				Node* operand = parse_expression();
+				if (operand && operand->ty == &untyped_real_type()) {
+					Type* natural = natural_real_origin_type(operand);
+					if (!natural) {
+						raise_value_error("real SizeOf operand is outside every predefined real domain", operand);
+					}
+					operand = cast(operand, natural);
+				}
 				operand_type = operand ? operand->ty : nullptr;
 			}
 			parse_closing_paren();
@@ -2952,6 +2990,12 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			// replace the built-in boundary in the same way Implicit can.
 			if (Node* converted = match_explicit_conversion(value, target_ty, false)) {
 				return converted;
+			}
+			if (auto real = dynamic_cast<Real*>(value); real && real->is_origin() && is_real_semantic_type(target_ty)) {
+				RealMaterialization converted = materialize_decimal_origin(*real->origin, target_ty);
+				if (converted.kind != RealMaterializationKind::InvalidTarget) {
+					return new Real(converted.value, target_ty);
+				}
 			}
 
 			// A declared Explicit operation overrides the predefined type
@@ -4054,6 +4098,9 @@ Node* Parser::mk_membership(Node* item, Node* set, LeadingTokenDirectives direct
 Node* Parser::mk_unary_same(std::string id, Node* x, LeadingTokenDirectives directives) {
 	if (auto integer = untyped_integer_constant(x)) {
 		if (id == "-") {
+			if (!integer->negative && integer->value > (uint64_t{1} << 63)) {
+				raise_value_error("integer constant is below Int64 minimum", integer);
+			}
 			return new Integer(integer->value, &untyped_integer_type(), !integer->negative);
 		}
 		if (id == "+") {
@@ -4065,6 +4112,13 @@ Node* Parser::mk_unary_same(std::string id, Node* x, LeadingTokenDirectives dire
 			// constant declaration that another expression may also reference.
 			x = new Integer(integer->value, integer_type(), integer->negative);
 		}
+	}
+	if (auto real = dynamic_cast<Real*>(x); real && real->is_origin() && (id == "-" || id == "+")) {
+		DecimalOrigin origin = *real->origin;
+		if (id == "-") {
+			origin.negative = !origin.negative;
+		}
+		return new Real(std::move(origin));
 	}
 	const std::string pascal_identifier = operator_expression_identifier(OperatorInvocation::UnaryToken, id, 1, directives.overflow_checks);
 	auto fn = resolve_value(pascal_identifier);
@@ -8366,6 +8420,23 @@ static Integer* untyped_integer_constant(Node* expression) {
 	return integer && integer->ty == &untyped_integer_type() ? integer : nullptr;
 }
 
+static Real* untyped_real_constant(Node* expression) {
+	if (!expression || expression->ty != &untyped_real_type()) {
+		return nullptr;
+	}
+	if (auto real = dynamic_cast<Real*>(expression); real && real->is_origin()) {
+		return real;
+	}
+
+	ConstEvalContext ctx;
+	ConstEvalResult folded = expression->const_eval(ctx);
+	if (folded.kind != ConstEvalResult::Kind::Success) {
+		return nullptr;
+	}
+	auto real = dynamic_cast<Real*>(folded.node);
+	return real && real->ty == &untyped_real_type() && real->is_origin() ? real : nullptr;
+}
+
 static std::optional<uint64_t> integer_literal_target_preference(Type* target) {
 	// The literal remains untyped. Rank fitting destinations by Pascal's
 	// magnitude-driven predefined carrier order, rather than pretending the
@@ -8401,6 +8472,18 @@ static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Ty
 	}
 	a_formal = overload_rank_type(a_formal);
 	b_formal = overload_rank_type(b_formal);
+	if (a.rounded_real_origin && b.rounded_real_origin) {
+		// Ordinary overloads still need a deterministic context for an inexact
+		// decimal origin: prefer the declaration which discards fewer bits of
+		// the origin. Do not apply this reversal to typed integer/real values;
+		// their information loss is considered jointly only by common-domain
+		// operator policy below.
+		const int a_real = real_semantic_rank(a_formal);
+		const int b_real = real_semantic_rank(b_formal);
+		if (a_real >= 0 && b_real >= 0 && a_real != b_real) {
+			return a_real > b_real;
+		}
+	}
 	if (a_formal && b_formal && a_formal != b_formal) {
 		const bool a_to_b = direct_assignment_edge(a_formal, b_formal);
 		const bool b_to_a = direct_assignment_edge(b_formal, a_formal);
@@ -8933,16 +9016,28 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, converted.node};
 	}
 
-	if (auto literal = dynamic_cast<Real*>(actual); literal && real_range_rank(target) >= 0) {
-		// A real literal is constructed in its selected destination context;
-		// this does not invent a reverse Extended -> Single assignment edge.
-		// Preserve the source node inside the candidate-local cast so {$R+}
-		// can still reject a selected literal outside the destination
-		// representation.
-		if (target == literal->ty) {
-			return ArgumentMatch{{MatchRank::Tier::Exact, 0}, actual};
+	if (auto literal = untyped_real_constant(actual); literal && is_real_semantic_type(target)) {
+		// Materialize separately for every candidate. The source node remains an
+		// exact decimal origin, which makes a literal and an untyped const alias
+		// genuinely substitution-equivalent during overload testing.
+		RealMaterialization converted = materialize_decimal_origin(*literal->origin, target);
+		if (converted.kind == RealMaterializationKind::InvalidTarget) {
+			return std::nullopt;
 		}
-		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, make_implicit_cast(actual, target)};
+		MatchRank rank{
+		    converted.kind == RealMaterializationKind::Exact        ? MatchRank::Tier::Equal
+		    : converted.kind == RealMaterializationKind::OutOfRange ? MatchRank::Tier::ConvertNarrowing
+		                                                           : MatchRank::Tier::Convert,
+		    0,
+		};
+		rank.rounded_real_origin = converted.kind == RealMaterializationKind::Rounded;
+		rank.information_losing = converted.kind != RealMaterializationKind::Exact;
+		if (converted.kind == RealMaterializationKind::OutOfRange && directive_state.switch_enabled('r')) {
+			// R+ changes only the conversion node executed after selection.
+			// `rank` and candidate viability are identical under R+ and R-.
+			return ArgumentMatch{rank, new RangeCheckedCast(actual, target)};
+		}
+		return ArgumentMatch{rank, new Real(converted.value, target)};
 	}
 
 	if (source == target) {
@@ -8972,12 +9067,44 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			// different destinations even though every literal fits directly.
 			return ArgumentMatch{rank, new Integer(untyped_integer->value, target, untyped_integer->negative)};
 		}
+		if (is_real_semantic_type(target)) {
+			// An integer origin has a value, not a carrier-wide domain. Classify
+			// this particular magnitude directly in each real destination:
+			// e.g. 1 is exact in Single, 16777217 first becomes exact in Double,
+			// and QWord.Max first becomes exact in binary80 Extended.
+			DecimalOrigin origin;
+			origin.negative = untyped_integer->negative;
+			origin.digits = std::to_string(untyped_integer->value);
+			RealMaterialization converted = materialize_decimal_origin(origin, target);
+			if (converted.kind == RealMaterializationKind::InvalidTarget) {
+				return std::nullopt;
+			}
+			MatchRank rank{
+			    converted.kind == RealMaterializationKind::Exact        ? MatchRank::Tier::Equal
+			    : converted.kind == RealMaterializationKind::OutOfRange ? MatchRank::Tier::ConvertNarrowing
+			                                                           : MatchRank::Tier::Convert,
+			    0,
+			};
+			rank.information_losing = converted.kind != RealMaterializationKind::Exact;
+			if (converted.kind == RealMaterializationKind::OutOfRange && directive_state.switch_enabled('r')) {
+				// R+ changes only the selected conversion's execution. It must
+				// never reject or re-rank this overload candidate.
+				return ArgumentMatch{rank, new RangeCheckedCast(actual, target)};
+			}
+			return ArgumentMatch{rank, new Real(converted.value, target)};
+		}
 	}
 	if (source == &untyped_integer_type() && !untyped_integer) {
 		// Untyped integer is a constant-expression category, never a runtime
 		// storage type. If it cannot be folded here, accepting it through the
 		// type-only conversion table would lose the magnitude required for
 		// range checking and ranking.
+		return std::nullopt;
+	}
+	if (source == &untyped_real_type()) {
+		// Untyped real is a constant-expression category, never a runtime
+		// storage type. Its exact decimal payload must be materialized by the
+		// contextual branch above.
 		return std::nullopt;
 	}
 
@@ -9024,6 +9151,12 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		auto source_signed = integer_carrier_is_signed(assignment_source);
 		auto target_signed = integer_carrier_is_signed(target);
 		rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;
+		if (is_integer_semantic_type(assignment_source) && is_real_semantic_type(target)) {
+			// Unlike an origin, a typed actual can hold every value in its
+			// declared carrier. Record whether the complete carrier survives;
+			// common-domain operator selection consumes this bit jointly.
+			rank.information_losing = !integer_domain_is_exact_in_real(assignment_source, target);
+		}
 		return ArgumentMatch{rank, make_implicit_cast(actual, target)};
 	}
 	return std::nullopt;
@@ -9625,6 +9758,19 @@ static bool candidate_admitted_in_phase(Callable* callable, const CallableMatch&
 	return homogeneous || pointer_offset_formals(callable, policy);
 }
 
+static bool common_domain_policy(OverloadResolutionPolicy policy) {
+	return policy == OverloadResolutionPolicy::CommonBinary || policy == OverloadResolutionPolicy::CommonIntegerBinary || policy == OverloadResolutionPolicy::CommonBinaryPointerLeft || policy == OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep;
+}
+
+static Type* homogeneous_common_formal(const CallableMatch& match) {
+	if (match.formal_types.size() != 2) {
+		return nullptr;
+	}
+	Type* first = overload_rank_type(match.formal_types[0]);
+	Type* second = overload_rank_type(match.formal_types[1]);
+	return first && first == second ? first : nullptr;
+}
+
 /** Select the cohort which participates in product-order dominance.
  * Fully-typed candidates are phase-filtered. Catch-all coordinates remain
  * ordinary per-argument ranks and join the best typed cohort rather than
@@ -9659,9 +9805,42 @@ static std::vector<size_t> overload_resolution_cohort(const std::vector<std::pai
 
 	std::vector<size_t> result;
 	if (best_typed_phase) {
+		// A rounded decimal origin has no source carrier. In the common-domain
+		// phase, compare the proposed domain once for the whole operand pair
+		// instead of allowing one positional rank to prefer a narrow domain
+		// while another prefers a wide one. Typed narrowing was excluded by
+		// the earlier phase choice; the most informative visible real domain
+		// therefore implements the specified rounded-origin phase.
+		bool have_lossless_common_domain = false;
+		int best_lossy_real_domain = -1;
+		if (common_domain_policy(policy) && *best_typed_phase == MatchRank::Tier::Convert) {
+			for (size_t i = 0; i < viable.size(); ++i) {
+				const CallableMatch& match = viable[i].second;
+				if (callable_match_has_generic(match) || callable_match_phase(match) != *best_typed_phase || !candidate_admitted_in_phase(viable[i].first, match, *best_typed_phase, policy)) {
+					continue;
+				}
+				Type* common = homogeneous_common_formal(match);
+				if (!common) {
+					continue;
+				}
+				const bool loses_information = std::ranges::any_of(match.ranks, [](const MatchRank& rank) { return rank.information_losing; });
+				if (!loses_information) {
+					have_lossless_common_domain = true;
+				} else {
+					best_lossy_real_domain = std::max(best_lossy_real_domain, real_semantic_rank(common));
+				}
+			}
+		}
 		for (size_t i = 0; i < viable.size(); ++i) {
 			const CallableMatch& match = viable[i].second;
 			if (!callable_match_has_generic(match) && callable_match_phase(match) == *best_typed_phase && candidate_admitted_in_phase(viable[i].first, match, *best_typed_phase, policy)) {
+				const bool loses_information = std::ranges::any_of(match.ranks, [](const MatchRank& rank) { return rank.information_losing; });
+				if (have_lossless_common_domain && loses_information) {
+					continue;
+				}
+				if (!have_lossless_common_domain && best_lossy_real_domain >= 0 && loses_information && real_semantic_rank(homogeneous_common_formal(match)) != best_lossy_real_domain) {
+					continue;
+				}
 				result.push_back(i);
 			}
 		}

@@ -693,6 +693,16 @@ struct UntypedIntegerType : public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Exact decimal real origin before a context selects a concrete Pascal real
+ *  domain. This type is internal, has no storage layout or C++ carrier, and is
+ *  never registered under a Pascal identifier. */
+struct UntypedRealType : public Type {
+	UntypedRealType(SourceLocation source_location);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 enum class ParamMode { Value, Var, Out, Const };
 
 struct Parameter {

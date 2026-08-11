@@ -28,4 +28,21 @@ then
 	exit 1
 fi
 
+if ./mp -Furtl \
+	-o"$tmp/operator_not_equal_unsupported.cc" \
+	tests/operator_not_equal_unsupported.pp \
+	>"$tmp/not_equal.out" 2>&1
+then
+	echo "accepted a separately declarable NotEqual operator" >&2
+	exit 1
+fi
+
+if ! rg -Fq "unknown custom operator 'notequal'" \
+	"$tmp/not_equal.out"
+then
+	echo "wrong NotEqual diagnostic" >&2
+	cat "$tmp/not_equal.out" >&2
+	exit 1
+fi
+
 echo "operator catalog tests passed"

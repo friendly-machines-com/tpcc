@@ -83,6 +83,13 @@ struct MatchRank {
 	// incomparable widening destinations are available. Identity, subtype,
 	// and direct assignment-edge direction are compared first.
 	bool integer_sign_mismatch = false;
+	// Rounded decimal origins prefer the more informative real destination,
+	// the reverse of the usual exact-destination specificity direction.
+	bool rounded_real_origin = false;
+	// True when this actual-to-formal conversion cannot preserve every value
+	// in the actual's semantic domain. Common-domain selection first seeks a
+	// proposal for which no operand loses information.
+	bool information_losing = false;
 };
 
 /** One candidate's treatment of one source argument. Matching never mutates

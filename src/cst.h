@@ -1,5 +1,7 @@
 #pragma once
+#include "numeric_constants.h"
 #include <cstdint>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -568,8 +570,15 @@ class String : public Node {
 
 class Real : public Node {
       public:
+	// Present exactly when ty is untyped_real_type(). Typed real constants
+	// store their already-rounded concrete value in `value`.
+	std::optional<DecimalOrigin> origin;
 	long double value = 0.0L;
 	Real(long double value, Type* ty);
+	explicit Real(DecimalOrigin origin);
+	bool is_origin() const {
+		return origin.has_value();
+	}
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

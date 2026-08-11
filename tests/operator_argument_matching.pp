@@ -293,7 +293,7 @@ begin
     edge. Extended is the first declared arithmetic formal accepting both. }
   if NumericKind(Signed64 + Unsigned64) <> 15 then
     Halt(5);
-  if NumericKind(Real32 + Real32) <> 15 then
+  if NumericKind(Real32 + Real32) <> 14 then
     Halt(6);
   if NumericKind(LeftByte / RightByte) <> 15 then
     Halt(7);

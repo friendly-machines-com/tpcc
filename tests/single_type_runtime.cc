@@ -29,7 +29,7 @@ int main() {
 	    p_rankextended != 3 ||
 	    p_rankinteger != 1 ||
 	    p_ranktypedinteger != 1 ||
-	    p_rankliteral != 3)
+	    p_rankliteral != 1)
 		return 7;
 	if (p_parsecode != 0 ||
 	    p_parsed != 2.25f)

@@ -249,12 +249,13 @@ const Frame& root_frame();
 
 // Shared singletons for internal-only types not registered under any Pascal
 // name. Callers compare by identity (pointer equality) against &unit_type()
-// or &untyped_integer_type().
+// or one of the internal numeric origin types.
 // FIXME: Non-const because the callers store the address
 // in Type* fields (Node::ty etc.); the underlying objects have no non-const
 // methods, so returning non-const doesn't risk mutation of the singleton.
 UnitType& unit_type();
 UntypedIntegerType& untyped_integer_type();
+UntypedRealType& untyped_real_type();
 
 // Cached lookups of frequently-referenced intrinsics from root_frame().
 Type* byte_type();

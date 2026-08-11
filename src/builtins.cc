@@ -94,6 +94,11 @@ UntypedIntegerType& untyped_integer_type() {
 	return t;
 }
 
+UntypedRealType& untyped_real_type() {
+	static UntypedRealType t(SourceLocation::internal());
+	return t;
+}
+
 Type* byte_type() {
 	return &k_byte;
 }
@@ -259,6 +264,9 @@ static const Integer* const_integer_arg(Node* n) {
 }
 
 static bool const_numeric_as_long_double(Node* n, long double* out) {
+	// Selected operator calls must already have materialized every origin into
+	// their formal types. Rejecting an origin here prevents the folder from
+	// silently inventing a second, host-long-double operator semantics.
 	if (auto i = dynamic_cast<const Integer*>(n)) {
 		*out = static_cast<long double>(i->value);
 		if (i->negative) {
@@ -266,10 +274,24 @@ static bool const_numeric_as_long_double(Node* n, long double* out) {
 		}
 		return true;
 	} else if (auto r = dynamic_cast<const Real*>(n)) {
+		if (r->is_origin()) {
+			return false;
+		}
 		*out = r->value;
 		return true;
 	}
 	return false;
+}
+
+static ConstEvalResult fold_real_result(long double value, Type* result_ty) {
+	// Transcendental helpers and unary operations compute in the host container,
+	// but a folded constant is committed at the selected Pascal result boundary.
+	// It must never remain an unrounded host long double or regain origin status.
+	auto rounded = round_typed_real(value, result_ty);
+	if (!rounded) {
+		return ConstEvalResult::not_constant();
+	}
+	return ConstEvalResult::success(new Real(*rounded, result_ty));
 }
 
 static ConstEvalResult fold_integer_result(uint64_t magnitude, bool negative, Type* ty) {
@@ -304,26 +326,42 @@ static ConstEvalResult fold_unchecked_integer_bits(uint64_t bits, Type* result_t
 }
 
 static ConstEvalResult fold_unary_minus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !const_integer_arg(args[0])) {
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
 	}
-	auto i = const_integer_arg(args[0]);
-	return fold_integer_result(i->value, !i->negative && i->value != 0, result_ty);
+	if (auto i = const_integer_arg(args[0])) {
+		return fold_integer_result(i->value, !i->negative && i->value != 0, result_ty);
+	}
+	if (auto real = dynamic_cast<Real*>(args[0]); real && !real->is_origin()) {
+		return fold_real_result(-real->value, result_ty);
+	}
+	return ConstEvalResult::not_constant();
 }
 
 static ConstEvalResult fold_unchecked_unary_minus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !const_integer_arg(args[0])) {
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
 	}
-	return fold_unchecked_integer_bits(uint64_t{0} - unchecked_integer_bits(const_integer_arg(args[0])), result_ty);
+	if (auto integer = const_integer_arg(args[0])) {
+		return fold_unchecked_integer_bits(uint64_t{0} - unchecked_integer_bits(integer), result_ty);
+	}
+	if (auto real = dynamic_cast<Real*>(args[0]); real && !real->is_origin()) {
+		return fold_real_result(-real->value, result_ty);
+	}
+	return ConstEvalResult::not_constant();
 }
 
 static ConstEvalResult fold_unary_plus(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
-	if (args.size() != 1 || !const_integer_arg(args[0])) {
+	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
 	}
-	auto i = const_integer_arg(args[0]);
-	return fold_integer_result(i->value, i->negative, result_ty);
+	if (auto i = const_integer_arg(args[0])) {
+		return fold_integer_result(i->value, i->negative, result_ty);
+	}
+	if (auto real = dynamic_cast<Real*>(args[0]); real && !real->is_origin()) {
+		return fold_real_result(real->value, result_ty);
+	}
+	return ConstEvalResult::not_constant();
 }
 
 struct ConstantOrdinalCarrier {
@@ -417,6 +455,29 @@ static int compare_ordinal_constants(const std::pair<bool, uint64_t>& a, const s
 static ConstEvalResult fold_comparison(ComparisonKind kind, const std::vector<Node*>& args) {
 	if (args.size() != 2 || !args[0] || !args[1]) {
 		return ConstEvalResult::not_constant();
+	}
+	auto real_a = dynamic_cast<Real*>(args[0]);
+	auto real_b = dynamic_cast<Real*>(args[1]);
+	if (real_a && real_b && !real_a->is_origin() && !real_b->is_origin()) {
+		bool result = false;
+		switch (kind) {
+		case ComparisonKind::LessThan:
+			result = real_a->value < real_b->value;
+			break;
+		case ComparisonKind::LessThanOrEqual:
+			result = real_a->value <= real_b->value;
+			break;
+		case ComparisonKind::Equal:
+			result = real_a->value == real_b->value;
+			break;
+		case ComparisonKind::GreaterThan:
+			result = real_a->value > real_b->value;
+			break;
+		case ComparisonKind::GreaterThanOrEqual:
+			result = real_a->value >= real_b->value;
+			break;
+		}
+		return ConstEvalResult::success(new EnumMemberRef(result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false", result ? 1 : 0, boolean_type()));
 	}
 	auto a = constant_ordinal_value(args[0]);
 	auto b = constant_ordinal_value(args[1]);
@@ -753,7 +814,10 @@ static ConstEvalResult fold_abs_impl(Type* result_ty, const std::vector<Node*>& 
 		return ConstEvalResult::not_constant();
 	}
 	if (auto real = dynamic_cast<Real*>(args[0])) {
-		return ConstEvalResult::success(new Real(::fabsl(real->value), result_ty));
+		if (real->is_origin()) {
+			return ConstEvalResult::not_constant();
+		}
+		return fold_real_result(::fabsl(real->value), result_ty);
 	} else {
 		auto value = constant_ordinal_value(args[0]);
 		auto carrier = constant_ordinal_carrier(result_ty);
@@ -904,6 +968,13 @@ static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& a
 			return const_convert_string(left->value + right->value, result_ty);
 		}
 	}
+	if (args.size() == 2 && is_real_semantic_type(result_ty)) {
+		long double a = 0.0L, b = 0.0L;
+		if (const_numeric_as_long_double(args[0], &a) && const_numeric_as_long_double(args[1], &b)) {
+			auto result = eval_typed_real_binary(subtract ? RealBinaryOperation::Subtract : RealBinaryOperation::Add, a, b, result_ty);
+			return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
+		}
+	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
 	}
@@ -943,6 +1014,13 @@ static ConstEvalResult fold_unchecked_add_sub(Type* result_ty, const std::vector
 			return const_convert_string(left->value + right->value, result_ty);
 		}
 	}
+	if (args.size() == 2 && is_real_semantic_type(result_ty)) {
+		long double a = 0.0L, b = 0.0L;
+		if (const_numeric_as_long_double(args[0], &a) && const_numeric_as_long_double(args[1], &b)) {
+			auto result = eval_typed_real_binary(subtract ? RealBinaryOperation::Subtract : RealBinaryOperation::Add, a, b, result_ty);
+			return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
+		}
+	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
 	}
@@ -960,6 +1038,13 @@ static ConstEvalResult fold_unchecked_subtract(ConstEvalContext&, Type* result_t
 }
 
 static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() == 2 && is_real_semantic_type(result_ty)) {
+		long double a = 0.0L, b = 0.0L;
+		if (const_numeric_as_long_double(args[0], &a) && const_numeric_as_long_double(args[1], &b)) {
+			auto result = eval_typed_real_binary(RealBinaryOperation::Multiply, a, b, result_ty);
+			return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
+		}
+	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
 	}
@@ -975,6 +1060,13 @@ static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const s
 }
 
 static ConstEvalResult fold_unchecked_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (args.size() == 2 && is_real_semantic_type(result_ty)) {
+		long double a = 0.0L, b = 0.0L;
+		if (const_numeric_as_long_double(args[0], &a) && const_numeric_as_long_double(args[1], &b)) {
+			auto result = eval_typed_real_binary(RealBinaryOperation::Multiply, a, b, result_ty);
+			return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
+		}
+	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
 	}
@@ -1021,7 +1113,7 @@ static ConstEvalResult fold_power(ConstEvalContext&, Type* result_ty, const std:
 	if (!const_numeric_as_long_double(args[0], &base) || !const_numeric_as_long_double(args[1], &exponent)) {
 		return ConstEvalResult::not_constant();
 	}
-	return ConstEvalResult::success(new Real(::powl(base, exponent), result_ty));
+	return fold_real_result(::powl(base, exponent), result_ty);
 }
 
 static ConstEvalResult fold_intdivide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -1088,10 +1180,8 @@ static ConstEvalResult fold_divide(ConstEvalContext&, Type* result_ty, const std
 	if (!const_numeric_as_long_double(args[0], &a) || !const_numeric_as_long_double(args[1], &b)) {
 		return ConstEvalResult::not_constant();
 	}
-	if (b == 0.0) {
-		return ConstEvalResult::error("real constant division by zero");
-	}
-	return ConstEvalResult::success(new Real(a / b, result_ty));
+	auto result = eval_typed_real_binary(RealBinaryOperation::Divide, a, b, result_ty);
+	return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
 }
 
 static ConstEvalResult fold_real_to_int64(const std::vector<Node*>& args, bool round) {
@@ -1129,7 +1219,7 @@ static ConstEvalResult fold_frac(ConstEvalContext&, Type* result_ty, const std::
 		return ConstEvalResult::not_constant();
 	}
 	long double integral = 0.0L;
-	return ConstEvalResult::success(new Real(::modfl(value, &integral), result_ty));
+	return fold_real_result(::modfl(value, &integral), result_ty);
 }
 
 static ConstEvalResult fold_sqrt(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -1140,7 +1230,7 @@ static ConstEvalResult fold_sqrt(ConstEvalContext&, Type* result_ty, const std::
 	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
 	}
-	return ConstEvalResult::success(new Real(::sqrtl(value), result_ty));
+	return fold_real_result(::sqrtl(value), result_ty);
 }
 
 static ConstEvalResult fold_sqr(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -1154,7 +1244,8 @@ static ConstEvalResult fold_sqr(ConstEvalContext&, Type* result_ty, const std::v
 	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
 	}
-	return ConstEvalResult::success(new Real(value * value, result_ty));
+	auto result = eval_typed_real_binary(RealBinaryOperation::Multiply, value, value, result_ty);
+	return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
 }
 
 static ConstEvalResult fold_exp(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -1165,7 +1256,7 @@ static ConstEvalResult fold_exp(ConstEvalContext&, Type* result_ty, const std::v
 	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
 	}
-	return ConstEvalResult::success(new Real(::expl(value), result_ty));
+	return fold_real_result(::expl(value), result_ty);
 }
 
 static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
@@ -1176,7 +1267,7 @@ static ConstEvalResult fold_ln(ConstEvalContext&, Type* result_ty, const std::ve
 	if (!const_numeric_as_long_double(args[0], &value)) {
 		return ConstEvalResult::not_constant();
 	}
-	return ConstEvalResult::success(new Real(::logl(value), result_ty));
+	return fold_real_result(::logl(value), result_ty);
 }
 
 static ConstEvalResult fold_pos(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {

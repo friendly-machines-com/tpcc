@@ -2641,6 +2641,9 @@ void Emitter::emit_expression(Node* expr) {
 			}
 		}
 	} else if (auto r = dynamic_cast<Real*>(expr)) {
+		if (r->is_origin()) {
+			unhandled_node("unmaterialized real origin reached emission", r);
+		}
 		long double inf = std::numeric_limits<long double>::infinity();
 		if (r->value != r->value) {
 			fprintf(active, "std::numeric_limits<");
@@ -2654,7 +2657,19 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "static_cast<");
 			emit_type_ref(r->ty);
 			fprintf(active, ">(");
-			fprintf(active, "%.*Lg", std::numeric_limits<long double>::max_digits10, r->value);
+			char literal_buffer[256];
+			snprintf(literal_buffer, sizeof(literal_buffer), "%.*Lg", std::numeric_limits<long double>::max_digits10, r->value);
+			std::string literal_text = literal_buffer;
+			if (literal_text.find_first_of(".eE") == std::string::npos) {
+				literal_text += ".0";
+			}
+			fputs(literal_text.c_str(), active);
+			Type* storage = distinct_storage_type(r->ty);
+			if (storage == single_type()) {
+				fputc('f', active);
+			} else if (storage == extended_type()) {
+				fputc('L', active);
+			}
 			fprintf(active, ")");
 		}
 	} else if (auto s = dynamic_cast<String*>(expr)) {
@@ -3161,7 +3176,12 @@ void Emitter::emit_expression(Node* expr) {
 			OrdinalBounds bounds;
 			return type == char_type() || dynamic_cast<EnumType*>(type) || integer_bounds(type, &bounds);
 		};
-		const bool real_conversion = ca->a && real_type(ca->a->ty) && real_type(ca->ty);
+		auto source_real_origin = dynamic_cast<Real*>(ca->a);
+		const bool real_conversion =
+		    ca->a &&
+		    ((source_real_origin && source_real_origin->is_origin()) ||
+		     real_type(ca->a->ty)) &&
+		    real_type(ca->ty);
 		const bool ordinal_conversion = ca->a && ordinal_type(ca->a->ty) && ordinal_type(ca->ty);
 		auto source_set = dynamic_cast<FixedSetType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_set = dynamic_cast<FixedSetType*>(ca->ty);
@@ -3190,11 +3210,22 @@ void Emitter::emit_expression(Node* expr) {
 
 		if (dynamic_cast<RangeCheckedCast*>(ca)) {
 			if (real_conversion) {
-				fprintf(active, "::u_system::m_range_checked_real_cast<");
-				emit_type_ref(ca->ty);
-				fprintf(active, ">(");
-				emit_expression(ca->a);
-				fprintf(active, ")");
+				if (source_real_origin && source_real_origin->is_origin()) {
+					// Overload selection already established that this exact
+					// origin is outside the selected destination. It has no
+					// runtime source carrier to emit, so defer the known R+
+					// failure to expression evaluation rather than inventing
+					// an Extended source or leaking an untyped origin.
+					fprintf(active, "([]() -> ");
+					emit_type_ref(ca->ty);
+					fprintf(active, " { ::u_system::m_runtime_error(201); return {}; }())");
+				} else {
+					fprintf(active, "::u_system::m_range_checked_real_cast<");
+					emit_type_ref(ca->ty);
+					fprintf(active, ">(");
+					emit_expression(ca->a);
+					fprintf(active, ")");
+				}
 			} else {
 				TypeBound lower(TypeBoundKind::Low, ca->ty);
 				TypeBound upper(TypeBoundKind::High, ca->ty);
