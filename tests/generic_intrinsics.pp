@@ -63,6 +63,24 @@ begin
       N := 1 div N
     end;
 
+  B := 37;
+  if Low(B) <> 0 then
+    Halt(1);
+  if High(B) <> 255 then
+    Halt(2);
+
+  Choice := ChoiceOne;
+  if Low(Choice) <> ChoiceZero then
+    Halt(3);
+  if High(Choice) <> ChoiceThree then
+    Halt(4);
+
+  S := 5;
+  if Low(S) <> 0 then
+    Halt(5);
+  if High(S) <> 10 then
+    Halt(6);
+
   I := High(LongInt);
   Inc(I);
   if I <> Low(LongInt) then

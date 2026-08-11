@@ -36,6 +36,7 @@ static Type* subrange_range_type(Type* ty);
 static Type* overload_rank_type(Type* type);
 static Type* integer_literal_natural_type(const Integer* literal);
 static Integer* untyped_integer_constant(Node* expression);
+static bool is_ordinal_intrinsic_argument(Type* ty);
 static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge);
 enum class BracketIntegerPreference {
 	Array,
@@ -2826,9 +2827,18 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			Node* operand = parse_expression();
 			parse_closing_paren();
 			Type* operand_type = operand ? operand->ty : nullptr;
+			if (operand_type &&
+			    is_ordinal_intrinsic_argument(operand_type)) {
+				// An ordinal value contributes only its static Pascal type:
+				// Low(enum_variable) is exactly Low(EnumType), independent
+				// of the variable's current value.  Do not send it through
+				// ValueBound, which exists for bounds obtained from a
+				// sequence value such as a dynamic array.
+				return new TypeBound(*kind, operand_type);
+			}
 			Type* result_type = operand_type ? operand_type->sequence_index_type() : nullptr;
 			if (!result_type) {
-				raise_type_kind_mismatch("Low/High value operand", "string or array", operand_type);
+				raise_type_kind_mismatch("Low/High value operand", "ordinal, string, or array", operand_type);
 			}
 			return new ValueBound(*kind, operand, result_type);
 		}

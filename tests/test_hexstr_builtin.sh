@@ -34,14 +34,4 @@ done
 	-o "$tmp/hexstr_builtin_pascal"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/hexstr_builtin_pascal"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	tests/hexstr_builtin_runtime.cpp \
-	-o "$tmp/hexstr_builtin"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/hexstr_builtin"
-
 echo "HexStr builtin tests passed"

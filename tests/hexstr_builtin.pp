@@ -36,11 +36,19 @@ begin
   if HexStr(Q, 0) <> '' then
     Halt(9);
 
-  P := nil;
-  S := HexStr(P);
-  if Length(S) <> SizeOf(Pointer) * 2 then
+  L := 0;
+  S := HexStr(L, 255);
+  if Length(S) <> 255 then
     Halt(10);
   for Position := 1 to Length(S) do
     if S[Position] <> '0' then
-      Halt(11)
+      Halt(11);
+
+  P := nil;
+  S := HexStr(P);
+  if Length(S) <> SizeOf(Pointer) * 2 then
+    Halt(12);
+  for Position := 1 to Length(S) do
+    if S[Position] <> '0' then
+      Halt(13)
 end.
