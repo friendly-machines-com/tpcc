@@ -1530,6 +1530,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_directoryexists", nullptr},
     {"::u_system::p_expandfilename", nullptr},
     {"::u_system::p_getenvironmentvariable", nullptr},
+    {"::u_system::p_fpgetenv", nullptr},
     {"::u_system::p_getlocaltime", nullptr},
     {"::u_system::p_filedatetodatetime", nullptr},
     {"::u_system::p_decodedate", nullptr},

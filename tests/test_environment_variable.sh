@@ -26,6 +26,12 @@ then
 	echo "GetEnvironmentVariable did not use its SysUtils RTL operation" >&2
 	exit 1
 fi
+if ! rg -Fq '::u_system::p_fpgetenv' \
+	"$tmp/environment_variable.cc"
+then
+	echo "BaseUnix.FpGetEnv did not use its borrowed-pointer RTL operation" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \
@@ -37,6 +43,7 @@ fi
 	-Irtl \
 	-I"$tmp" \
 	"$tmp/environment_variable.cc" \
+	"$tmp/baseunix.cc" \
 	"$tmp/sysutils.cc" \
 	"$tmp/system.cc" \
 	-o "$tmp/environment_variable"

@@ -1,10 +1,11 @@
 program EnvironmentVariableTest;
 
 uses
-  SysUtils;
+  SysUtils, BaseUnix;
 
 var
   Name, Value: AnsiString;
+  EnvironmentPointer: PChar;
   I: SizeInt;
 
 begin
@@ -40,5 +41,30 @@ begin
   if Ord(Value[1]) <> 128 then
     Halt(11);
   if Ord(Value[2]) <> 255 then
-    Halt(12)
+    Halt(12);
+
+  { BaseUnix returns borrowed environment storage, while assigning that PChar
+    to AnsiString performs the ordinary copying conversion. }
+  Name := 'TPCC_ENV_PRESENT';
+  EnvironmentPointer :=
+    BaseUnix.FpGetEnv(PChar(Pointer(Name)));
+  if EnvironmentPointer = nil then
+    Halt(13);
+  Value := EnvironmentPointer;
+  if Value <> 'alpha beta:gamma' then
+    Halt(14);
+
+  Name := 'TPCC_ENV_EMPTY';
+  EnvironmentPointer :=
+    BaseUnix.FpGetEnv(PChar(Pointer(Name)));
+  if EnvironmentPointer = nil then
+    Halt(15);
+  if EnvironmentPointer^ <> #0 then
+    Halt(16);
+
+  Name := 'TPCC_ENV_MISSING';
+  if BaseUnix.FpGetEnv(PChar(Pointer(Name))) <> nil then
+    Halt(17);
+  if BaseUnix.FpGetEnv(nil) <> nil then
+    Halt(18)
 end.

@@ -2548,6 +2548,17 @@ inline t_ansistring p_getenvironmentvariable(
 	    value, std::strlen(value));
 }
 
+inline t_char* p_fpgetenv(t_char* name) {
+	// BaseUnix exposes getenv's borrowed storage directly.  Reading the
+	// t_char bytes through char is permitted, and preserves the pointer and
+	// lifetime supplied by the C environment rather than manufacturing a copy.
+	if (!name)
+		return nullptr;
+	return reinterpret_cast<t_char*>(
+	    std::getenv(
+		reinterpret_cast<const char*>(name)));
+}
+
 template<typename SystemTime>
 inline void p_getlocaltime(
     SystemTime& system_time) {

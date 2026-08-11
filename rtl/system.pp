@@ -44,6 +44,7 @@ type
   TextFile = Text;
   PShortString = ^shortstring;
   PChar = ^Char;
+  PAnsiChar = PChar;
   AnsiString = external name '::u_system::t_ansistring';
   // `class of X` is a real class-reference type in the compiler. Its C++
   // carrier is a pointer to the empty target-specific base implemented by
