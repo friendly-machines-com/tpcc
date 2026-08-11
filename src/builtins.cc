@@ -1317,6 +1317,7 @@ static const BuiltinDesc k_builtins[] = {
         .const_fold = nullptr,
         .generic_kind = BuiltinGenericKind::ValOutput,
     },
+    {"::u_system::p_hexstr", nullptr},
     {"::u_system::p_octstr", nullptr},
     {"::u_system::p_strlen", nullptr},
     {

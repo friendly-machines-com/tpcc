@@ -6425,6 +6425,66 @@ inline void p_val(
 	p_val(source, destination, code);
 }
 
+inline t_char tpcc_hex_digit(uint8_t value) {
+	return t_char{
+	    static_cast<uint8_t>(
+		value < 10
+		    ? static_cast<uint8_t>('0') + value
+		    : static_cast<uint8_t>('A') + value - 10)};
+}
+
+template<typename T>
+requires std::is_integral_v<T>
+inline t_shortstring<255> tpcc_hexstr_bits(T value, t_byte count) {
+	using unsigned_type = std::make_unsigned_t<T>;
+	// HexStr exposes the source carrier's bits, so signed inputs first become
+	// the corresponding unsigned bit pattern.  Logical shifts then discard
+	// left-hand nibbles and, when count exceeds the carrier width, zero-fill.
+	unsigned_type bits;
+	if constexpr (std::is_signed_v<T>)
+		bits = std::bit_cast<unsigned_type>(value);
+	else
+		bits = value;
+
+	t_shortstring<255> result{};
+	result.length = t_char{count};
+	for (std::size_t i = count; i != 0; --i) {
+		result.data[i - 1] =
+		    tpcc_hex_digit(
+			static_cast<uint8_t>(
+			    bits & unsigned_type{15}));
+		bits >>= 4;
+	}
+	return result;
+}
+
+inline t_shortstring<255> p_hexstr(
+    t_longint value, t_byte count) {
+	return tpcc_hexstr_bits(value, count);
+}
+
+inline t_shortstring<255> p_hexstr(
+    t_int64 value, t_byte count) {
+	return tpcc_hexstr_bits(value, count);
+}
+
+inline t_shortstring<255> p_hexstr(
+    t_qword value, t_byte count) {
+	return tpcc_hexstr_bits(value, count);
+}
+
+inline t_shortstring<255> p_hexstr(t_pointer value) {
+	static_assert(
+	    sizeof(t_pointer) * 2 <= 255,
+	    "a complete pointer must fit in ShortString");
+	// Unlike the counted overloads, Pascal defines the pointer form as a
+	// complete representation of the target pointer carrier.
+	constexpr t_byte count =
+	    static_cast<t_byte>(sizeof(t_pointer) * 2);
+	return tpcc_hexstr_bits(
+	    reinterpret_cast<std::uintptr_t>(value), count);
+}
+
 template<typename T>
 requires std::is_signed_v<T> && std::is_integral_v<T>
 inline t_shortstring<255> tpcc_octstr_signed(T value, t_byte count) {

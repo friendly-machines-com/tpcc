@@ -499,6 +499,10 @@ procedure val(const s: AnsiString; out value: Extended; out code); overload; ext
 // fixed-scale representation.
 // FIXME: Enumeration Val needs generated name-to-ordinal metadata; tpcc
 // currently emits enum values but no runtime lookup table for their names.
+function hexstr(value: LongInt; count: Byte): ShortString; overload; external name '::u_system::p_hexstr';
+function hexstr(value: Int64; count: Byte): ShortString; overload; external name '::u_system::p_hexstr';
+function hexstr(value: QWord; count: Byte): ShortString; overload; external name '::u_system::p_hexstr';
+function hexstr(value: Pointer): ShortString; overload; external name '::u_system::p_hexstr';
 function octstr(value: LongInt; count: Byte): ShortString; overload; external name '::u_system::p_octstr';
 function octstr(value: Int64; count: Byte): ShortString; overload; external name '::u_system::p_octstr';
 function octstr(value: QWord; count: Byte): ShortString; overload; external name '::u_system::p_octstr';
