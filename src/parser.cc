@@ -9088,8 +9088,14 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 				if (!preference) {
 					return std::nullopt;
 				}
-				return ArgumentMatch{
-				    {MatchRank::Tier::Equal, *preference}, based};
+				MatchRank rank{
+				    MatchRank::Tier::Equal, *preference};
+				// The assignment is legal, but it changes the origin's
+				// positive mathematical value into a signed carrier bit
+				// pattern. A common domain which preserves the magnitude is
+				// preferred when one is visible.
+				rank.information_losing = true;
+				return ArgumentMatch{rank, based};
 			}
 			// Literal fit needs only the ordinal endpoints. Reusing fixed-array
 			// range construction here incorrectly rejects the complete Int64
@@ -9193,6 +9199,8 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		                                                               : MatchRank::Tier::Convert,
 		    assignment->distance,
 		};
+		rank.information_losing =
+		    assignment->kind == AssignmentConversionClass::Narrowing;
 		auto source_signed = integer_carrier_is_signed(assignment_source);
 		auto target_signed = integer_carrier_is_signed(target);
 		rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;
@@ -9850,15 +9858,13 @@ static std::vector<size_t> overload_resolution_cohort(const std::vector<std::pai
 
 	std::vector<size_t> result;
 	if (best_typed_phase) {
-		// A rounded decimal origin has no source carrier. In the common-domain
-		// phase, compare the proposed domain once for the whole operand pair
-		// instead of allowing one positional rank to prefer a narrow domain
-		// while another prefers a wide one. Typed narrowing was excluded by
-		// the earlier phase choice; the most informative visible real domain
-		// therefore implements the specified rounded-origin phase.
+		// Compare a homogeneous proposal once for the whole operand pair.
+		// This applies in Equal as well as conversion phases: contextual
+		// origins can otherwise make each coordinate prefer a different
+		// carrier even though an operator needs one domain for both.
 		bool have_lossless_common_domain = false;
 		int best_lossy_real_domain = -1;
-		if (common_domain_policy(policy) && *best_typed_phase == MatchRank::Tier::Convert) {
+		if (common_domain_policy(policy)) {
 			for (size_t i = 0; i < viable.size(); ++i) {
 				const CallableMatch& match = viable[i].second;
 				if (callable_match_has_generic(match) || callable_match_phase(match) != *best_typed_phase || !candidate_admitted_in_phase(viable[i].first, match, *best_typed_phase, policy)) {
@@ -9880,11 +9886,14 @@ static std::vector<size_t> overload_resolution_cohort(const std::vector<std::pai
 			const CallableMatch& match = viable[i].second;
 			if (!callable_match_has_generic(match) && callable_match_phase(match) == *best_typed_phase && candidate_admitted_in_phase(viable[i].first, match, *best_typed_phase, policy)) {
 				const bool loses_information = std::ranges::any_of(match.ranks, [](const MatchRank& rank) { return rank.information_losing; });
-				if (have_lossless_common_domain && loses_information) {
-					continue;
-				}
-				if (!have_lossless_common_domain && best_lossy_real_domain >= 0 && loses_information && real_semantic_rank(homogeneous_common_formal(match)) != best_lossy_real_domain) {
-					continue;
+				Type* common = homogeneous_common_formal(match);
+				if (common) {
+					if (have_lossless_common_domain && loses_information) {
+						continue;
+					}
+					if (!have_lossless_common_domain && best_lossy_real_domain >= 0 && loses_information && real_semantic_rank(common) != best_lossy_real_domain) {
+						continue;
+					}
 				}
 				result.push_back(i);
 			}

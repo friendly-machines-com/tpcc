@@ -86,9 +86,10 @@ struct MatchRank {
 	// Rounded decimal origins prefer the more informative real destination,
 	// the reverse of the usual exact-destination specificity direction.
 	bool rounded_real_origin = false;
-	// True when this actual-to-formal conversion cannot preserve every value
-	// in the actual's semantic domain. Common-domain selection first seeks a
-	// proposal for which no operand loses information.
+	// True when this actual-to-formal conversion narrows a typed domain, rounds
+	// an origin, or reinterprets a based integer origin as a signed bit pattern.
+	// Common-domain selection first seeks a proposal which preserves both
+	// operand values.
 	bool information_losing = false;
 };
 
