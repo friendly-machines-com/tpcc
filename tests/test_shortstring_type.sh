@@ -77,4 +77,39 @@ fi
 	-o "$tmp/implicit_narrowing"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/implicit_narrowing"
 
+./mp -Furtl \
+	-o"$tmp/pchar_ansistring.cc" \
+	tests/pchar_ansistring_implicit.pp
+if ! rg -Fq \
+	'::u_system::o_implicit(p_pointervalue, ::u_system::m_conversion_target<::u_system::t_ansistring>{})' \
+	"$tmp/pchar_ansistring.cc"
+then
+	echo "missing direct PChar-to-AnsiString conversion" >&2
+	exit 1
+fi
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-fsanitize=address,undefined \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/pchar_ansistring.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/pchar_ansistring"
+ASAN_OPTIONS=detect_leaks=1 "$tmp/pchar_ansistring"
+
+# PChar has no bounded payload length, so the ShortString narrowing conversion
+# remains unavailable until its truncation/range-check contract is specified.
+if ./mp -Furtl \
+	-o"$tmp/pchar_shortstring.cc" \
+	tests/pchar_shortstring_implicit_rejected.pp \
+	>"$tmp/pchar_shortstring.out" \
+	2>"$tmp/pchar_shortstring.err"
+then
+	echo "accepted implicit PChar-to-ShortString conversion" >&2
+	exit 1
+fi
+
 echo "ShortString type tests passed"

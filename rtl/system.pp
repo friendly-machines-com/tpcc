@@ -590,6 +590,7 @@ operator UncheckedAdd(a, b: ansistring): ansistring; external name '::u_system::
 operator Add(a, b: ansistring): ansistring; external name '::u_system::o_add';
 operator :=(a: shortstring): ansistring; external name '::u_system::o_implicit';
 operator :=(a: AnsiChar): AnsiString; external name '::u_system::o_implicit';
+operator :=(a: PChar): AnsiString; external name '::u_system::o_implicit';
 
 procedure SetLength(var destination: AnsiString; value: SizeInt); overload; external name '::u_system::p_setlength';
 { The omitted type covers dynamic arrays and every fixed-capacity ShortString

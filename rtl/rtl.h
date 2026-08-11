@@ -5241,6 +5241,26 @@ inline t_ansistring o_implicit(
 	result.assign(value);
 	return result;
 }
+inline t_ansistring o_implicit(
+    t_char* source,
+    m_conversion_target<t_ansistring>) {
+	t_ansistring result{};
+	// Pascal defines a nil PChar as an empty string in this conversion.
+	// Otherwise the terminator supplies the length which PChar does not carry.
+	if (!source)
+		return result;
+	std::size_t length = 0;
+	while (source[length].value != 0)
+		++length;
+	std::vector<t_char> replacement(
+	    length + 1, t_char{0});
+	std::copy_n(
+	    source, length,
+	    replacement.data());
+	result.storage.m_replace(
+	    std::move(replacement));
+	return result;
+}
 inline t_boolean o_lessthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value < b.value); }
 inline t_boolean o_lessthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value <= b.value); }
 inline t_boolean o_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value == b.value); }
