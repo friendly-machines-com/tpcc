@@ -23,6 +23,11 @@ begin
   Result := 2
 end;
 
+function TakeSigned64(Value: Int64): Int64;
+begin
+  Result := Value
+end;
+
 begin
   if SignedBytePattern <> -1 then
     Halt(3);
@@ -35,8 +40,12 @@ begin
   if Signed64 <> Signed64Pattern then
     Halt(6);
 
-  { Destination-only bit-pattern construction must not become an Int64
-    overload conversion for the same untyped positive literal. }
+  { The natural QWord overload remains better than the contextual Int64
+    bit-pattern construction. }
   if LiteralKind($AAAAAAAAAAAAAAAA) <> 2 then
-    Halt(7)
+    Halt(7);
+
+  { A singleton value formal accepts exactly what an Int64 assignment does. }
+  if TakeSigned64($AAAAAAAAAAAAAAAA) <> Signed64Pattern then
+    Halt(8)
 end.

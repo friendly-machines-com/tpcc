@@ -8463,6 +8463,34 @@ static std::optional<uint64_t> integer_literal_target_preference(Type* target) {
 	return std::nullopt;
 }
 
+static Node* contextual_based_integer_value(Node* expression, Type* target) {
+	Integer* literal = untyped_integer_constant(expression);
+	if (!literal || !literal->based_literal || literal->negative) {
+		return nullptr;
+	}
+
+	OrdinalBounds bounds;
+	if (!integer_bounds(target, &bounds) || !bounds.signed_type || literal->value <= bounds.max_positive) {
+		return nullptr;
+	}
+	const uint64_t unsigned_max =
+	    bounds.min_magnitude == (uint64_t{1} << 63)
+	        ? UINT64_MAX
+	        : bounds.min_magnitude * 2 - 1;
+	if (literal->value > unsigned_max) {
+		return nullptr;
+	}
+
+	// Pascal based notation can construct the destination carrier's bit
+	// pattern. Treat that construction as one assignment-compatible value
+	// match so a value formal and an assignment destination accept it equally.
+	ConstEvalResult converted =
+	    const_explicit_ordinal_cast(literal->value, false, target);
+	return converted.kind == ConstEvalResult::Kind::Success
+	           ? converted.node
+	           : nullptr;
+}
+
 static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge) {
 	if (a.tier != b.tier) {
 		return static_cast<unsigned>(a.tier) < static_cast<unsigned>(b.tier);
@@ -8989,6 +9017,13 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	}
 
 	if (auto reference = dynamic_cast<RoutineRef*>(actual)) {
+		if (target == pointer_type()) {
+			Node* resolved = try_resolve_routine_code_reference(reference);
+			return resolved
+			           ? std::optional<ArgumentMatch>(
+			                 ArgumentMatch{{MatchRank::Tier::Equal, 0}, resolved})
+			           : std::nullopt;
+		}
 		auto routine = dynamic_cast<RoutineType*>(target);
 		if (!routine) {
 			return std::nullopt;
@@ -9046,6 +9081,16 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 
 	if (untyped_integer) {
 		if (is_integer_semantic_type(target)) {
+			if (Node* based =
+			        contextual_based_integer_value(actual, target)) {
+				auto preference =
+				    integer_literal_target_preference(target);
+				if (!preference) {
+					return std::nullopt;
+				}
+				return ArgumentMatch{
+				    {MatchRank::Tier::Equal, *preference}, based};
+			}
 			// Literal fit needs only the ordinal endpoints. Reusing fixed-array
 			// range construction here incorrectly rejects the complete Int64
 			// domain because its element count is 2^64 and cannot fit in the
@@ -9861,55 +9906,14 @@ Node* Parser::make_implicit_cast(Node* value, Type* target) {
 }
 
 Node* Parser::cast(Node* a, Type* target_ty) {
-	return cast_impl(a, target_ty, false);
+	return cast_impl(a, target_ty);
 }
 
 Node* Parser::cast_for_destination(Node* a, Type* target_ty) {
-	return cast_impl(a, target_ty, true);
+	return cast_impl(a, target_ty);
 }
 
-static Node* contextual_based_integer_destination(Node* expression, Type* target) {
-	Integer* literal = untyped_integer_constant(expression);
-	if (!literal || !literal->based_literal || literal->negative) {
-		return nullptr;
-	}
-
-	OrdinalBounds bounds;
-	if (!integer_bounds(target, &bounds) || !bounds.signed_type || literal->value <= bounds.max_positive) {
-		return nullptr;
-	}
-	const uint64_t unsigned_max = bounds.min_magnitude == (uint64_t{1} << 63) ? UINT64_MAX : bounds.min_magnitude * 2 - 1;
-	if (literal->value > unsigned_max) {
-		return nullptr;
-	}
-
-	// `$` and `%` are the Pascal notation for carrier bit patterns as well as
-	// positive integer magnitudes. Once assignment has already selected a
-	// signed intrinsic destination, an otherwise-out-of-range based numeral
-	// fitting that carrier is constructed from those bits. This is not an
-	// implicit conversion edge: overload matching never enters this
-	// destination-only path. Decimal literals remain ordinary magnitudes;
-	// computed expressions have their operator's selected result type and
-	// follow the ordinary typed-destination conversion rules.
-	ConstEvalResult converted = const_explicit_ordinal_cast(literal->value, false, target);
-	return converted.kind == ConstEvalResult::Kind::Success ? converted.node : nullptr;
-}
-
-Node* Parser::cast_impl(Node* a, Type* target_ty, bool allow_destination_conversion) {
-	if (auto reference = dynamic_cast<RoutineRef*>(a)) {
-		if (target_ty == pointer_type()) {
-			return resolve_routine_code_reference(reference);
-		}
-		if (auto routine = dynamic_cast<RoutineType*>(target_ty)) {
-			// Overload-candidate matching must reject an incompatible routine
-			// designator silently, but cast() is the final contextual
-			// application. Resolve here so failure retains the designator's
-			// callable family and reports plain versus of-object category
-			// instead of treating its intentionally absent pre-context type as
-			// an ordinary <unknown type>.
-			return resolve_routine_reference(reference, routine);
-		}
-	}
+Node* Parser::cast_impl(Node* a, Type* target_ty) {
 	if (target_ty == unknown_type()) {
 		// An omitted-type value is a raw view of the source expression, not a
 		// value conversion to a fictional semantic type.
@@ -9918,17 +9922,26 @@ Node* Parser::cast_impl(Node* a, Type* target_ty, bool allow_destination_convers
 	if (!target_ty) {
 		raise_parse_error("implicit conversion has no target type");
 	}
-	if (allow_destination_conversion) {
-		if (Node* based = contextual_based_integer_destination(a, target_ty)) {
-			return based;
-		}
-	}
+	// A fixed destination is the one-coordinate form of a value-parameter
+	// call. Reusing match_argument here keeps acceptance and the constructed
+	// conversion identical; overload resolution merely repeats this operation
+	// for each candidate's proposed formal type.
 	Parameter formal("", "", target_ty, ParamMode::Value, nullptr);
 	MatchFailure failure = MatchFailure::Incompatible;
 	DeclaredConversionFailure conversion_failure;
 	auto match = match_argument(formal, a, nullptr, 0, true, &failure, &conversion_failure);
 	if (match) {
 		return match->value;
+	}
+	if (auto reference = dynamic_cast<RoutineRef*>(a)) {
+		// Matching above is the sole compatibility decision. These calls only
+		// reconstruct the richer final-context diagnostic on failure.
+		if (target_ty == pointer_type()) {
+			return resolve_routine_code_reference(reference);
+		}
+		if (auto routine = dynamic_cast<RoutineType*>(target_ty)) {
+			return resolve_routine_reference(reference, routine);
+		}
 	}
 	if (dynamic_cast<NilLiteral*>(a)) {
 		raise_type_kind_mismatch("'nil' conversion target", "reference or routine-value", target_ty);
@@ -10016,28 +10029,22 @@ Node* Parser::resolve_routine_reference(RoutineRef* reference, RoutineType* targ
 	raise_routine_reference_error("no overload of the routine reference is compatible with " + category + " target", reference, target_ty);
 }
 
-Node* Parser::resolve_routine_code_reference(RoutineRef* reference) {
+Node* Parser::try_resolve_routine_code_reference(RoutineRef* reference) {
 	if (!reference) {
-		raise_routine_reference_error("invalid routine code reference", reference, pointer_type());
+		return nullptr;
 	}
 	std::vector<Callable*> candidates = routine_reference_candidates(reference->candidates);
 	if (candidates.size() != 1) {
-		raise_routine_reference_error("a Pointer routine reference requires one "
-		                              "non-overloaded routine",
-		                              reference, pointer_type());
+		return nullptr;
 	}
 	Callable* candidate = candidates.front();
 	bool valid_plain = (dynamic_cast<Procedure*>(candidate) && candidate->ty->kind == ROUTINE && reference->receiver == nullptr) || (dynamic_cast<Method*>(candidate) && static_cast<Method*>(candidate)->is_static && candidate->ty->kind == ROUTINE);
 	bool valid_method = dynamic_cast<Method*>(candidate) && !static_cast<Method*>(candidate)->is_static && (candidate->ty->kind == METHOD || candidate->ty->kind == CLASS_METHOD) && reference->receiver != nullptr;
 	if (!valid_plain && !valid_method) {
-		raise_routine_reference_error("Pointer routine reference does not name a plain "
-		                              "routine or bound instance method",
-		                              reference, pointer_type());
+		return nullptr;
 	}
 	if (valid_method && !(reference->receiver->ty && reference->receiver->ty->is_reference_type()) && !is_referenceable(reference->receiver)) {
-		raise_routine_reference_error("a bound method code reference requires a stable "
-		                              "object receiver",
-		                              reference, pointer_type());
+		return nullptr;
 	}
 
 	auto result = new RoutineRef(reference->receiver, reference->candidates);
@@ -10052,6 +10059,41 @@ Node* Parser::resolve_routine_code_reference(RoutineRef* reference) {
 		}
 	}
 	return result;
+}
+
+Node* Parser::resolve_routine_code_reference(RoutineRef* reference) {
+	if (!reference) {
+		raise_routine_reference_error("invalid routine code reference", reference, pointer_type());
+	}
+	if (Node* result = try_resolve_routine_code_reference(reference)) {
+		return result;
+	}
+	std::vector<Callable*> candidates =
+	    routine_reference_candidates(reference->candidates);
+	if (candidates.size() != 1) {
+		raise_routine_reference_error(
+		    "a Pointer routine reference requires one non-overloaded routine",
+		    reference, pointer_type());
+	}
+	Callable* candidate = candidates.front();
+	bool valid_method =
+	    dynamic_cast<Method*>(candidate) &&
+	    !static_cast<Method*>(candidate)->is_static &&
+	    (candidate->ty->kind == METHOD ||
+	     candidate->ty->kind == CLASS_METHOD) &&
+	    reference->receiver != nullptr;
+	if (valid_method &&
+	    !(reference->receiver->ty &&
+	      reference->receiver->ty->is_reference_type()) &&
+	    !is_referenceable(reference->receiver)) {
+		raise_routine_reference_error(
+		    "a bound method code reference requires a stable object receiver",
+		    reference, pointer_type());
+	}
+	raise_routine_reference_error(
+	    "Pointer routine reference does not name a plain routine or bound "
+	    "instance method",
+	    reference, pointer_type());
 }
 
 static bool callable_accepts_receiver(Callable* callable, Node* receiver) {

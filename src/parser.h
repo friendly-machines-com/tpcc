@@ -424,9 +424,10 @@ class Parser {
 	Node* make_implicit_cast(Node* value, Type* target);
 	Node* cast(Node* a, Type* target_ty);
 	Node* cast_for_destination(Node* a, Type* target_ty);
-	Node* cast_impl(Node* a, Type* target_ty, bool allow_destination_conversion);
+	Node* cast_impl(Node* a, Type* target_ty);
 	Node* resolve_routine_reference(RoutineRef* reference, RoutineType* target_ty);
 	Node* try_resolve_routine_reference(RoutineRef* reference, RoutineType* target_ty, bool* ambiguous);
+	Node* try_resolve_routine_code_reference(RoutineRef* reference);
 	Node* resolve_routine_code_reference(RoutineRef* reference);
 	uint64_t next_subrange_type_number = 0;
 	std::string next_subrange_cxx_name();

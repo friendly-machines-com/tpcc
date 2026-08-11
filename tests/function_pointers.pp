@@ -93,6 +93,11 @@ begin
     StaticPointerCastResult := Arg
 end;
 
+function PointerIdentity(Value: Pointer): Pointer;
+begin
+  Result := Value
+end;
+
 destructor TBase.Destroy;
 begin
 end;
@@ -171,6 +176,7 @@ begin
     TPointerMethodCallback(ObjectMethodCallback);
   PointerMethodCallback(Pointer(OtherReceiver), nil);
 
-  GlobalCode := Pointer(@Mutate);
-  MethodCode := Pointer(@Receiver.Scale)
+  { Pointer value formals apply the same routine-code context as assignment. }
+  GlobalCode := PointerIdentity(@Mutate);
+  MethodCode := PointerIdentity(@Receiver.Scale)
 end.
