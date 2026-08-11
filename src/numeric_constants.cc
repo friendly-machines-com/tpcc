@@ -3,20 +3,17 @@
 #include "builtins.h"
 #include "types.h"
 
-#include <charconv>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <system_error>
 #include <type_traits>
 
-static_assert(std::numeric_limits<float>::radix == 2 && std::numeric_limits<float>::digits == 24 && std::numeric_limits<float>::max_exponent == 128,
-              "TPCC bootstrap requires IEEE binary32 float");
-static_assert(std::numeric_limits<double>::radix == 2 && std::numeric_limits<double>::digits == 53 && std::numeric_limits<double>::max_exponent == 1024,
-              "TPCC bootstrap requires IEEE binary64 double");
-static_assert(std::numeric_limits<long double>::radix == 2 && std::numeric_limits<long double>::digits >= 64 && std::numeric_limits<long double>::max_exponent >= 16384,
-              "TPCC bootstrap long double must losslessly contain Pascal binary80");
+static_assert(std::numeric_limits<float>::radix == 2 && std::numeric_limits<float>::digits == 24 && std::numeric_limits<float>::max_exponent == 128, "TPCC bootstrap requires IEEE binary32 float");
+static_assert(std::numeric_limits<double>::radix == 2 && std::numeric_limits<double>::digits == 53 && std::numeric_limits<double>::max_exponent == 1024, "TPCC bootstrap requires IEEE binary64 double");
+static_assert(std::numeric_limits<long double>::radix == 2 && std::numeric_limits<long double>::digits >= 64 && std::numeric_limits<long double>::max_exponent >= 16384, "TPCC bootstrap long double must losslessly contain Pascal binary80");
 
 namespace {
 
@@ -202,8 +199,7 @@ bool decimal_is_exact_binary(const DecimalOrigin& origin, const BinaryFormat& fo
 	return binary_exponent >= format.minimum_subnormal_exponent && highest_exponent <= format.maximum_normal_exponent;
 }
 
-template <typename T>
-RealMaterialization parse_as(const DecimalOrigin& origin, Type* target) {
+template <typename T> RealMaterialization parse_as(const DecimalOrigin& origin, Type* target) {
 	const std::string text = decimal_origin_text(origin);
 	T value = 0;
 	if constexpr (std::is_same_v<T, long double>) {
@@ -230,9 +226,7 @@ RealMaterialization parse_as(const DecimalOrigin& origin, Type* target) {
 			// Every supported binary format has values both below 1 and above
 			// 1. Thus the exact decimal's scientific exponent unambiguously
 			// distinguishes an underflow report from an overflow report.
-			const __int128 scientific_exponent =
-			    static_cast<__int128>(origin.exponent10) +
-			    static_cast<__int128>(origin.digits.size()) - 1;
+			const __int128 scientific_exponent = static_cast<__int128>(origin.exponent10) + static_cast<__int128>(origin.digits.size()) - 1;
 			if (scientific_exponent < 0) {
 				value = origin.negative ? -T{0} : T{0};
 			} else {
@@ -258,8 +252,7 @@ RealMaterialization parse_as(const DecimalOrigin& origin, Type* target) {
 	};
 }
 
-template <typename T>
-long double eval_binary(RealBinaryOperation operation, long double left, long double right) {
+template <typename T> long double eval_binary(RealBinaryOperation operation, long double left, long double right) {
 	// The CST's long double fields are containers, not an instruction to do all
 	// arithmetic in Extended. Re-enter the selected Pascal carrier before the
 	// operation so folding has the same operand and result boundaries as the

@@ -103,17 +103,9 @@ static bool token_is_identifier(const std::string& token) {
 	if (token.empty() || keywords.find(token) != keywords.end()) {
 		return false;
 	}
-	const auto is_letter = [](char value) {
-		return std::isalpha(static_cast<unsigned char>(value));
-	};
-	const auto is_identifier_character = [&](char value) {
-		return is_letter(value) ||
-		       std::isdigit(static_cast<unsigned char>(value)) ||
-		       value == '_';
-	};
-	return (is_letter(token.front()) || token.front() == '_') &&
-	       std::all_of(token.begin() + 1, token.end(),
-	                   is_identifier_character);
+	const auto is_letter = [](char value) { return std::isalpha(static_cast<unsigned char>(value)); };
+	const auto is_identifier_character = [&](char value) { return is_letter(value) || std::isdigit(static_cast<unsigned char>(value)) || value == '_'; };
+	return (is_letter(token.front()) || token.front() == '_') && std::all_of(token.begin() + 1, token.end(), is_identifier_character);
 }
 
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options) : unit_registry(unit_registry), emitter(emitter), options(options) {
@@ -8473,10 +8465,7 @@ static Node* contextual_based_integer_value(Node* expression, Type* target) {
 	if (!integer_bounds(target, &bounds) || !bounds.signed_type || literal->value <= bounds.max_positive) {
 		return nullptr;
 	}
-	const uint64_t unsigned_max =
-	    bounds.min_magnitude == (uint64_t{1} << 63)
-	        ? UINT64_MAX
-	        : bounds.min_magnitude * 2 - 1;
+	const uint64_t unsigned_max = bounds.min_magnitude == (uint64_t{1} << 63) ? UINT64_MAX : bounds.min_magnitude * 2 - 1;
 	if (literal->value > unsigned_max) {
 		return nullptr;
 	}
@@ -8484,11 +8473,8 @@ static Node* contextual_based_integer_value(Node* expression, Type* target) {
 	// Pascal based notation can construct the destination carrier's bit
 	// pattern. Treat that construction as one assignment-compatible value
 	// match so a value formal and an assignment destination accept it equally.
-	ConstEvalResult converted =
-	    const_explicit_ordinal_cast(literal->value, false, target);
-	return converted.kind == ConstEvalResult::Kind::Success
-	           ? converted.node
-	           : nullptr;
+	ConstEvalResult converted = const_explicit_ordinal_cast(literal->value, false, target);
+	return converted.kind == ConstEvalResult::Kind::Success ? converted.node : nullptr;
 }
 
 static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge) {
@@ -9019,10 +9005,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	if (auto reference = dynamic_cast<RoutineRef*>(actual)) {
 		if (target == pointer_type()) {
 			Node* resolved = try_resolve_routine_code_reference(reference);
-			return resolved
-			           ? std::optional<ArgumentMatch>(
-			                 ArgumentMatch{{MatchRank::Tier::Equal, 0}, resolved})
-			           : std::nullopt;
+			return resolved ? std::optional<ArgumentMatch>(ArgumentMatch{{MatchRank::Tier::Equal, 0}, resolved}) : std::nullopt;
 		}
 		auto routine = dynamic_cast<RoutineType*>(target);
 		if (!routine) {
@@ -9062,7 +9045,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		MatchRank rank{
 		    converted.kind == RealMaterializationKind::Exact        ? MatchRank::Tier::Equal
 		    : converted.kind == RealMaterializationKind::OutOfRange ? MatchRank::Tier::ConvertNarrowing
-		                                                           : MatchRank::Tier::Convert,
+		                                                            : MatchRank::Tier::Convert,
 		    0,
 		};
 		rank.rounded_real_origin = converted.kind == RealMaterializationKind::Rounded;
@@ -9081,15 +9064,12 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 
 	if (untyped_integer) {
 		if (is_integer_semantic_type(target)) {
-			if (Node* based =
-			        contextual_based_integer_value(actual, target)) {
-				auto preference =
-				    integer_literal_target_preference(target);
+			if (Node* based = contextual_based_integer_value(actual, target)) {
+				auto preference = integer_literal_target_preference(target);
 				if (!preference) {
 					return std::nullopt;
 				}
-				MatchRank rank{
-				    MatchRank::Tier::Equal, *preference};
+				MatchRank rank{MatchRank::Tier::Equal, *preference};
 				// The assignment is legal, but it changes the origin's
 				// positive mathematical value into a signed carrier bit
 				// pattern. A common domain which preserves the magnitude is
@@ -9133,7 +9113,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			MatchRank rank{
 			    converted.kind == RealMaterializationKind::Exact        ? MatchRank::Tier::Equal
 			    : converted.kind == RealMaterializationKind::OutOfRange ? MatchRank::Tier::ConvertNarrowing
-			                                                           : MatchRank::Tier::Convert,
+			                                                            : MatchRank::Tier::Convert,
 			    0,
 			};
 			rank.information_losing = converted.kind != RealMaterializationKind::Exact;
@@ -9199,8 +9179,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		                                                               : MatchRank::Tier::Convert,
 		    assignment->distance,
 		};
-		rank.information_losing =
-		    assignment->kind == AssignmentConversionClass::Narrowing;
+		rank.information_losing = assignment->kind == AssignmentConversionClass::Narrowing;
 		auto source_signed = integer_carrier_is_signed(assignment_source);
 		auto target_signed = integer_carrier_is_signed(target);
 		rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;
@@ -10077,32 +10056,18 @@ Node* Parser::resolve_routine_code_reference(RoutineRef* reference) {
 	if (Node* result = try_resolve_routine_code_reference(reference)) {
 		return result;
 	}
-	std::vector<Callable*> candidates =
-	    routine_reference_candidates(reference->candidates);
+	std::vector<Callable*> candidates = routine_reference_candidates(reference->candidates);
 	if (candidates.size() != 1) {
-		raise_routine_reference_error(
-		    "a Pointer routine reference requires one non-overloaded routine",
-		    reference, pointer_type());
+		raise_routine_reference_error("a Pointer routine reference requires one non-overloaded routine", reference, pointer_type());
 	}
 	Callable* candidate = candidates.front();
-	bool valid_method =
-	    dynamic_cast<Method*>(candidate) &&
-	    !static_cast<Method*>(candidate)->is_static &&
-	    (candidate->ty->kind == METHOD ||
-	     candidate->ty->kind == CLASS_METHOD) &&
-	    reference->receiver != nullptr;
-	if (valid_method &&
-	    !(reference->receiver->ty &&
-	      reference->receiver->ty->is_reference_type()) &&
-	    !is_referenceable(reference->receiver)) {
-		raise_routine_reference_error(
-		    "a bound method code reference requires a stable object receiver",
-		    reference, pointer_type());
+	bool valid_method = dynamic_cast<Method*>(candidate) && !static_cast<Method*>(candidate)->is_static && (candidate->ty->kind == METHOD || candidate->ty->kind == CLASS_METHOD) && reference->receiver != nullptr;
+	if (valid_method && !(reference->receiver->ty && reference->receiver->ty->is_reference_type()) && !is_referenceable(reference->receiver)) {
+		raise_routine_reference_error("a bound method code reference requires a stable object receiver", reference, pointer_type());
 	}
-	raise_routine_reference_error(
-	    "Pointer routine reference does not name a plain routine or bound "
-	    "instance method",
-	    reference, pointer_type());
+	raise_routine_reference_error("Pointer routine reference does not name a plain routine or bound "
+	                              "instance method",
+	                              reference, pointer_type());
 }
 
 static bool callable_accepts_receiver(Callable* callable, Node* receiver) {
@@ -10393,11 +10358,8 @@ Node* Parser::make_call(FinalizedCall finalized, std::vector<Node*> args, Leadin
 			raise_parse_error("internal error: selected Val declaration has invalid arity");
 		}
 		Type* source_type = args[0] ? args[0]->ty : nullptr;
-		if (!dynamic_cast<ShortStringType*>(source_type) &&
-		    source_type != ansistring_type()) {
-			raise_type_kind_mismatch(
-			    "Val source", "ShortString or AnsiString",
-			    source_type);
+		if (!dynamic_cast<ShortStringType*>(source_type) && source_type != ansistring_type()) {
+			raise_type_kind_mismatch("Val source", "ShortString or AnsiString", source_type);
 		}
 
 		const ValDestinationFamily family = val_destination_family(args[1] ? args[1]->ty : nullptr);

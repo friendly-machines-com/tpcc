@@ -576,9 +576,11 @@ class Real : public Node {
 	long double value = 0.0L;
 	Real(long double value, Type* ty);
 	explicit Real(DecimalOrigin origin);
+
 	bool is_origin() const {
 		return origin.has_value();
 	}
+
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

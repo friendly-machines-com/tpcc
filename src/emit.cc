@@ -3177,11 +3177,7 @@ void Emitter::emit_expression(Node* expr) {
 			return type == char_type() || dynamic_cast<EnumType*>(type) || integer_bounds(type, &bounds);
 		};
 		auto source_real_origin = dynamic_cast<Real*>(ca->a);
-		const bool real_conversion =
-		    ca->a &&
-		    ((source_real_origin && source_real_origin->is_origin()) ||
-		     real_type(ca->a->ty)) &&
-		    real_type(ca->ty);
+		const bool real_conversion = ca->a && ((source_real_origin && source_real_origin->is_origin()) || real_type(ca->a->ty)) && real_type(ca->ty);
 		const bool ordinal_conversion = ca->a && ordinal_type(ca->a->ty) && ordinal_type(ca->ty);
 		auto source_set = dynamic_cast<FixedSetType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_set = dynamic_cast<FixedSetType*>(ca->ty);
