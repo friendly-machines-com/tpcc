@@ -448,6 +448,7 @@ procedure runerror; overload; noreturn; external name '::u_system::p_runerror';
 // the original process arguments. The ShortString result matches FPC's
 // System unit, which is compiled under {$H-}.
 function paramstr(index: LongInt): ShortString; external name '::u_system::p_paramstr';
+function paramcount: LongInt; external name '::u_system::p_paramcount';
 // These `m_` external names are intentionally unqualified internal macros, not
 // ordinary addressable `p_` functions. A C++ function would observe its own
 // frame instead of the generated Pascal call site, while a namespace qualifier

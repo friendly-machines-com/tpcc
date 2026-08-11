@@ -5,6 +5,8 @@ var
   Index: Integer;
 
 begin
+  if System.ParamCount <> 5 then
+    Halt(8);
   if System.ParamStr(0) <> ParamStr(1) then
     Halt(1);
   if ParamStr(2) <> 'alpha' then

@@ -4584,6 +4584,15 @@ inline t_shortstring<255> p_paramstr(t_longint index) {
 	    argument, std::strlen(argument));
 }
 
+inline t_longint p_paramcount() {
+	// argc includes the executable element at index zero; Pascal's count is
+	// the largest valid user-argument index and is never negative.
+	return tpcc_program_argc > 0
+	    ? static_cast<t_longint>(
+		  tpcc_program_argc - 1)
+	    : 0;
+}
+
 inline std::error_code m_getdir_bytes(
     std::string& bytes) {
 	std::error_code error;

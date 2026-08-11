@@ -14,7 +14,8 @@ cd "$root"
 for required in \
 	'int main(int argc, char* argv[])' \
 	'::u_system::m_set_program_arguments(argc, argv);' \
-	'::u_system::p_paramstr('
+	'::u_system::p_paramstr(' \
+	'::u_system::p_paramcount()'
 do
 	if ! rg -Fq "$required" "$tmp/paramstr_builtin.cc"
 	then
