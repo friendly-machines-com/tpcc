@@ -42,6 +42,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_overlay"
 	tests/packed_array_field_write.pp
 for required in \
 	'auto tpcc_packed_field = tpcc_packed_value.m_get_p_data();' \
+	'static_assert(alignof(tpcc_packed_item_type) == 1' \
 	'::u_system::p_index(tpcc_packed_field,' \
 	'tpcc_packed_value.m_set_p_data(tpcc_packed_field);'
 do

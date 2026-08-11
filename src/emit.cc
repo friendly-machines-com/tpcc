@@ -1032,6 +1032,11 @@ void Emitter::emit_statement(Node* stmt) {
 			if (!field) {
 				unhandled_node("indexed packed-record target is not a field", indexed_member);
 			}
+			Type* item_type = field->ty ? field->ty->sequence_element_type() : nullptr;
+			auto item_layout = item_type ? type_layout(true, item_type) : std::nullopt;
+			if (!item_layout || item_layout->alignment != 1) {
+				unhandled_type("indexed packed-record field item does not have alignment one", field->ty);
+			}
 			const char* index_name = "::u_system::p_index";
 			if (indexed_property) {
 				auto builtin = dynamic_cast<Builtin*>(indexed_property->property->write_accessor);
@@ -1044,6 +1049,10 @@ void Emitter::emit_statement(Node* stmt) {
 			emit_expression(indexed_member->a);
 			fprintf(active, ";\n");
 			fprintf(active, "\t\tauto tpcc_packed_field = tpcc_packed_value.m_get_%s();\n", field->cxx_name.c_str());
+			fprintf(active, "\t\tusing tpcc_packed_item_type = std::remove_reference_t<"
+			                "decltype(*tpcc_packed_field.m_data())>;\n");
+			fprintf(active, "\t\tstatic_assert(alignof(tpcc_packed_item_type) == 1, "
+			                "\"indexed packed-record field item must have alignment one\");\n");
 			fprintf(active, "\t\t%s(tpcc_packed_field, ", index_name);
 			emit_expression(indexed_argument);
 			fprintf(active, ") = ");
