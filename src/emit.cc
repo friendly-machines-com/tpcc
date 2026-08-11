@@ -580,7 +580,10 @@ void Emitter::emit_main_prologue(const std::vector<UnitLifecycleNames>& unit_lif
 		fprintf(active, "}\n");
 	}
 	fprintf(active, "}\n\n");
-	fprintf(active, "int main() {\n");
+	// Command-line state must be installed before unit initialization because
+	// a unit initialization section may legally call ParamStr.
+	fprintf(active, "int main(int argc, char* argv[]) {\n");
+	fprintf(active, "\t::u_system::m_set_program_arguments(argc, argv);\n");
 	fprintf(active, "\tif (std::atexit(tpcc_finalize_initialized_units) != 0)\n");
 	fprintf(active, "\t\tstd::terminate();\n");
 	fprintf(active, "\ttry {\n");

@@ -1320,6 +1320,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_hexstr", nullptr},
     {"::u_system::p_octstr", nullptr},
     {"::u_system::p_strlen", nullptr},
+    {"::u_system::p_paramstr", nullptr},
     {
         .cxx_name = "::u_system::p_new",
         .const_fold = nullptr,

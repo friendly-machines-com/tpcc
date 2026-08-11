@@ -4545,6 +4545,45 @@ inline t_shortstring<Capacity> tpcc_shortstring_from_c(
 	return result;
 }
 
+inline int tpcc_program_argc = 0;
+inline char** tpcc_program_argv = nullptr;
+inline t_shortstring<255> tpcc_program_executable_path{};
+
+inline void m_set_program_arguments(
+    int argc, char* argv[]) noexcept {
+	tpcc_program_argc = std::max(argc, 0);
+	tpcc_program_argv = argv;
+	tpcc_program_executable_path = {};
+
+	// FPC's Linux System unit obtains ParamStr(0) from /proc/self/exe rather
+	// than trusting argv[0], which POSIX allows the caller to choose freely.
+	// Keep the fixed 255-byte buffer: System.ParamStr returns ShortString and
+	// FPC truncates the executable path to that carrier at startup.
+	char executable_path[255];
+	const ssize_t length =
+	    ::readlink(
+		"/proc/self/exe",
+		executable_path,
+		sizeof(executable_path));
+	if (length > 0 && executable_path[0] == '/')
+		tpcc_program_executable_path =
+		    tpcc_shortstring_from_c(
+			executable_path,
+			static_cast<std::size_t>(length));
+}
+
+inline t_shortstring<255> p_paramstr(t_longint index) {
+	if (index == 0)
+		return tpcc_program_executable_path;
+	if (index < 0 || !tpcc_program_argv ||
+	    index >= tpcc_program_argc ||
+	    !tpcc_program_argv[index])
+		return {};
+	const char* argument = tpcc_program_argv[index];
+	return tpcc_shortstring_from_c(
+	    argument, std::strlen(argument));
+}
+
 inline std::error_code m_getdir_bytes(
     std::string& bytes) {
 	std::error_code error;
