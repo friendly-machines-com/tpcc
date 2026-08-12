@@ -6,6 +6,7 @@
 #include "types.h"
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <string>
 
@@ -1672,18 +1673,16 @@ const BuiltinDesc* lookup_builtin_desc(std::string_view cxx_name) {
 	return nullptr;
 }
 
-Builtin* create_builtin_value(std::string cxx_name) {
-	for (auto& b : k_builtins) {
-		if (b.cxx_name == cxx_name) {
-			auto bi = new Builtin(&b);
-			return bi;
-		}
+Builtin* create_builtin_value(std::string_view cxx_name) {
+	if (const BuiltinDesc* desc = lookup_builtin_desc(cxx_name)) {
+		return new Builtin(desc);
 	}
-	// Fallback to anything, we will get a linker error anyway.
-	fprintf(stderr, "warning: builtin '%s' doesn't have a registration.  Allowing it--but it won't constant-fold.\n", cxx_name.c_str());
-	auto bs = BuiltinDesc{cxx_name, nullptr};
-	auto bi = new Builtin(&bs);
-	return bi;
+	// Callers use this helper only for compiler-owned operations.  Source
+	// declarations with an arbitrary `external name` are ordinary Callables
+	// and never acquire fabricated builtin metadata.
+	fprintf(stderr, "internal error: compiler builtin '%.*s' has no registration\n",
+	        static_cast<int>(cxx_name.size()), cxx_name.data());
+	std::abort();
 }
 
 const Frame& root_frame() {

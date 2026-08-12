@@ -406,7 +406,6 @@ class Parser {
 	// implemented; a condition mp doesn't understand evaluates to true and
 	// logs a note (so we don't silently drop needed code).
 	bool eval_directive_expr(const std::string& expr);
-	Builtin* lookup_external_value(const char* lib, std::string cxx_name);
 	Type* lookup_external_type(const char* lib, std::string cxx_name);
 	/** OVERFLOW_CHECKS is the directive state captured at the operator's
 	 * leading source token. Operand parsing may encounter directives for

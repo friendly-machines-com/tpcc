@@ -7997,21 +7997,6 @@ Type* Parser::lookup_external_type(const char* lib, std::string cxx_name) {
 	}
 }
 
-Builtin* Parser::lookup_external_value(const char* lib, std::string cxx_name) {
-	if (lib == nullptr) {
-		auto builtin = create_builtin_value(cxx_name);
-		if (builtin == nullptr) {
-			raise_parse_error("builtin '" + cxx_name + "' not found");
-			return nullptr;
-		} else {
-			return builtin;
-		}
-	} else {
-		raise_parse_error("external library not implemented");
-		return nullptr;
-	}
-}
-
 struct ParsedOperatorIdentity {
 	std::vector<std::string> pascal_identifiers;
 	std::string cxx_name;
@@ -8251,21 +8236,13 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		Procedure* target = match_or_create_procedure(first_name, operator_identity.pascal_identifiers, operator_identity.cxx_name, sig, had_paren, has_overload, short_form_implementation);
 		if (external_cxx_name) {
 			target->owning_unit = nullptr;
-			auto builtin = lookup_external_value(nullptr, *external_cxx_name);
-			if (builtin != nullptr) {
-				// This is basically making TARGET an ALIAS for BUILTIN.
-				target->has_body = true;
-				target->is_external = true;
-				if (auto qbuiltin = dynamic_cast<Builtin*>(builtin)) { // used
-					// These Builtins are all polymorphic and C++ overloads will just have to adjust
-					// to us.
-					auto desc = qbuiltin->desc;
-					target->cxx_name = desc->cxx_name;
-					target->builtin_desc = desc;
-				} else {
-					raise_parse_error("unknown intrinsic via external '" + *external_cxx_name + "'");
-				}
-			}
+			target->has_body = true;
+			target->is_external = true;
+			// The declaration itself owns an arbitrary external spelling.
+			// Only names present in the static builtin catalog acquire
+			// compiler semantics such as special syntax or constant folding.
+			target->cxx_name = *external_cxx_name;
+			target->builtin_desc = lookup_builtin_desc(*external_cxx_name);
 		} else if (body_follows) {
 			parse_routine_body(target, nullptr);
 		} else {
