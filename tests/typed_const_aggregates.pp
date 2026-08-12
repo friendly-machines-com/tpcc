@@ -30,8 +30,30 @@ type
     LongText: AnsiString;
     Narrowed: String[3];
   end;
+  THexTable = array[0..15] of Char;
+  TChar4 = array[1..4] of Char;
+  TCharRows = array[0..1] of TChar4;
+  TCharacterRecord = record
+    Kind: Byte;
+    Text: TChar4;
+  end;
 
 const
+  CharacterAlias = 'xy';
+  HexTable: THexTable = '0123456789abcdef';
+  CharacterAliasArray: TChar4 = CharacterAlias;
+  EmbeddedCharacterArray: TChar4 = 'A'#0;
+  EmptyCharacterArray: TChar4 = '';
+  CharacterFunctionArray: TChar4 = Chr(66);
+  CharacterCastArray: TChar4 = Char(67);
+  CharacterRows: TCharRows = (
+    'ab',
+    'wxyz'
+  );
+  CharacterRecord: TCharacterRecord = (
+    Kind: 7;
+    Text: 'R'
+  );
   LongManaged =
     AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
     AnsiString('01234567890123456789012345678901234567890123456789012345678901234567890123456789') +
@@ -150,5 +172,36 @@ begin
 
   RuntimeNarrowed := AnsiString('abc') + AnsiString('def');
   if RuntimeNarrowed <> Managed.Narrowed then
-    Halt(26)
+    Halt(26);
+
+  if (HexTable[0] <> '0') or (HexTable[15] <> 'f') then
+    Halt(27);
+  if (CharacterAliasArray[1] <> 'x') or
+     (CharacterAliasArray[2] <> 'y') or
+     (CharacterAliasArray[3] <> #0) or
+     (CharacterAliasArray[4] <> #0) then
+    Halt(28);
+  if (EmbeddedCharacterArray[1] <> 'A') or
+     (EmbeddedCharacterArray[2] <> #0) or
+     (EmbeddedCharacterArray[3] <> #0) or
+     (EmbeddedCharacterArray[4] <> #0) then
+    Halt(29);
+  if (EmptyCharacterArray[1] <> #0) or
+     (EmptyCharacterArray[4] <> #0) then
+    Halt(30);
+  if (CharacterFunctionArray[1] <> 'B') or
+     (CharacterFunctionArray[2] <> #0) then
+    Halt(31);
+  if (CharacterCastArray[1] <> 'C') or
+     (CharacterCastArray[2] <> #0) then
+    Halt(32);
+  if (CharacterRows[0][1] <> 'a') or
+     (CharacterRows[0][2] <> 'b') or
+     (CharacterRows[0][3] <> #0) or
+     (CharacterRows[1][4] <> 'z') then
+    Halt(33);
+  if (CharacterRecord.Kind <> 7) or
+     (CharacterRecord.Text[1] <> 'R') or
+     (CharacterRecord.Text[2] <> #0) then
+    Halt(34)
 end.

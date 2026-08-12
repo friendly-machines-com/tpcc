@@ -6004,6 +6004,58 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 	}
 
 	if (auto arr = dynamic_cast<FixedArrayType*>(ty)) {
+		if (arr->item_type == char_type() && input_token != "(") {
+			// A constant character or string initializes the logical array
+			// elements; it is not a C string initializer.  Consequently an
+			// exact-length value has no terminator, while a shorter value fills
+			// every remaining Pascal element with #0.  Keep '(' reserved for
+			// the ordinary exact-count array aggregate grammar below.
+			Node* expression = parse_expression();
+			ConstEvalContext ctx;
+			ConstEvalResult folded = expression->const_eval(ctx);
+			if (folded.kind == ConstEvalResult::Kind::NotConstant) {
+				raise_value_error("constant character-array initializer expected", expression);
+			}
+			if (folded.kind == ConstEvalResult::Kind::Error) {
+				raise_value_error(folded.message, expression);
+			}
+
+			std::string value;
+			if (auto string = dynamic_cast<String*>(folded.node)) {
+				value = string->value;
+			} else if (auto character = dynamic_cast<Integer*>(folded.node);
+			           character && character->ty == char_type() &&
+			               !character->negative && character->value <= 255) {
+				// Constant operations such as an explicit Char cast represent
+				// their ordinal result as Integer-with-Char-type rather than as
+				// a String node.
+				value.push_back(static_cast<char>(
+				    static_cast<unsigned char>(character->value)));
+			} else {
+				raise_value_error(
+				    "character-array initializer must fold to a character or string",
+				    folded.node ? folded.node : expression);
+			}
+
+			if (value.size() > arr->range.length) {
+				raise_value_error(
+				    "string length is larger than character-array length",
+				    folded.node ? folded.node : expression);
+			}
+
+			std::vector<Node*> elements;
+			elements.reserve(static_cast<std::size_t>(arr->range.length));
+			for (unsigned char character : value) {
+				elements.push_back(new String(
+				    std::string(1, static_cast<char>(character)),
+				    char_type()));
+			}
+			while (elements.size() < arr->range.length) {
+				elements.push_back(new String(std::string(1, '\0'), char_type()));
+			}
+			return new FixedArrayLiteral(std::move(elements), ty);
+		}
+
 		parse_opening_paren();
 		std::vector<Node*> elements;
 		if (input_token != ")") {

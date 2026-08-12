@@ -56,4 +56,30 @@ then
 	exit 1
 fi
 
+if ./mp -Furtl \
+	-o"$tmp/character_array_string_too_long.cc" \
+	tests/character_array_string_too_long.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "overlong character-array string initializer was accepted" >&2
+	exit 1
+fi
+if ! rg -Fq \
+	"string length is larger than character-array length" \
+	"$tmp/stderr"
+then
+	echo "wrong overlong character-array diagnostic" >&2
+	sed -n '1,80p' "$tmp/stderr" >&2
+	exit 1
+fi
+
+if ./mp -Furtl \
+	-o"$tmp/byte_array_string_initializer_rejected.cc" \
+	tests/byte_array_string_initializer_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "string shortcut was incorrectly accepted for array of Byte" >&2
+	exit 1
+fi
+
 echo "typed aggregate constant tests passed"
