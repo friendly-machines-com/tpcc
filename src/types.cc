@@ -231,19 +231,16 @@ static bool variant_contains_file_state(const VariantPart* variant) {
 	if (!variant) {
 		return false;
 	}
-	if (variant->selector_type &&
-	    variant->selector_type->contains_file_state()) {
+	if (variant->selector_type && variant->selector_type->contains_file_state()) {
 		return true;
 	}
 	for (const VariantArm& arm : variant->arms) {
 		for (const AggregateField& field : arm.fields) {
-			if (field.ty &&
-			    field.ty->contains_file_state()) {
+			if (field.ty && field.ty->contains_file_state()) {
 				return true;
 			}
 		}
-		if (variant_contains_file_state(
-			arm.variant)) {
+		if (variant_contains_file_state(arm.variant)) {
 			return true;
 		}
 	}
@@ -261,8 +258,7 @@ bool RecordType::has_managed_lifetime() const {
 
 bool RecordType::contains_file_state() const {
 	for (const AggregateField& field : fields) {
-		if (field.ty &&
-		    field.ty->contains_file_state()) {
+		if (field.ty && field.ty->contains_file_state()) {
 			return true;
 		}
 	}
@@ -280,8 +276,7 @@ bool PackedRecordType::has_managed_lifetime() const {
 
 bool PackedRecordType::contains_file_state() const {
 	for (const AggregateField& field : fields) {
-		if (field.ty &&
-		    field.ty->contains_file_state()) {
+		if (field.ty && field.ty->contains_file_state()) {
 			return true;
 		}
 	}
@@ -309,8 +304,7 @@ bool ObjectType::contains_file_state() const {
 		return true;
 	}
 	for (const AggregateField& field : fields) {
-		if (field.ty &&
-		    field.ty->contains_file_state()) {
+		if (field.ty && field.ty->contains_file_state()) {
 			return true;
 		}
 	}

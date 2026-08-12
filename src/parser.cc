@@ -2832,8 +2832,7 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			Node* operand = parse_expression();
 			parse_closing_paren();
 			Type* operand_type = operand ? operand->ty : nullptr;
-			if (operand_type &&
-			    is_ordinal_intrinsic_argument(operand_type)) {
+			if (operand_type && is_ordinal_intrinsic_argument(operand_type)) {
 				// An ordinal value contributes only its static Pascal type:
 				// Low(enum_variable) is exactly Low(EnumType), independent
 				// of the variable's current value.  Do not send it through
@@ -2885,14 +2884,9 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 
 			item.value = args[0];
 			destination = args[1];
-			Type* destination_type =
-			    destination ? destination->ty : nullptr;
-			if (!dynamic_cast<ShortStringType*>(destination_type) &&
-			    destination_type != ansistring_type()) {
-				raise_type_kind_mismatch(
-				    "Str destination",
-				    "ShortString or AnsiString",
-				    destination_type);
+			Type* destination_type = destination ? destination->ty : nullptr;
+			if (!dynamic_cast<ShortStringType*>(destination_type) && destination_type != ansistring_type()) {
+				raise_type_kind_mismatch("Str destination", "ShortString or AnsiString", destination_type);
 			}
 			const StrValueFamily family = str_value_family(item.value ? item.value->ty : nullptr);
 			if (family == StrValueFamily::EnumerationTodo) {
@@ -2901,12 +2895,10 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			if (family == StrValueFamily::Unsupported) {
 				raise_type_kind_mismatch("Str value", "integer or predefined real", item.value ? item.value->ty : nullptr);
 			}
-			if (item.precision &&
-			    family != StrValueFamily::ExistingReal) {
+			if (item.precision && family != StrValueFamily::ExistingReal) {
 				// Pascal's second colon is the fractional-digit count of a
 				// real value, not a generic third formatting operand.
-				raise_parse_error(
-				    "Str precision requires a predefined real value");
+				raise_parse_error("Str precision requires a predefined real value");
 			}
 
 			Node* result = new StrCall(item, destination);
@@ -4046,16 +4038,13 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives 
 }
 
 Node* Parser::mk_assign(Node* a, Node* b) {
-	if (a && a->ty &&
-	    a->ty->contains_file_state()) {
+	if (a && a->ty && a->ty->contains_file_state()) {
 		// ISO 7185 6.4.6 makes assignment legal for an identical type only
 		// when that type is permissible as a file component. 6.4.3.5
 		// recursively excludes files and structures containing files. This
 		// is also the ownership boundary: a backend pointer copy must never
 		// fabricate a second owner for one host file state.
-		raise_type_error(
-		    "file values and values containing files cannot be assigned",
-		    a->ty);
+		raise_type_error("file values and values containing files cannot be assigned", a->ty);
 	}
 	return new Assign(a, cast_for_destination(b, a->ty));
 }
@@ -7520,16 +7509,12 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 				names.push_back(parse_identifier());
 			}
 			Type* ty = maybe_parse_colon() ? parse_formal_type_expression() : unknown_type();
-			if (ty->contains_file_state() &&
-			    mode != ParamMode::Var &&
-			    mode != ParamMode::Out) {
+			if (ty->contains_file_state() && mode != ParamMode::Var && mode != ParamMode::Out) {
 				// A value parameter copies its actual; FPC's `const` mode is
 				// likewise deliberately not a file-parameter mode. File
 				// variables cross routine boundaries only by aliasing their
 				// original storage with var/out.
-				raise_type_error(
-				    "file types and types containing files require var or out parameters",
-				    ty);
+				raise_type_error("file types and types containing files require var or out parameters", ty);
 			}
 			Node* default_value = nullptr;
 			if (maybe_parse_equal()) {
@@ -7568,9 +7553,7 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 		parse_colon();
 		ret_ty = parse_type_expression(false);
 		if (ret_ty->contains_file_state()) {
-			raise_type_error(
-			    "functions cannot return file types or types containing files",
-			    ret_ty);
+			raise_type_error("functions cannot return file types or types containing files", ret_ty);
 		}
 	}
 

@@ -407,12 +407,15 @@ struct TypedFileType : public Type {
 	Type* item_type;
 	TypedFileType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
+
 	bool has_managed_lifetime() const override {
 		return true;
 	}
+
 	bool contains_file_state() const override {
 		return true;
 	}
+
 	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

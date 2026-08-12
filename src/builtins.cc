@@ -1691,8 +1691,7 @@ Builtin* create_builtin_value(std::string_view cxx_name) {
 	// Callers use this helper only for compiler-owned operations.  Source
 	// declarations with an arbitrary `external name` are ordinary Callables
 	// and never acquire fabricated builtin metadata.
-	fprintf(stderr, "internal error: compiler builtin '%.*s' has no registration\n",
-	        static_cast<int>(cxx_name.size()), cxx_name.data());
+	fprintf(stderr, "internal error: compiler builtin '%.*s' has no registration\n", static_cast<int>(cxx_name.size()), cxx_name.data());
 	std::abort();
 }
 
