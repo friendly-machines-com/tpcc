@@ -335,6 +335,9 @@ test-type-identity-and-compatibility: mp
 test-operator-argument-matching: mp
 	sh tests/test_operator_argument_matching.sh
 
+test-typed-integer-constant-conversion: mp
+	sh tests/test_typed_integer_constant_conversion.sh
+
 test-operator-ranking-policies: mp
 	sh tests/test_operator_ranking_policies.sh
 

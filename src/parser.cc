@@ -8519,6 +8519,24 @@ static Real* untyped_real_constant(Node* expression) {
 	return real && real->ty == &untyped_real_type() && real->is_origin() ? real : nullptr;
 }
 
+static Integer* typed_integer_constant(Node* expression) {
+	if (!expression || expression->ty == &untyped_integer_type() || !is_integer_semantic_type(expression->ty)) {
+		return nullptr;
+	}
+
+	// This is a semantic constant-expression query, not an optimization.
+	// Keeping the expression's concrete Type* above distinguishes a typed
+	// SizeOf/Low/selected-operator result from an untyped numeral origin, while
+	// the folded value lets assignment matching prove that one otherwise
+	// narrowing integer conversion loses no value.
+	ConstEvalContext ctx;
+	ConstEvalResult folded = expression->const_eval(ctx);
+	if (folded.kind != ConstEvalResult::Kind::Success) {
+		return nullptr;
+	}
+	return dynamic_cast<Integer*>(folded.node);
+}
+
 static std::optional<uint64_t> integer_literal_target_preference(Type* target) {
 	// The literal remains untyped. Rank fitting destinations by Pascal's
 	// magnitude-driven predefined carrier order, rather than pretending the
@@ -9255,6 +9273,20 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		assignment = target->assignment_conversion_from(assignment_source);
 	}
 
+	const Integer* typed_constant = nullptr;
+	bool value_preserving_typed_integer_conversion = false;
+	if (assignment &&
+	    assignment->kind == AssignmentConversionClass::Narrowing &&
+	    is_integer_semantic_type(assignment_source) &&
+	    is_integer_semantic_type(target)) {
+		// Do not ask constant evaluation about unrelated or already-widening
+		// matches. Its value proof exists solely to refine this otherwise
+		// narrowing integer edge.
+		typed_constant = typed_integer_constant(actual);
+		value_preserving_typed_integer_conversion =
+		    typed_constant && integer_type_contains_literal(target, typed_constant);
+	}
+
 	if (allow_declared_conversion) {
 		MatchFailure local_failure = MatchFailure::Incompatible;
 		MatchFailure* declared_failure = failure ? failure : &local_failure;
@@ -9265,8 +9297,16 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			// conversion by its value-domain effect, not by whether its
 			// implementation came from System, user source, or the compiler.
 			if (assignment) {
-				declared->rank.tier = assignment->kind == AssignmentConversionClass::Equal ? MatchRank::Tier::Equal : assignment->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing : MatchRank::Tier::Convert;
+				declared->rank.tier =
+				    assignment->kind == AssignmentConversionClass::Equal
+				        ? MatchRank::Tier::Equal
+				    : assignment->kind == AssignmentConversionClass::Narrowing && !value_preserving_typed_integer_conversion
+				        ? MatchRank::Tier::ConvertNarrowing
+				        : MatchRank::Tier::Convert;
 				declared->rank.distance = assignment->distance;
+				declared->rank.information_losing =
+				    assignment->kind == AssignmentConversionClass::Narrowing &&
+				    !value_preserving_typed_integer_conversion;
 			}
 			return declared;
 		}
@@ -9280,11 +9320,13 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	if (assignment) {
 		MatchRank rank{
 		    assignment->kind == AssignmentConversionClass::Equal       ? MatchRank::Tier::Equal
-		    : assignment->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing
+		    : assignment->kind == AssignmentConversionClass::Narrowing && !value_preserving_typed_integer_conversion ? MatchRank::Tier::ConvertNarrowing
 		                                                               : MatchRank::Tier::Convert,
 		    assignment->distance,
 		};
-		rank.information_losing = assignment->kind == AssignmentConversionClass::Narrowing;
+		rank.information_losing =
+		    assignment->kind == AssignmentConversionClass::Narrowing &&
+		    !value_preserving_typed_integer_conversion;
 		auto source_signed = integer_carrier_is_signed(assignment_source);
 		auto target_signed = integer_carrier_is_signed(target);
 		rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;
@@ -9293,6 +9335,16 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			// declared carrier. Record whether the complete carrier survives;
 			// common-domain operator selection consumes this bit jointly.
 			rank.information_losing = !integer_domain_is_exact_in_real(assignment_source, target);
+		}
+		if (value_preserving_typed_integer_conversion) {
+			// The source remains typed, so an exact source-type overload still
+			// wins. For this conversion, however, the semantic constant value
+			// has proved the destination range sufficient. Treat it like a
+			// widening conversion and retain the original expression beneath
+			// an ordinary cast. make_implicit_cast() deliberately reasons
+			// about the complete source type and would add an R+ check which is
+			// unnecessary—and must not affect ranking—after this value proof.
+			return ArgumentMatch{rank, new Cast(actual, target)};
 		}
 		return ArgumentMatch{rank, make_implicit_cast(actual, target)};
 	}
@@ -9912,7 +9964,10 @@ static Type* homogeneous_common_formal(const CallableMatch& match) {
  * Fully-typed candidates are phase-filtered. Catch-all coordinates remain
  * ordinary per-argument ranks and join the best typed cohort rather than
  * creating a candidate-wide Generic phase. */
-static std::vector<size_t> overload_resolution_cohort(const std::vector<std::pair<Callable*, CallableMatch>>& viable, OverloadResolutionPolicy policy) {
+static std::vector<size_t> overload_resolution_cohort(
+    const std::vector<std::pair<Callable*, CallableMatch>>& viable,
+    OverloadResolutionPolicy policy,
+    const std::function<bool(Type*, Type*)>& direct_assignment_edge) {
 	std::vector<size_t> exact;
 	std::vector<size_t> generic;
 	std::optional<MatchRank::Tier> best_typed_phase;
@@ -9977,6 +10032,39 @@ static std::vector<size_t> overload_resolution_cohort(const std::vector<std::pai
 					}
 					if (!have_lossless_common_domain && best_lossy_real_domain >= 0 && loses_information && real_semantic_rank(common) != best_lossy_real_domain) {
 						continue;
+					}
+					if (have_lossless_common_domain && !loses_information) {
+						bool wider_than_another_lossless_domain = false;
+						for (size_t j = 0; j < viable.size(); ++j) {
+							if (i == j) {
+								continue;
+							}
+							const CallableMatch& other_match = viable[j].second;
+							if (callable_match_has_generic(other_match) ||
+							    callable_match_phase(other_match) != *best_typed_phase ||
+							    !candidate_admitted_in_phase(viable[j].first, other_match, *best_typed_phase, policy) ||
+							    std::ranges::any_of(other_match.ranks, [](const MatchRank& rank) { return rank.information_losing; })) {
+								continue;
+							}
+							Type* other_common = homogeneous_common_formal(other_match);
+							if (!other_common || other_common == common) {
+								continue;
+							}
+							const bool other_assigns_to_common = direct_assignment_edge(other_common, common);
+							const bool common_assigns_to_other = direct_assignment_edge(common, other_common);
+							if (other_assigns_to_common && !common_assigns_to_other) {
+								// Both proposals preserve both operand values,
+								// so compare their domains once for the pair.
+								// The domain which assigns only outward to the
+								// other is the more specific lossless domain.
+								// Incomparable domains deliberately survive.
+								wider_than_another_lossless_domain = true;
+								break;
+							}
+						}
+						if (wider_than_another_lossless_domain) {
+							continue;
+						}
 					}
 				}
 				result.push_back(i);
@@ -10274,7 +10362,13 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		bool admitted = false;
 		if (match && (!expected_return_type || static_cast<RoutineType*>(c->ty)->return_type == expected_return_type)) {
 			std::vector<std::pair<Callable*, CallableMatch>> probe{{c, *match}};
-			admitted = !overload_resolution_cohort(probe, resolution_policy).empty();
+			admitted = !overload_resolution_cohort(
+			                probe,
+			                resolution_policy,
+			                [this](Type* source, Type* destination) {
+				                return has_direct_assignment_edge(source, destination);
+			                })
+			                .empty();
 		}
 		if (!match || !admitted || (expected_return_type && static_cast<RoutineType*>(c->ty)->return_type != expected_return_type)) {
 			std::vector<Callable*> candidates{c};
@@ -10306,7 +10400,12 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 			std::vector<Callable*> none;
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args, expected_return_type, candidates, viable, none, false);
 		}
-		const std::vector<size_t> cohort = overload_resolution_cohort(viable, resolution_policy);
+		const std::vector<size_t> cohort = overload_resolution_cohort(
+		    viable,
+		    resolution_policy,
+		    [this](Type* source, Type* destination) {
+			    return has_direct_assignment_edge(source, destination);
+		    });
 		if (cohort.empty()) {
 			std::vector<Callable*> none;
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args, expected_return_type, candidates, viable, none, false);
