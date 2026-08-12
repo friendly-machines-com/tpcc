@@ -3584,6 +3584,10 @@ struct binary_file_state {
 	bool writable = false;
 };
 
+// This is the single pending status described at System.IOResult. Unchecked
+// I/O preserves its first failure and skips later operations; IOResult returns
+// and clears it. A C FILE's sticky error indicator is therefore not additional
+// Pascal state and must be consumed when its error is translated below.
 inline t_word m_inoutres = 0;
 inline t_byte p_filemode = 2;
 
@@ -3608,6 +3612,26 @@ inline t_word m_file_error_from_errno(
 	default:
 		return fallback;
 	}
+}
+
+inline t_word m_consume_stdio_error(
+    std::FILE* file, int error,
+    t_word fallback) noexcept {
+	// stdio's error indicator is sticky, whereas InOutRes is Pascal's sole
+	// pending-I/O-error latch. Once an operation has translated the host
+	// error, consume the host indicator so IOResult (or a caught checked-I/O
+	// exception) really does allow a later operation to run independently.
+	std::clearerr(file);
+	return m_file_error_from_errno(
+	    error, fallback);
+}
+
+inline t_word m_consume_stdio_error(
+    std::FILE* file, t_word fallback) noexcept {
+	// Call this overload immediately after a failing stdio operation. Read
+	// paths which must call ferror first save errno and use the overload above.
+	return m_consume_stdio_error(
+	    file, errno, fallback);
 }
 
 inline t_word p_ioresult() {
@@ -3945,10 +3969,11 @@ inline t_word m_do_close(t_text& file) {
 		// descriptors; flushing is the only host I/O.
 		if (!file.state->handle)
 			return 103;
-		return std::fflush(file.state->handle) == 0
-			   ? 0
-			   : m_file_error_from_errno(
-				 errno, 101);
+		errno = 0;
+		if (std::fflush(file.state->handle) == 0)
+			return 0;
+		return m_consume_stdio_error(
+		    file.state->handle, 101);
 	}
 	return m_do_close_text_handle(
 	    *file.state);
@@ -3982,10 +4007,12 @@ inline t_word m_do_seek(
 	    static_cast<long>(
 	        record_position *
 	        file.state->record_size);
+	errno = 0;
 	if (std::fseek(
 	        file.state->handle,
 	        byte_position, SEEK_SET) != 0)
-		return 156;
+		return m_consume_stdio_error(
+		    file.state->handle, 156);
 	return 0;
 }
 
@@ -4010,10 +4037,14 @@ m_do_filepos(t_file& file) {
 	    m_require_open_binary_file(file);
 	if (open_error != 0)
 		return {-1, open_error};
+	errno = 0;
 	const long position =
 	    std::ftell(file.state->handle);
 	if (position < 0)
-		return {-1, 156};
+		return {
+		    -1,
+		    m_consume_stdio_error(
+			file.state->handle, 156)};
 	return {
 	    static_cast<t_int64>(
 		position /
@@ -4041,20 +4072,46 @@ m_do_filesize(t_file& file) {
 	    m_require_open_binary_file(file);
 	if (open_error != 0)
 		return {-1, open_error};
+	errno = 0;
 	const long original =
 	    std::ftell(file.state->handle);
-	if (original < 0 ||
-	    std::fseek(
+	if (original < 0)
+		return {
+		    -1,
+		    m_consume_stdio_error(
+			file.state->handle, 156)};
+	errno = 0;
+	if (std::fseek(
 	        file.state->handle, 0, SEEK_END) != 0)
-		return {-1, 156};
+		return {
+		    -1,
+		    m_consume_stdio_error(
+			file.state->handle, 156)};
+	errno = 0;
 	const long end =
 	    std::ftell(file.state->handle);
+	if (end < 0) {
+		const t_word error =
+		    m_consume_stdio_error(
+			file.state->handle, 156);
+		// Best effort: a failed size query must not unnecessarily leave the
+		// caller at the temporary end-of-file position.
+		errno = 0;
+		if (std::fseek(
+		        file.state->handle,
+		        original, SEEK_SET) != 0)
+			(void)m_consume_stdio_error(
+			    file.state->handle, 156);
+		return {-1, error};
+	}
+	errno = 0;
 	if (std::fseek(
 	        file.state->handle,
 	        original, SEEK_SET) != 0)
-		return {-1, 156};
-	if (end < 0)
-		return {-1, 156};
+		return {
+		    -1,
+		    m_consume_stdio_error(
+			file.state->handle, 156)};
 	return {
 	    static_cast<t_int64>(
 		end /
@@ -4084,19 +4141,44 @@ m_do_eof(t_file& file) {
 		return {p_true, open_error};
 	if (!file.state->readable)
 		return {p_true, 104};
+	errno = 0;
 	const long original =
 	    std::ftell(file.state->handle);
-	if (original < 0 ||
-	    std::fseek(
+	if (original < 0)
+		return {
+		    p_true,
+		    m_consume_stdio_error(
+			file.state->handle, 156)};
+	errno = 0;
+	if (std::fseek(
 	        file.state->handle, 0, SEEK_END) != 0)
-		return {p_true, 156};
+		return {
+		    p_true,
+		    m_consume_stdio_error(
+			file.state->handle, 156)};
+	errno = 0;
 	const long end =
 	    std::ftell(file.state->handle);
+	if (end < 0) {
+		const t_word error =
+		    m_consume_stdio_error(
+			file.state->handle, 156);
+		errno = 0;
+		if (std::fseek(
+		        file.state->handle,
+		        original, SEEK_SET) != 0)
+			(void)m_consume_stdio_error(
+			    file.state->handle, 156);
+		return {p_true, error};
+	}
+	errno = 0;
 	if (std::fseek(
 	        file.state->handle,
-	        original, SEEK_SET) != 0 ||
-	    end < 0)
-		return {p_true, 156};
+	        original, SEEK_SET) != 0)
+		return {
+		    p_true,
+		    m_consume_stdio_error(
+			file.state->handle, 156)};
 	return {
 	    tpcc_bool_to_boolean(
 		original >= end),
@@ -4129,16 +4211,23 @@ m_do_eof(t_text& file) {
 	const int value =
 	    std::fgetc(file.state->handle);
 	if (value == EOF) {
+		// fgetc uses EOF for both normal end-of-file and an input error.
+		const int saved_errno = errno;
 		if (std::ferror(file.state->handle))
 			return {
 			    p_true,
-			    m_file_error_from_errno(
-				errno, 100)};
+			    m_consume_stdio_error(
+				file.state->handle,
+				saved_errno, 100)};
 		return {p_true, 0};
 	}
+	errno = 0;
 	if (std::ungetc(
 	        value, file.state->handle) == EOF)
-		return {p_true, 100};
+		return {
+		    p_true,
+		    m_consume_stdio_error(
+			file.state->handle, 100)};
 	return {p_false, 0};
 }
 
@@ -4179,30 +4268,43 @@ m_do_readln_bytes(t_text& file) {
 		const int value =
 		    std::fgetc(file.state->handle);
 		if (value == EOF) {
+			// fgetc uses EOF for both normal end-of-file and an input error.
+			const int saved_errno = errno;
 			if (std::ferror(file.state->handle))
 				return {
 				    {},
-				    m_file_error_from_errno(
-					errno, 100)};
+				    m_consume_stdio_error(
+					file.state->handle,
+					saved_errno, 100)};
 			break;
 		}
 		if (value == '\n')
 			break;
 		if (value == '\r') {
+			errno = 0;
 			const int following =
 			    std::fgetc(file.state->handle);
 			if (following != '\n' &&
-			    following != EOF &&
-			    std::ungetc(
-				following,
-				file.state->handle) == EOF)
-				return {{}, 100};
-			if (following == EOF &&
-			    std::ferror(file.state->handle))
-				return {
-				    {},
-				    m_file_error_from_errno(
-					errno, 100)};
+			    following != EOF) {
+				errno = 0;
+				if (std::ungetc(
+				        following,
+				        file.state->handle) == EOF)
+					return {
+					    {},
+					    m_consume_stdio_error(
+						file.state->handle, 100)};
+			}
+			if (following == EOF) {
+				const int saved_errno = errno;
+				if (std::ferror(
+				        file.state->handle))
+					return {
+					    {},
+					    m_consume_stdio_error(
+						file.state->handle,
+						saved_errno, 100)};
+			}
 			break;
 		}
 		bytes.push_back(
@@ -4275,11 +4377,16 @@ inline t_word m_do_truncate(t_file& file) {
 		return open_error;
 	if (!file.state->writable)
 		return 105;
+	errno = 0;
 	const long position =
 	    std::ftell(file.state->handle);
-	if (position < 0 ||
-	    std::fflush(file.state->handle) != 0)
-		return 101;
+	if (position < 0)
+		return m_consume_stdio_error(
+		    file.state->handle, 101);
+	errno = 0;
+	if (std::fflush(file.state->handle) != 0)
+		return m_consume_stdio_error(
+		    file.state->handle, 101);
 	std::error_code error;
 	std::filesystem::resize_file(
 	    file.state->name,
@@ -4287,11 +4394,12 @@ inline t_word m_do_truncate(t_file& file) {
 	    error);
 	if (error)
 		return 101;
-	std::clearerr(file.state->handle);
+	errno = 0;
 	if (std::fseek(
 	        file.state->handle,
 	        position, SEEK_SET) != 0)
-		return 156;
+		return m_consume_stdio_error(
+		    file.state->handle, 156);
 	return 0;
 }
 
@@ -4355,15 +4463,22 @@ inline t_word m_do_blockread(
 		return count_error;
 	if (bytes > buffer.size)
 		return 100;
+	errno = 0;
 	const std::size_t transferred =
 	    std::fread(
 	        buffer.data,
 	        static_cast<std::size_t>(
 	            file.state->record_size),
 	        records, file.state->handle);
+	const int saved_errno = errno;
 	result = static_cast<Result>(transferred);
-	if (std::ferror(file.state->handle))
-		return 100;
+	// A short fread can mean either ordinary end-of-file or an input error.
+	// A complete (including zero-length) transfer needs no sticky-state test.
+	if (transferred != records &&
+	    std::ferror(file.state->handle))
+		return m_consume_stdio_error(
+		    file.state->handle,
+		    saved_errno, 100);
 	return 0;
 }
 
@@ -4447,6 +4562,7 @@ inline t_word m_do_blockwrite(
 		return count_error;
 	if (bytes > buffer.size)
 		return 101;
+	errno = 0;
 	const std::size_t transferred =
 	    std::fwrite(
 	        buffer.data,
@@ -4454,9 +4570,11 @@ inline t_word m_do_blockwrite(
 	            file.state->record_size),
 	        records, file.state->handle);
 	result = static_cast<Result>(transferred);
-	if (transferred != records ||
-	    std::ferror(file.state->handle))
-		return 101;
+	// fwrite's count describes this operation. Do not consult ferror here:
+	// its sticky indicator could only describe an already-translated failure.
+	if (transferred != records)
+		return m_consume_stdio_error(
+		    file.state->handle, 101);
 	return 0;
 }
 
@@ -4684,22 +4802,32 @@ tpcc_render_formatted_value(
 }
 
 template<typename T>
-inline bool tpcc_write_one(
+inline t_word tpcc_write_one(
     std::FILE* out,
     const tpcc_formatted_value<T>& argument) {
+	// fputc and fwrite report this operation through their return values.
+	// ferror is deliberately not used: unlike Pascal's IOResult status, it is
+	// sticky and does not identify which host operation failed.
 	tpcc_rendered_formatted_value rendered =
 	    tpcc_render_formatted_value(
 		argument);
 	for (std::size_t i = 0;
-	     i < rendered.left_padding; ++i)
+	     i < rendered.left_padding; ++i) {
+		errno = 0;
 		if (std::fputc(' ', out) == EOF)
-			return false;
+			return m_consume_stdio_error(
+			    out, 101);
+	}
 	if (rendered.value.empty())
-		return true;
-	return std::fwrite(
-		   rendered.value.data(), 1,
-		   rendered.value.size(), out) ==
-	       rendered.value.size();
+		return 0;
+	errno = 0;
+	if (std::fwrite(
+	        rendered.value.data(), 1,
+	        rendered.value.size(), out) ==
+	    rendered.value.size())
+		return 0;
+	return m_consume_stdio_error(
+	    out, 101);
 }
 
 template<typename... Values>
@@ -4714,12 +4842,8 @@ inline t_word tpcc_write_many(
 		    [out, &error](const auto& argument) {
 			    if (error != 0)
 				    return;
-			    errno = 0;
-			    if (!tpcc_write_one(
-				    out, argument))
-				    error =
-				        m_file_error_from_errno(
-					    errno, 101);
+			    error = tpcc_write_one(
+				out, argument);
 		    };
 		(write_one(arguments), ...);
 	}
@@ -4741,10 +4865,12 @@ inline t_word m_do_flush(t_text& file) {
 	if (output.error != 0)
 		return output.error;
 	errno = 0;
-	return std::fflush(output.value) == 0 &&
-		       !std::ferror(output.value)
-		   ? 0
-		   : m_file_error_from_errno(errno, 101);
+	// fflush's return value reports this flush. A separately tested ferror
+	// indicator could instead be residue from an earlier translated failure.
+	if (std::fflush(output.value) == 0)
+		return 0;
+	return m_consume_stdio_error(
+	    output.value, 101);
 }
 
 inline void p_flush(t_text& file) {
@@ -4778,9 +4904,10 @@ inline t_word m_do_writeln(
 	if (write_error != 0)
 		return write_error;
 	errno = 0;
-	return std::fputc('\n', out) != EOF
-		   ? 0
-		   : m_file_error_from_errno(errno, 101);
+	if (std::fputc('\n', out) != EOF)
+		return 0;
+	return m_consume_stdio_error(
+	    out, 101);
 }
 
 template<typename... Values>

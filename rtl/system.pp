@@ -563,6 +563,10 @@ procedure truncate(var f: File); external name '::u_system::p_truncate';
 procedure settextbuf(var f: Text; var buffer; size: SizeInt); external name '::u_system::p_settextbuf';
 procedure readln(var f: Text; out value: ShortString); overload; external name '::u_system::p_readln';
 procedure readln(var f: Text; out value: AnsiString); overload; external name '::u_system::p_readln';
+// Old-style Pascal I/O has one pending status. With I/O checking disabled, the
+// first failure sets that status and later I/O operations are skipped.
+// IOResult returns and clears it; the operation after IOResult must therefore
+// execute independently of the failure which produced the returned status.
 function ioresult: Word; external name '::u_system::p_ioresult';
 procedure blockread(var f: File; var buffer; count: Int64; var result: Int64); external name '::u_system::p_blockread';
 procedure blockread(var f: File; var buffer; count: LongInt; var result: LongInt); external name '::u_system::p_blockread';
