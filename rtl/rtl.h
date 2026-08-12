@@ -29,7 +29,6 @@
 #include <filesystem>
 #include <exception>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -897,51 +896,72 @@ tpcc_shortstring_cast(
 	return result;
 }
 
-// A Pascal Text variable currently stores the stream used by Write/WriteLn.
-// The pointer is non-owning and null means that the Text variable is unopened.
-// Write/WriteLn without an explicit Text argument write to std::cout directly.
-// Assign/Rewrite/Close and owned file streams are not implemented yet.
+// File carriers contain only one opaque state pointer. The state owns all
+// C++ implementation objects and host resources; no FILE, std::string, or
+// stream object is embedded in Pascal storage.
+//
+// Copying is deleted at the carrier boundary as a second line of defence
+// behind the Pascal semantic check. ISO 7185 does not make file values (or
+// structures containing them) assignment-compatible. A raw pointer copy
+// would otherwise create two apparent owners with no defined Close/Finalize
+// behavior.
+struct text_file_state;
+void m_release_text_file_state(
+    text_file_state*& state) noexcept;
 struct t_text {
-	std::ostream* stream = nullptr;
+	text_file_state* state = nullptr;
+
+	constexpr t_text() noexcept = default;
+	explicit constexpr t_text(
+	    text_file_state* state) noexcept
+	    : state(state) {
+	}
+	t_text(const t_text&) = delete;
+	t_text& operator=(const t_text&) = delete;
+	~t_text() noexcept;
 };
 static_assert(sizeof(t_text) == sizeof(void*));
 static_assert(alignof(t_text) == alignof(void*));
-
-// System.StdOut and System.StdErr are Pascal variables, rather than aliases
-// expanded by the compiler. Their stream pointers are non-owning because the
-// C++ standard streams outlive every Pascal unit and must never be closed by
-// Text cleanup. std::cerr intentionally retains its normal unitbuf behavior:
-// bootstrap-compiler diagnostics should become visible without requiring a
-// separately implemented Pascal buffering layer.
-inline t_text p_stdout{&std::cout};
-inline t_text p_stderr{&std::cerr};
 
 // Text, untyped binary files, and typed binary files are incompatible Pascal
 // types even though all three currently carry one runtime-state pointer.
 // Binary state is deliberately opaque here: file operations own its concrete
 // handle, filename, mode, and record-size representation.
 struct binary_file_state;
+void m_release_binary_file_state(
+    binary_file_state*& state) noexcept;
 
 struct t_file {
 	binary_file_state* state = nullptr;
+
+	constexpr t_file() noexcept = default;
+	t_file(const t_file&) = delete;
+	t_file& operator=(const t_file&) = delete;
+	~t_file() noexcept;
 };
 
 template<typename Element>
 struct t_typedfile {
 	using element_type = Element;
 	binary_file_state* state = nullptr;
+
+	constexpr t_typedfile() noexcept = default;
+	t_typedfile(const t_typedfile&) = delete;
+	t_typedfile& operator=(
+	    const t_typedfile&) = delete;
+	~t_typedfile() noexcept;
 };
 
 static_assert(sizeof(t_file) == sizeof(void*));
 static_assert(alignof(t_file) == alignof(void*));
-static_assert(std::is_aggregate_v<t_file>);
 static_assert(std::is_standard_layout_v<t_file>);
-static_assert(std::is_trivially_copyable_v<t_file>);
 static_assert(sizeof(t_typedfile<t_byte>) == sizeof(void*));
 static_assert(alignof(t_typedfile<t_byte>) == alignof(void*));
-static_assert(std::is_aggregate_v<t_typedfile<t_byte>>);
 static_assert(std::is_standard_layout_v<t_typedfile<t_byte>>);
-static_assert(std::is_trivially_copyable_v<t_typedfile<t_byte>>);
+static_assert(!std::is_copy_constructible_v<t_file>);
+static_assert(!std::is_copy_assignable_v<t_file>);
+static_assert(!std::is_copy_constructible_v<t_text>);
+static_assert(!std::is_copy_assignable_v<t_text>);
 static_assert(!std::is_same_v<t_file, t_text>);
 static_assert(!std::is_same_v<t_file, t_typedfile<t_byte>>);
 static_assert(!std::is_same_v<t_text, t_typedfile<t_byte>>);
@@ -2917,6 +2937,25 @@ inline void m_pascal_initialize(
 	    std::addressof(value))) t_ansistring;
 }
 
+inline void m_pascal_initialize(
+    t_text& value) noexcept {
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_text;
+}
+
+inline void m_pascal_initialize(
+    t_file& value) noexcept {
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_file;
+}
+
+template<typename T>
+inline void m_pascal_initialize(
+    t_typedfile<T>& value) noexcept {
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_typedfile<T>;
+}
+
 template<typename T>
 inline void m_pascal_initialize(
     t_dynamicarray<T>& value) noexcept {
@@ -2946,6 +2985,28 @@ inline void m_pascal_finalize(
 	std::destroy_at(std::addressof(value));
 	::new (static_cast<void*>(
 	    std::addressof(value))) t_ansistring;
+}
+
+inline void m_pascal_finalize(
+    t_text& value) noexcept {
+	std::destroy_at(std::addressof(value));
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_text;
+}
+
+inline void m_pascal_finalize(
+    t_file& value) noexcept {
+	std::destroy_at(std::addressof(value));
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_file;
+}
+
+template<typename T>
+inline void m_pascal_finalize(
+    t_typedfile<T>& value) noexcept {
+	std::destroy_at(std::addressof(value));
+	::new (static_cast<void*>(
+	    std::addressof(value))) t_typedfile<T>;
 }
 
 template<typename T>
@@ -3482,6 +3543,39 @@ m_enumerate(
 	    value, lower, upper};
 }
 
+enum class text_file_mode {
+	Closed,
+	Input,
+	Output,
+};
+
+struct text_file_state {
+	std::string name;
+	std::FILE* handle = nullptr;
+	text_file_mode mode = text_file_mode::Closed;
+	bool standard_stream = false;
+};
+
+inline text_file_state m_stdout_text_state{
+    .name = {},
+    .handle = stdout,
+    .mode = text_file_mode::Output,
+    .standard_stream = true,
+};
+inline text_file_state m_stderr_text_state{
+    .name = {},
+    .handle = stderr,
+    .mode = text_file_mode::Output,
+    .standard_stream = true,
+};
+
+// System.StdOut and System.StdErr are real Pascal variables. Their states are
+// non-owning because the C runtime owns stdout/stderr. Flush and Write still
+// use the same FILE API as every named Text; only finalization's ownership
+// decision differs.
+inline t_text p_stdout{&m_stdout_text_state};
+inline t_text p_stderr{&m_stderr_text_state};
+
 struct binary_file_state {
 	std::string name;
 	std::FILE* handle = nullptr;
@@ -3489,18 +3583,6 @@ struct binary_file_state {
 	bool readable = false;
 	bool writable = false;
 };
-
-// FPC's file variables are opaque handles and Close preserves the assigned
-// filename so Reset/Rewrite can reopen without another Assign. Keep the
-// pointed-to state in process-owned storage: t_file remains its pointer-sized,
-// trivially-copyable Pascal carrier, while every state is reclaimed during
-// normal C++ process teardown.
-inline std::vector<std::unique_ptr<binary_file_state>>&
-m_binary_file_states() {
-	static std::vector<
-	    std::unique_ptr<binary_file_state>> states;
-	return states;
-}
 
 inline t_word m_inoutres = 0;
 inline t_byte p_filemode = 2;
@@ -3591,6 +3673,84 @@ inline t_word m_do_close_binary_handle(
 	return error;
 }
 
+inline t_word m_do_close_text_handle(
+    text_file_state& state) {
+	if (!state.handle)
+		return 0;
+	errno = 0;
+	const int result = std::fclose(state.handle);
+	const t_word error =
+	    result == 0
+		? 0
+		: m_file_error_from_errno(
+		      errno, 101);
+	state.handle = nullptr;
+	state.mode = text_file_mode::Closed;
+	return error;
+}
+
+inline void m_release_text_file_state(
+    text_file_state*& state) noexcept {
+	if (!state)
+		return;
+	if (state->standard_stream) {
+		// stdout/stderr and their state objects are owned by the C runtime
+		// and this RTL respectively. A Pascal variable may refer to them but
+		// must never fclose or delete them.
+		state = nullptr;
+		return;
+	}
+	const t_word close_error =
+	    m_do_close_text_handle(*state);
+	m_set_io_error(close_error);
+	delete state;
+	state = nullptr;
+}
+
+inline void m_release_binary_file_state(
+    binary_file_state*& state) noexcept {
+	if (!state)
+		return;
+	const t_word close_error =
+	    m_do_close_binary_handle(*state);
+	m_set_io_error(close_error);
+	delete state;
+	state = nullptr;
+}
+
+inline t_text::~t_text() noexcept {
+	m_release_text_file_state(state);
+}
+
+inline t_file::~t_file() noexcept {
+	m_release_binary_file_state(state);
+}
+
+template<typename Element>
+inline t_typedfile<Element>::~t_typedfile()
+    noexcept {
+	m_release_binary_file_state(state);
+}
+
+template<typename PascalString>
+inline void p_assign(
+    t_text& file, const PascalString& name) {
+	if (m_inoutres != 0)
+		return;
+	// Assign changes only the association. It must not hide a close/flush
+	// operation, and standard Text variables cannot be repurposed while open.
+	if (file.state &&
+	    (file.state->handle ||
+	     file.state->mode != text_file_mode::Closed))
+		m_runtime_error(102);
+	if (file.state) {
+		file.state->name = name.m_string();
+		return;
+	}
+	file.state = new text_file_state;
+	file.state->name = name.m_string();
+}
+
 template<typename PascalString>
 inline void p_assign(
     t_file& file, const PascalString& name) {
@@ -3607,12 +3767,8 @@ inline void p_assign(
 		file.state->name = name.m_string();
 		return;
 	}
-	auto state =
-	    std::make_unique<binary_file_state>();
-	state->name = name.m_string();
-	file.state = state.get();
-	m_binary_file_states().push_back(
-	    std::move(state));
+	file.state = new binary_file_state;
+	file.state->name = name.m_string();
 }
 
 inline t_word m_prepare_binary_open(
@@ -3700,6 +3856,40 @@ inline t_word m_do_reset(
 	return 0;
 }
 
+inline t_word m_do_reset(t_text& file) {
+	if (!file.state || file.state->standard_stream)
+		return 102;
+	if (file.state->handle) {
+		const t_word close_error =
+		    m_do_close_text_handle(
+			*file.state);
+		if (close_error != 0)
+			return close_error;
+	}
+	errno = 0;
+	file.state->handle =
+	    std::fopen(
+		file.state->name.c_str(), "rb");
+	if (!file.state->handle)
+		return m_file_error_from_errno(
+		    errno, 100);
+	file.state->mode = text_file_mode::Input;
+	return 0;
+}
+
+inline void p_reset(t_text& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_reset(file));
+}
+
+inline void m_unchecked_reset(t_text& file) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_reset(file));
+}
+
 inline void p_reset(
     t_file& file, t_longint record_size) {
 	m_raise_pending_io_error();
@@ -3740,6 +3930,37 @@ inline void p_close(t_file& file) {
 }
 
 inline void m_unchecked_close(t_file& file) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_close(file));
+}
+
+inline t_word m_do_close(t_text& file) {
+	if (!file.state ||
+	    file.state->mode == text_file_mode::Closed)
+		return 103;
+	if (file.state->standard_stream) {
+		// The C runtime owns stdout/stderr. Pascal Close must not close their
+		// descriptors; flushing is the only host I/O.
+		if (!file.state->handle)
+			return 103;
+		return std::fflush(file.state->handle) == 0
+			   ? 0
+			   : m_file_error_from_errno(
+				 errno, 101);
+	}
+	return m_do_close_text_handle(
+	    *file.state);
+}
+
+inline void p_close(t_text& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_close(file));
+}
+
+inline void m_unchecked_close(t_text& file) {
 	if (m_inoutres != 0)
 		return;
 	m_finish_unchecked_io(
@@ -3894,6 +4115,157 @@ inline t_boolean m_unchecked_eof(
 		return p_true;
 	return m_finish_unchecked_io(
 	    m_do_eof(file));
+}
+
+inline m_io_result<t_boolean>
+m_do_eof(t_text& file) {
+	if (!file.state ||
+	    file.state->mode == text_file_mode::Closed ||
+	    !file.state->handle)
+		return {p_true, 103};
+	if (file.state->mode != text_file_mode::Input)
+		return {p_true, 104};
+	errno = 0;
+	const int value =
+	    std::fgetc(file.state->handle);
+	if (value == EOF) {
+		if (std::ferror(file.state->handle))
+			return {
+			    p_true,
+			    m_file_error_from_errno(
+				errno, 100)};
+		return {p_true, 0};
+	}
+	if (std::ungetc(
+	        value, file.state->handle) == EOF)
+		return {p_true, 100};
+	return {p_false, 0};
+}
+
+inline t_boolean p_eof(t_text& file) {
+	m_raise_pending_io_error();
+	return m_finish_checked_io(
+	    m_do_eof(file));
+}
+
+inline t_boolean m_unchecked_eof(
+    t_text& file) {
+	if (m_inoutres != 0)
+		return p_true;
+	return m_finish_unchecked_io(
+	    m_do_eof(file));
+}
+
+inline void p_settextbuf(
+    t_text&, tpcc_storage_ref,
+    t_sizeint) noexcept {
+	// The three-argument operation is semantically only a buffering request.
+	// The C stdio implementation retains its own buffer for now; evaluating
+	// and validating the Pascal var arguments still happens at the call site.
+}
+
+inline m_io_result<std::string>
+m_do_readln_bytes(t_text& file) {
+	if (!file.state ||
+	    file.state->mode == text_file_mode::Closed ||
+	    !file.state->handle)
+		return {{}, 103};
+	if (file.state->mode != text_file_mode::Input)
+		return {{}, 104};
+
+	std::string bytes;
+	for (;;) {
+		errno = 0;
+		const int value =
+		    std::fgetc(file.state->handle);
+		if (value == EOF) {
+			if (std::ferror(file.state->handle))
+				return {
+				    {},
+				    m_file_error_from_errno(
+					errno, 100)};
+			break;
+		}
+		if (value == '\n')
+			break;
+		if (value == '\r') {
+			const int following =
+			    std::fgetc(file.state->handle);
+			if (following != '\n' &&
+			    following != EOF &&
+			    std::ungetc(
+				following,
+				file.state->handle) == EOF)
+				return {{}, 100};
+			if (following == EOF &&
+			    std::ferror(file.state->handle))
+				return {
+				    {},
+				    m_file_error_from_errno(
+					errno, 100)};
+			break;
+		}
+		bytes.push_back(
+		    static_cast<char>(
+			static_cast<unsigned char>(
+			    value)));
+	}
+	return {std::move(bytes), 0};
+}
+
+template<std::size_t Capacity>
+inline void m_store_text_line(
+    const std::string& bytes,
+    t_shortstring<Capacity>& destination) {
+	const std::size_t count =
+	    std::min(bytes.size(), Capacity);
+	destination.length =
+	    t_char{static_cast<uint8_t>(count)};
+	for (std::size_t i = 0; i < count; ++i)
+		destination.data[i] =
+		    t_char{static_cast<uint8_t>(
+			static_cast<unsigned char>(
+			    bytes[i]))};
+}
+
+inline void m_store_text_line(
+    const std::string& bytes,
+    t_ansistring& destination) {
+	std::vector<t_char> stored;
+	stored.reserve(bytes.size() + 1);
+	for (unsigned char value : bytes)
+		stored.push_back(t_char{value});
+	stored.push_back(t_char{0});
+	destination.storage.m_replace(
+	    std::move(stored));
+}
+
+template<typename PascalString>
+inline t_word m_do_readln(
+    t_text& file, PascalString& destination) {
+	auto line = m_do_readln_bytes(file);
+	if (line.error != 0)
+		return line.error;
+	m_store_text_line(
+	    line.value, destination);
+	return 0;
+}
+
+template<typename PascalString>
+inline void p_readln(
+    t_text& file, PascalString& destination) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_readln(file, destination));
+}
+
+template<typename PascalString>
+inline void m_unchecked_readln(
+    t_text& file, PascalString& destination) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_readln(file, destination));
 }
 
 inline t_word m_do_truncate(t_file& file) {
@@ -4313,64 +4685,64 @@ tpcc_render_formatted_value(
 
 template<typename T>
 inline void tpcc_write_one(
-    std::ostream& out,
+    std::FILE* out,
     const tpcc_formatted_value<T>& argument) {
 	tpcc_rendered_formatted_value rendered =
 	    tpcc_render_formatted_value(
 		argument);
 	for (std::size_t i = 0;
 	     i < rendered.left_padding; ++i)
-			out.put(' ');
-	out.write(
+		if (std::fputc(' ', out) == EOF)
+			return;
+	if (!rendered.value.empty())
+		std::fwrite(
 	    rendered.value.data(),
-	    static_cast<std::streamsize>(
-		rendered.value.size()));
+	    1, rendered.value.size(), out);
 }
 
 template<typename... Values>
 inline t_word tpcc_write_many(
-    std::ostream& out,
+    std::FILE* out,
     const tpcc_formatted_value<Values>&... arguments) {
+	if (!out)
+		return 103;
 	t_word error = 0;
-	try {
-		if constexpr (sizeof...(Values) > 0) {
-			auto write_one =
-			    [&out, &error](const auto& argument) {
-				    if (error != 0)
-					    return;
-				    tpcc_write_one(
-					out, argument);
-				    if (!out)
-					    error = 101;
-			    };
-			(write_one(arguments), ...);
-		}
-	} catch (const std::ios_base::failure&) {
-		return 101;
+	if constexpr (sizeof...(Values) > 0) {
+		auto write_one =
+		    [out, &error](const auto& argument) {
+			    if (error != 0)
+				    return;
+			    errno = 0;
+			    tpcc_write_one(out, argument);
+			    if (std::ferror(out))
+				    error =
+				        m_file_error_from_errno(
+					    errno, 101);
+		    };
+		(write_one(arguments), ...);
 	}
 	return error;
 }
 
-inline m_io_result<std::ostream*>
-tpcc_text_stream(t_text& file) {
-	if (!file.stream)
+inline m_io_result<std::FILE*>
+tpcc_text_output(t_text& file) {
+	if (!file.state || !file.state->handle ||
+	    file.state->mode == text_file_mode::Closed)
 		return {nullptr, 103};
-	return {file.stream, 0};
+	if (file.state->mode != text_file_mode::Output)
+		return {nullptr, 105};
+	return {file.state->handle, 0};
 }
 
 inline t_word m_do_flush(t_text& file) {
-	const auto stream =
-	    tpcc_text_stream(file);
-	if (stream.error != 0)
-		return stream.error;
-	try {
-		stream.value->flush();
-	} catch (const std::ios_base::failure&) {
-		return 101;
-	}
-	// ostream reports failures through its state unless the caller enabled
-	// exceptions, so the non-throwing path needs the same Pascal error check.
-	return *stream.value ? 0 : 101;
+	const auto output = tpcc_text_output(file);
+	if (output.error != 0)
+		return output.error;
+	errno = 0;
+	return std::fflush(output.value) == 0 &&
+		       !std::ferror(output.value)
+		   ? 0
+		   : m_file_error_from_errno(errno, 101);
 }
 
 inline void p_flush(t_text& file) {
@@ -4388,7 +4760,7 @@ inline void m_unchecked_flush(t_text& file) {
 
 template<typename... Values>
 inline t_word m_do_write(
-    std::ostream& out,
+    std::FILE* out,
     const tpcc_formatted_value<Values>&... arguments) {
 	return tpcc_write_many(
 	    out, arguments...);
@@ -4396,19 +4768,17 @@ inline t_word m_do_write(
 
 template<typename... Values>
 inline t_word m_do_writeln(
-    std::ostream& out,
+    std::FILE* out,
     const tpcc_formatted_value<Values>&... arguments) {
 	const t_word write_error =
 	    tpcc_write_many(
 		out, arguments...);
 	if (write_error != 0)
 		return write_error;
-	try {
-		out.put('\n');
-	} catch (const std::ios_base::failure&) {
-		return 101;
-	}
-	return out ? 0 : 101;
+	errno = 0;
+	return std::fputc('\n', out) != EOF
+		   ? 0
+		   : m_file_error_from_errno(errno, 101);
 }
 
 template<typename... Values>
@@ -4417,7 +4787,8 @@ inline void p_write(
 	m_raise_pending_io_error();
 	m_finish_checked_io(
 	    m_do_write(
-		std::cout, arguments...));
+		m_stdout_text_state.handle,
+		arguments...));
 }
 
 template<typename... Values>
@@ -4425,12 +4796,11 @@ inline void p_write(
     t_text& file,
     const tpcc_formatted_value<Values>&... arguments) {
 	m_raise_pending_io_error();
-	const auto stream =
-	    tpcc_text_stream(file);
-	m_finish_checked_io(stream.error);
+	const auto output = tpcc_text_output(file);
+	m_finish_checked_io(output.error);
 	m_finish_checked_io(
 	    m_do_write(
-		*stream.value, arguments...));
+		output.value, arguments...));
 }
 
 template<typename... Values>
@@ -4440,7 +4810,8 @@ inline void m_unchecked_write(
 		return;
 	m_finish_unchecked_io(
 	    m_do_write(
-		std::cout, arguments...));
+		m_stdout_text_state.handle,
+		arguments...));
 }
 
 template<typename... Values>
@@ -4449,16 +4820,15 @@ inline void m_unchecked_write(
     const tpcc_formatted_value<Values>&... arguments) {
 	if (m_inoutres != 0)
 		return;
-	const auto stream =
-	    tpcc_text_stream(file);
-	if (stream.error != 0) {
+	const auto output = tpcc_text_output(file);
+	if (output.error != 0) {
 		m_finish_unchecked_io(
-		    stream.error);
+		    output.error);
 		return;
 	}
 	m_finish_unchecked_io(
 	    m_do_write(
-		*stream.value, arguments...));
+		output.value, arguments...));
 }
 
 template<typename... Values>
@@ -4467,7 +4837,8 @@ inline void p_writeln(
 	m_raise_pending_io_error();
 	m_finish_checked_io(
 	    m_do_writeln(
-		std::cout, arguments...));
+		m_stdout_text_state.handle,
+		arguments...));
 }
 
 template<typename... Values>
@@ -4475,12 +4846,11 @@ inline void p_writeln(
     t_text& file,
     const tpcc_formatted_value<Values>&... arguments) {
 	m_raise_pending_io_error();
-	const auto stream =
-	    tpcc_text_stream(file);
-	m_finish_checked_io(stream.error);
+	const auto output = tpcc_text_output(file);
+	m_finish_checked_io(output.error);
 	m_finish_checked_io(
 	    m_do_writeln(
-		*stream.value, arguments...));
+		output.value, arguments...));
 }
 
 template<typename... Values>
@@ -4490,7 +4860,8 @@ inline void m_unchecked_writeln(
 		return;
 	m_finish_unchecked_io(
 	    m_do_writeln(
-		std::cout, arguments...));
+		m_stdout_text_state.handle,
+		arguments...));
 }
 
 template<typename... Values>
@@ -4499,16 +4870,15 @@ inline void m_unchecked_writeln(
     const tpcc_formatted_value<Values>&... arguments) {
 	if (m_inoutres != 0)
 		return;
-	const auto stream =
-	    tpcc_text_stream(file);
-	if (stream.error != 0) {
+	const auto output = tpcc_text_output(file);
+	if (output.error != 0) {
 		m_finish_unchecked_io(
-		    stream.error);
+		    output.error);
 		return;
 	}
 	m_finish_unchecked_io(
 	    m_do_writeln(
-		*stream.value, arguments...));
+		output.value, arguments...));
 }
 
 inline void p_uniquestring(t_ansistring& value) {

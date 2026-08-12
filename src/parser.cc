@@ -4046,6 +4046,17 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives 
 }
 
 Node* Parser::mk_assign(Node* a, Node* b) {
+	if (a && a->ty &&
+	    a->ty->contains_file_state()) {
+		// ISO 7185 6.4.6 makes assignment legal for an identical type only
+		// when that type is permissible as a file component. 6.4.3.5
+		// recursively excludes files and structures containing files. This
+		// is also the ownership boundary: a backend pointer copy must never
+		// fabricate a second owner for one host file state.
+		raise_type_error(
+		    "file values and values containing files cannot be assigned",
+		    a->ty);
+	}
 	return new Assign(a, cast_for_destination(b, a->ty));
 }
 
@@ -7509,6 +7520,17 @@ std::vector<Parameter> Parser::parse_proc_formal_parameters() {
 				names.push_back(parse_identifier());
 			}
 			Type* ty = maybe_parse_colon() ? parse_formal_type_expression() : unknown_type();
+			if (ty->contains_file_state() &&
+			    mode != ParamMode::Var &&
+			    mode != ParamMode::Out) {
+				// A value parameter copies its actual; FPC's `const` mode is
+				// likewise deliberately not a file-parameter mode. File
+				// variables cross routine boundaries only by aliasing their
+				// original storage with var/out.
+				raise_type_error(
+				    "file types and types containing files require var or out parameters",
+				    ty);
+			}
 			Node* default_value = nullptr;
 			if (maybe_parse_equal()) {
 				if (names.size() > 1) {
@@ -7545,6 +7567,11 @@ RoutineType* Parser::parse_routine_signature(bool is_class, bool is_function, bo
 	} else if (is_function) {
 		parse_colon();
 		ret_ty = parse_type_expression(false);
+		if (ret_ty->contains_file_state()) {
+			raise_type_error(
+			    "functions cannot return file types or types containing files",
+			    ret_ty);
+		}
 	}
 
 	// A routine TYPE has no category until its late optional `of object`

@@ -146,6 +146,10 @@ bool FixedArrayType::has_managed_lifetime() const {
 	return item_type && item_type->has_managed_lifetime();
 }
 
+bool FixedArrayType::contains_file_state() const {
+	return item_type && item_type->contains_file_state();
+}
+
 Type* DynamicArrayType::sequence_index_type() const {
 	return sizeint_type();
 }
@@ -223,6 +227,29 @@ static bool variant_has_managed_lifetime(const VariantPart* variant) {
 	return false;
 }
 
+static bool variant_contains_file_state(const VariantPart* variant) {
+	if (!variant) {
+		return false;
+	}
+	if (variant->selector_type &&
+	    variant->selector_type->contains_file_state()) {
+		return true;
+	}
+	for (const VariantArm& arm : variant->arms) {
+		for (const AggregateField& field : arm.fields) {
+			if (field.ty &&
+			    field.ty->contains_file_state()) {
+				return true;
+			}
+		}
+		if (variant_contains_file_state(
+			arm.variant)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool RecordType::has_managed_lifetime() const {
 	for (const AggregateField& field : fields) {
 		if (field.ty && field.ty->has_managed_lifetime()) {
@@ -232,6 +259,16 @@ bool RecordType::has_managed_lifetime() const {
 	return variant_has_managed_lifetime(variant);
 }
 
+bool RecordType::contains_file_state() const {
+	for (const AggregateField& field : fields) {
+		if (field.ty &&
+		    field.ty->contains_file_state()) {
+			return true;
+		}
+	}
+	return variant_contains_file_state(variant);
+}
+
 bool PackedRecordType::has_managed_lifetime() const {
 	for (const AggregateField& field : fields) {
 		if (field.ty && field.ty->has_managed_lifetime()) {
@@ -239,6 +276,16 @@ bool PackedRecordType::has_managed_lifetime() const {
 		}
 	}
 	return variant_has_managed_lifetime(variant);
+}
+
+bool PackedRecordType::contains_file_state() const {
+	for (const AggregateField& field : fields) {
+		if (field.ty &&
+		    field.ty->contains_file_state()) {
+			return true;
+		}
+	}
+	return variant_contains_file_state(variant);
 }
 
 bool ObjectType::has_managed_lifetime() const {
@@ -251,6 +298,19 @@ bool ObjectType::has_managed_lifetime() const {
 	for (const auto& declaration : children->value_declarations()) {
 		auto slot = dynamic_cast<StorageSlot*>(declaration.second.value);
 		if (slot && slot->kind == StorageSlot::Kind::AggregateMember && slot->ty && slot->ty->has_managed_lifetime()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ObjectType::contains_file_state() const {
+	if (super && super->contains_file_state()) {
+		return true;
+	}
+	for (const AggregateField& field : fields) {
+		if (field.ty &&
+		    field.ty->contains_file_state()) {
 			return true;
 		}
 	}
@@ -1008,6 +1068,10 @@ bool DistinctType::sequence_is_resizable() const {
 
 bool DistinctType::has_managed_lifetime() const {
 	return base_type->has_managed_lifetime();
+}
+
+bool DistinctType::contains_file_state() const {
+	return base_type->contains_file_state();
 }
 
 bool DistinctType::is_reference_type() const {

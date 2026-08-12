@@ -22,7 +22,8 @@ var
 
 procedure AcceptIntegerFile(var Value: TIntegerFile);
 begin
-  Value := Value;
+  if SizeOf(Value) <> SizeOf(Pointer) then
+    Halt(6);
 end;
 
 begin

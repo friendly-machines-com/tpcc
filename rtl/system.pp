@@ -543,15 +543,26 @@ procedure GetDir(drivenr: Byte; var dir: ShortString); overload; external name '
 procedure GetDir(drivenr: Byte; var dir: AnsiString); overload; external name '::u_system::p_getdir';
 procedure RmDir(const path: ShortString); overload; external name '::u_system::p_rmdir';
 procedure RmDir(const path: AnsiString); overload; external name '::u_system::p_rmdir';
-procedure assign(out f: File; const name: ShortString); external name '::u_system::p_assign';
+procedure assign(out f: File; const name: ShortString); overload; external name '::u_system::p_assign';
+procedure assign(out f: Text; const name: ShortString); overload; external name '::u_system::p_assign';
+procedure assign(out f: Text; const name: AnsiString); overload; external name '::u_system::p_assign';
 procedure rewrite(var f: File; recordsize: LongInt = 128); external name '::u_system::p_rewrite';
-procedure reset(var f: File; recordsize: LongInt = 128); external name '::u_system::p_reset';
-procedure close(var f: File); external name '::u_system::p_close';
+procedure reset(var f: File; recordsize: LongInt = 128); overload; external name '::u_system::p_reset';
+procedure reset(var f: Text); overload; external name '::u_system::p_reset';
+procedure close(var f: File); overload; external name '::u_system::p_close';
+procedure close(var f: Text); overload; external name '::u_system::p_close';
 procedure seek(var f: File; position: Int64); external name '::u_system::p_seek';
 function filepos(var f: File): Int64; external name '::u_system::p_filepos';
 function filesize(var f: File): Int64; external name '::u_system::p_filesize';
-function eof(var f: File): Boolean; external name '::u_system::p_eof';
+function eof(var f: File): Boolean; overload; external name '::u_system::p_eof';
+function eof(var f: Text): Boolean; overload; external name '::u_system::p_eof';
 procedure truncate(var f: File); external name '::u_system::p_truncate';
+// SetTextBuf changes only buffering and therefore may be a no-op without
+// changing Pascal-visible results. Keep the complete three-argument contract
+// so the caller still supplies and type-checks its buffer storage.
+procedure settextbuf(var f: Text; var buffer; size: SizeInt); external name '::u_system::p_settextbuf';
+procedure readln(var f: Text; out value: ShortString); overload; external name '::u_system::p_readln';
+procedure readln(var f: Text; out value: AnsiString); overload; external name '::u_system::p_readln';
 function ioresult: Word; external name '::u_system::p_ioresult';
 procedure blockread(var f: File; var buffer; count: Int64; var result: Int64); external name '::u_system::p_blockread';
 procedure blockread(var f: File; var buffer; count: LongInt; var result: LongInt); external name '::u_system::p_blockread';

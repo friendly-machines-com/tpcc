@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
-#include <sstream>
+#include <string>
 
 static bool equals(
     const ::u_system::t_shortstring<255>& value,
@@ -17,6 +17,17 @@ static bool equals(
     const ::u_system::t_ansistring& value,
     const char* expected) {
 	return value.m_string() == expected;
+}
+
+template<typename T>
+static std::string render(
+    const ::u_system::tpcc_formatted_value<T>& value) {
+	const auto rendered =
+	    ::u_system::tpcc_render_formatted_value(
+		value);
+	return std::string(
+		   rendered.left_padding, ' ') +
+	    rendered.value;
 }
 
 int main() {
@@ -46,28 +57,20 @@ int main() {
 	    ::u_system::tpcc_make_formatted_value(
 		static_cast<::u_system::t_integer>(42),
 		static_cast<::u_system::t_sizeint>(5));
-	std::ostringstream integer_output;
-	if (::u_system::m_do_write(
-		integer_output, integer) != 0)
-		return EXIT_FAILURE;
 	::u_system::p_str(integer, text);
 	if (!equals(
 		text,
-		integer_output.str().c_str()))
+		render(integer).c_str()))
 		return EXIT_FAILURE;
 
 	auto extended =
 	    ::u_system::tpcc_make_formatted_value(
 		static_cast<::u_system::t_extended>(
 		    1.5L));
-	std::ostringstream extended_output;
-	if (::u_system::m_do_write(
-		extended_output, extended) != 0)
-		return EXIT_FAILURE;
 	::u_system::p_str(extended, text);
 	if (!equals(
 		text,
-		extended_output.str().c_str()))
+		render(extended).c_str()))
 		return EXIT_FAILURE;
 
 	auto precise =

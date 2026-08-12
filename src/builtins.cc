@@ -247,7 +247,11 @@ bool IntrinsicType::sequence_is_resizable() const {
 }
 
 bool IntrinsicType::has_managed_lifetime() const {
-	return carrier == IntrinsicCarrier::AnsiString;
+	return carrier == IntrinsicCarrier::AnsiString || carrier == IntrinsicCarrier::Text || carrier == IntrinsicCarrier::File;
+}
+
+bool IntrinsicType::contains_file_state() const {
+	return carrier == IntrinsicCarrier::Text || carrier == IntrinsicCarrier::File;
 }
 
 bool integer_bounds(const Type* ty, OrdinalBounds* out) {
@@ -1394,6 +1398,13 @@ static const BuiltinDesc k_builtins[] = {
         .disabled_cxx_name = "::u_system::m_unchecked_eof",
     },
     {"::u_system::m_unchecked_eof", nullptr},
+    {
+        .cxx_name = "::u_system::p_readln",
+        .call_site_switch = BuiltinCallSiteSwitch::Io,
+        .disabled_cxx_name = "::u_system::m_unchecked_readln",
+    },
+    {"::u_system::m_unchecked_readln", nullptr},
+    {"::u_system::p_settextbuf", nullptr},
     {
         .cxx_name = "::u_system::p_truncate",
         .call_site_switch = BuiltinCallSiteSwitch::Io,

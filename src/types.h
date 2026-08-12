@@ -170,6 +170,18 @@ class Type {
 		return false;
 	}
 
+	/** Whether a value of this type contains Pascal file state.
+	 *
+	 * ISO 7185 permits assignment/value-parameter copying only for types
+	 * which are permissible as a file component; a file, or a structured
+	 * value containing one recursively, is not.  Keep that semantic property
+	 * separate from backend carrier layout so a pointer-sized file handle
+	 * cannot accidentally become copyable merely because C++ can copy its
+	 * bytes. */
+	virtual bool contains_file_state() const {
+		return false;
+	}
+
 	/** Whether this type and OTHER have the same C++ type spelling.
 	 * This backend equivalence never participates in Pascal lookup,
 	 * conversion, var/out matching, or signature identity; it exists to
@@ -231,6 +243,7 @@ struct DistinctType : public Type {
 	Type* sequence_length_type() const override;
 	bool sequence_is_resizable() const override;
 	bool has_managed_lifetime() const override;
+	bool contains_file_state() const override;
 	bool is_reference_type() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -306,6 +319,7 @@ struct FixedArrayType : public Type {
 
 	Type* sequence_length_type() const override;
 	bool has_managed_lifetime() const override;
+	bool contains_file_state() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -336,6 +350,10 @@ struct DynamicArrayType : public Type {
 
 	bool has_managed_lifetime() const override {
 		return true;
+	}
+
+	bool contains_file_state() const override {
+		return item_type && item_type->contains_file_state();
 	}
 
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
@@ -389,6 +407,12 @@ struct TypedFileType : public Type {
 	Type* item_type;
 	TypedFileType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
+	bool has_managed_lifetime() const override {
+		return true;
+	}
+	bool contains_file_state() const override {
+		return true;
+	}
 	bool same_cxx_carrier_definition_as(const Type* other) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
@@ -487,6 +511,7 @@ struct RecordType : public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	bool has_managed_lifetime() const override;
+	bool contains_file_state() const override;
 };
 
 /** A byte-packed Pascal record.
@@ -511,6 +536,7 @@ struct PackedRecordType : public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	bool has_managed_lifetime() const override;
+	bool contains_file_state() const override;
 };
 
 struct AggregateFieldLayout {
@@ -632,6 +658,7 @@ struct ObjectType : public Type {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	void print_diagnostic_stub(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 	bool has_managed_lifetime() const override;
+	bool contains_file_state() const override;
 };
 
 struct PointerType : public Type {
