@@ -2557,6 +2557,16 @@ inline t_longint p_fileage(
 	    information.st_mtime);
 }
 
+inline t_boolean p_deletefile(
+    const t_ansistring& file_name) {
+	const std::string path =
+	    file_name.m_string();
+	if (path.empty())
+		return p_false;
+	return tpcc_bool_to_boolean(
+	    ::unlink(path.c_str()) == 0);
+}
+
 inline t_boolean p_fileexists(
     const t_ansistring& file_name,
     t_boolean follow_link) {

@@ -71,6 +71,7 @@ function IncludeTrailingPathDelimiter(const Path: AnsiString): AnsiString;
 function ExtractFileName(const FileName: AnsiString): AnsiString;
 function ExtractFilePath(const FileName: AnsiString): AnsiString;
 function ChangeFileExt(const FileName, Extension: AnsiString): AnsiString;
+function DeleteFile(const FileName: AnsiString): Boolean; external name '::u_sysutils::p_deletefile';
 function FileAge(const FileName: AnsiString): LongInt; external name '::u_sysutils::p_fileage';
 function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_sysutils::p_fileexists';
 function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_sysutils::p_directoryexists';
