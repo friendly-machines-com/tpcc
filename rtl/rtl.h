@@ -6185,6 +6185,59 @@ inline T m_integer_from_bits(
 		return bits;
 }
 
+template<typename T>
+requires std::is_integral_v<T> &&
+	 (sizeof(T) == 2 || sizeof(T) == 4 ||
+	  sizeof(T) == 8)
+inline T m_swap_endian_integer(T value) {
+	using unsigned_type = std::make_unsigned_t<T>;
+	unsigned_type remaining =
+	    static_cast<unsigned_type>(value);
+	unsigned_type reversed = 0;
+	// Work on the carrier bits rather than the numeric sign. Unsigned shifts
+	// are defined modulo the carrier width, and m_integer_from_bits states the
+	// resulting signed two's-complement representation without an
+	// implementation-defined unsigned-to-signed conversion.
+	for (std::size_t i = 0; i < sizeof(T); ++i) {
+		reversed =
+		    static_cast<unsigned_type>(
+			(reversed << 8) |
+			(remaining & unsigned_type{0xff}));
+		remaining >>= 8;
+	}
+	return m_integer_from_bits<T>(reversed);
+}
+
+inline t_smallint p_swapendian(
+    const t_smallint& value) {
+	return m_swap_endian_integer(value);
+}
+
+inline t_word p_swapendian(
+    const t_word& value) {
+	return m_swap_endian_integer(value);
+}
+
+inline t_longint p_swapendian(
+    const t_longint& value) {
+	return m_swap_endian_integer(value);
+}
+
+inline t_longword p_swapendian(
+    const t_longword& value) {
+	return m_swap_endian_integer(value);
+}
+
+inline t_int64 p_swapendian(
+    const t_int64& value) {
+	return m_swap_endian_integer(value);
+}
+
+inline t_qword p_swapendian(
+    const t_qword& value) {
+	return m_swap_endian_integer(value);
+}
+
 template<typename Result, typename Operand>
 requires std::is_integral_v<Result>
 inline Result m_arithmetic_operand(Operand value) {

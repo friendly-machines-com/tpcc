@@ -422,6 +422,15 @@ function chr(value: Integer): Char; overload; external name '::u_system::p_chr';
 function chr(value: Cardinal): Char; overload; external name '::u_system::p_chr';
 function chr(value: Int64): Char; overload; external name '::u_system::p_chr';
 function chr(value: QWord): Char; overload; external name '::u_system::p_chr';
+{ SwapEndian reverses the bytes of the selected integer carrier. Signed
+  overloads preserve the resulting bit pattern; this is not arithmetic
+  negation and the const argument is never modified in place. }
+function SwapEndian(const value: SmallInt): SmallInt; overload; external name '::u_system::p_swapendian';
+function SwapEndian(const value: Word): Word; overload; external name '::u_system::p_swapendian';
+function SwapEndian(const value: LongInt): LongInt; overload; external name '::u_system::p_swapendian';
+function SwapEndian(const value: DWord): DWord; overload; external name '::u_system::p_swapendian';
+function SwapEndian(const value: Int64): Int64; overload; external name '::u_system::p_swapendian';
+function SwapEndian(const value: QWord): QWord; overload; external name '::u_system::p_swapendian';
 procedure fillchar(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillchar';
 procedure fillchar(var destination; count: SizeInt; value: Char); external name '::u_system::p_fillchar';
 procedure fillbyte(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillbyte';
