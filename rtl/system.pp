@@ -628,6 +628,14 @@ operator :=(a: shortstring): ansistring; external name '::u_system::o_implicit';
 operator :=(a: AnsiChar): AnsiString; external name '::u_system::o_implicit';
 operator :=(a: PChar): AnsiString; external name '::u_system::o_implicit';
 
+{ SetString copies a counted character range. Buf is not required to point to
+  a null-terminated string, and embedded #0 characters are ordinary data. A
+  nil Buf still sets the requested length without reading source storage. }
+procedure SetString(out S: AnsiString; Buf: PAnsiChar; Len: SizeInt); overload; external name '::u_system::p_setstring';
+{ The omitted destination preserves each String[N] type's capacity. The
+  SetString builtin contract admits only ShortString destinations here; this
+  is not general out-parameter covariance. }
+procedure SetString(out S; Buf: PAnsiChar; Len: SizeInt); overload; external name '::u_system::p_setstring';
 procedure SetLength(var destination: AnsiString; value: SizeInt); overload; external name '::u_system::p_setlength';
 { The omitted type covers dynamic arrays and every fixed-capacity ShortString
   type without weakening ordinary exact-type rules for var parameters. }

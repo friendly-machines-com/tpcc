@@ -1462,6 +1462,11 @@ static const BuiltinDesc k_builtins[] = {
         .disabled_cxx_name = "::u_system::m_unchecked_flush",
     },
     {"::u_system::m_unchecked_flush", nullptr},
+    {
+        .cxx_name = "::u_system::p_setstring",
+        .const_fold = nullptr,
+        .generic_kind = BuiltinGenericKind::ShortStringMutation,
+    },
     {"::u_system::p_setlength", nullptr, {}, BuiltinGenericKind::SequenceResize},
     {"::u_system::p_uniquestring", nullptr},
     {"::u_system::m_new_instance", nullptr},

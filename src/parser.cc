@@ -8829,8 +8829,8 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	if (target == unknown_type()) {
 		if (builtin && builtin->generic_kind == BuiltinGenericKind::ShortStringMutation && !dynamic_cast<ShortStringType*>(source)) {
 			// Only the mutable String[N] formal is omitted in System's
-			// Delete/Insert declarations. Preserve its exact capacity without
-			// making arbitrary mutable arguments viable.
+			// Delete/Insert/SetString declarations. Preserve its exact
+			// capacity without making arbitrary mutable arguments viable.
 			return std::nullopt;
 		}
 		if (builtin && builtin->generic_kind == BuiltinGenericKind::StrOutput) {

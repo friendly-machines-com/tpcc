@@ -6070,6 +6070,56 @@ inline void p_setlength(
 	value.m_resize(length);
 }
 
+inline void p_setstring(
+    t_ansistring& destination,
+    t_char* buffer,
+    t_sizeint length) {
+	// SetString consumes exactly `length` characters; a zero byte in that
+	// range is data rather than a terminator. Constructing the replacement
+	// before releasing destination also keeps a buffer which points into the
+	// destination's current storage valid until the counted copy is complete.
+	if (length <= 0) {
+		destination.storage.m_replace({});
+		return;
+	}
+	const std::size_t count =
+	    static_cast<std::size_t>(length);
+	std::vector<t_char> replacement(
+	    count + 1, t_char{0});
+	if (buffer)
+		std::copy_n(
+		    buffer, count,
+		    replacement.data());
+	// The final zero belongs to the AnsiString carrier, not its Pascal length.
+	// With nil buffer the Pascal payload is unspecified; retaining the
+	// value-initialized bytes avoids exposing uninitialized host memory.
+	destination.storage.m_replace(
+	    std::move(replacement));
+}
+
+template<typename T>
+requires tpcc_is_shortstring_v<T>
+inline void p_setstring(
+    tpcc_typed_storage_ref<T> destination,
+    t_char* buffer,
+    t_sizeint length) {
+	// String[N] has inline storage and therefore clamps the counted source to
+	// its declared capacity. Unlike AnsiString, a nil source exposes the
+	// existing inline payload after changing only the logical length.
+	const std::size_t count =
+	    length <= 0
+		? 0
+		: std::min<std::size_t>(
+		      static_cast<std::size_t>(length),
+		      T::capacity);
+	destination.value->m_resize(
+	    static_cast<t_sizeint>(count));
+	if (buffer)
+		std::copy_n(
+		    buffer, count,
+		    destination.value->m_data());
+}
+
 template<typename T>
 inline void p_setlength(
     tpcc_typed_storage_ref<T> value,

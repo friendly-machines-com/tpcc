@@ -89,8 +89,8 @@ enum class BuiltinGenericKind {
 	// intrinsic storage contract, not general var/out covariance. Its omitted
 	// formals retain the exact source, destination, and optional code storage.
 	ValOutput,
-	// Delete and Insert retain the exact capacity of their omitted mutable
-	// String[N] formal. Concrete AnsiString overloads remain ordinary
+	// Delete, Insert, and SetString retain the exact capacity of their omitted
+	// mutable String[N] formal. Concrete AnsiString overloads remain ordinary
 	// declarations; this fallback accepts only ShortStringType actuals.
 	ShortStringMutation,
 	// Abs has the otherwise-unspellable exact numeric relation T -> T. The
