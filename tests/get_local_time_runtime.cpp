@@ -36,7 +36,7 @@ int main() {
 		return EXIT_FAILURE;
 
 	system_time value{};
-	::u_system::p_getlocaltime(value);
+	::u_sysutils::p_getlocaltime(value);
 
 	if (::clock_gettime(CLOCK_REALTIME, &after) != 0)
 		return EXIT_FAILURE;

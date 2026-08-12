@@ -20,13 +20,13 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/environment_variable.cc" \
 	tests/environment_variable.pp
-if ! rg -Fq '::u_system::p_getenvironmentvariable' \
+if ! rg -Fq '::u_sysutils::p_getenvironmentvariable' \
 	"$tmp/environment_variable.cc"
 then
 	echo "GetEnvironmentVariable did not use its SysUtils RTL operation" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::p_fpgetenv' \
+if ! rg -Fq '::u_baseunix::p_fpgetenv' \
 	"$tmp/environment_variable.cc"
 then
 	echo "BaseUnix.FpGetEnv did not use its borrowed-pointer RTL operation" >&2

@@ -11,7 +11,7 @@ cd "$root"
 ./mp -Furtl -o"$tmp/file_date_to_date_time.cc" \
 	tests/file_date_to_date_time.pp
 
-if ! rg -Fq '::u_system::p_filedatetodatetime' \
+if ! rg -Fq '::u_sysutils::p_filedatetodatetime' \
 	"$tmp/file_date_to_date_time.cc"
 then
 	echo "SysUtils.FileDateToDateTime did not use p_filedatetodatetime" >&2

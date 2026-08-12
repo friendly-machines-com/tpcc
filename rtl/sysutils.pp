@@ -59,38 +59,38 @@ const
   faVirtual = $00010000;
   faAnyFile = $000001FF;
 
-function Supports(a: TObject; b: TClass): Boolean; external name '::u_system::p_supports';
+function Supports(a: TObject; b: TClass): Boolean; external name '::u_sysutils::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
 function IncludeTrailingPathDelimiter(const Path: AnsiString): AnsiString;
 function ExtractFileName(const FileName: AnsiString): AnsiString;
 function ExtractFilePath(const FileName: AnsiString): AnsiString;
 function ChangeFileExt(const FileName, Extension: AnsiString): AnsiString;
 function FileAge(const FileName: AnsiString): LongInt; external name '::u_sysutils::p_fileage';
-function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_fileexists';
-function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_system::p_directoryexists';
-function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_system::p_expandfilename';
-function GetEnvironmentVariable(const Name: AnsiString): AnsiString; external name '::u_system::p_getenvironmentvariable';
-procedure GetLocalTime(var SystemTime: TSystemTime); external name '::u_system::p_getlocaltime';
-function FileDateToDateTime(FileDate: LongInt): TDateTime; external name '::u_system::p_filedatetodatetime';
-procedure DecodeDate(Date: TDateTime; out Year, Month, Day: Word); external name '::u_system::p_decodedate';
-procedure DecodeTime(Time: TDateTime; out Hour, Minute, Second, Millisecond: Word); external name '::u_system::p_decodetime';
+function FileExists(const FileName: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_sysutils::p_fileexists';
+function DirectoryExists(const Directory: AnsiString; FollowLink: Boolean = True): Boolean; external name '::u_sysutils::p_directoryexists';
+function ExpandFileName(const FileName: AnsiString): AnsiString; external name '::u_sysutils::p_expandfilename';
+function GetEnvironmentVariable(const Name: AnsiString): AnsiString; external name '::u_sysutils::p_getenvironmentvariable';
+procedure GetLocalTime(var SystemTime: TSystemTime); external name '::u_sysutils::p_getlocaltime';
+function FileDateToDateTime(FileDate: LongInt): TDateTime; external name '::u_sysutils::p_filedatetodatetime';
+procedure DecodeDate(Date: TDateTime; out Year, Month, Day: Word); external name '::u_sysutils::p_decodedate';
+procedure DecodeTime(Time: TDateTime; out Hour, Minute, Second, Millisecond: Word); external name '::u_sysutils::p_decodetime';
 function ExecuteProcess(const Path, ComLine: AnsiString;
   Flags: TExecuteFlags = []): Integer; overload;
 function ExecuteProcess(const Path: AnsiString;
   const ComLine: array of AnsiString;
   Flags: TExecuteFlags = []): Integer; overload;
-function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TSearchRec): LongInt; external name '::u_system::p_findfirst';
-function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_system::p_findnext';
-procedure FindClose(var F: TSearchRec); external name '::u_system::p_findclose';
+function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TSearchRec): LongInt; external name '::u_sysutils::p_findfirst';
+function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_sysutils::p_findnext';
+procedure FindClose(var F: TSearchRec); external name '::u_sysutils::p_findclose';
 
 implementation
 
 function ExecuteProcessCommandLine(const Path,
   ComLine: AnsiString): Integer;
-  external name '::u_system::p_executeprocess_commandline';
+  external name '::u_sysutils::p_executeprocess_commandline';
 function ExecuteProcessArguments(const Path: AnsiString;
   const ComLine: array of AnsiString): Integer;
-  external name '::u_system::p_executeprocess_arguments';
+  external name '::u_sysutils::p_executeprocess_arguments';
 
 procedure RaiseExecuteProcessError(Status: Integer);
 var

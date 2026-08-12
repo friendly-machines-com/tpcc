@@ -19,8 +19,8 @@ cd "$root"
 ./mp -Furtl -o"$tmp/execute_process.cc" \
 	tests/execute_process.pp
 for required in \
-	'::u_system::p_executeprocess_commandline' \
-	'::u_system::p_executeprocess_arguments'
+	'::u_sysutils::p_executeprocess_commandline' \
+	'::u_sysutils::p_executeprocess_arguments'
 do
 	if ! rg -Fq "$required" "$tmp/sysutils.cc"
 	then

@@ -15,11 +15,11 @@ int main() {
 		return EXIT_FAILURE;
 	::tzset();
 	if (!nearly_equal(
-		::u_system::p_filedatetodatetime(0),
+		::u_sysutils::p_filedatetodatetime(0),
 		25569.0))
 		return EXIT_FAILURE;
 	if (!nearly_equal(
-		::u_system::p_filedatetodatetime(43200),
+		::u_sysutils::p_filedatetodatetime(43200),
 		25569.5))
 		return EXIT_FAILURE;
 
@@ -27,7 +27,7 @@ int main() {
 		return EXIT_FAILURE;
 	::tzset();
 	if (!nearly_equal(
-		::u_system::p_filedatetodatetime(0),
+		::u_sysutils::p_filedatetodatetime(0),
 		25568.0 + 19.0 / 24.0))
 		return EXIT_FAILURE;
 	return EXIT_SUCCESS;

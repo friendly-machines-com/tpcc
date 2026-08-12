@@ -11,7 +11,7 @@ cd "$root"
 ./mp -Furtl -o"$tmp/get_local_time.cc" \
 	tests/get_local_time.pp
 
-if ! rg -Fq '::u_system::p_getlocaltime' \
+if ! rg -Fq '::u_sysutils::p_getlocaltime' \
 	"$tmp/get_local_time.cc"
 then
 	echo "SysUtils.GetLocalTime did not use p_getlocaltime" >&2

@@ -2287,6 +2287,25 @@ inline t_ansistring tpcc_ansistring_literal(
 	return result;
 }
 
+} // namespace u_system
+
+namespace u_sysutils {
+
+using ::u_system::p_false;
+using ::u_system::t_ansistring;
+using ::u_system::t_boolean;
+using ::u_system::t_double;
+using ::u_system::t_int64;
+using ::u_system::t_integer;
+using ::u_system::t_longint;
+using ::u_system::t_longword;
+using ::u_system::t_openarray;
+using ::u_system::t_qword;
+using ::u_system::t_sizeint;
+using ::u_system::t_word;
+using ::u_system::tpcc_ansistring_literal;
+using ::u_system::tpcc_bool_to_boolean;
+
 inline constexpr t_longint m_fa_read_only = 0x00000001;
 inline constexpr t_longint m_fa_hidden = 0x00000002;
 inline constexpr t_longint m_fa_system = 0x00000004;
@@ -2502,6 +2521,22 @@ inline t_longint p_findfirst(
 	return -1;
 }
 
+inline t_longint p_fileage(
+    const t_ansistring& file_name) {
+	const std::string path =
+	    file_name.m_string();
+	struct stat information {};
+	if (path.empty() ||
+	    ::stat(path.c_str(), &information) != 0)
+		return -1;
+	// This is the legacy LongInt FileAge contract, which treats directories
+	// as failure even though stat supplies a meaningful directory timestamp.
+	if (S_ISDIR(information.st_mode))
+		return -1;
+	return static_cast<t_longint>(
+	    information.st_mtime);
+}
+
 inline t_boolean p_fileexists(
     const t_ansistring& file_name,
     t_boolean follow_link) {
@@ -2557,16 +2592,25 @@ inline t_ansistring p_getenvironmentvariable(
 	    value, std::strlen(value));
 }
 
-inline t_char* p_fpgetenv(t_char* name) {
+} // namespace u_sysutils
+
+namespace u_baseunix {
+
+inline ::u_system::t_char* p_fpgetenv(
+    ::u_system::t_char* name) {
 	// BaseUnix exposes getenv's borrowed storage directly.  Reading the
 	// t_char bytes through char is permitted, and preserves the pointer and
 	// lifetime supplied by the C environment rather than manufacturing a copy.
 	if (!name)
 		return nullptr;
-	return reinterpret_cast<t_char*>(
+	return reinterpret_cast<::u_system::t_char*>(
 	    std::getenv(
 		reinterpret_cast<const char*>(name)));
 }
+
+} // namespace u_baseunix
+
+namespace u_sysutils {
 
 template<typename SystemTime>
 inline void p_getlocaltime(
@@ -2710,14 +2754,22 @@ inline void p_decodetime(
 	    time % 1000);
 }
 
-inline t_integer p_fpsystem(
-    const t_ansistring& command) {
+} // namespace u_sysutils
+
+namespace u_unix {
+
+inline ::u_system::t_integer p_fpsystem(
+    const ::u_system::t_ansistring& command) {
 	if (command.m_length() == 0)
 		return 1;
 	const std::string bytes = command.m_string();
-	return static_cast<t_integer>(
+	return static_cast<::u_system::t_integer>(
 	    ::system(bytes.c_str()));
 }
+
+} // namespace u_unix
+
+namespace u_sysutils {
 
 inline bool m_executeprocess_separator(char value) {
 	return value == ' ' || value == '\t' ||
@@ -2821,6 +2873,10 @@ inline t_integer p_executeprocess_arguments(
 		    arguments.m_data()[index].m_string());
 	return m_executeprocess(path, std::move(bytes));
 }
+
+} // namespace u_sysutils
+
+namespace u_system {
 
 template<std::size_t DestinationCapacity>
 inline t_shortstring<DestinationCapacity>
@@ -4641,6 +4697,10 @@ inline std::error_code m_getdir_bytes(
 	return {};
 }
 
+} // namespace u_system
+
+namespace u_sysutils {
+
 inline void m_expand_path_components(
     const std::string& path,
     std::size_t position,
@@ -4717,7 +4777,8 @@ inline t_ansistring p_expandfilename(
 	std::vector<std::string> components;
 	if (path.empty() || path[0] != '/') {
 		std::string current_directory;
-		if (m_getdir_bytes(current_directory))
+		if (::u_system::m_getdir_bytes(
+		        current_directory))
 			current_directory = "/";
 		m_expand_rooted_path(
 		    current_directory, components);
@@ -4749,6 +4810,10 @@ inline t_ansistring p_expandfilename(
 	return tpcc_ansistring_literal(
 	    result.data(), result.size());
 }
+
+} // namespace u_sysutils
+
+namespace u_system {
 
 inline void p_getdir(
     t_byte drive_number,
@@ -6950,23 +7015,3 @@ using t_tclass = m_iobject;
 //#define class_instance_new(X) (new X)
 
 } // namespace u_system
-
-namespace u_sysutils {
-
-inline ::u_system::t_longint p_fileage(
-    const ::u_system::t_ansistring& file_name) {
-	const std::string path =
-	    file_name.m_string();
-	struct stat information {};
-	if (path.empty() ||
-	    ::stat(path.c_str(), &information) != 0)
-		return -1;
-	// This is the legacy LongInt FileAge contract, which treats directories
-	// as failure even though stat supplies a meaningful directory timestamp.
-	if (S_ISDIR(information.st_mode))
-		return -1;
-	return static_cast<::u_system::t_longint>(
-	    information.st_mtime);
-}
-
-} // namespace u_sysutils
