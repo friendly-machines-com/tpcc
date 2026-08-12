@@ -434,6 +434,7 @@ class Parser {
 	Type* parse_subrange_type(Node* lower_bound, Node* upper_bound);
 	ClassType* lookup_implicit_tobject_superclass();
 	Node* active_function_result_lvalue(Callable* c) const;
+	Node* active_function_result_lvalue_from_binding(Node* binding) const;
 
       protected:
 	std::string input_token;

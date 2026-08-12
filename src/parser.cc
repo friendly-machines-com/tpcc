@@ -2243,20 +2243,33 @@ Node* Parser::active_function_result_lvalue(Callable* c) const {
 	return c->body_frame->lookup_value("result");
 }
 
+Node* Parser::active_function_result_lvalue_from_binding(Node* binding) const {
+	// An unqualified method name is represented as MemberAccess(Self, method)
+	// before expression parsing sees it. The implicit receiver changes how a
+	// real call is emitted, but not Pascal's rule that the enclosing function
+	// name denotes its hidden result unless `(` explicitly starts recursion.
+	if (auto member = dynamic_cast<MemberAccess*>(binding)) {
+		binding = member->b;
+	}
+	if (auto callable = dynamic_cast<Callable*>(binding)) {
+		return active_function_result_lvalue(callable);
+	}
+	if (auto overloads = dynamic_cast<OverloadSet*>(binding)) {
+		for (Callable* callable : overloads->members) {
+			if (Node* result = active_function_result_lvalue(callable)) {
+				return result;
+			}
+		}
+	}
+	return nullptr;
+}
+
 /** value that can be assigned to */
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (Node* hit = it->lookup_value(name).binding) {
-			if (auto c = dynamic_cast<Callable*>(hit)) {
-				if (Node* result = active_function_result_lvalue(c)) {
-					return result;
-				}
-			} else if (auto os = dynamic_cast<OverloadSet*>(hit)) {
-				for (auto* c : os->members) {
-					if (Node* result = active_function_result_lvalue(c)) {
-						return result;
-					}
-				}
+			if (Node* result = active_function_result_lvalue_from_binding(hit)) {
+				return result;
 			}
 			return bind_lookup_result(it->qualifier, hit);
 		}
@@ -2793,16 +2806,8 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 		// required in value context for representation overlays such as
 		// `TWordRec(reverse_word).hi`.
 		if (!qualified_member && input_token != "(") {
-			if (auto c = dynamic_cast<Callable*>(value)) {
-				if (Node* result = active_function_result_lvalue(c)) {
-					return result;
-				}
-			} else if (auto os = dynamic_cast<OverloadSet*>(value)) {
-				for (auto* c : os->members) {
-					if (Node* result = active_function_result_lvalue(c)) {
-						return result;
-					}
-				}
+			if (Node* result = active_function_result_lvalue_from_binding(value)) {
+				return result;
 			}
 		}
 		// Low/High are type-argument intrinsics, so ordinary call finalization
