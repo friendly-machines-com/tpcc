@@ -239,7 +239,8 @@ class WriteCall : public Node {
 
 /** Compiler-owned Str invocation. `width` and `precision` are the colon
  * qualifiers attached to `value`, not ordinary routine arguments.
- * `destination` retains its exact bounded ShortString type and storage. */
+ * `destination` retains its exact bounded ShortString or managed AnsiString
+ * type and storage. */
 class StrCall : public Node {
       public:
 	FormattedValue formatted;

@@ -481,6 +481,14 @@ procedure str(const x: Int64; var s); overload; external name '::u_system::p_str
 procedure str(const x: QWord; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s); overload; external name '::u_system::p_str';
 procedure str(const x; var s); overload; external name '::u_system::p_str';
+// AnsiString needs concrete overloads because `var` parameters do not perform
+// ShortString-to-AnsiString assignment conversion. These select the unbounded
+// managed-string sink while the omitted forms above preserve each String[N]
+// destination's exact capacity.
+procedure str(const x: Int64; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: QWord; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: Extended; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure val(const s: ShortString; out value); overload; external name '::u_system::p_val';
 procedure val(const s: ShortString; out value; out code); overload; external name '::u_system::p_val';
 procedure val(const s: AnsiString; out value); overload; external name '::u_system::p_val';

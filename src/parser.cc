@@ -2880,8 +2880,14 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 
 			item.value = args[0];
 			destination = args[1];
-			if (!dynamic_cast<ShortStringType*>(destination ? destination->ty : nullptr)) {
-				raise_type_kind_mismatch("Str destination", "ShortString", destination ? destination->ty : nullptr);
+			Type* destination_type =
+			    destination ? destination->ty : nullptr;
+			if (!dynamic_cast<ShortStringType*>(destination_type) &&
+			    destination_type != ansistring_type()) {
+				raise_type_kind_mismatch(
+				    "Str destination",
+				    "ShortString or AnsiString",
+				    destination_type);
 			}
 			const StrValueFamily family = str_value_family(item.value ? item.value->ty : nullptr);
 			if (family == StrValueFamily::EnumerationTodo) {
@@ -8765,6 +8771,9 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 				return std::nullopt;
 			}
 			if (parameter_index == 1 && !dynamic_cast<ShortStringType*>(source)) {
+				// Only the omitted destination form models the String[N]
+				// family. AnsiString has concrete declarations so its var
+				// parameter remains exact during ordinary overload ranking.
 				return std::nullopt;
 			}
 		}

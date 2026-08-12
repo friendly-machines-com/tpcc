@@ -6172,6 +6172,37 @@ inline void p_str(
 		spaces + copied);
 }
 
+template<typename T>
+inline void p_str(
+    const tpcc_formatted_value<T>& argument,
+    t_ansistring& destination) {
+	tpcc_rendered_formatted_value rendered =
+	    tpcc_render_formatted_value(
+		argument);
+	// AnsiString is the unbounded Str destination: retain the complete field
+	// instead of applying ShortString's compile-time capacity. The trailing
+	// zero belongs to the managed carrier and is not part of its Pascal length.
+	std::vector<t_char> replacement(
+	    rendered.left_padding +
+		rendered.value.size() + 1,
+	    t_char{0});
+	std::fill_n(
+	    replacement.data(),
+	    rendered.left_padding,
+	    t_char{
+		static_cast<uint8_t>(' ')});
+	for (std::size_t i = 0;
+	     i < rendered.value.size(); ++i)
+		replacement[
+		    rendered.left_padding + i] =
+		    t_char{
+			static_cast<uint8_t>(
+			    static_cast<unsigned char>(
+				rendered.value[i]))};
+	destination.storage.m_replace(
+	    std::move(replacement));
+}
+
 // Convenience entry points retain the direct RTL surface while delegating
 // every formatting decision to the same representation used by Write.
 template<typename T, std::size_t Capacity>

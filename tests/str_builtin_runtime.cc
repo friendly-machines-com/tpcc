@@ -13,8 +13,15 @@ static bool equals(
 	    std::memcmp(value.data, expected, length) == 0;
 }
 
+static bool equals(
+    const ::u_system::t_ansistring& value,
+    const char* expected) {
+	return value.m_string() == expected;
+}
+
 int main() {
 	::u_system::t_shortstring<255> text{};
+	::u_system::t_ansistring dynamic_text{};
 
 	::u_system::p_str(static_cast<::u_system::t_extended>(1.5L), text);
 	if (!equals(text, " 1.50000000000000000000E+0000"))
@@ -61,6 +68,27 @@ int main() {
 	if (!equals(
 		text,
 		extended_output.str().c_str()))
+		return EXIT_FAILURE;
+
+	auto precise =
+	    ::u_system::tpcc_make_formatted_value(
+		static_cast<::u_system::t_extended>(
+		    1.5L),
+		static_cast<::u_system::t_sizeint>(0),
+		static_cast<::u_system::t_sizeint>(3));
+	::u_system::p_str(precise, dynamic_text);
+	if (!equals(dynamic_text, "1.500"))
+		return EXIT_FAILURE;
+
+	auto wide =
+	    ::u_system::tpcc_make_formatted_value(
+		static_cast<::u_system::t_integer>(7),
+		static_cast<::u_system::t_sizeint>(300));
+	::u_system::p_str(wide, dynamic_text);
+	if (dynamic_text.m_length() != 300 ||
+	    dynamic_text.index(1).value != ' ' ||
+	    dynamic_text.index(299).value != ' ' ||
+	    dynamic_text.index(300).value != '7')
 		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
