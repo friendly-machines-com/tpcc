@@ -21,6 +21,7 @@ type
   EOutOfMemory = class(EHeapMemoryError);
   EAccessViolation = class(Exception);
   EAbstractError = class(Exception);
+  EConvertError = class(Exception);
   EInOutError = class(Exception)
   public
     ErrorCode: Integer;
@@ -61,6 +62,7 @@ const
 
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_sysutils::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
+function StrToInt(const S: String): LongInt;
 function IncludeTrailingPathDelimiter(const Path: AnsiString): AnsiString;
 function ExtractFileName(const FileName: AnsiString): AnsiString;
 function ExtractFilePath(const FileName: AnsiString): AnsiString;
@@ -84,6 +86,15 @@ function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_sysutils::p
 procedure FindClose(var F: TSearchRec); external name '::u_sysutils::p_findclose';
 
 implementation
+
+function StrToInt(const S: String): LongInt;
+var
+  Error: Word;
+begin
+  Val(S, Result, Error);
+  if Error <> 0 then
+    raise EConvertError.Create('Invalid integer')
+end;
 
 function ExecuteProcessCommandLine(const Path,
   ComLine: AnsiString): Integer;
