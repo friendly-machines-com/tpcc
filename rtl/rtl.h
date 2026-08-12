@@ -4684,7 +4684,7 @@ tpcc_render_formatted_value(
 }
 
 template<typename T>
-inline void tpcc_write_one(
+inline bool tpcc_write_one(
     std::FILE* out,
     const tpcc_formatted_value<T>& argument) {
 	tpcc_rendered_formatted_value rendered =
@@ -4693,11 +4693,13 @@ inline void tpcc_write_one(
 	for (std::size_t i = 0;
 	     i < rendered.left_padding; ++i)
 		if (std::fputc(' ', out) == EOF)
-			return;
-	if (!rendered.value.empty())
-		std::fwrite(
-	    rendered.value.data(),
-	    1, rendered.value.size(), out);
+			return false;
+	if (rendered.value.empty())
+		return true;
+	return std::fwrite(
+		   rendered.value.data(), 1,
+		   rendered.value.size(), out) ==
+	       rendered.value.size();
 }
 
 template<typename... Values>
@@ -4713,8 +4715,8 @@ inline t_word tpcc_write_many(
 			    if (error != 0)
 				    return;
 			    errno = 0;
-			    tpcc_write_one(out, argument);
-			    if (std::ferror(out))
+			    if (!tpcc_write_one(
+				    out, argument))
 				    error =
 				        m_file_error_from_errno(
 					    errno, 101);
@@ -6616,8 +6618,8 @@ template<typename T, std::size_t Capacity>
 inline void p_str(
     const tpcc_formatted_value<T>& argument,
     t_shortstring<Capacity>& destination) {
-	// Str and Write differ only here: the former stores the shared formatter's
-	// result in a bounded string, while the latter sends it to an ostream.
+	// Str stores the shared formatter's result in its destination string;
+	// Write sends the same rendered value to a FILE-backed Text output.
 	tpcc_rendered_formatted_value rendered =
 	    tpcc_render_formatted_value(
 		argument);
