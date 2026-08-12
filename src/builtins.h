@@ -160,6 +160,9 @@ enum class BuiltinCallSiteSwitch {
 };
 
 struct BuiltinDesc {
+	// Descriptors are static compiler-catalog entries. These views refer only
+	// to string literals in that catalog; parsed `external name` strings are
+	// owned by Callable and never stored here.
 	std::string_view cxx_name;   // e.g. "::u_system::p_ord"
 	BuiltinConstFold const_fold; // nullptr when this builtin is not foldable
 	std::optional<TypeBoundKind> type_bound_kind = {};
