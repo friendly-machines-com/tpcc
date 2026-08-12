@@ -27,7 +27,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/math_intrinsics"
 	-Wextra \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/math_intrinsics_runtime_range.cc \
+	tests/math_intrinsics_runtime_range.cpp \
 	-o "$tmp/math_intrinsics_runtime_range"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/math_intrinsics_runtime_range"
 

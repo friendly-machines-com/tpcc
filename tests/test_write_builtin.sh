@@ -37,7 +37,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/write_builtin_runtime.cc \
+	tests/write_builtin_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/write_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/write_builtin"

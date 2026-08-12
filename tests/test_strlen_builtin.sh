@@ -28,7 +28,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/strlen_builtin_pascal"
 	-Wextra \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/strlen_builtin_runtime.cc \
+	tests/strlen_builtin_runtime.cpp \
 	-o "$tmp/strlen_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/strlen_builtin"
 

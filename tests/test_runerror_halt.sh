@@ -17,7 +17,7 @@ cd "$root"
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/errorcode_builtin_runtime.cc \
+	tests/errorcode_builtin_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/errorcode_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/errorcode_builtin"

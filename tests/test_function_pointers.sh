@@ -60,7 +60,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/function_pointers_runtime.cc \
+	tests/function_pointers_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/function_pointers"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/function_pointers"

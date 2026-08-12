@@ -27,7 +27,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/insert_builtin"
 	-Wextra \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/insert_runtime.cc \
+	tests/insert_runtime.cpp \
 	-o "$tmp/insert_runtime"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/insert_runtime"
 

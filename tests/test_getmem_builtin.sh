@@ -28,7 +28,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/getmem_builtin_pascal"
 	-Wextra \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/getmem_builtin_runtime.cc \
+	tests/getmem_builtin_runtime.cpp \
 	-o "$tmp/getmem_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/getmem_builtin"
 

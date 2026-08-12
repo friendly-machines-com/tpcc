@@ -50,7 +50,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_pascal"
 	-Wpedantic \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/shortstring_type_runtime.cc \
+	tests/shortstring_type_runtime.cpp \
 	-o "$tmp/shortstring_type_runtime"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_runtime"
 

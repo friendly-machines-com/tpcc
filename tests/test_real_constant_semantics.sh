@@ -34,7 +34,7 @@ cmp "$tmp/x86_64.cc" "$tmp/aarch64.cc"
 	-Wpedantic \
 	-Irtl \
 	-I"$tmp" \
-	tests/real_constant_semantics_runtime.cc \
+	tests/real_constant_semantics_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/real_constant_semantics"
 

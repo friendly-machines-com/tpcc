@@ -37,7 +37,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/comparechar_builtin_pascal"
 	-Wextra \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/comparechar_builtin_runtime.cc \
+	tests/comparechar_builtin_runtime.cpp \
 	-o "$tmp/comparechar_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/comparechar_builtin"
 

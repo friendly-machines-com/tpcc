@@ -17,7 +17,7 @@ cd "$root"
 	-fsanitize=address,undefined \
 	-fno-sanitize-recover=all \
 	-Irtl \
-	tests/file_lifecycle_runtime.cc \
+	tests/file_lifecycle_runtime.cpp \
 	-o "$tmp/file_lifecycle"
 
 ASAN_OPTIONS=detect_leaks=1 \

@@ -31,7 +31,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/pos_builtin"
 	-Wextra \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/pos_char_runtime.cc \
+	tests/pos_char_runtime.cpp \
 	-o "$tmp/pos_char_runtime"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/pos_char_runtime"
 

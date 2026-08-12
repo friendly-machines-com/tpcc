@@ -21,7 +21,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/copy_builtin_runtime.cc \
+	tests/copy_builtin_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/copy_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/copy_builtin"

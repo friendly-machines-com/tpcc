@@ -16,7 +16,7 @@ cd "$root"
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/chr_builtin_runtime.cc \
+	tests/chr_builtin_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/chr_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/chr_builtin"

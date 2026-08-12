@@ -28,7 +28,7 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/octstr_builtin_pascal"
 	-Wextra \
 	-fsanitize=address,undefined \
 	-Irtl \
-	tests/octstr_builtin_runtime.cc \
+	tests/octstr_builtin_runtime.cpp \
 	-o "$tmp/octstr_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/octstr_builtin"
 

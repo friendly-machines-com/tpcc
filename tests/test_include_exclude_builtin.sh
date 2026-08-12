@@ -27,7 +27,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/include_exclude_builtin_runtime.cc \
+	tests/include_exclude_builtin_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/include_exclude_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/include_exclude_builtin"

@@ -25,7 +25,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/writable_cast_runtime.cc \
+	tests/writable_cast_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/writable_cast"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/writable_cast"

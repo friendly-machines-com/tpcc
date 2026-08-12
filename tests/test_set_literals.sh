@@ -29,7 +29,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/set_literals_runtime.cc \
+	tests/set_literals_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/set_literals"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/set_literals"

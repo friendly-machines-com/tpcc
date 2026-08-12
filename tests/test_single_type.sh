@@ -32,7 +32,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/single_type_runtime.cc \
+	tests/single_type_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/single_type"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/single_type"

@@ -35,7 +35,7 @@ fi
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \
-	tests/properties_runtime.cc \
+	tests/properties_runtime.cpp \
 	"$tmp/system.cc" \
 	-o "$tmp/properties"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/properties"
