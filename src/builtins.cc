@@ -1535,6 +1535,7 @@ static const BuiltinDesc k_builtins[] = {
     {"::u_system::p_findfirst", nullptr},
     {"::u_system::p_findnext", nullptr},
     {"::u_system::p_findclose", nullptr},
+    {"::u_sysutils::p_fileage", nullptr},
     {"::u_system::p_fileexists", nullptr},
     {"::u_system::p_directoryexists", nullptr},
     {"::u_system::p_expandfilename", nullptr},

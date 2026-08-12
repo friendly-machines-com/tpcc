@@ -6950,3 +6950,23 @@ using t_tclass = m_iobject;
 //#define class_instance_new(X) (new X)
 
 } // namespace u_system
+
+namespace u_sysutils {
+
+inline ::u_system::t_longint p_fileage(
+    const ::u_system::t_ansistring& file_name) {
+	const std::string path =
+	    file_name.m_string();
+	struct stat information {};
+	if (path.empty() ||
+	    ::stat(path.c_str(), &information) != 0)
+		return -1;
+	// This is the legacy LongInt FileAge contract, which treats directories
+	// as failure even though stat supplies a meaningful directory timestamp.
+	if (S_ISDIR(information.st_mode))
+		return -1;
+	return static_cast<::u_system::t_longint>(
+	    information.st_mtime);
+}
+
+} // namespace u_sysutils

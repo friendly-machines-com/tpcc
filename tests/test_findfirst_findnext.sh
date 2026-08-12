@@ -10,6 +10,7 @@ printf abc >"$tmp/work/files/alpha1.dat"
 printf 12345 >"$tmp/work/files/alpha2.dat"
 printf secret >"$tmp/work/files/.secret"
 printf readonly >"$tmp/work/files/readonly.dat"
+touch -m -d @123456789 "$tmp/work/files/alpha1.dat"
 chmod 444 "$tmp/work/files/readonly.dat"
 mkfifo "$tmp/work/files/pipe"
 ln -s alpha1.dat "$tmp/work/files/file-link"
@@ -20,6 +21,12 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/findfirst_findnext.cc" \
 	tests/findfirst_findnext.pp
+if ! rg -Fq '::u_sysutils::p_fileage' \
+	"$tmp/findfirst_findnext.cc"
+then
+	echo "SysUtils.FileAge did not use p_fileage" >&2
+	exit 1
+fi
 "${CXX:-g++}" \
 	-std=c++20 \
 	-Wall \

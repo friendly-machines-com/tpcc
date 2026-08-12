@@ -116,6 +116,15 @@ begin
     Halt(86);
   if not SysUtils.FileExists('files/pipe', False) then
     Halt(87);
+  if SysUtils.FileAge('files/alpha1.dat') <> 123456789 then
+    Halt(134);
+  // The legacy LongInt overload follows symlinks, but rejects directories.
+  if SysUtils.FileAge('files/file-link') <> 123456789 then
+    Halt(135);
+  if SysUtils.FileAge('files/subdir') <> -1 then
+    Halt(136);
+  if SysUtils.FileAge('files/missing') <> -1 then
+    Halt(137);
   if not SysUtils.DirectoryExists('files/subdir') then
     Halt(118);
   if not SysUtils.DirectoryExists('files/subdir', False) then
