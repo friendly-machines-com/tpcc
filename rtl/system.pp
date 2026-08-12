@@ -442,6 +442,7 @@ function sizeof(const x): SizeInt; external name '::u_system::p_sizeof';
 // name lookup and shadowing while BuiltinSyntaxKind parses the actual call.
 procedure write; external name '::u_system::p_write';
 procedure writeln; external name '::u_system::p_writeln';
+procedure flush(var output: Text); external name '::u_system::p_flush';
 procedure halt(value: LongInt); overload; noreturn; external name '::u_system::p_halt';
 procedure halt; overload; noreturn; external name '::u_system::p_halt';
 procedure runerror(value: Word); overload; noreturn; external name '::u_system::p_runerror';

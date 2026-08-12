@@ -23,6 +23,7 @@ var
   CheckedWriteFile, UncheckedWriteFile: File;
   AliasCheckedFile, AliasUncheckedFile: File;
   PointerFile: File;
+  CheckedFlushText, UncheckedFlushText: Text;
   CheckedBuffer, UncheckedBuffer: array[0..7] of Byte;
   CheckedCount, UncheckedCount: LongInt;
   CheckedPosition, UncheckedPosition: Int64;
@@ -52,6 +53,7 @@ begin
   System.BlockWrite(CheckedWriteFile, CheckedBuffer, 1, CheckedCount);
   Write('checked-write');
   WriteLn('checked-writeln');
+  System.Flush(CheckedFlushText);
 
   {$I-}
   System.Reset(UncheckedResetFile);
@@ -66,6 +68,7 @@ begin
   System.BlockWrite(UncheckedWriteFile, UncheckedBuffer, 1, UncheckedCount);
   Write('unchecked-write');
   WriteLn('unchecked-writeln');
+  System.Flush(UncheckedFlushText);
 
   // Argument-subtree directives persist afterward, but cannot retroactively
   // change the Reset operation whose identifier has already been consumed.

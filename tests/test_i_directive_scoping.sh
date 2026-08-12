@@ -39,6 +39,8 @@ for expectation in \
 	'::u_system::m_unchecked_write(' \
 	'::u_system::p_writeln(' \
 	'::u_system::m_unchecked_writeln(' \
+	'::u_system::p_flush(p_checkedflushtext' \
+	'::u_system::m_unchecked_flush(p_uncheckedflushtext' \
 	'::u_system::p_reset(p_anchoredcheckedfile' \
 	'::u_system::m_unchecked_reset(p_anchoreduncheckedfile' \
 	'::u_system::m_unchecked_reset(p_aliasuncheckedfile' \

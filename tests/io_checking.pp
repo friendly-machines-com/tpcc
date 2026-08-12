@@ -89,6 +89,8 @@ begin
   CheckStatus(103, 16);
   WriteLn(ClosedText, 'x');
   CheckStatus(103, 17);
+  Flush(ClosedText);
+  CheckStatus(103, 18);
 
   // Every checked entry point raises instead of returning a sentinel.
   {$I+}
@@ -195,6 +197,14 @@ begin
     on E: EInOutError do Remember(E)
   end;
   CheckCaught(103, 56);
+
+  BeginCatch;
+  try
+    Flush(ClosedText)
+  except
+    on E: EInOutError do Remember(E)
+  end;
+  CheckCaught(103, 80);
 
   // Entering checked mode with an old unchecked error raises and consumes
   // that original error before attempting the new operation.

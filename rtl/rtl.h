@@ -4302,6 +4302,34 @@ tpcc_text_stream(t_text& file) {
 	return {file.stream, 0};
 }
 
+inline t_word m_do_flush(t_text& file) {
+	const auto stream =
+	    tpcc_text_stream(file);
+	if (stream.error != 0)
+		return stream.error;
+	try {
+		stream.value->flush();
+	} catch (const std::ios_base::failure&) {
+		return 101;
+	}
+	// ostream reports failures through its state unless the caller enabled
+	// exceptions, so the non-throwing path needs the same Pascal error check.
+	return *stream.value ? 0 : 101;
+}
+
+inline void p_flush(t_text& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_flush(file));
+}
+
+inline void m_unchecked_flush(t_text& file) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_flush(file));
+}
+
 template<typename... Values>
 inline t_word m_do_write(
     std::ostream& out,

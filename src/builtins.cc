@@ -1444,6 +1444,12 @@ static const BuiltinDesc k_builtins[] = {
         .disabled_cxx_name = "::u_system::m_unchecked_writeln",
     },
     {"::u_system::m_unchecked_writeln", nullptr},
+    {
+        .cxx_name = "::u_system::p_flush",
+        .call_site_switch = BuiltinCallSiteSwitch::Io,
+        .disabled_cxx_name = "::u_system::m_unchecked_flush",
+    },
+    {"::u_system::m_unchecked_flush", nullptr},
     {"::u_system::p_setlength", nullptr, {}, BuiltinGenericKind::SequenceResize},
     {"::u_system::p_uniquestring", nullptr},
     {"::u_system::m_new_instance", nullptr},
