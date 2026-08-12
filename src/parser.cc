@@ -1391,6 +1391,15 @@ static Frame* get_type_body_frame(Type* ty) {
 }
 
 void Parser::maybe_parse_statement() {
+	if (input_token == ";") {
+		if (emitter) {
+			emitter->emit_statement(new EmptyStatement());
+		}
+		// The enclosing statement or case sequence owns the `;` operation.
+		// Its missing statement operand therefore emits a node without
+		// consuming the operator.
+		return;
+	}
 	if (peek_keyword("end") || peek_keyword("until") || peek_keyword("except") || peek_keyword("finally")) {
 		return;
 	}
@@ -1532,7 +1541,7 @@ void Parser::maybe_parse_statement() {
 					}
 					push_scope(handler_frame);
 					bare_raise_allowed = true;
-					const bool empty_handler = input_token == ";" || peek_directive("on") || peek_keyword("else") || peek_keyword("end");
+					const bool empty_handler = peek_directive("on") || peek_keyword("else") || peek_keyword("end");
 					if (!empty_handler) {
 						parse_statement();
 					}
@@ -1601,13 +1610,7 @@ void Parser::maybe_parse_statement() {
 		if (emitter) {
 			emitter->emit_if_prologue(condition);
 		}
-		// Match FPC's pstatmnt.if_statement: a token in `endtokens`
-		// means the then branch is absent. Leave the delimiter unconsumed
-		// for the surrounding if, block, repeat, or exception parser.
-		const bool empty_then = input_token == ";" || peek_keyword("end") || peek_keyword("else") || peek_keyword("until") || peek_keyword("except") || peek_keyword("finally");
-		if (!empty_then) {
 			parse_statement();
-		}
 		if (maybe_parse_keyword("else")) {
 			if (emitter) {
 				emitter->emit_if_else();
@@ -5873,6 +5876,17 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 }
 
 void Parser::parse_statement() {
+	if (input_token == ";" || peek_keyword("end") || peek_keyword("else") ||
+	    peek_keyword("until") || peek_keyword("except") ||
+	    peek_keyword("finally")) {
+		// This routine is called where the Pascal grammar requires exactly one
+		// statement. A delimiter in that position denotes an empty statement;
+		// leave it untouched for its owning construct.
+		if (emitter) {
+			emitter->emit_statement(new EmptyStatement());
+		}
+		return;
+	}
 	maybe_parse_statement();
 }
 

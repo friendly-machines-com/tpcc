@@ -15,6 +15,14 @@ void Block::add(Node* stmt) {
 	statements.push_back(stmt);
 }
 
+const char* EmptyStatement::diagnostic_kind() const {
+	return "empty_statement";
+}
+
+void EmptyStatement::print_diagnostic_definition(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << diagnostic_kind();
+}
+
 Symbol::Symbol(std::string text) {
 	this->text = text;
 }

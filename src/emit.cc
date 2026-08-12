@@ -939,7 +939,12 @@ void Emitter::emit_statement(Node* stmt) {
 	if (!active) {
 		return;
 	}
-	if (dynamic_cast<ConstructorFail*>(stmt)) {
+	if (dynamic_cast<EmptyStatement*>(stmt)) {
+		// Use a compound statement rather than dropping the Pascal statement.
+		// Besides being an explicit no-op, `{}` can follow a C++ label even
+		// immediately before the containing block's closing brace.
+		fprintf(active, "\t{}\n");
+	} else if (dynamic_cast<ConstructorFail*>(stmt)) {
 		fprintf(active, "\tthrow ::u_system::tpcc_constructor_fail{};\n");
 	} else if (auto raise = dynamic_cast<Raise*>(stmt)) {
 		if (!raise->object) {

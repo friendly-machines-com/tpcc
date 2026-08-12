@@ -10,10 +10,19 @@ cd "$root"
 
 ./mp -Furtl -o"$tmp/empty_statement.cc" tests/empty_statement.pp
 
+if ! rg -Uq 'pas_label_emptyatend:\n[[:space:]]*\{\}' \
+	"$tmp/empty_statement.cc"
+then
+	echo "empty labeled statement was not preserved in C++20" >&2
+	exit 1
+fi
+
 "${CXX:-g++}" \
 	-std=c++20 \
 	-Wall \
 	-Wextra \
+	-Wpedantic \
+	-pedantic-errors \
 	-fsanitize=address,undefined \
 	-Irtl \
 	-I"$tmp" \

@@ -56,6 +56,14 @@ class Block : public Node {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Pascal's empty statement is a real statement, not merely an absent CST
+ * node. Its backend representation must remain labelable in C++20. */
+class EmptyStatement : public Node {
+      public:
+	const char* diagnostic_kind() const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 class Symbol : public Node {
       private:
 	std::string text;
