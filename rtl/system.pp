@@ -546,7 +546,8 @@ procedure RmDir(const path: AnsiString); overload; external name '::u_system::p_
 procedure assign(out f: File; const name: ShortString); overload; external name '::u_system::p_assign';
 procedure assign(out f: Text; const name: ShortString); overload; external name '::u_system::p_assign';
 procedure assign(out f: Text; const name: AnsiString); overload; external name '::u_system::p_assign';
-procedure rewrite(var f: File; recordsize: LongInt = 128); external name '::u_system::p_rewrite';
+procedure rewrite(var f: File; recordsize: LongInt = 128); overload; external name '::u_system::p_rewrite';
+procedure rewrite(var f: Text); overload; external name '::u_system::p_rewrite';
 procedure reset(var f: File; recordsize: LongInt = 128); overload; external name '::u_system::p_reset';
 procedure reset(var f: Text); overload; external name '::u_system::p_reset';
 procedure close(var f: File); overload; external name '::u_system::p_close';

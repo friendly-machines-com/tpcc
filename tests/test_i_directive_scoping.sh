@@ -18,7 +18,9 @@ for expectation in \
 	'::u_system::p_reset(p_checkedresetfile' \
 	'::u_system::m_unchecked_reset(p_uncheckedresetfile' \
 	'::u_system::p_rewrite(p_checkedrewritefile' \
+	'::u_system::p_rewrite(p_checkedrewritetext' \
 	'::u_system::m_unchecked_rewrite(p_uncheckedrewritefile' \
+	'::u_system::m_unchecked_rewrite(p_uncheckedrewritetext' \
 	'::u_system::p_close(p_checkedclosefile' \
 	'::u_system::m_unchecked_close(p_uncheckedclosefile' \
 	'::u_system::p_seek(p_checkedseekfile' \

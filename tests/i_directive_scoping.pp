@@ -29,6 +29,7 @@ var
   CheckedPosition, UncheckedPosition: Int64;
   CheckedSize, UncheckedSize: Int64;
   CheckedAtEnd, UncheckedAtEnd: Boolean;
+  CheckedRewriteText, UncheckedRewriteText: Text;
   Marker: Integer;
   ResetProc: TResetProc;
 
@@ -43,6 +44,7 @@ begin
   {$I+}
   System.Reset(CheckedResetFile);
   System.Rewrite(CheckedRewriteFile);
+  System.Rewrite(CheckedRewriteText);
   System.Close(CheckedCloseFile);
   System.Seek(CheckedSeekFile, 0);
   CheckedPosition := System.FilePos(CheckedPositionFile);
@@ -58,6 +60,7 @@ begin
   {$I-}
   System.Reset(UncheckedResetFile);
   System.Rewrite(UncheckedRewriteFile);
+  System.Rewrite(UncheckedRewriteText);
   System.Close(UncheckedCloseFile);
   System.Seek(UncheckedSeekFile, 0);
   UncheckedPosition := System.FilePos(UncheckedPositionFile);

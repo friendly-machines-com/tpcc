@@ -33,4 +33,25 @@ cd "$root"
 ASAN_OPTIONS=detect_leaks=1 \
 	"$tmp/named_text_input" "$tmp/input.txt"
 
-echo "named Text input tests passed"
+./mp -Furtl -o"$tmp/named_text_output.cc" \
+	tests/named_text_output.pp
+
+"${CXX:-g++}" \
+	-std=c++20 \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-fsanitize=address,undefined \
+	-fno-sanitize-recover=all \
+	-Irtl \
+	-I"$tmp" \
+	"$tmp/named_text_output.cc" \
+	"$tmp/system.cc" \
+	-o "$tmp/named_text_output"
+
+ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/named_text_output" "$tmp/output.txt"
+printf 'kept' >"$tmp/expected-output.txt"
+cmp "$tmp/expected-output.txt" "$tmp/output.txt"
+
+echo "named Text input/output tests passed"

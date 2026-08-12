@@ -3870,6 +3870,43 @@ inline void m_unchecked_rewrite(
 	    m_do_rewrite(file, record_size));
 }
 
+inline t_word m_do_rewrite(t_text& file) {
+	if (!file.state || file.state->standard_stream)
+		return 102;
+	// Rewrite on an already-open Text first closes that association and then
+	// creates/truncates the same named file. Report a close failure before
+	// attempting a second host open so Pascal retains the first I/O error.
+	if (file.state->handle) {
+		const t_word close_error =
+		    m_do_close_text_handle(
+			*file.state);
+		if (close_error != 0)
+			return close_error;
+	}
+	errno = 0;
+	file.state->handle =
+	    std::fopen(
+		file.state->name.c_str(), "wb");
+	if (!file.state->handle)
+		return m_file_error_from_errno(
+		    errno, 101);
+	file.state->mode = text_file_mode::Output;
+	return 0;
+}
+
+inline void p_rewrite(t_text& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(
+	    m_do_rewrite(file));
+}
+
+inline void m_unchecked_rewrite(t_text& file) {
+	if (m_inoutres != 0)
+		return;
+	m_finish_unchecked_io(
+	    m_do_rewrite(file));
+}
+
 inline t_word m_do_reset(
     t_file& file, t_longint record_size) {
 	const t_word prepare_error =
