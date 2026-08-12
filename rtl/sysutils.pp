@@ -63,6 +63,7 @@ const
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_sysutils::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
 function StrToInt(const S: String): LongInt;
+function StrPas(Str: PChar): AnsiString;
 function IncludeTrailingPathDelimiter(const Path: AnsiString): AnsiString;
 function ExtractFileName(const FileName: AnsiString): AnsiString;
 function ExtractFilePath(const FileName: AnsiString): AnsiString;
@@ -94,6 +95,12 @@ begin
   Val(S, Result, Error);
   if Error <> 0 then
     raise EConvertError.Create('Invalid integer')
+end;
+
+function StrPas(Str: PChar): AnsiString;
+begin
+  { System's PChar-to-AnsiString conversion owns the NUL scan and nil handling. }
+  Result := Str
 end;
 
 function ExecuteProcessCommandLine(const Path,
