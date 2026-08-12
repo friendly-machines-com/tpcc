@@ -62,6 +62,9 @@ const
 
 function Supports(a: TObject; b: TClass): Boolean; external name '::u_sysutils::p_supports';
 function CompareText(const S1: AnsiString; const S2: AnsiString): Integer;
+function IntToStr(Value: LongInt): AnsiString; overload;
+function IntToStr(Value: Int64): AnsiString; overload;
+function IntToStr(Value: QWord): AnsiString; overload;
 function StrToInt(const S: String): LongInt;
 function StrPas(Str: PChar): AnsiString;
 function IncludeTrailingPathDelimiter(const Path: AnsiString): AnsiString;
@@ -87,6 +90,22 @@ function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_sysutils::p
 procedure FindClose(var F: TSearchRec); external name '::u_sysutils::p_findclose';
 
 implementation
+
+function IntToStr(Value: LongInt): AnsiString;
+begin
+  // System.Str remains the single integer formatting implementation.
+  System.Str(Value, Result)
+end;
+
+function IntToStr(Value: Int64): AnsiString;
+begin
+  System.Str(Value, Result)
+end;
+
+function IntToStr(Value: QWord): AnsiString;
+begin
+  System.Str(Value, Result)
+end;
 
 function StrToInt(const S: String): LongInt;
 var
