@@ -2896,17 +2896,12 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			if (family == StrValueFamily::Unsupported) {
 				raise_type_kind_mismatch("Str value", "integer or predefined real", item.value ? item.value->ty : nullptr);
 			}
-			if (item.precision) {
-				// TODO: add the real precision formatter as a separate
-				// lowering family rather than teaching integer p_str an
-				// accidental interpretation of the second colon.
-				raise_parse_error("Str real precision formatting is not implemented");
-			}
-			if (item.width && family == StrValueFamily::ExistingReal) {
-				// Existing unqualified Extended Str remains supported. Its
-				// formatted-width family is deliberately left as an explicit
-				// extension point with Real/Currency/Comp formatting.
-				raise_parse_error("Str real width formatting is not implemented");
+			if (item.precision &&
+			    family != StrValueFamily::ExistingReal) {
+				// Pascal's second colon is the fractional-digit count of a
+				// real value, not a generic third formatting operand.
+				raise_parse_error(
+				    "Str precision requires a predefined real value");
 			}
 
 			Node* result = new StrCall(item, destination);

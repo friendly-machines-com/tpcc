@@ -1237,13 +1237,6 @@ void Emitter::emit_statement(Node* stmt) {
 		}
 		fprintf(active, ");\n");
 	} else if (auto str = dynamic_cast<StrCall*>(stmt)) {
-		if (str->formatted.precision) {
-			// The parser currently rejects this branch. Keeping the CST edge
-			// and an explicit backend guard makes the future real formatter a
-			// new lowering contract rather than silently accepting an
-			// unsupported source family.
-			unhandled_node("Str precision lowering is not implemented", str);
-		}
 		fprintf(active, "\t::u_system::p_str(");
 		emit_formatted_value(str->formatted);
 		fprintf(active, ", ");
