@@ -907,6 +907,15 @@ struct t_text {
 static_assert(sizeof(t_text) == sizeof(void*));
 static_assert(alignof(t_text) == alignof(void*));
 
+// System.StdOut and System.StdErr are Pascal variables, rather than aliases
+// expanded by the compiler. Their stream pointers are non-owning because the
+// C++ standard streams outlive every Pascal unit and must never be closed by
+// Text cleanup. std::cerr intentionally retains its normal unitbuf behavior:
+// bootstrap-compiler diagnostics should become visible without requiring a
+// separately implemented Pascal buffering layer.
+inline t_text p_stdout{&std::cout};
+inline t_text p_stderr{&std::cerr};
+
 // Text, untyped binary files, and typed binary files are incompatible Pascal
 // types even though all three currently carry one runtime-state pointer.
 // Binary state is deliberately opaque here: file operations own its concrete

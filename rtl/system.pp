@@ -84,6 +84,8 @@ const
   PathSeparator: Char = ':';
 
 var
+  StdOut: Text external name '::u_system::p_stdout';
+  StdErr: Text external name '::u_system::p_stderr';
   // RunError stores its error number in this RTL variable before terminating.
   ErrorCode: Word external name '::u_system::p_errorcode';
   // System reports language runtime failures without depending on SysUtils.

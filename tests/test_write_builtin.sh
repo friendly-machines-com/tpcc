@@ -21,6 +21,14 @@ if ! rg -Fq '::u_system::tpcc_make_formatted_value(' "$tmp/write_builtin.cc"; th
 	echo "formatted output arguments lost their RTL descriptors" >&2
 	exit 1
 fi
+if ! rg -Fq '::u_system::p_stdout' "$tmp/write_builtin.cc"; then
+	echo "System.StdOut did not bind to the RTL standard-output Text" >&2
+	exit 1
+fi
+if ! rg -Fq '::u_system::p_stderr' "$tmp/write_builtin.cc"; then
+	echo "System.StdErr did not bind to the RTL standard-error Text" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \

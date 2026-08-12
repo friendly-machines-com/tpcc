@@ -6,19 +6,25 @@
 
 int main() {
 	std::ostringstream standard_output;
+	std::ostringstream standard_error;
 	std::ostringstream file_output;
 	std::streambuf* old_output =
 	    std::cout.rdbuf(standard_output.rdbuf());
+	std::streambuf* old_error =
+	    std::cerr.rdbuf(standard_error.rdbuf());
 	p_destination.stream = &file_output;
 
-	int result = tpcc_pascal_main();
+	int result = tpcc_pascal_main(0, nullptr);
 	std::cout.rdbuf(old_output);
+	std::cerr.rdbuf(old_error);
 
 	if (result != 0)
 		return 1;
 	if (standard_output.str() !=
-	    "A12 Z!\n\nTRUE\n  12\n")
+	    "A12 Z!\n\nTRUE\n  12\nexplicit stdout")
 		return 2;
+	if (standard_error.str() != "explicit stderr\n")
+		return 6;
 	if (file_output.str() != "file=-7:2.50\n")
 		return 3;
 

@@ -14,6 +14,8 @@ begin
   Writeln;
   Writeln(True);
   Writeln(12:4);
+  Write(stdout, 'explicit stdout');
+  Writeln(stderr, 'explicit stderr');
 
   Write(Destination, 'file=', -7);
   Writeln(Destination, ':', Value:0:2)
