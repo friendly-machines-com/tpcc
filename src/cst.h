@@ -506,6 +506,10 @@ class ConstantDecl : public Node {
 struct StorageSlot : public Node {
 	enum class Kind {
 		Ordinary,
+		// An omitted-type `out` formal is emitted as tpcc_storage_ref rather
+		// than as an object of unknown_type(). Retain that origin because its
+		// Pascal address denotes the caller's bytes, not the C++ descriptor.
+		OmittedOutFormal,
 		AggregateMember,
 		// Storage owned by the aggregate rather than by each instance.
 		// Covers both `class var` and initialized storage declared in an

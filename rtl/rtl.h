@@ -1041,6 +1041,18 @@ inline tpcc_storage_ref tpcc_make_storage_ref(tpcc_storage_ref value) {
 	return value;
 }
 
+template<typename Byte = t_byte>
+inline Byte* tpcc_omitted_out_pbyte(tpcc_storage_ref value) {
+	// C++ permits arbitrary object-representation access through unsigned
+	// char, but std::uint8_t is not required by C++20 to be that type. Keep the
+	// representation assumption at this std::byte* -> Pascal Byte* boundary
+	// instead of silently inheriting one from a particular C++ implementation.
+	static_assert(
+	    std::is_same_v<Byte, unsigned char>,
+	    "Pascal PByte access to untyped storage requires Byte to be unsigned char");
+	return reinterpret_cast<Byte*>(value.data);
+}
+
 // Dereferencing Pascal's untyped Pointer does not produce a C++ value: void
 // has no object representation that can be named by `*pointer`. It produces
 // an unbounded raw storage place, which can be consumed by Pascal's omitted-

@@ -224,6 +224,9 @@ test-metaclass-construction: mp
 test-untyped-pointer-dereference: mp
 	sh tests/test_untyped_pointer_dereference.sh
 
+test-omitted-out-pbyte: mp
+	sh tests/test_omitted_out_pbyte.sh
+
 test-ansistring-pointer-cast: mp
 	sh tests/test_ansistring_pointer_cast.sh
 
@@ -401,6 +404,7 @@ test-real-constant-semantics: mp
 test: test-predefined-explicit-conversions test-class-pointer-conversion test-custom-in-operator test-emission-semantic-boundaries test-pointer-arithmetic test-set-arithmetic test-diagnostic-context test-frame-intrinsics test-binding-lookup test-global-overload-scope
 test: test-function-result-designator
 test: test-file-error-state
+test: test-omitted-out-pbyte
 test: test-strtoint
 test: test-inttostr
 test: test-strpas
@@ -413,6 +417,7 @@ test: test-packed-record test-ifopt test-directive-push-pop test-h-directive-str
 .PHONY: test-strpas
 .PHONY: test-delete-file
 .PHONY: test-file-error-state
+.PHONY: test-omitted-out-pbyte
 .PHONY: test-predefined-explicit-conversions
 .PHONY: test-class-pointer-conversion
 .PHONY: test-custom-in-operator

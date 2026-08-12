@@ -38,6 +38,12 @@ static Type* integer_literal_natural_type(const Integer* literal);
 static Integer* untyped_integer_constant(Node* expression);
 static bool is_ordinal_intrinsic_argument(Type* ty);
 static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge);
+static bool is_address_of_omitted_out_formal(Node* value) {
+	auto address = dynamic_cast<AddrOf*>(value);
+	auto slot = address ? dynamic_cast<StorageSlot*>(address->a) : nullptr;
+	return slot && slot->kind == StorageSlot::Kind::OmittedOutFormal &&
+	       slot->ty == unknown_type();
+}
 enum class BracketIntegerPreference {
 	Array,
 	Set,
@@ -3053,6 +3059,12 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 					}
 					return new ExplicitCast(value, target_ty);
 				}
+			} else if (is_address_of_omitted_out_formal(value)) {
+				// This source is a storage-view address rather than an ordinary
+				// C++ object pointer. Explicit reinterpretation would bypass the
+				// provenance-sensitive assignment rule and could make emission
+				// address the descriptor instead of the caller's storage.
+				raise_type_mismatch("explicit conversion of an omitted-type out formal address is unsupported", target_ty, value->ty);
 			} else if (target_ty->predefined_explicit_conversion_from(value->ty)) {
 				return new ExplicitCast(value, target_ty);
 			} else if (Node* converted = match_explicit_conversion(value, target_ty, true)) {
@@ -7974,7 +7986,12 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	}
 	auto rty = static_cast<RoutineType*>(target->ty);
 	for (auto& p : rty->formals) {
-		if (!body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty), p.ty)) {
+		StorageSlot::Kind slot_kind =
+		    p.ty == unknown_type() && p.mode == ParamMode::Out
+		        ? StorageSlot::Kind::OmittedOutFormal
+		        : StorageSlot::Kind::Ordinary;
+		if (!body_frame->register_variable(
+		        p.pas_name, new StorageSlot(p.cxx_name, p.ty, slot_kind), p.ty)) {
 			raise_parse_error("duplicate parameter identifier: " + p.pas_name);
 		}
 	}
@@ -9010,6 +9027,18 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		auto value = new NilLiteral();
 		value->ty = target;
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, value};
+	}
+
+	auto target_pointer = dynamic_cast<PointerType*>(target);
+	if (target_pointer && target_pointer->item_type == byte_type() &&
+	    is_address_of_omitted_out_formal(actual)) {
+		// The source Type alone is merely ^unknown and does not retain whether
+		// its address denotes a storage-view descriptor or caller storage.
+		// Therefore this relation must inspect the expression provenance rather
+		// than become a broad PointerType edge. Keeping it in the ordinary
+		// matcher gives assignments and by-value/const calls the same rule.
+		return ArgumentMatch{{MatchRank::Tier::Convert, 20},
+		                     new Cast(actual, target)};
 	}
 
 	if (auto reference = dynamic_cast<RoutineRef*>(actual)) {
