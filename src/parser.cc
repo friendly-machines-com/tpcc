@@ -4070,12 +4070,28 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives 
 	// "common" type first changes which overload is exact and makes operator
 	// calls obey a different language from ordinary calls.
 	std::vector<Node*> args{a, b};
+	const bool integer_operands =
+	    a && b && is_integer_semantic_type(a->ty) &&
+	    is_integer_semantic_type(b->ty);
 	OverloadResolutionPolicy policy = OverloadResolutionPolicy::Ordinary;
 	if (id == "+" || id == "-") {
-		policy = mutation_step ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep : OverloadResolutionPolicy::CommonBinaryPointerLeft;
+		policy = integer_operands
+		             ? OverloadResolutionPolicy::CommonIntegerBinary
+		             : mutation_step
+		                   ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep
+		                   : OverloadResolutionPolicy::CommonBinaryPointerLeft;
 	} else if (id == "div" || id == "mod" || id == "and" || id == "or" || id == "xor") {
 		policy = OverloadResolutionPolicy::CommonIntegerBinary;
-	} else if (id == "*" || id == "/" || id == "><") {
+	} else if (id == "*") {
+		policy = integer_operands
+		             ? OverloadResolutionPolicy::CommonIntegerBinary
+		             : OverloadResolutionPolicy::CommonBinary;
+	} else if (id == "**" && integer_operands) {
+		// Integer power deliberately has heterogeneous (Base, Integer)
+		// declarations, so it restricts the domain family without requiring
+		// homogeneous formals.
+		policy = OverloadResolutionPolicy::IntegerBinary;
+	} else if (id == "/" || id == "><") {
 		policy = OverloadResolutionPolicy::CommonBinary;
 	}
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), nullptr, policy);
@@ -4130,7 +4146,12 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirective
 	// exactly as for a named call; the selected formal types are applied only
 	// after overload resolution.
 	std::vector<Node*> args{a, b};
-	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), nullptr, OverloadResolutionPolicy::CommonBinary);
+	const OverloadResolutionPolicy policy =
+	    a && b && is_integer_semantic_type(a->ty) &&
+	            is_integer_semantic_type(b->ty)
+	        ? OverloadResolutionPolicy::CommonIntegerBinary
+	        : OverloadResolutionPolicy::CommonBinary;
+	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), nullptr, policy);
 	Node* call = make_call(fc, std::move(args), directives);
 	/*	if (call->ty->return_type != boolean_type()) {
 	                raise_type_mismatch("custom comparison operator '" + id + "' has wrong return type",
@@ -8566,6 +8587,12 @@ static Type* overload_rank_type(Type* type) {
 	return type;
 }
 
+static int integer_domain_rank(Type* type) {
+	type = distinct_storage_type(overload_rank_type(type));
+	auto intrinsic = dynamic_cast<IntrinsicType*>(type);
+	return intrinsic && intrinsic->rank ? *intrinsic->rank : -1;
+}
+
 static Integer* untyped_integer_constant(Node* expression) {
 	if (!expression || expression->ty != &untyped_integer_type()) {
 		return nullptr;
@@ -10021,6 +10048,10 @@ static bool candidate_admitted_in_phase(Callable* callable, const CallableMatch&
 	Type* first = overload_rank_type(match.formal_types[0]);
 	Type* second = overload_rank_type(match.formal_types[1]);
 	const bool homogeneous = first && first == second;
+	if (policy == OverloadResolutionPolicy::IntegerBinary) {
+		return is_integer_semantic_type(first) &&
+		       is_integer_semantic_type(second);
+	}
 	if (policy == OverloadResolutionPolicy::CommonIntegerBinary) {
 		return homogeneous && is_integer_semantic_type(first);
 	}
@@ -10083,6 +10114,7 @@ static std::vector<size_t> overload_resolution_cohort(
 		// carrier even though an operator needs one domain for both.
 		bool have_lossless_common_domain = false;
 		int best_lossy_real_domain = -1;
+		int best_lossy_integer_domain = -1;
 		if (common_domain_policy(policy)) {
 			for (size_t i = 0; i < viable.size(); ++i) {
 				const CallableMatch& match = viable[i].second;
@@ -10098,6 +10130,11 @@ static std::vector<size_t> overload_resolution_cohort(
 					have_lossless_common_domain = true;
 				} else {
 					best_lossy_real_domain = std::max(best_lossy_real_domain, real_semantic_rank(common));
+					if (policy == OverloadResolutionPolicy::CommonIntegerBinary) {
+						best_lossy_integer_domain =
+						    std::max(best_lossy_integer_domain,
+						             integer_domain_rank(common));
+					}
 				}
 			}
 		}
@@ -10111,6 +10148,18 @@ static std::vector<size_t> overload_resolution_cohort(
 						continue;
 					}
 					if (!have_lossless_common_domain && best_lossy_real_domain >= 0 && loses_information && real_semantic_rank(common) != best_lossy_real_domain) {
+						continue;
+					}
+					if (!have_lossless_common_domain &&
+					    best_lossy_integer_domain >= 0 &&
+					    loses_information &&
+					    integer_domain_rank(common) !=
+					        best_lossy_integer_domain) {
+						// The predefined integer carrier ranks form the
+						// language's extensible fallback order when no
+						// carrier contains both complete operand domains.
+						// New predefined carriers participate through
+						// their intrinsic rank, without named-type cases.
 						continue;
 					}
 					if (have_lossless_common_domain && !loses_information) {

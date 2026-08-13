@@ -24,16 +24,15 @@ tpcc_build "$tmp/typed_integer_constant_conversion" \
 tpcc_run \
 	"$tmp/typed_integer_constant_conversion"
 
-if tpcc_translate \
-	-o"$tmp/nonconstant.cc" \
-	tests/typed_integer_nonconstant_common_domain.pp \
-	>"$tmp/stdout" 2>"$tmp/stderr"
-then
-	echo "accepted incomparable runtime Int64/QWord division domains" >&2
-	exit 1
-fi
+tpcc_translate \
+	-o"$tmp/integer_operator_domain.cc" \
+	tests/integer_operator_domain.pp
 
-grep -Fq "ambiguous overload for 'uncheckedintdivide'" "$tmp/stderr"
-grep -Fq 'conflicting argument preferences:' "$tmp/stderr"
+tpcc_build "$tmp/integer_operator_domain" \
+	"$tmp/integer_operator_domain.cc" \
+	"$tmp/system.cc"
+
+tpcc_run \
+	"$tmp/integer_operator_domain"
 
 echo "typed integer constant conversion tests passed"

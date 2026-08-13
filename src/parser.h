@@ -133,11 +133,14 @@ enum class MatchFailure {
 /** Candidate-shape restrictions applied by the shared callable resolver.
  * Ordinary calls allow each formal coordinate to choose its own destination.
  * Common binary operators require one formal operand type once conversion is
- * needed; integer-only families additionally constrain that common type, and
- * pointer +/- offset is the agreed asymmetric exception. */
+ * needed. IntegerBinary restricts both formal domains to integers while
+ * retaining heterogeneous declarations such as integer exponentiation;
+ * CommonIntegerBinary additionally requires one common integer type.
+ * Pointer +/- offset is the agreed asymmetric exception. */
 enum class OverloadResolutionPolicy {
 	Ordinary,
 	CommonBinary,
+	IntegerBinary,
 	CommonIntegerBinary,
 	CommonBinaryPointerLeft,
 	CommonBinaryPointerLeftOrEnumStep,
