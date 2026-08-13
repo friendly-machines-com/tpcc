@@ -409,8 +409,10 @@ test-implicit-real-narrowing: mp
 
 test-real-constant-semantics: mp
 	sh tests/test_real_constant_semantics.sh
+test-absolute-alias: mp
+	sh tests/test_absolute_alias.sh
 
-test: test-predefined-explicit-conversions test-class-pointer-conversion test-custom-in-operator test-emission-semantic-boundaries test-pointer-arithmetic test-set-arithmetic test-diagnostic-context test-frame-intrinsics test-binding-lookup test-global-overload-scope
+test: test-predefined-explicit-conversions test-class-pointer-conversion test-custom-in-operator test-emission-semantic-boundaries test-pointer-arithmetic test-set-arithmetic test-diagnostic-context test-frame-intrinsics test-binding-lookup test-global-overload-scope test-absolute-alias
 test: test-function-result-designator
 test: test-file-error-state
 test: test-omitted-out-pbyte

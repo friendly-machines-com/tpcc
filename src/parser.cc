@@ -7234,6 +7234,43 @@ void Parser::maybe_parse_type_block(bool delphi_auto_end) {
 	}
 }
 
+StorageSlot* Parser::resolve_absolute_target(const std::string& target_name, Type* declared_type) {
+	if (!current_routine) {
+		raise_parse_error("'absolute' is only valid inside a procedure or function body");
+	}
+	Node* binding = current_declaration_frame()->lookup_value(target_name);
+	if (!binding) {
+		raise_parse_error("'absolute' target '" + target_name + "' is not visible in this scope");
+	}
+	auto target_slot = dynamic_cast<StorageSlot*>(binding);
+	if (!target_slot) {
+		raise_parse_error("'absolute' target '" + target_name + "' is not a variable");
+	}
+	const auto& formals = current_routine->ty->formals;
+	auto found = std::find_if(formals.begin(), formals.end(),
+	                          [&](const Parameter& p) { return p.pas_name == target_name; });
+	if (found == formals.end()) {
+		raise_parse_error("'absolute' target '" + target_name + "' is not a parameter of the enclosing routine");
+	}
+	if (found->mode != ParamMode::Value) {
+		raise_parse_error("'absolute' target '" + target_name + "' must be a by-value parameter");
+	}
+	auto is_pointer_family = [](Type* t) {
+		return dynamic_cast<PointerType*>(t) ||
+		       dynamic_cast<ClassType*>(t);
+	};
+	Type* target_type = found->ty;
+	if (!is_pointer_family(target_type) || !is_pointer_family(declared_type)) {
+		raise_parse_error("'absolute' is limited to pointer-or-class types on both sides");
+	}
+	auto target_layout = type_layout(false, target_type);
+	auto declared_layout = type_layout(false, declared_type);
+	if (!target_layout || !declared_layout || target_layout->size != declared_layout->size) {
+		raise_parse_error("'absolute' requires both types to have the same storage size");
+	}
+	return target_slot;
+}
+
 void Parser::parse_var_block() {
 	parse_keyword("var");
 	// Register each var directly into the enclosing declaration scope
@@ -7257,7 +7294,17 @@ void Parser::parse_var_block() {
 		parse_colon();
 		auto ty = parse_type_expression(false);
 		std::optional<std::string> external_cxx_name;
-		if (maybe_parse_directive("external")) {
+		StorageSlot* absolute_target_slot = nullptr;
+		if (maybe_parse_keyword("absolute")) {
+			if (names.size() != 1) {
+				raise_parse_error("an absolute variable declaration must have exactly one name");
+			}
+			if (external_cxx_name) {
+				raise_parse_error("an absolute variable declaration cannot also be external");
+			}
+			auto target_name = parse_identifier();
+			absolute_target_slot = resolve_absolute_target(target_name, ty);
+		} else if (maybe_parse_directive("external")) {
 			if (names.size() != 1) {
 				raise_parse_error("an external variable declaration must have exactly one name");
 			}
@@ -7265,7 +7312,7 @@ void Parser::parse_var_block() {
 			external_cxx_name = parse_string_literal();
 		}
 		Node* initializer = nullptr;
-		if (maybe_parse_equal()) {
+		if (!absolute_target_slot && maybe_parse_equal()) {
 			if (external_cxx_name) {
 				raise_parse_error("an external variable cannot have an initializer");
 			}
@@ -7282,11 +7329,18 @@ void Parser::parse_var_block() {
 			if (!external_cxx_name) {
 				slot->owning_unit = declaration_unit(scope);
 			}
+			if (absolute_target_slot) {
+				slot->absolute_target = absolute_target_slot;
+			}
 			if (!scope->register_variable(name, slot, ty)) {
 				raise_parse_error("duplicate identifier: " + name);
 			}
 			if (emitter && !external_cxx_name) {
-				emitter->emit_var_decl(slot->cxx_name, ty, initializer);
+				if (absolute_target_slot) {
+					emitter->emit_absolute_var_decl(slot->cxx_name, ty, absolute_target_slot->cxx_name);
+				} else {
+					emitter->emit_var_decl(slot->cxx_name, ty, initializer);
+				}
 			}
 		}
 		parse_semicolon();

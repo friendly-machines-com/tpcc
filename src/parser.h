@@ -447,6 +447,7 @@ class Parser {
 	void parse_label_block();
 	void parse_type_block(bool delphi_auto_end);
 	void parse_var_block();
+	StorageSlot* resolve_absolute_target(const std::string& target_name, Type* declared_type);
 	/** Parse declarations into the current declaration frame. */
 	void parse_decl_blocks(bool is_decl_only);
 	void validate_class_forwards(Frame* frame);

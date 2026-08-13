@@ -504,6 +504,29 @@ void Emitter::emit_var_decl(std::string cxx_name, Type* ty, Node* initializer) {
 	fprintf(active, ";\n");
 }
 
+void Emitter::emit_absolute_var_decl(std::string cxx_name, Type* ty, std::string target_cxx_name) {
+	if (!active) {
+		return;
+	}
+	emit_type_dependencies(ty);
+	// True storage alias: bind a reference of the new type to the target's
+	// bytes via reinterpret_cast. Required because Pascal `absolute` shares
+	// storage, so writes through either name must be visible through the
+	// other. The cast is representation-preserving (both sides are
+	// pointer-width).
+	//
+	// Accessing the resulting reference is a strict-aliasing violation under
+	// ISO C++ unless both types are compatible (or char/unsigned char/std::byte).
+	// Pascal's `absolute` deliberately reinterprets storage across unrelated
+	// pointer/class types, so the emitted code requires compiling with
+	// -fno-strict-aliasing.
+	fprintf(active, "[[maybe_unused]] ");
+	emit_type_ref(ty);
+	fprintf(active, "& %s = reinterpret_cast<", cxx_name.c_str());
+	emit_type_ref(ty);
+	fprintf(active, "&>(%s);\n", target_cxx_name.c_str());
+}
+
 void Emitter::emit_initialized_storage_decl(std::string cxx_name, Type* ty, Node* initializer, bool routine_local) {
 	if (!active) {
 		return;

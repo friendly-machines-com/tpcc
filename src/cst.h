@@ -534,6 +534,11 @@ struct StorageSlot : public Node {
 	// initializers stay in the semantic graph until the enclosing type block
 	// is normalized and are emitted with that aggregate, never during parse.
 	Node* initializer = nullptr;
+	// Non-null when this slot is declared `absolute <target>`: storage is a
+	// true alias of target's bytes, viewed through this slot's type. Limited
+	// to by-value pointer-or-class parameters of the enclosing routine, with
+	// a pointer-width new type.
+	StorageSlot* absolute_target = nullptr;
 	StorageSlot(std::string cxx_name, Type* ty, Kind kind = Kind::Ordinary, Type* owner_type = nullptr);
 	const char* diagnostic_kind() const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
