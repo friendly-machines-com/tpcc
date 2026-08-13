@@ -6,23 +6,23 @@ set -eu
 
 tpcc_translate -o"$tmp/comparechar_builtin.cc" tests/comparechar_builtin.pp
 
-if ! rg -q '::u_system::p_comparechar' "$tmp/comparechar_builtin.cc"; then
+if ! grep -Eq '::u_system::p_comparechar' "$tmp/comparechar_builtin.cc"; then
 	echo "CompareChar did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q '::u_system::p_comparebyte' "$tmp/comparechar_builtin.cc"; then
+if ! grep -Eq '::u_system::p_comparebyte' "$tmp/comparechar_builtin.cc"; then
 	echo "CompareByte did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q '::u_system::p_indexbyte' "$tmp/comparechar_builtin.cc"; then
+if ! grep -Eq '::u_system::p_indexbyte' "$tmp/comparechar_builtin.cc"; then
 	echo "IndexByte did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q '::u_system::p_indexword' "$tmp/comparechar_builtin.cc"; then
+if ! grep -Eq '::u_system::p_indexword' "$tmp/comparechar_builtin.cc"; then
 	echo "IndexWord did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q '::u_system::p_compareword' "$tmp/comparechar_builtin.cc"; then
+if ! grep -Eq '::u_system::p_compareword' "$tmp/comparechar_builtin.cc"; then
 	echo "CompareWord did not lower through the RTL" >&2
 	exit 1
 fi

@@ -7,20 +7,20 @@ set -eu
 tpcc_translate -o"$tmp/abstract_methods.cc" \
 	tests/abstract_methods.pp
 
-if rg -Fq 'p_missing() = 0' \
+if grep -Fq 'p_missing() = 0' \
 	"$tmp/abstract_methods.cc"
 then
 	echo "class abstract method was still emitted as pure virtual" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::m_runtime_error(211);' \
 	"$tmp/abstract_methods.cc"
 then
 	echo "class abstract method did not receive the runtime-error stub" >&2
 	exit 1
 fi
-if ! rg -Fq 'virtual void p_interfacemethod() = 0;' \
+if ! grep -Fq 'virtual void p_interfacemethod() = 0;' \
 	"$tmp/abstract_methods.cc"
 then
 	echo "interface method stopped being pure virtual" >&2
@@ -70,7 +70,7 @@ do
 		exit 1
 	fi
 	expected_error=$(sed -n '1p' "$base.error")
-	if ! rg -Fq -- "$expected_error" "$tmp/stderr"
+	if ! grep -Fq -- "$expected_error" "$tmp/stderr"
 	then
 		echo "wrong abstract-method diagnostic; expected: $expected_error" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2

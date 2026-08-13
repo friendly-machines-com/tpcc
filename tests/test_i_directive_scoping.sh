@@ -46,7 +46,7 @@ for expectation in \
 	'p_resetproc = &::u_system::p_reset' \
 	'p_defaultiison'
 do
-	if ! rg -Fq "$expectation" "$generated"
+	if ! grep -Fq "$expectation" "$generated"
 	then
 		echo "missing I/O directive lowering: $expectation" >&2
 		exit 1
@@ -58,7 +58,7 @@ then
 	echo "a user Reset declaration was changed by caller I/O state" >&2
 	exit 1
 fi
-if rg -Fq 'm_unchecked_reset(p_marker)' "$generated"
+if grep -Fq 'm_unchecked_reset(p_marker)' "$generated"
 then
 	echo "a user Reset declaration acquired System I/O lowering" >&2
 	exit 1
@@ -76,7 +76,7 @@ then
 	exit 1
 fi
 expected=$(sed -n '1p' tests/iochecks_invalid.error)
-if ! rg -Fq -- "$expected" "$tmp/stderr"
+if ! grep -Fq -- "$expected" "$tmp/stderr"
 then
 	echo "wrong IOCHECKS diagnostic; expected: $expected" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2

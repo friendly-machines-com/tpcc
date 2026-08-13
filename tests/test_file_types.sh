@@ -6,24 +6,24 @@ set -eu
 
 tpcc_translate -o"$tmp/file_types.cc" tests/file_types.pp
 
-if ! rg -Fq '::u_system::t_file p_binaryfile;' "$tmp/file_types.cc"
+if ! grep -Fq '::u_system::t_file p_binaryfile;' "$tmp/file_types.cc"
 then
 	echo "File did not emit the untyped binary-file carrier" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::t_text p_textalias;' "$tmp/file_types.cc"
+if ! grep -Fq '::u_system::t_text p_textalias;' "$tmp/file_types.cc"
 then
 	echo "TextFile did not alias Text" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::t_typedfile<::u_system::t_integer> p_integers;' \
 	"$tmp/file_types.cc"
 then
 	echo "file of Integer did not emit a parameterized typed-file carrier" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::t_typedfile<t_tnode> p_nodes;' \
 	"$tmp/file_types.cc"
 then
@@ -47,7 +47,7 @@ do
 		echo "accepted incompatible typed-file var argument: $source" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'no matching overload' "$tmp/stderr"
+	if ! grep -Fq 'no matching overload' "$tmp/stderr"
 	then
 		echo "wrong diagnostic for incompatible typed files: $source" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2

@@ -5,7 +5,7 @@ set -eu
 
 
 tpcc_translate -o"$tmp/copy_builtin.cc" tests/copy_builtin.pp
-if ! rg -q '::u_system::p_copy\(' "$tmp/copy_builtin.cc"; then
+if ! grep -Eq '::u_system::p_copy\(' "$tmp/copy_builtin.cc"; then
 	echo "Copy did not lower to its ordinary RTL call" >&2
 	exit 1
 fi

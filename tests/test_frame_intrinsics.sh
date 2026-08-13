@@ -13,20 +13,20 @@ for macro_call in \
 	'm_get_caller_addr(' \
 	'm_get_caller_frame('
 do
-	if ! rg -Fq "$macro_call" \
+	if ! grep -Fq "$macro_call" \
 		"$tmp/frame_intrinsics.cc"
 	then
 		echo "generated code omitted frame macro call: $macro_call" >&2
 		exit 1
 	fi
 done
-if rg -Fq '::u_system::m_get_' \
+if grep -Fq '::u_system::m_get_' \
 	"$tmp/frame_intrinsics.cc"
 then
 	echo "generated code namespace-qualified a frame macro" >&2
 	exit 1
 fi
-if rg -q '\bp_get_(frame|caller_addr|caller_frame)\b' \
+if grep -Eq '\bp_get_(frame|caller_addr|caller_frame)\b' \
 	"$tmp/frame_intrinsics.cc"
 then
 	echo "generated code used the ordinary-function prefix for a frame macro" >&2

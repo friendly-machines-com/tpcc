@@ -61,7 +61,7 @@ run_negative() {
 		echo "negative fixture $name compiled; expected failure" >&2
 		exit 1
 	fi
-	if ! rg -Fq -- "$expected" "$bin/stderr"; then
+	if ! grep -Fq -- "$expected" "$bin/stderr"; then
 		echo "wrong diagnostic for $name; expected substring: $expected" >&2
 		sed -n '1,30p' "$bin/stderr" >&2
 		exit 1

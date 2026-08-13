@@ -21,7 +21,7 @@ then
 	echo "accepted invalid LONGSTRINGS setting" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	"$(sed -n '1p' tests/longstrings_invalid.error)" \
 	"$tmp/stderr"
 then

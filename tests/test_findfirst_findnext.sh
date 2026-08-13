@@ -18,7 +18,7 @@ ln -s missing "$tmp/work/files/broken-link"
 
 tpcc_translate -o"$tmp/findfirst_findnext.cc" \
 	tests/findfirst_findnext.pp
-if ! rg -Fq '::u_sysutils::p_fileage' \
+if ! grep -Fq '::u_sysutils::p_fileage' \
 	"$tmp/findfirst_findnext.cc"
 then
 	echo "SysUtils.FileAge did not use p_fileage" >&2

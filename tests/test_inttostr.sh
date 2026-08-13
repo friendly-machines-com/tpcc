@@ -6,7 +6,7 @@ set -eu
 
 tpcc_translate -o"$tmp/inttostr.cc" tests/inttostr.pp
 
-if ! rg -Fq '::u_sysutils::p_inttostr(' "$tmp/inttostr.cc"; then
+if ! grep -Fq '::u_sysutils::p_inttostr(' "$tmp/inttostr.cc"; then
 	echo "SysUtils.IntToStr did not resolve in the SysUtils namespace" >&2
 	exit 1
 fi

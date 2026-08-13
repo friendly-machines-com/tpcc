@@ -6,11 +6,11 @@ set -eu
 
 tpcc_translate -o"$tmp/strpas.cc" tests/strpas.pp
 
-if ! rg -Fq '::u_sysutils::p_strpas(' "$tmp/strpas.cc"; then
+if ! grep -Fq '::u_sysutils::p_strpas(' "$tmp/strpas.cc"; then
 	echo "SysUtils.StrPas did not resolve in the SysUtils namespace" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::o_implicit(' "$tmp/sysutils.cc"; then
+if ! grep -Fq '::u_system::o_implicit(' "$tmp/sysutils.cc"; then
 	echo "SysUtils.StrPas did not use the existing PChar-to-AnsiString conversion" >&2
 	exit 1
 fi

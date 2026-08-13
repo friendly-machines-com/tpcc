@@ -16,7 +16,7 @@ for required in \
 	'm_openarray_out_view(' \
 	'm_enumerate('
 do
-	if ! rg -Fq "$required" "$tmp/managed.cc"
+	if ! grep -Fq "$required" "$tmp/managed.cc"
 	then
 		echo "missing managed sequence lowering: $required" >&2
 		exit 1
@@ -28,7 +28,7 @@ for required in \
 	'::u_system::m_free_object(tpcc_for_enumerator)' \
 	'tpcc_for_enumerator.p_done()'
 do
-	if ! rg -Fq "$required" "$tmp/custom.cc"
+	if ! grep -Fq "$required" "$tmp/custom.cc"
 	then
 		echo "missing custom-enumerator lowering: $required" >&2
 		exit 1
@@ -60,7 +60,7 @@ do
 		exit 1
 	fi
 	expected=$(sed -n '1p' "$base.error")
-	if ! rg -Fq -- "$expected" "$tmp/rejected.err"
+	if ! grep -Fq -- "$expected" "$tmp/rejected.err"
 	then
 		echo "wrong diagnostic for $source; expected: $expected" >&2
 		sed -n '1,80p' "$tmp/rejected.err" >&2

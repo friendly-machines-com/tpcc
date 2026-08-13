@@ -17,7 +17,7 @@ for expected in \
 	'::u_system::o_implicit(' \
 	'::u_system::tpcc_shortstring_cast<3>'
 do
-	if ! rg -Fq "$expected" "$tmp/typed_const_aggregates.cc"; then
+	if ! grep -Fq "$expected" "$tmp/typed_const_aggregates.cc"; then
 		echo "missing typed-constant lowering: $expected" >&2
 		exit 1
 	fi
@@ -37,7 +37,7 @@ then
 	exit 1
 fi
 expected=$(sed -n '1p' tests/custom_conversion_constant_rejected.error)
-if ! rg -Fq "$expected" "$tmp/stderr"
+if ! grep -Fq "$expected" "$tmp/stderr"
 then
 	echo "wrong custom-conversion constant diagnostic; expected: $expected" >&2
 	sed -n '1,80p' "$tmp/stderr" >&2
@@ -52,7 +52,7 @@ then
 	echo "overlong character-array string initializer was accepted" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	"string length is larger than character-array length" \
 	"$tmp/stderr"
 then

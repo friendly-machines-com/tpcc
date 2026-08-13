@@ -24,7 +24,7 @@ do
 		exit 1
 	fi
 	expected_error=$(sed -n '1p' "$base.error")
-	if ! rg -Fq -- "$expected_error" "$tmp/stderr"
+	if ! grep -Fq -- "$expected_error" "$tmp/stderr"
 	then
 		echo "wrong absolute diagnostic; expected: $expected_error" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2

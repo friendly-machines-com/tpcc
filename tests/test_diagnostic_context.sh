@@ -24,7 +24,7 @@ for required in \
 	"    method trigger" \
 	"      owner: tcontext"
 do
-	if ! rg -Fq "$required" "$tmp/stderr"
+	if ! grep -Fq "$required" "$tmp/stderr"
 	then
 		echo "incomplete enclosing diagnostic context: $required" >&2
 		sed -n '1,180p' "$tmp/stderr" >&2
@@ -48,7 +48,7 @@ for forbidden in \
 	"value system =" \
 	"unrelated:"
 do
-	if rg -Fq "$forbidden" "$tmp/stderr"
+	if grep -Fq "$forbidden" "$tmp/stderr"
 	then
 		echo "diagnostic graph emitted forbidden text: $forbidden" >&2
 		sed -n '1,180p' "$tmp/stderr" >&2
@@ -70,7 +70,7 @@ for required in \
 	"  program: diagnosticcontextrichrejected" \
 	"  routine: \\tcontext.trigger\\"
 do
-	if ! rg -Fq "$required" "$tmp/rich.stderr"
+	if ! grep -Fq "$required" "$tmp/rich.stderr"
 	then
 		echo "incomplete rich diagnostic context: $required" >&2
 		sed -n '1,180p' "$tmp/rich.stderr" >&2
@@ -85,14 +85,14 @@ then
 	sed -n '1,180p' "$tmp/rich.stderr" >&2
 	exit 1
 fi
-if rg -Fq "<unregistered" "$tmp/rich.stderr"
+if grep -Fq "<unregistered" "$tmp/rich.stderr"
 then
 	echo "rich diagnostic emitted an unregistered graph reference" >&2
 	sed -n '1,180p' "$tmp/rich.stderr" >&2
 	exit 1
 fi
-if rg -Fq "  context:" "$tmp/rich.stderr" ||
-   rg -Fq "  owner type:" "$tmp/rich.stderr"
+if grep -Fq "  context:" "$tmp/rich.stderr" ||
+   grep -Fq "  owner type:" "$tmp/rich.stderr"
 then
 	echo "rich diagnostic emitted a redundant context section or owner reference" >&2
 	sed -n '1,180p' "$tmp/rich.stderr" >&2
@@ -114,7 +114,7 @@ for required in \
 	"  owner type: tcontext" \
 	"  type tcontext ="
 do
-	if ! rg -Fq "$required" "$tmp/owner.stderr"
+	if ! grep -Fq "$required" "$tmp/owner.stderr"
 	then
 		echo "incomplete owner-type diagnostic context: $required" >&2
 		sed -n '1,180p' "$tmp/owner.stderr" >&2
@@ -134,7 +134,7 @@ for forbidden in \
 	"  context:" \
 	"  routine:"
 do
-	if rg -Fq "$forbidden" "$tmp/owner.stderr"
+	if grep -Fq "$forbidden" "$tmp/owner.stderr"
 	then
 		echo "owner diagnostic emitted forbidden text: $forbidden" >&2
 		sed -n '1,180p' "$tmp/owner.stderr" >&2

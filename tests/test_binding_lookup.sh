@@ -19,7 +19,7 @@ then
 	echo "same-scope type/value duplicate was accepted" >&2
 	exit 1
 fi
-if ! rg -Fq "duplicate identifier: x" \
+if ! grep -Fq "duplicate identifier: x" \
 	"$tmp/rejected.out"
 then
 	echo "same-scope duplicate produced the wrong diagnostic" >&2

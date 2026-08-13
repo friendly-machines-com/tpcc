@@ -26,7 +26,7 @@ do
 		exit 1
 	fi
 
-	if ! rg -Fq 'no implicit conversion' "$tmp/stderr"
+	if ! grep -Fq 'no implicit conversion' "$tmp/stderr"
 	then
 		echo "wrong diagnostic for rejected implicit conversion chain: $kind" >&2
 		sed -n '1,80p' "$tmp/stderr" >&2

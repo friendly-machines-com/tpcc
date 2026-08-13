@@ -7,12 +7,12 @@ set -eu
 tpcc_translate -o"$tmp/custom_in_operator.cc" \
 	tests/custom_in_operator.pp
 
-if ! rg -Fq 'o_in(' "$tmp/custom_in_operator.cc"
+if ! grep -Fq 'o_in(' "$tmp/custom_in_operator.cc"
 then
 	echo "custom In did not lower through its ordinary operator declaration" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::o_in(' "$tmp/custom_in_operator.cc"
+if ! grep -Fq '::u_system::o_in(' "$tmp/custom_in_operator.cc"
 then
 	echo "System set membership fallback was not retained" >&2
 	exit 1
@@ -41,7 +41,7 @@ do
 		'arg 2:' \
 		'all candidates:'
 	do
-		if ! rg -Fq "$required" "$tmp/stderr"
+		if ! grep -Fq "$required" "$tmp/stderr"
 		then
 			echo "incomplete In diagnostic for $rejection" >&2
 			sed -n '1,180p' "$tmp/stderr" >&2
@@ -65,7 +65,7 @@ for required in \
 	'tchoicea' \
 	'tchoiceb'
 do
-	if ! rg -Fiq "$required" "$tmp/stderr"
+	if ! grep -Fiq "$required" "$tmp/stderr"
 	then
 		echo "incomplete ambiguous In diagnostic" >&2
 		sed -n '1,220p' "$tmp/stderr" >&2

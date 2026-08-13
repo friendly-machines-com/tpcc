@@ -23,7 +23,7 @@ then
 	exit 1
 fi
 
-if ! rg -Fq 'error: expected identifier' \
+if ! grep -Fq 'error: expected identifier' \
 	"$tmp/symbol_identifier_rejected.out"
 then
 	echo "wrong symbolic-identifier diagnostic" >&2

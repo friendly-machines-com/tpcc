@@ -30,14 +30,14 @@ for required in \
 	'm_conversion_target<t_tconversionresulta>' \
 	'm_conversion_target<t_tconversionresultb>'
 do
-	if ! rg -Fq "$required" "$tmp/type_identity.cc"
+	if ! grep -Fq "$required" "$tmp/type_identity.cc"
 	then
 		echo "missing implicit-conversion lowering: $required" >&2
 		exit 1
 	fi
 done
 
-if rg -Fq 'p_operator_assign' "$tmp/type_identity.cc"
+if grep -Fq 'p_operator_assign' "$tmp/type_identity.cc"
 then
 	echo "implicit conversion retained the old C++ operator name" >&2
 	exit 1
@@ -82,7 +82,7 @@ for required in \
 	'where' \
 	'source:'
 do
-	if ! rg -Fq "$required" "$tmp/stderr"
+	if ! grep -Fq "$required" "$tmp/stderr"
 	then
 		echo "incomplete mixed-routine-kind diagnostic: $required" >&2
 		sed -n '1,140p' "$tmp/stderr" >&2
@@ -99,7 +99,7 @@ do
 		echo "accepted invalid value assignment: $source" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'no implicit conversion' "$tmp/stderr"
+	if ! grep -Fq 'no implicit conversion' "$tmp/stderr"
 	then
 		echo "wrong value-assignment diagnostic: $source" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
@@ -126,7 +126,7 @@ do
 		expected='no implicit conversion'
 		;;
 	esac
-	if ! rg -Fq "$expected" "$tmp/stderr"
+	if ! grep -Fq "$expected" "$tmp/stderr"
 	then
 		echo "wrong contextual-conversion diagnostic: $source" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
@@ -144,7 +144,7 @@ do
 		echo "accepted an erased C++ overload collision: $kind" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'same C++ parameter carriers' "$tmp/stderr"
+	if ! grep -Fq 'same C++ parameter carriers' "$tmp/stderr"
 	then
 		echo "wrong C++ carrier-collision diagnostic: $kind" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
@@ -157,14 +157,14 @@ do
 		'where' \
 		'source:'
 	do
-		if ! rg -Fq "$required" "$tmp/stderr"
+		if ! grep -Fq "$required" "$tmp/stderr"
 		then
 			echo "incomplete C++ carrier-collision diagnostic: $kind" >&2
 			sed -n '1,80p' "$tmp/stderr" >&2
 			exit 1
 		fi
 	done
-	if rg -Fq '<unregistered' "$tmp/stderr"
+	if grep -Fq '<unregistered' "$tmp/stderr"
 	then
 		echo "unresolved reference in C++ carrier-collision diagnostic: $kind" >&2
 		sed -n '1,80p' "$tmp/stderr" >&2
@@ -183,7 +183,7 @@ do
 		echo "accepted distinct Type* as typed var: $kind" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'no matching overload' "$tmp/stderr"
+	if ! grep -Fq 'no matching overload' "$tmp/stderr"
 	then
 		echo "wrong typed-var identity diagnostic: $kind" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
@@ -212,14 +212,14 @@ for required in \
 	'type tstringa' \
 	'type tstringb'
 do
-	if ! rg -Fq "$required" "$tmp/stderr"
+	if ! grep -Fq "$required" "$tmp/stderr"
 	then
 		echo "incomplete implicit-conversion carrier diagnostic: $required" >&2
 		sed -n '1,120p' "$tmp/stderr" >&2
 		exit 1
 	fi
 done
-if rg -Fq '<unregistered' "$tmp/stderr"
+if grep -Fq '<unregistered' "$tmp/stderr"
 then
 	echo "unresolved reference in conversion-carrier diagnostic" >&2
 	sed -n '1,120p' "$tmp/stderr" >&2
@@ -245,14 +245,14 @@ for required in \
 	'type tstringa' \
 	'type tstringb'
 do
-	if ! rg -Fq "$required" "$tmp/stderr"
+	if ! grep -Fq "$required" "$tmp/stderr"
 	then
 		echo "incomplete explicit-conversion carrier diagnostic: $required" >&2
 		sed -n '1,120p' "$tmp/stderr" >&2
 		exit 1
 	fi
 done
-if rg -Fq '<unregistered' "$tmp/stderr"
+if grep -Fq '<unregistered' "$tmp/stderr"
 then
 	echo "unresolved reference in explicit conversion-carrier diagnostic" >&2
 	sed -n '1,120p' "$tmp/stderr" >&2
@@ -266,7 +266,7 @@ then
 	echo "accepted an accidental C++ virtual override" >&2
 	exit 1
 fi
-if ! rg -Fq 'would accidentally override an ancestor' "$tmp/stderr"
+if ! grep -Fq 'would accidentally override an ancestor' "$tmp/stderr"
 then
 	echo "wrong accidental-override diagnostic" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2

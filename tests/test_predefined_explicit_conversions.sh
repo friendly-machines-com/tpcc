@@ -12,7 +12,7 @@ for required in \
 	'm_ordinal_cast<::u_system::t_ptruint>' \
 	'::u_system::m_set_cast<'
 do
-	if ! rg -Fq "$required" \
+	if ! grep -Fq "$required" \
 		"$tmp/predefined_explicit_conversions.cc"
 	then
 		echo "missing predefined explicit-conversion lowering: $required" >&2
@@ -52,7 +52,7 @@ do
 		'expected type' \
 		'but got type'
 	do
-		if ! rg -Fq "$required" "$tmp/stderr"
+		if ! grep -Fq "$required" "$tmp/stderr"
 		then
 			echo "incomplete explicit-conversion diagnostic for $rejection" >&2
 			sed -n '1,160p' "$tmp/stderr" >&2

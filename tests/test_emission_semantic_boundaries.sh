@@ -18,10 +18,10 @@ compile_and_run()
 compile_and_run boolean_short_circuit
 for operator in '&&' '||'
 do
-	if ! rg -F \
+	if ! grep -F \
 		"tpcc_bool_to_boolean" \
 		"$tmp/boolean_short_circuit.cc" |
-		rg -Fq "$operator"
+		grep -Fq "$operator"
 	then
 		echo "Boolean $operator did not retain Pascal Boolean result type" >&2
 		exit 1
@@ -29,10 +29,10 @@ do
 done
 
 compile_and_run const_address
-if ! rg -Fq \
+if ! grep -Fq \
 	'const_cast<' \
 	"$tmp/const_address.cc" ||
-   ! rg -Fq \
+   ! grep -Fq \
 	'std::addressof(' \
 	"$tmp/const_address.cc"
 then
@@ -41,7 +41,7 @@ then
 fi
 
 compile_and_run selected_callable_emission
-if ! rg -Fq \
+if ! grep -Fq \
 	'static_cast<::u_system::t_integer>(9ull)' \
 	"$tmp/selected_callable_emission.cc"
 then

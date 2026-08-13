@@ -11,12 +11,12 @@ printf data >"$tmp/work/regular-file"
 
 
 tpcc_translate -o"$tmp/rmdir.cc" tests/rmdir.pp
-if ! rg -Fq '::u_system::p_rmdir' "$tmp/rmdir.cc"
+if ! grep -Fq '::u_system::p_rmdir' "$tmp/rmdir.cc"
 then
 	echo "checked RmDir did not use its System RTL operation" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::m_unchecked_rmdir' "$tmp/rmdir.cc"
+if ! grep -Fq '::u_system::m_unchecked_rmdir' "$tmp/rmdir.cc"
 then
 	echo "unchecked RmDir did not use its System RTL operation" >&2
 	exit 1

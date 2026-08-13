@@ -39,7 +39,7 @@ then
 	echo "interface uses was incorrectly re-exported" >&2
 	exit 1
 fi
-if ! rg -Fq "unresolved value identifier: bvalue" \
+if ! grep -Fq "unresolved value identifier: bvalue" \
 	"$tmp/no-interface-reexport/stderr"
 then
 	echo "wrong diagnostic for an interface-use name in a user of the unit" >&2
@@ -56,7 +56,7 @@ then
 	echo "implementation uses was incorrectly re-exported" >&2
 	exit 1
 fi
-if ! rg -Fq "unresolved value identifier: cvalue" \
+if ! grep -Fq "unresolved value identifier: cvalue" \
 	"$tmp/no-implementation-reexport/stderr"
 then
 	echo "wrong diagnostic for an implementation-use name in a user of the unit" >&2
@@ -87,7 +87,7 @@ then
 	echo "accepted an interface dependency cycle" >&2
 	exit 1
 fi
-if ! rg -Fq "circular interface dependency" "$tmp/cycles/stderr"
+if ! grep -Fq "circular interface dependency" "$tmp/cycles/stderr"
 then
 	echo "wrong diagnostic for an interface dependency cycle" >&2
 	sed -n '1,20p' "$tmp/cycles/stderr" >&2

@@ -8,16 +8,16 @@ tpcc_translate \
 	-o"$tmp/q_directive_scoping.cc" \
 	tests/q_directive_scoping.pp
 
-rg -q \
+grep -Eq \
 	'for \(p_loopunchecked = .*::u_system::m_unchecked_succ\(p_loopunchecked\)' \
 	"$tmp/q_directive_scoping.cc"
-rg -q \
+grep -Eq \
 	'for \(p_loopchecked = .*::u_system::p_succ\(p_loopchecked\)' \
 	"$tmp/q_directive_scoping.cc"
-rg -q \
+grep -Eq \
 	'for \(p_downunchecked = .*::u_system::m_unchecked_pred\(p_downunchecked\)' \
 	"$tmp/q_directive_scoping.cc"
-rg -q \
+grep -Eq \
 	'for \(p_downchecked = .*::u_system::p_pred\(p_downchecked\)' \
 	"$tmp/q_directive_scoping.cc"
 
@@ -48,7 +48,7 @@ do
 		echo "$define checked outer call unexpectedly compiled" >&2
 		exit 1
 	fi
-	rg -Fq 'integer constant overflow' \
+	grep -Fq 'integer constant overflow' \
 		"$tmp/stderr"
 done
 

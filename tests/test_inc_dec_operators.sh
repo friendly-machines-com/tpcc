@@ -12,7 +12,7 @@ for operation in \
 	o_inc o_unchecked_inc o_dec o_unchecked_dec \
 	o_add o_unchecked_add o_subtract o_unchecked_subtract
 do
-	rg -Fq "$operation" \
+	grep -Fq "$operation" \
 		"$tmp/inc_dec_operators.cc"
 done
 
@@ -37,7 +37,7 @@ check_rejected()
 		echo "expected $define mode to be rejected" >&2
 		exit 1
 	fi
-	if ! rg -Fq -- "$expected" "$tmp/stderr"; then
+	if ! grep -Fq -- "$expected" "$tmp/stderr"; then
 		echo "wrong diagnostic for $define; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
 		exit 1

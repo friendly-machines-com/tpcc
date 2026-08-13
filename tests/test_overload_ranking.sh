@@ -29,7 +29,7 @@ for required in \
 	'viable ranks [exact, generic]' \
 	'viable ranks [generic, exact]'
 do
-	if ! rg -Fq "$required" "$tmp/stderr"
+	if ! grep -Fq "$required" "$tmp/stderr"
 	then
 		echo "incomplete per-argument catch-all diagnostic" >&2
 		sed -n '1,180p' "$tmp/stderr" >&2
@@ -54,14 +54,14 @@ for required in \
 	'arg 2 prefers' \
 	"preserves the actual integer type's signedness"
 do
-	if ! rg -Fq "$required" "$tmp/stderr"
+	if ! grep -Fq "$required" "$tmp/stderr"
 	then
 		echo "incomplete equal-rank ambiguity diagnostic: $required" >&2
 		sed -n '1,220p' "$tmp/stderr" >&2
 		exit 1
 	fi
 done
-if rg -Fq 'convert+' "$tmp/stderr"
+if grep -Fq 'convert+' "$tmp/stderr"
 then
 	echo "overload diagnostic exposed a raw numeric tie-breaker" >&2
 	sed -n '1,220p' "$tmp/stderr" >&2

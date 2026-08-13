@@ -13,7 +13,7 @@ then
 	echo "instance and class override-final declarations were not emitted" >&2
 	exit 1
 fi
-if ! rg -Fq 'virtual void p_directfinal() final;' \
+if ! grep -Fq 'virtual void p_directfinal() final;' \
 	"$tmp/final_methods.cc"
 then
 	echo "direct virtual-final declaration was not emitted" >&2
@@ -34,7 +34,7 @@ do
 		echo "accepted an override of a final Pascal method: $define" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'overrides a final method' "$tmp/stderr"
+	if ! grep -Fq 'overrides a final method' "$tmp/stderr"
 	then
 		echo "wrong final-override diagnostic: $define" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
@@ -52,7 +52,7 @@ then
 fi
 expected=$(sed -n '1p' \
 	tests/final_nonvirtual_rejected.error)
-if ! rg -Fq -- "$expected" "$tmp/stderr"
+if ! grep -Fq -- "$expected" "$tmp/stderr"
 then
 	echo "wrong nonvirtual-final diagnostic; expected: $expected" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2

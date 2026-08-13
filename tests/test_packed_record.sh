@@ -28,7 +28,7 @@ for required in \
 	'::u_system::p_index(tpcc_packed_field,' \
 	'tpcc_packed_value.m_set_p_data(tpcc_packed_field);'
 do
-	if ! rg -Fq "$required" "$tmp/packed_array_field_write.cc"
+	if ! grep -Fq "$required" "$tmp/packed_array_field_write.cc"
 	then
 		echo "missing indexed packed-field copyback: $required" >&2
 		exit 1
@@ -52,7 +52,7 @@ for source in tests/packed_rejected/*.pp; do
 		exit 1
 	fi
 	expected=$(sed -n '1p' "$base.error")
-	if ! rg -F -q -- "$expected" "$tmp/stderr"; then
+	if ! grep -F -q -- "$expected" "$tmp/stderr"; then
 		echo "wrong diagnostic for $source; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
 		exit 1

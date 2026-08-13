@@ -8,9 +8,9 @@ tpcc_translate \
 	-o"$tmp/implicit_real_narrowing.cc" \
 	tests/implicit_real_narrowing.pp
 
-rg -Fq '::u_system::m_real_cast' \
+grep -Fq '::u_system::m_real_cast' \
 	"$tmp/implicit_real_narrowing.cc"
-rg -Fq '::u_system::m_range_checked_real_cast' \
+grep -Fq '::u_system::m_range_checked_real_cast' \
 	"$tmp/implicit_real_narrowing.cc"
 
 tpcc_build "$tmp/implicit_real_narrowing" \
@@ -30,7 +30,7 @@ then
 	exit 1
 fi
 
-if ! rg -Fq \
+if ! grep -Fq \
 	'real constant out of range for target type' \
 	"$tmp/stderr"
 then

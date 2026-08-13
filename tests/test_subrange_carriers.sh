@@ -17,7 +17,7 @@ for required in \
 	'std::is_standard_layout_v<m_subrange_' \
 	'std::is_trivially_copyable_v<m_subrange_'
 do
-	if ! rg -Fq "$required" "$tmp/rangecarrier.h"
+	if ! grep -Fq "$required" "$tmp/rangecarrier.h"
 	then
 		echo "missing public subrange carrier output: $required" >&2
 		exit 1
@@ -39,7 +39,7 @@ then
 	echo "accepted overloads distinguished only by subrange declarations" >&2
 	exit 1
 fi
-if ! rg -Fq 'both declarations have the same Pascal overload signature' "$tmp/stderr"
+if ! grep -Fq 'both declarations have the same Pascal overload signature' "$tmp/stderr"
 then
 	echo "wrong duplicate-subrange-overload diagnostic" >&2
 	sed -n '1,120p' "$tmp/stderr" >&2

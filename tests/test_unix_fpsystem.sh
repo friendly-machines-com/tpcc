@@ -7,7 +7,7 @@ set -eu
 tpcc_translate -o"$tmp/unix_fpsystem.cc" \
 	tests/unix_fpsystem.pp
 
-if ! rg -Fq '::u_unix::p_fpsystem' \
+if ! grep -Fq '::u_unix::p_fpsystem' \
 	"$tmp/unix_fpsystem.cc"
 then
 	echo "Unix.FpSystem did not use p_fpsystem" >&2

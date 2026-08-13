@@ -15,7 +15,7 @@ for required in \
 	'm_conversion_target<t_tothertarget>' \
 	'p_explicit('
 do
-	if ! rg -Fq "$required" \
+	if ! grep -Fq "$required" \
 		"$tmp/custom_explicit_conversions.cc"
 	then
 		echo "missing explicit-conversion lowering: $required" >&2
@@ -38,7 +38,7 @@ then
 	echo "accepted an Explicit-only conversion implicitly" >&2
 	exit 1
 fi
-if ! rg -Fq 'no implicit conversion' "$tmp/stderr"
+if ! grep -Fq 'no implicit conversion' "$tmp/stderr"
 then
 	echo "wrong Explicit-only implicit-conversion diagnostic" >&2
 	sed -n '1,120p' "$tmp/stderr" >&2
@@ -52,7 +52,7 @@ then
 	echo "accepted operator Explicit through 'as'" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	"'as' requires compatible real-number or class/interface types" \
 	"$tmp/stderr"
 then

@@ -14,7 +14,7 @@ for required in \
 	'p_takepointer' \
 	'p_takeconstpointer'
 do
-	if ! rg -Fq "$required" \
+	if ! grep -Fq "$required" \
 		"$tmp/class_pointer_conversion.cc"
 	then
 		echo "missing class-to-Pointer lowering: $required" >&2
@@ -46,7 +46,7 @@ do
 		echo "accepted forbidden class-to-Pointer conversion: $kind" >&2
 		exit 1
 	fi
-	if ! rg -q \
+	if ! grep -Eq \
 		'no implicit conversion|no matching overload' \
 		"$tmp/stderr"
 	then

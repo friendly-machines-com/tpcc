@@ -7,8 +7,8 @@ set -eu
 tpcc_translate -o"$tmp/abstract_classes.cc" \
 	tests/abstract_classes.pp
 
-if rg -q '\) = 0;' "$tmp/abstract_classes.cc" ||
-   rg -Fq 'p_runerror(' "$tmp/abstract_classes.cc"
+if grep -Eq '\) = 0;' "$tmp/abstract_classes.cc" ||
+   grep -Fq 'p_runerror(' "$tmp/abstract_classes.cc"
 then
 	echo "class abstract incorrectly changed C++ class or method emission" >&2
 	exit 1

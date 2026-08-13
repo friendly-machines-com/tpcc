@@ -7,19 +7,19 @@ set -eu
 tpcc_translate -o"$tmp/inherited_calls.cc" \
 	tests/inherited_calls.pp
 
-if ! rg -Fq 't_tbase::p_insert(' \
+if ! grep -Fq 't_tbase::p_insert(' \
 	"$tmp/inherited_calls.cc"
 then
 	echo "parenthesized inherited instance call was not emitted" >&2
 	exit 1
 fi
-if ! rg -Fq 't_tbase::p_select(' \
+if ! grep -Fq 't_tbase::p_select(' \
 	"$tmp/inherited_calls.cc"
 then
 	echo "inherited overload was not selected" >&2
 	exit 1
 fi
-if ! rg -Fq 't_tbase::p_withdefault(7ull)' \
+if ! grep -Fq 't_tbase::p_withdefault(7ull)' \
 	"$tmp/inherited_calls.cc"
 then
 	echo "inherited call did not materialize a default argument" >&2

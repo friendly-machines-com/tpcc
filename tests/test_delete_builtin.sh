@@ -17,7 +17,7 @@ then
 	echo "Delete accepted a non-ShortString generic destination" >&2
 	exit 1
 fi
-if ! rg -Fq "no matching overload for 'delete'" "$tmp/stderr"; then
+if ! grep -Fq "no matching overload for 'delete'" "$tmp/stderr"; then
 	echo "Delete produced the wrong non-ShortString diagnostic" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2
 	exit 1

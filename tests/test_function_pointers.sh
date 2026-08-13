@@ -7,40 +7,40 @@ set -eu
 tpcc_translate -o"$tmp/function_pointers.cc" \
 	tests/function_pointers.pp
 
-if ! rg -q \
+if ! grep -Eq \
 	'::u_system::m_proc<void\(::u_system::t_integer\)> p_plainprocedure' \
 	"$tmp/function_pointers.cc"
 then
 	echo "plain routine type did not use m_proc<Signature>" >&2
 	exit 1
 fi
-if ! rg -q \
+if ! grep -Eq \
 	'::u_system::m_method<void\(::u_system::t_integer\)> p_boundprocedure' \
 	"$tmp/function_pointers.cc"
 then
 	echo "method routine type did not use m_method<Signature>" >&2
 	exit 1
 fi
-if ! rg -q '::u_system::m_bind_method<static_cast<' \
+if ! grep -Eq '::u_system::m_bind_method<static_cast<' \
 	"$tmp/function_pointers.cc"
 then
 	echo "method binding did not use the template adapter" >&2
 	exit 1
 fi
-if rg -q '\[[^]]*\].*p_accumulate' \
+if grep -Eq '\[[^]]*\].*p_accumulate' \
 	"$tmp/function_pointers.cc"
 then
 	echo "method binding emitted a capture lambda" >&2
 	exit 1
 fi
-if ! rg -q \
+if ! grep -Eq \
 	'::u_system::m_explicit_routine_cast<void\(::u_system::t_pointer, ::u_system::t_pointer\)>\(p_objectcallback\)' \
 	"$tmp/function_pointers.cc"
 then
 	echo "plain explicit pointer-parameter routine cast was not preserved" >&2
 	exit 1
 fi
-if ! rg -q \
+if ! grep -Eq \
 	'::u_system::m_explicit_routine_cast<void\(::u_system::t_pointer, ::u_system::t_pointer\)>\(p_objectmethodcallback\)' \
 	"$tmp/function_pointers.cc"
 then
@@ -56,14 +56,14 @@ tpcc_run "$tmp/function_pointers"
 tpcc_translate -o"$tmp/routine_value_overload_categories.cc" \
 	tests/routine_value_overload_categories.pp
 
-if ! rg -q \
+if ! grep -Eq \
 	'p_foreachcall\(::u_system::m_proc<void\(.*t_pointer.*t_pointer.*\)>' \
 	"$tmp/routine_value_overload_categories.cc"
 then
 	echo "plain callback overload did not retain its m_proc carrier" >&2
 	exit 1
 fi
-if ! rg -q \
+if ! grep -Eq \
 	'p_foreachcall\(::u_system::m_method<void\(.*t_pointer.*t_pointer.*\)>' \
 	"$tmp/routine_value_overload_categories.cc"
 then
@@ -82,7 +82,7 @@ tpcc_translate -Futests/routine_const \
 	-o"$tmp/routine-const/program.cc" \
 	tests/routine_const/routine_const_program.pp
 
-if ! rg -Fq \
+if ! grep -Fq \
 	'p_dostatus = &::u_routineconstunit::p_defstatus' \
 	"$tmp/routine-const/routineconstunit.h"
 then
@@ -113,7 +113,7 @@ do
 	while IFS= read -r expected
 	do
 		test -z "$expected" && continue
-		if ! rg -F -q -- "$expected" "$tmp/stderr"
+		if ! grep -F -q -- "$expected" "$tmp/stderr"
 		then
 			echo "wrong diagnostic for $source; expected: $expected" >&2
 			sed -n '1,40p' "$tmp/stderr" >&2

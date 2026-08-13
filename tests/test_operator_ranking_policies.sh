@@ -30,7 +30,7 @@ do
 		echo "accepted forbidden operator policy: $policy" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'no matching overload' "$tmp/stderr"
+	if ! grep -Fq 'no matching overload' "$tmp/stderr"
 	then
 		echo "wrong forbidden-operator diagnostic: $policy" >&2
 		sed -n '1,140p' "$tmp/stderr" >&2

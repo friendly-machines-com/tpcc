@@ -17,7 +17,7 @@ then
 fi
 
 expected=$(sed -n '1p' tests/operator_lifecycle_unsupported.error)
-if ! rg -Fq "$expected" "$tmp/lifecycle.out"
+if ! grep -Fq "$expected" "$tmp/lifecycle.out"
 then
 	echo "wrong unsupported lifecycle diagnostic; expected:" >&2
 	echo "$expected" >&2
@@ -34,7 +34,7 @@ then
 	exit 1
 fi
 
-if ! rg -Fq "unknown custom operator 'notequal'" \
+if ! grep -Fq "unknown custom operator 'notequal'" \
 	"$tmp/not_equal.out"
 then
 	echo "wrong NotEqual diagnostic" >&2

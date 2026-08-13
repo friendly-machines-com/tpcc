@@ -7,7 +7,7 @@ set -eu
 tpcc_translate -o"$tmp/setstring_builtin.cc" \
 	tests/setstring_builtin.pp
 
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::p_setstring(' \
 	"$tmp/setstring_builtin.cc"
 then
@@ -28,7 +28,7 @@ then
 	echo "SetString accepted a non-string out destination" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	"no matching overload for 'setstring'" \
 	"$tmp/stderr"
 then

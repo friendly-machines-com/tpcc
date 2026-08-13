@@ -7,7 +7,7 @@ set -eu
 tpcc_translate -o"$tmp/pointer_arithmetic.cc" \
 	tests/pointer_arithmetic.pp
 
-if rg -Fq 'reinterpret_cast<uintptr_t>' \
+if grep -Fq 'reinterpret_cast<uintptr_t>' \
 	"$root/rtl/rtl.h" \
 	"$tmp/pointer_arithmetic.cc" "$tmp/system.cc"
 then
@@ -35,7 +35,7 @@ do
 		echo "accepted invalid pointer arithmetic: $rejection" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'no matching overload' "$tmp/stderr"
+	if ! grep -Fq 'no matching overload' "$tmp/stderr"
 	then
 		echo "wrong pointer-arithmetic diagnostic: $rejection" >&2
 		sed -n '1,180p' "$tmp/stderr" >&2
@@ -51,7 +51,7 @@ then
 	echo "accepted invalid pointer arithmetic: UNTYPED_STEP" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'inc requires an ordinal or typed pointer argument' \
 	"$tmp/stderr"
 then
@@ -68,7 +68,7 @@ then
 	echo "accepted address of a pointer-value cast" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'address requires a storage-backed expression' \
 	"$tmp/stderr"
 then

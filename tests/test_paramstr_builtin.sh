@@ -13,7 +13,7 @@ for required in \
 	'::u_system::p_paramstr(' \
 	'::u_system::p_paramcount()'
 do
-	if ! rg -Fq "$required" "$tmp/paramstr_builtin.cc"
+	if ! grep -Fq "$required" "$tmp/paramstr_builtin.cc"
 	then
 		echo "missing ParamStr lowering: $required" >&2
 		exit 1

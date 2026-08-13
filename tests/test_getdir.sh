@@ -9,7 +9,7 @@ mkdir -p "$long"
 
 
 tpcc_translate -o"$tmp/getdir.cc" tests/getdir.pp
-if ! rg -Fq '::u_system::p_getdir' "$tmp/getdir.cc"
+if ! grep -Fq '::u_system::p_getdir' "$tmp/getdir.cc"
 then
 	echo "GetDir did not lower to its System RTL operation" >&2
 	exit 1

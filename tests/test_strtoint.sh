@@ -6,11 +6,11 @@ set -eu
 
 tpcc_translate -o"$tmp/strtoint.cc" tests/strtoint.pp
 
-if ! rg -Fq '::u_sysutils::p_strtoint(' "$tmp/strtoint.cc"; then
+if ! grep -Fq '::u_sysutils::p_strtoint(' "$tmp/strtoint.cc"; then
 	echo "SysUtils.StrToInt did not resolve in the SysUtils namespace" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::p_val(' "$tmp/sysutils.cc"; then
+if ! grep -Fq '::u_system::p_val(' "$tmp/sysutils.cc"; then
 	echo "SysUtils.StrToInt did not delegate parsing to System.Val" >&2
 	exit 1
 fi

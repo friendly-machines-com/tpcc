@@ -14,13 +14,13 @@ for selected in \
 	p_rinitiallyminus \
 	p_nestedactive
 do
-	if ! rg -q "\\b${selected}\\b" "$tmp/ifopt.cc"; then
+	if ! grep -Eq "\\b${selected}\\b" "$tmp/ifopt.cc"; then
 		echo "missing IFOPT-selected declaration: $selected" >&2
 		exit 1
 	fi
 done
 
-if rg -q 'p_wrong' "$tmp/ifopt.cc"; then
+if grep -Eq 'p_wrong' "$tmp/ifopt.cc"; then
 	echo "an unselected IFOPT branch was emitted" >&2
 	exit 1
 fi
@@ -36,7 +36,7 @@ then
 	echo "expected malformed IFOPT to be rejected" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'$ifopt expects one option letter followed by + or -' \
 	"$tmp/stderr"
 then

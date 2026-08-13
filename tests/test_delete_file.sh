@@ -12,7 +12,7 @@ ln -s missing "$tmp/work/broken-link"
 
 tpcc_translate -o"$tmp/delete_file.cc" tests/delete_file.pp
 
-if ! rg -Fq '::u_sysutils::p_deletefile(' "$tmp/delete_file.cc"; then
+if ! grep -Fq '::u_sysutils::p_deletefile(' "$tmp/delete_file.cc"; then
 	echo "SysUtils.DeleteFile did not resolve in the SysUtils namespace" >&2
 	exit 1
 fi

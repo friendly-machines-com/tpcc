@@ -25,7 +25,7 @@ if test "$status" -ne 217; then
 	echo "unhandled Pascal exception returned $status, expected 217" >&2
 	exit 1
 fi
-if ! rg -Fq 'Unhandled Pascal exception' \
+if ! grep -Fq 'Unhandled Pascal exception' \
 	"$tmp/unhandled.stdout"; then
 	echo "SysUtils unhandled-exception hook did not run" >&2
 	exit 1
@@ -45,7 +45,7 @@ do
 		exit 1
 	fi
 	expected=$(sed -n '1p' "$base.error")
-	if ! rg -Fq -- "$expected" "$tmp/stderr"; then
+	if ! grep -Fq -- "$expected" "$tmp/stderr"; then
 		echo "wrong diagnostic for $source; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
 		exit 1

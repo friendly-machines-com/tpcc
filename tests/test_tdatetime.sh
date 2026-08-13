@@ -7,7 +7,7 @@ set -eu
 tpcc_translate -o"$tmp/tdatetime.cc" \
 	tests/tdatetime.pp
 
-if ! rg -Fq \
+if ! grep -Fq \
 	'using t_tdatetime = ::u_system::t_double;' \
 	"$tmp/system.h"
 then

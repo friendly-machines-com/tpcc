@@ -13,7 +13,7 @@ for required in \
 	'::u_sysutils::p_executeprocess_commandline' \
 	'::u_sysutils::p_executeprocess_arguments'
 do
-	if ! rg -Fq "$required" "$tmp/sysutils.cc"
+	if ! grep -Fq "$required" "$tmp/sysutils.cc"
 	then
 		echo "ExecuteProcess did not use $required" >&2
 		exit 1

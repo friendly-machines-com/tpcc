@@ -10,31 +10,31 @@ tpcc_translate -o"$tmp/class_static_methods.cc" \
 tpcc_translate -o"$tmp/class_var_visibility_boundary.cc" \
 	tests/class_var_visibility_boundary.pp
 
-if ! rg -q 'static .* p_staticvalue\(' \
+if ! grep -Eq 'static .* p_staticvalue\(' \
 	"$tmp/class_static_methods.cc"
 then
 	echo "static class method was not emitted as a native C++ static member" >&2
 	exit 1
 fi
-if rg -Fq 'm_meta::p_staticvalue' \
+if grep -Fq 'm_meta::p_staticvalue' \
 	"$tmp/class_static_methods.cc"
 then
 	echo "static class method was emitted into the metaclass" >&2
 	exit 1
 fi
-if ! rg -Fq '&t_tbase::p_staticvalue' \
+if ! grep -Fq '&t_tbase::p_staticvalue' \
 	"$tmp/class_static_methods.cc"
 then
 	echo "static class method reference was not emitted as a plain function pointer" >&2
 	exit 1
 fi
-if ! rg -Fq 'static_cast<void>(p_getobject())' \
+if ! grep -Fq 'static_cast<void>(p_getobject())' \
 	"$tmp/class_static_methods.cc"
 then
 	echo "runtime static-method qualifier was not sequenced" >&2
 	exit 1
 fi
-if ! rg -Fq 'static_cast<void>(p_getobject()), &t_tbase::p_staticvalue' \
+if ! grep -Fq 'static_cast<void>(p_getobject()), &t_tbase::p_staticvalue' \
 	"$tmp/class_static_methods.cc"
 then
 	echo "runtime static-method-reference qualifier was not sequenced" >&2
@@ -63,7 +63,7 @@ do
 		exit 1
 	fi
 	expected=$(sed -n '1p' "$base.error")
-	if ! rg -Fq -- "$expected" "$tmp/stderr"
+	if ! grep -Fq -- "$expected" "$tmp/stderr"
 	then
 		echo "wrong diagnostic for $source; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2

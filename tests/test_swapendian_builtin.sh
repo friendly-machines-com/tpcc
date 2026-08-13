@@ -7,7 +7,7 @@ set -eu
 tpcc_translate -o"$tmp/swapendian_builtin.cc" \
 	tests/swapendian_builtin.pp
 
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::p_swapendian(' \
 	"$tmp/swapendian_builtin.cc"
 then

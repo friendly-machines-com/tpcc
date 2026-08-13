@@ -7,25 +7,25 @@ set -eu
 tpcc_translate -o"$tmp/overflow_checking.cc" \
 	tests/overflow_checking.pp
 
-rg -Fq '::u_system::o_unchecked_add' \
+grep -Fq '::u_system::o_unchecked_add' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_add' \
+grep -Fq '::u_system::o_add' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_unchecked_negative' \
+grep -Fq '::u_system::o_unchecked_negative' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_negative' \
+grep -Fq '::u_system::o_negative' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_unchecked_intdivide' \
+grep -Fq '::u_system::o_unchecked_intdivide' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_intdivide' \
+grep -Fq '::u_system::o_intdivide' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_unchecked_subtract' \
+grep -Fq '::u_system::o_unchecked_subtract' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_subtract' \
+grep -Fq '::u_system::o_subtract' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_unchecked_multiply' \
+grep -Fq '::u_system::o_unchecked_multiply' \
 	"$tmp/overflow_checking.cc"
-rg -Fq '::u_system::o_multiply' \
+grep -Fq '::u_system::o_multiply' \
 	"$tmp/overflow_checking.cc"
 
 tpcc_build "$tmp/overflow_checking" \

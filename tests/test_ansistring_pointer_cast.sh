@@ -8,20 +8,20 @@ tpcc_translate -o"$tmp/system.cc" rtl/system.pp
 tpcc_translate -o"$tmp/ansistring_pointer_cast.cc" \
 	tests/ansistring_pointer_cast.pp
 
-if ! rg -Fq '.m_pointer()' \
+if ! grep -Fq '.m_pointer()' \
 	"$tmp/ansistring_pointer_cast.cc"
 then
 	echo "AnsiString cast did not use its data-pointer operation" >&2
 	exit 1
 fi
-if rg -Fq \
+if grep -Fq \
 	'static_cast<::u_system::t_pointer>(p_s)' \
 	"$tmp/ansistring_pointer_cast.cc"
 then
 	echo "AnsiString was cast as an aggregate rather than its data address" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'reinterpret_cast<::u_system::t_byte*>(::u_system::o_unchecked_add' \
 	"$tmp/ansistring_pointer_cast.cc"
 then

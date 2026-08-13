@@ -22,7 +22,7 @@ for selected in \
 	p_inactivebranchignored \
 	p_crossincludepop
 do
-	if ! rg -q "\\b${selected}\\b" \
+	if ! grep -Eq "\\b${selected}\\b" \
 		"$tmp/directive_push_pop.cc"
 	then
 		echo "missing directive-selected declaration: $selected" >&2
@@ -30,7 +30,7 @@ do
 	fi
 done
 
-if rg -q '\\bp_wrong' "$tmp/directive_push_pop.cc"
+if grep -Eq '\\bp_wrong' "$tmp/directive_push_pop.cc"
 then
 	echo "an unselected directive branch was emitted" >&2
 	exit 1
@@ -53,7 +53,7 @@ do
 		exit 1
 	fi
 	expected=$(sed -n '1p' "$base.error")
-	if ! rg -Fq -- "$expected" "$tmp/stderr"
+	if ! grep -Fq -- "$expected" "$tmp/stderr"
 	then
 		echo "wrong directive diagnostic; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2

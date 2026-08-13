@@ -20,7 +20,7 @@ for expected in \
 	'sizeof(::u_system::t_shortstring<5>)' \
 	'sizeof(::u_system::t_shortstring<255>)'
 do
-	if ! rg -Fq "$expected" "$tmp/shortstring_type.cc"; then
+	if ! grep -Fq "$expected" "$tmp/shortstring_type.cc"; then
 		echo "missing ShortString lowering: $expected" >&2
 		exit 1
 	fi
@@ -38,7 +38,7 @@ tpcc_run "$tmp/shortstring_type_runtime"
 tpcc_translate \
 	-o"$tmp/implicit_narrowing.cc" \
 	tests/ansistring_shortstring_implicit.pp
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::tpcc_shortstring_cast<3>' \
 	"$tmp/implicit_narrowing.cc"
 then
@@ -53,7 +53,7 @@ tpcc_run "$tmp/implicit_narrowing"
 tpcc_translate \
 	-o"$tmp/pchar_ansistring.cc" \
 	tests/pchar_ansistring_implicit.pp
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::o_implicit(p_pointervalue, ::u_system::m_conversion_target<::u_system::t_ansistring>{})' \
 	"$tmp/pchar_ansistring.cc"
 then

@@ -17,7 +17,7 @@ for expected in \
 	'p_calculated = 16' \
 	'p_charactera = 65'
 do
-	if ! rg -Fq "$expected" "$tmp/explicit_enum_values.cc"; then
+	if ! grep -Fq "$expected" "$tmp/explicit_enum_values.cc"; then
 		echo "missing explicit enum lowering: $expected" >&2
 		exit 1
 	fi
@@ -35,7 +35,7 @@ then
 	echo "accepted an explicit enum value outside signed 32-bit range" >&2
 	exit 1
 fi
-if ! rg -Fq \
+if ! grep -Fq \
 	'explicit enum value is outside signed 32-bit range' \
 	"$tmp/stderr"
 then

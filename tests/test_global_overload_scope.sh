@@ -29,7 +29,7 @@ then
 	echo "outer routine was implicitly merged without overload" >&2
 	exit 1
 fi
-if ! rg -Fq "no matching overload for 'pick'" \
+if ! grep -Fq "no matching overload for 'pick'" \
 	"$tmp/shadow/stderr"
 then
 	echo "wrong cross-scope shadowing diagnostic" >&2
@@ -54,14 +54,14 @@ then
 	echo "legacy builtin was used as an ordinary overload fallback" >&2
 	exit 1
 fi
-if ! rg -Fq "too many arguments to 'write'" \
+if ! grep -Fq "too many arguments to 'write'" \
 	"$tmp/legacy/rejected.stderr"
 then
 	echo "wrong legacy builtin shadowing diagnostic" >&2
 	sed -n '1,40p' "$tmp/legacy/rejected.stderr" >&2
 	exit 1
 fi
-if rg -Fq "rtl/system.pp" \
+if grep -Fq "rtl/system.pp" \
 	"$tmp/legacy/rejected.stderr"
 then
 	echo "legacy System.Write leaked into the ordinary overload family" >&2

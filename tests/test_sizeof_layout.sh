@@ -11,7 +11,7 @@ if [ "$(rg -F -c 'static_cast<::u_system::t_sizeint>(sizeof(' "$tmp/sizeof_layou
 	exit 1
 fi
 
-if ! rg -Fq '::u_system::t_fixedarray<::u_system::t_byte, 4,' "$tmp/sizeof_layout.cc"; then
+if ! grep -Fq '::u_system::t_fixedarray<::u_system::t_byte, 4,' "$tmp/sizeof_layout.cc"; then
 	echo "SizeOf constant evaluation did not construct the array bound" >&2
 	exit 1
 fi
@@ -39,13 +39,13 @@ for expected in \
 	'sizeof(t_tshortstringrecord) == 10' \
 	'alignof(t_tshortstringrecord) == 1'
 do
-	if ! rg -Fq "$expected" "$tmp/sizeof_layout.cc"; then
+	if ! grep -Fq "$expected" "$tmp/sizeof_layout.cc"; then
 		echo "missing layout assertion: $expected" >&2
 		exit 1
 	fi
 done
 
-if rg -q 'layout_oracle|gnu::packed' "$tmp/sizeof_layout.cc"; then
+if grep -Eq 'layout_oracle|gnu::packed' "$tmp/sizeof_layout.cc"; then
 	echo "packed layout unexpectedly depends on a GNU oracle" >&2
 	exit 1
 fi

@@ -10,7 +10,7 @@ tpcc_translate \
 
 # R+ must not emit a range check after semantic constant evaluation has
 # already proved that the actual value belongs to the selected destination.
-if rg -Fq 'm_range_checked_ordinal_cast' \
+if grep -Fq 'm_range_checked_ordinal_cast' \
 	"$tmp/typed_integer_constant_conversion.cc"
 then
 	echo "range-checked a proved in-range typed integer constant" >&2
@@ -33,7 +33,7 @@ then
 	exit 1
 fi
 
-rg -Fq "ambiguous overload for 'uncheckedintdivide'" "$tmp/stderr"
-rg -Fq 'conflicting argument preferences:' "$tmp/stderr"
+grep -Fq "ambiguous overload for 'uncheckedintdivide'" "$tmp/stderr"
+grep -Fq 'conflicting argument preferences:' "$tmp/stderr"
 
 echo "typed integer constant conversion tests passed"

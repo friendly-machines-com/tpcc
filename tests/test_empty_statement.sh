@@ -6,8 +6,13 @@ set -eu
 
 tpcc_translate -o"$tmp/empty_statement.cc" tests/empty_statement.pp
 
-if ! rg -Uq 'pas_label_emptyatend:\n[[:space:]]*\{\}' \
-	"$tmp/empty_statement.cc"
+if ! awk '
+	/pas_label_emptyatend:/ {
+		if (getline > 0 && $0 ~ /^[[:space:]]*\{\}/)
+			found = 1
+	}
+	END { exit !found }
+' "$tmp/empty_statement.cc"
 then
 	echo "empty labeled statement was not preserved in C++20" >&2
 	exit 1

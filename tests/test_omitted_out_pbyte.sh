@@ -8,14 +8,14 @@ tpcc_translate -o"$tmp/system.cc" rtl/system.pp
 tpcc_translate -o"$tmp/omitted_out_pbyte.cc" \
 	tests/omitted_out_pbyte.pp
 
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::tpcc_omitted_out_pbyte(p_buffer)' \
 	"$tmp/omitted_out_pbyte.cc"
 then
 	echo "omitted out formal did not expose the caller's Byte storage" >&2
 	exit 1
 fi
-if rg -Fq 'std::addressof(p_buffer)' "$tmp/omitted_out_pbyte.cc"
+if grep -Fq 'std::addressof(p_buffer)' "$tmp/omitted_out_pbyte.cc"
 then
 	echo "omitted out formal exposed its storage-ref descriptor" >&2
 	exit 1

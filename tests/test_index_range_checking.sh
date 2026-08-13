@@ -7,13 +7,13 @@ set -eu
 tpcc_translate -o"$tmp/index_range_checking.cc" \
 	tests/index_range_checking.pp
 
-rg -Fq '::u_system::m_unchecked_index' \
+grep -Fq '::u_system::m_unchecked_index' \
 	"$tmp/index_range_checking.cc"
-rg -Fq '::u_system::p_index' \
+grep -Fq '::u_system::p_index' \
 	"$tmp/index_range_checking.cc"
-rg -Fq '::u_system::m_ordinal_cast' \
+grep -Fq '::u_system::m_ordinal_cast' \
 	"$tmp/index_range_checking.cc"
-rg -Fq '::u_system::m_range_checked_ordinal_cast' \
+grep -Fq '::u_system::m_range_checked_ordinal_cast' \
 	"$tmp/index_range_checking.cc"
 
 tpcc_build "$tmp/index_range_checking" \

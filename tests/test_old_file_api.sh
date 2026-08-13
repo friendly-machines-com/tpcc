@@ -10,7 +10,7 @@ tpcc_translate -o"$tmp/old_file_api.cc" \
 
 for operation in assign rewrite reset close seek filepos filesize eof truncate ioresult blockread blockwrite
 do
-	if ! rg -Fq "::u_system::p_$operation" \
+	if ! grep -Fq "::u_system::p_$operation" \
 		"$tmp/old_file_api.cc"
 	then
 		echo "missing old file operation: $operation" >&2

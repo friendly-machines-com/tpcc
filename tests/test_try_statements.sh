@@ -23,7 +23,7 @@ do
 		exit 1
 	fi
 	expected=$(sed -n '1p' "$base.error")
-	if ! rg -F -q -- "$expected" "$tmp/stderr"; then
+	if ! grep -F -q -- "$expected" "$tmp/stderr"; then
 		echo "wrong diagnostic for $source; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
 		exit 1

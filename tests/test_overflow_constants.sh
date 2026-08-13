@@ -18,7 +18,7 @@ then
 	echo "checked overflowing constant unexpectedly compiled" >&2
 	exit 1
 fi
-rg -Fq 'integer constant out of range for target type' \
+grep -Fq 'integer constant out of range for target type' \
 	"$tmp/stderr"
 
 echo "overflow constant-folding tests passed"

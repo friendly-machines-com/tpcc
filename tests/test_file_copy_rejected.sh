@@ -16,7 +16,7 @@ do
 		echo "$source was accepted" >&2
 		exit 1
 	fi
-	if ! rg -q \
+	if ! grep -Eq \
 		'file values and values containing files cannot be assigned|file types and types containing files require var or out parameters' \
 		"$tmp/$source.out"
 	then

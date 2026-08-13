@@ -7,13 +7,13 @@ set -eu
 tpcc_translate -o"$tmp/custom_range_conversions.cc" \
 	tests/custom_range_conversions.pp
 
-rg -Fq 'o_implicit' \
+grep -Fq 'o_implicit' \
 	"$tmp/custom_range_conversions.cc"
-rg -Fq 'o_unchecked_implicit' \
+grep -Fq 'o_unchecked_implicit' \
 	"$tmp/custom_range_conversions.cc"
-rg -Fq 'p_implicit' \
+grep -Fq 'p_implicit' \
 	"$tmp/custom_range_conversions.cc"
-rg -Fq 'p_uncheckedimplicit' \
+grep -Fq 'p_uncheckedimplicit' \
 	"$tmp/custom_range_conversions.cc"
 
 tpcc_build "$tmp/custom_range_conversions" \
@@ -33,7 +33,7 @@ do
 		echo "accepted a missing ${omitted} implicit conversion family" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'no implicit conversion' "$tmp/stderr"
+	if ! grep -Fq 'no implicit conversion' "$tmp/stderr"
 	then
 		echo "wrong diagnostic for missing ${omitted} implicit conversion" >&2
 		sed -n '1,100p' "$tmp/stderr" >&2
@@ -48,7 +48,7 @@ do
 		'type tdestination' \
 		'source:'
 	do
-		if ! rg -Fq "$required" "$tmp/stderr"
+		if ! grep -Fq "$required" "$tmp/stderr"
 		then
 			echo "incomplete implicit-conversion diagnostic: $required" >&2
 			sed -n '1,140p' "$tmp/stderr" >&2
@@ -72,7 +72,7 @@ do
 		echo "attached a conversion body to a different operator contract: $mode" >&2
 		exit 1
 	fi
-	if ! rg -Fq 'callable declaration conflicts with existing declaration' \
+	if ! grep -Fq 'callable declaration conflicts with existing declaration' \
 		"$tmp/stderr"
 	then
 		echo "wrong diagnostic for conversion contract mismatch: $mode" >&2
@@ -88,7 +88,7 @@ do
 		'type tdestination' \
 		'source:'
 	do
-		if ! rg -Fq "$required" "$tmp/stderr"
+		if ! grep -Fq "$required" "$tmp/stderr"
 		then
 			echo "incomplete conversion-declaration diagnostic: $required" >&2
 			sed -n '1,140p' "$tmp/stderr" >&2

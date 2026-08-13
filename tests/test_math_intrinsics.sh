@@ -20,7 +20,7 @@ if tpcc_translate -o"$tmp/range_error.cc" tests/math_intrinsics_range_error.pp \
 	exit 1
 fi
 expected=$(sed -n '1p' tests/math_intrinsics_range_error.error)
-if ! rg -F -q -- "$expected" "$tmp/stderr"; then
+if ! grep -F -q -- "$expected" "$tmp/stderr"; then
 	echo "wrong Trunc range diagnostic; expected: $expected" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2
 	exit 1

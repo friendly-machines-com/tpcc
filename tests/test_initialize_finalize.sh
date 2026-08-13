@@ -14,7 +14,7 @@ for required in \
 	'inline void m_pascal_initialize(t_tmanaged& value) noexcept' \
 	'inline void m_pascal_finalize(t_tmanaged& value) noexcept'
 do
-	if ! rg -Fq "$required" "$tmp/initialize_finalize.cc"
+	if ! grep -Fq "$required" "$tmp/initialize_finalize.cc"
 	then
 		echo "missing Initialize/Finalize lowering: $required" >&2
 		exit 1
@@ -42,7 +42,7 @@ do
 		echo "accepted unsupported two-argument $intrinsic" >&2
 		exit 1
 	fi
-	if ! rg -Fqi "too many arguments to '${intrinsic}'" \
+	if ! grep -Fqi "too many arguments to '${intrinsic}'" \
 		"$tmp/stderr"
 	then
 		echo "wrong two-argument $intrinsic diagnostic" >&2

@@ -8,13 +8,13 @@ tpcc_translate \
 	-o"$tmp/filldword_builtin.cc" \
 	tests/filldword_builtin.pp
 
-if ! rg -q '::u_system::p_filldword' \
+if ! grep -Eq '::u_system::p_filldword' \
 	"$tmp/filldword_builtin.cc"
 then
 	echo "FillDWord did not lower through the RTL" >&2
 	exit 1
 fi
-if ! rg -q '::u_system::p_fillbyte' \
+if ! grep -Eq '::u_system::p_fillbyte' \
 	"$tmp/filldword_builtin.cc"
 then
 	echo "FillByte did not lower through the RTL" >&2

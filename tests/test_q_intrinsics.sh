@@ -12,7 +12,7 @@ for operation in \
 	p_succ m_unchecked_succ \
 	p_pred m_unchecked_pred
 do
-	rg -Fq "::u_system::$operation" \
+	grep -Fq "::u_system::$operation" \
 		"$tmp/q_intrinsics.cc"
 done
 
@@ -43,7 +43,7 @@ do
 		echo "$define checked constant unexpectedly compiled" >&2
 		exit 1
 	fi
-	rg -Fq 'integer constant overflow' \
+	grep -Fq 'integer constant overflow' \
 		"$tmp/stderr"
 done
 

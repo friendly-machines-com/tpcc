@@ -10,43 +10,43 @@ tpcc_translate -o"$tmp/lifecycle.cc" \
 tpcc_translate -o"$tmp/shadow.cc" \
 	tests/old_object_new_shadow.pp
 
-if ! rg -Fq 'void t_tbase::p_init(' \
+if ! grep -Fq 'void t_tbase::p_init(' \
 	"$tmp/lifecycle.cc"
 then
 	echo "old-object constructor was not emitted as a Unit method" >&2
 	exit 1
 fi
-if ! rg -Fq 'virtual void p_done()' \
+if ! grep -Fq 'virtual void p_done()' \
 	"$tmp/lifecycle.cc"
 then
 	echo "old-object destructor was not emitted as a virtual ordinary method" >&2
 	exit 1
 fi
-if rg -Fq '~t_tbase() {' \
+if grep -Fq '~t_tbase() {' \
 	"$tmp/lifecycle.cc"
 then
 	echo "Pascal old-object destructor body became a C++ destructor" >&2
 	exit 1
 fi
-if ! rg -Fq 'virtual ~t_tbase() = default;' \
+if ! grep -Fq 'virtual ~t_tbase() = default;' \
 	"$tmp/lifecycle.cc"
 then
 	echo "VMT-bearing old object lacks its hidden carrier destructor" >&2
 	exit 1
 fi
-if ! rg -Fq 't_tbase::p_done();' \
+if ! grep -Fq 't_tbase::p_done();' \
 	"$tmp/lifecycle.cc"
 then
 	echo "explicit inherited old-object destructor call was dropped" >&2
 	exit 1
 fi
-if rg -Fq 'new t_tderived{}' \
+if grep -Fq 'new t_tderived{}' \
 	"$tmp/lifecycle.cc"
 then
 	echo "old-object allocation was value-initialized" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::m_new_object<t_tderived' \
+if ! grep -Fq '::u_system::m_new_object<t_tderived' \
 	"$tmp/lifecycle.cc"
 then
 	echo "extended New did not preserve the exact pointed-to object type" >&2
@@ -60,7 +60,7 @@ then
 	echo "virtual old-object constructor was accepted" >&2
 	exit 1
 fi
-if ! rg -Fq 'old-style object constructors cannot be' \
+if ! grep -Fq 'old-style object constructors cannot be' \
 	"$tmp/bad.err"
 then
 	echo "virtual old-object constructor diagnostic was not specific" >&2

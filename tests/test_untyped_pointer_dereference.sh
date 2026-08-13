@@ -8,14 +8,14 @@ tpcc_translate -o"$tmp/system.cc" rtl/system.pp
 tpcc_translate -o"$tmp/untyped_pointer_dereference.cc" \
 	tests/untyped_pointer_dereference.pp
 
-if ! rg -Fq \
+if ! grep -Fq \
 	'::u_system::tpcc_dereference_storage(p_rawdestination)' \
 	"$tmp/untyped_pointer_dereference.cc"
 then
 	echo "untyped Pointer^ did not produce a raw storage place" >&2
 	exit 1
 fi
-if rg -Fq '*p_rawdestination' \
+if grep -Fq '*p_rawdestination' \
 	"$tmp/untyped_pointer_dereference.cc"
 then
 	echo "untyped Pointer^ was emitted as C++ unary dereference" >&2

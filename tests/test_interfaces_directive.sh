@@ -27,7 +27,7 @@ do
 		exit 1
 	fi
 	expected=$(sed -n '1p' "$base.error")
-	if ! rg -Fq -- "$expected" "$tmp/stderr"
+	if ! grep -Fq -- "$expected" "$tmp/stderr"
 	then
 		echo "wrong interface-model diagnostic; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2

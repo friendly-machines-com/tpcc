@@ -11,7 +11,7 @@ for required in \
 	'::u_system::p_hexstr(p_q,' \
 	'::u_system::p_hexstr(p_p)'
 do
-	if ! rg -Fq "$required" "$tmp/hexstr_builtin.cc"
+	if ! grep -Fq "$required" "$tmp/hexstr_builtin.cc"
 	then
 		echo "missing HexStr overload lowering: $required" >&2
 		exit 1

@@ -18,7 +18,7 @@ then
 	echo "accepted an unterminated parenthesized block comment" >&2
 	exit 1
 fi
-if ! rg -Fq 'missing end comment' "$tmp/stderr"
+if ! grep -Fq 'missing end comment' "$tmp/stderr"
 then
 	echo "wrong unterminated block-comment diagnostic" >&2
 	sed -n '1,80p' "$tmp/stderr" >&2

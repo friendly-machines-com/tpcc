@@ -7,27 +7,27 @@ set -eu
 tpcc_translate -o"$tmp/incomplete_type_resolution.cc" \
 	tests/incomplete_type_resolution.pp
 
-if ! rg -Fq 'struct t_tsecond;' \
+if ! grep -Fq 'struct t_tsecond;' \
 	"$tmp/incomplete_type_resolution.cc"
 then
 	echo "later aggregate did not receive a C++ forward declaration" >&2
 	exit 1
 fi
-if ! rg -Fq 't_tsecond* p_next;' \
+if ! grep -Fq 't_tsecond* p_next;' \
 	"$tmp/incomplete_type_resolution.cc"
 then
 	echo "aggregate member forward reference was not resolved" >&2
 	exit 1
 fi
-if ! rg -Fq 'inline static t_tvalue& p_seven()' \
+if ! grep -Fq 'inline static t_tvalue& p_seven()' \
 	"$tmp/incomplete_type_resolution.cc" ||
-   ! rg -Fq 'static t_tvalue m_value = ' \
+   ! grep -Fq 'static t_tvalue m_value = ' \
 	"$tmp/incomplete_type_resolution.cc"
 then
 	echo "typed aggregate constant did not receive stable deferred storage" >&2
 	exit 1
 fi
-if ! rg -Fq 'struct t_timplicitclass;' \
+if ! grep -Fq 'struct t_timplicitclass;' \
 	"$tmp/incomplete_type_resolution.cc"
 then
 	echo "class-of target did not receive a C++ forward declaration" >&2
@@ -43,7 +43,7 @@ tpcc_translate \
 	-o"$tmp/incomplete_type_callable_normalization.cc" \
 	tests/incomplete_type_callable_normalization.pp
 
-if ! rg -Fq 'p_getcopy() override;' \
+if ! grep -Fq 'p_getcopy() override;' \
 	"$tmp/incomplete_type_callable_normalization.cc"
 then
 	echo "same-block self-result override was not retained after normalization" >&2
@@ -65,7 +65,7 @@ then
 fi
 expected=$(sed -n '1p' \
 	tests/aggregate_true_constant_address_rejected.error)
-if ! rg -F -q -- "$expected" "$tmp/stderr"
+if ! grep -F -q -- "$expected" "$tmp/stderr"
 then
 	echo "wrong true-constant address diagnostic; expected: $expected" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2
@@ -82,13 +82,13 @@ then
 fi
 expected=$(sed -n '1p' \
 	tests/incomplete_type_by_value_cycle.error)
-if ! rg -F -q -- "$expected" "$tmp/stderr"
+if ! grep -F -q -- "$expected" "$tmp/stderr"
 then
 	echo "wrong by-value recursion diagnostic; expected: $expected" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2
 	exit 1
 fi
-if rg -Fq 'internal compiler error' "$tmp/stderr"
+if grep -Fq 'internal compiler error' "$tmp/stderr"
 then
 	echo "by-value recursion escaped to C++ layout" >&2
 	exit 1
@@ -110,7 +110,7 @@ do
 		echo "accepted invalid implicit type forward: $define" >&2
 		exit 1
 	fi
-	if ! rg -F -q -- "$expected" "$tmp/stderr"
+	if ! grep -F -q -- "$expected" "$tmp/stderr"
 	then
 		echo "wrong implicit-forward diagnostic for $define; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2
@@ -135,7 +135,7 @@ do
 		echo "accepted invalid recursive type equation: $define" >&2
 		exit 1
 	fi
-	if ! rg -F -q -- "$expected" "$tmp/stderr"
+	if ! grep -F -q -- "$expected" "$tmp/stderr"
 	then
 		echo "wrong recursive-type diagnostic for $define; expected: $expected" >&2
 		sed -n '1,20p' "$tmp/stderr" >&2

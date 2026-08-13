@@ -7,7 +7,7 @@ set -eu
 tpcc_translate -o"$tmp/get_local_time.cc" \
 	tests/get_local_time.pp
 
-if ! rg -Fq '::u_sysutils::p_getlocaltime' \
+if ! grep -Fq '::u_sysutils::p_getlocaltime' \
 	"$tmp/get_local_time.cc"
 then
 	echo "SysUtils.GetLocalTime did not use p_getlocaltime" >&2

@@ -18,7 +18,7 @@ for operation in \
 	'::u_system::o_lessthanorequal(' \
 	'::u_system::o_greaterthanorequal('
 do
-	if ! rg -Fq "$operation" \
+	if ! grep -Fq "$operation" \
 		"$tmp/set_arithmetic.cc"
 	then
 		echo "missing predefined set operation: $operation" >&2
@@ -46,7 +46,7 @@ for required in \
 	'arg 2:' \
 	'all candidates:'
 do
-	if ! rg -Fq "$required" "$tmp/stderr"
+	if ! grep -Fq "$required" "$tmp/stderr"
 	then
 		echo "incomplete incompatible-set diagnostic" >&2
 		sed -n '1,180p' "$tmp/stderr" >&2

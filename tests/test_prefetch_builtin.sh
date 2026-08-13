@@ -8,7 +8,7 @@ tpcc_translate \
 	-o"$tmp/prefetch_builtin.cc" \
 	tests/prefetch_builtin.pp
 
-if ! rg -q \
+if ! grep -Eq \
 	'::u_system::p_prefetch' \
 	"$tmp/prefetch_builtin.cc"
 then

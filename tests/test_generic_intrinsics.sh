@@ -16,7 +16,7 @@ if tpcc_translate -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr";
 	exit 1
 fi
 expected=$(sed -n '1p' tests/generic_intrinsic_nonordinal.error)
-if ! rg -F -q -- "$expected" "$tmp/stderr"; then
+if ! grep -F -q -- "$expected" "$tmp/stderr"; then
 	echo "wrong generic-intrinsic diagnostic; expected: $expected" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2
 	exit 1

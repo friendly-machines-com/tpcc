@@ -10,9 +10,9 @@ tpcc_translate \
 
 # Both procedures selected Domain(Single). R changes only the constructed
 # unchecked value versus checked-failure expression after overload selection.
-rg -Fq 'p_domain(std::numeric_limits<::u_system::t_single>::infinity())' \
+grep -Fq 'p_domain(std::numeric_limits<::u_system::t_single>::infinity())' \
 	"$tmp/real_constant_semantics.cc"
-rg -Fq 'p_domain(([]() -> ::u_system::t_single { ::u_system::m_runtime_error(201); return {}; }()))' \
+grep -Fq 'p_domain(([]() -> ::u_system::t_single { ::u_system::m_runtime_error(201); return {}; }()))' \
 	"$tmp/real_constant_semantics.cc"
 
 tpcc_translate -dCPUX86_64 \
@@ -38,6 +38,6 @@ then
 	exit 1
 fi
 
-rg -Fq 'integer constant is below Int64 minimum' "$tmp/err"
+grep -Fq 'integer constant is below Int64 minimum' "$tmp/err"
 
 echo "real constant semantics tests passed"

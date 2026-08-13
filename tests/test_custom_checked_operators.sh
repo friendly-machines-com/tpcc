@@ -7,13 +7,13 @@ set -eu
 tpcc_translate -o"$tmp/custom_checked_operators.cc" \
 	tests/custom_checked_operators.pp
 
-rg -Fq 'o_unchecked_add' \
+grep -Fq 'o_unchecked_add' \
 	"$tmp/custom_checked_operators.cc"
-rg -Fq 'o_add' \
+grep -Fq 'o_add' \
 	"$tmp/custom_checked_operators.cc"
-rg -Fq 'o_operator_plus' \
+grep -Fq 'o_operator_plus' \
 	"$tmp/custom_checked_operators.cc"
-rg -Fq 'p_add' \
+grep -Fq 'p_add' \
 	"$tmp/custom_checked_operators.cc"
 
 tpcc_build "$tmp/custom_checked_operators" \

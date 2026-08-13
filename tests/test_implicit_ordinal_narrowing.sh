@@ -8,9 +8,9 @@ tpcc_translate \
 	-o"$tmp/implicit_ordinal_narrowing.cc" \
 	tests/implicit_ordinal_narrowing.pp
 
-rg -Fq '::u_system::m_ordinal_cast' \
+grep -Fq '::u_system::m_ordinal_cast' \
 	"$tmp/implicit_ordinal_narrowing.cc"
-rg -Fq '::u_system::m_range_checked_ordinal_cast' \
+grep -Fq '::u_system::m_range_checked_ordinal_cast' \
 	"$tmp/implicit_ordinal_narrowing.cc"
 
 tpcc_build "$tmp/implicit_ordinal_narrowing" \

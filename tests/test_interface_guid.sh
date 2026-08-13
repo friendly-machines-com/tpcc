@@ -7,9 +7,9 @@ set -eu
 tpcc_translate -o"$tmp/interface_guid.cc" \
 	tests/interface_guid.pp
 
-if ! rg -Fq 'virtual void p_base() = 0;' \
+if ! grep -Fq 'virtual void p_base() = 0;' \
 	"$tmp/interface_guid.cc" ||
-   ! rg -Fq 'virtual void p_child() = 0;' \
+   ! grep -Fq 'virtual void p_child() = 0;' \
 	"$tmp/interface_guid.cc"
 then
 	echo "GUID clause changed interface member emission" >&2
@@ -30,7 +30,7 @@ then
 fi
 expected=$(sed -n '1p' \
 	tests/interface_guid_nonstring_rejected.error)
-if ! rg -Fq -- "$expected" "$tmp/stderr"
+if ! grep -Fq -- "$expected" "$tmp/stderr"
 then
 	echo "wrong non-string GUID diagnostic; expected: $expected" >&2
 	sed -n '1,20p' "$tmp/stderr" >&2
