@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-interface-guid-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/interface_guid.cc" \
+tpcc_translate -o"$tmp/interface_guid.cc" \
 	tests/interface_guid.pp
 
 if ! rg -Fq 'virtual void p_base() = 0;' \
@@ -20,19 +16,12 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/interface_guid" \
 	"$tmp/interface_guid.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/interface_guid"
+	"$tmp/system.cc"
 "$tmp/interface_guid"
 
-if ./mp -Furtl -o"$tmp/rejected.cc" \
+if tpcc_translate -o"$tmp/rejected.cc" \
 	tests/interface_guid_nonstring_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then

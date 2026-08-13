@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-properties-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/properties.cc" tests/properties.pp
+tpcc_translate -o"$tmp/properties.cc" tests/properties.pp
 
 if rg -q 'p_[a-zA-Z0-9_]+\[' "$tmp/properties.cc"; then
 	echo "generated Pascal indexing bypassed the RTL" >&2
@@ -28,17 +24,10 @@ if ! rg -q '::u_system::p_uniquestring\(p_longs\)' "$tmp/properties.cc"; then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/properties" \
 	tests/properties_runtime.cpp \
-	"$tmp/system.cc" \
-	-o "$tmp/properties"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/properties"
+	"$tmp/system.cc"
+tpcc_run "$tmp/properties"
 
 for source in \
 	tests/conversion_expected_return_rejected.pp \
@@ -49,7 +38,7 @@ for source in \
 	tests/property_write_only_read_rejected.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
 		echo "expected tpcc to reject $source" >&2
 		exit 1
 	fi

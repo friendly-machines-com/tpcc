@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-ordinary-external-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-if ! ./mp -Furtl -o"$tmp/ordinary_external.cc" \
+if ! tpcc_translate -o"$tmp/ordinary_external.cc" \
 	tests/ordinary_external.pp \
 	>"$tmp/compile.out" 2>"$tmp/compile.err"
 then

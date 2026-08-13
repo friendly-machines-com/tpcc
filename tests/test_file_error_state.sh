@@ -1,25 +1,13 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-file-error-state-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	tests/file_error_state_runtime.cpp \
-	-o "$tmp/file_error_state"
+tpcc_build "$tmp/file_error_state" \
+	tests/file_error_state_runtime.cpp
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/file_error_state"
 
 echo "file error-state tests passed"

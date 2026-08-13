@@ -1,26 +1,15 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-directive-diagnostics-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/directive_diagnostics_inactive.cc" \
 	tests/directive_diagnostics_inactive.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/directive_diagnostics_inactive" \
 	"$tmp/directive_diagnostics_inactive.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/directive_diagnostics_inactive"
+	"$tmp/system.cc"
 "$tmp/directive_diagnostics_inactive"
 
 for source in \
@@ -30,7 +19,7 @@ for source in \
 	tests/directive_error_include.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "accepted active diagnostic directive: $source" >&2

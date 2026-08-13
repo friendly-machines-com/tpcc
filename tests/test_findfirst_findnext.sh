@@ -1,9 +1,7 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-findfirst-findnext-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+. "$(dirname -- "$0")/testlib.sh"
 mkdir -p "$tmp/work/files/subdir" "$tmp/work/home"
 
 printf abc >"$tmp/work/files/alpha1.dat"
@@ -17,9 +15,8 @@ ln -s alpha1.dat "$tmp/work/files/file-link"
 ln -s subdir "$tmp/work/files/dir-link"
 ln -s missing "$tmp/work/files/broken-link"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/findfirst_findnext.cc" \
+tpcc_translate -o"$tmp/findfirst_findnext.cc" \
 	tests/findfirst_findnext.pp
 if ! rg -Fq '::u_sysutils::p_fileage' \
 	"$tmp/findfirst_findnext.cc"
@@ -27,23 +24,14 @@ then
 	echo "SysUtils.FileAge did not use p_fileage" >&2
 	exit 1
 fi
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/findfirst_findnext" \
 	"$tmp/findfirst_findnext.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/findfirst_findnext"
+	"$tmp/system.cc"
 
 cd "$tmp/work"
 HOME="$tmp/work/home" \
-	ASAN_OPTIONS=detect_leaks=1 \
+	tpcc_run \
 	"$tmp/findfirst_findnext"
 
 echo "FindFirst/FindNext tests passed"

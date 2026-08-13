@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-strtoint-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/strtoint.cc" tests/strtoint.pp
+tpcc_translate -o"$tmp/strtoint.cc" tests/strtoint.pp
 
 if ! rg -Fq '::u_sysutils::p_strtoint(' "$tmp/strtoint.cc"; then
 	echo "SysUtils.StrToInt did not resolve in the SysUtils namespace" >&2
@@ -19,21 +15,12 @@ if ! rg -Fq '::u_system::p_val(' "$tmp/sysutils.cc"; then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/strtoint" \
 	"$tmp/strtoint.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/strtoint"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/strtoint"
 
 echo "StrToInt tests passed"

@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-custom-range-conversions.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/custom_range_conversions.cc" \
+tpcc_translate -o"$tmp/custom_range_conversions.cc" \
 	tests/custom_range_conversions.pp
 
 rg -Fq 'o_implicit' \
@@ -20,25 +16,16 @@ rg -Fq 'p_implicit' \
 rg -Fq 'p_uncheckedimplicit' \
 	"$tmp/custom_range_conversions.cc"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/custom_range_conversions" \
 	"$tmp/custom_range_conversions.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/custom_range_conversions"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/custom_range_conversions"
 
 for omitted in CHECKED UNCHECKED
 do
-	if ./mp -Furtl -d"OMIT_${omitted}" \
+	if tpcc_translate -d"OMIT_${omitted}" \
 		-o"$tmp/missing_${omitted}.cc" \
 		tests/custom_range_conversions.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -77,7 +64,7 @@ do
 	then
 		define=-dREVERSE
 	fi
-	if ./mp -Furtl $define \
+	if tpcc_translate $define \
 		-o"$tmp/contract_${mode}.cc" \
 		tests/implicit_conversion_contract_mismatch_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"

@@ -1,35 +1,22 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-overload-ranking.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/overload_ranking.cc" \
 	tests/overload_ranking.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
+tpcc_build "$tmp/overload_ranking" \
 	-Wno-unused-parameter \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
 	"$tmp/overload_ranking.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/overload_ranking"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/overload_ranking"
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/generic_ambiguous.cc" \
 	tests/overload_ranking_generic_ambiguous.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -50,7 +37,7 @@ do
 	fi
 done
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/signedness_ambiguous.cc" \
 	tests/overload_ranking_signedness_ambiguous.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -81,22 +68,13 @@ then
 	exit 1
 fi
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/untyped_constants.cc" \
 	tests/overload_ranking_untyped_constants.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/untyped_constants" \
 	"$tmp/untyped_constants.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/untyped_constants"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/untyped_constants"
 
 echo "overload ranking tests passed"

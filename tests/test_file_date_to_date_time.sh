@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-file-date-to-date-time-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/file_date_to_date_time.cc" \
+tpcc_translate -o"$tmp/file_date_to_date_time.cc" \
 	tests/file_date_to_date_time.pp
 
 if ! rg -Fq '::u_sysutils::p_filedatetodatetime' \
@@ -18,36 +14,19 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/file_date_to_date_time" \
 	"$tmp/file_date_to_date_time.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/file_date_to_date_time"
+	"$tmp/system.cc"
 
 TZ=UTC0 \
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/file_date_to_date_time"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	tests/file_date_to_date_time_runtime.cpp \
-	-o "$tmp/file_date_to_date_time_runtime"
+tpcc_build "$tmp/file_date_to_date_time_runtime" \
+	tests/file_date_to_date_time_runtime.cpp
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/file_date_to_date_time_runtime"
 
 echo "FileDateToDateTime tests passed"

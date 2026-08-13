@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-filldword-builtin-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/filldword_builtin.cc" \
 	tests/filldword_builtin.pp
 
@@ -25,32 +21,15 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/filldword_builtin_pascal" \
 	"$tmp/filldword_builtin.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/filldword_builtin_pascal"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/filldword_builtin_pascal"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	tests/filldword_builtin_runtime.cpp \
-	-o "$tmp/filldword_builtin_runtime"
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_build "$tmp/filldword_builtin_runtime" \
+	tests/filldword_builtin_runtime.cpp
+tpcc_run \
 	"$tmp/filldword_builtin_runtime"
 
 echo "FillByte/FillDWord builtin tests passed"

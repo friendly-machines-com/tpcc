@@ -1,27 +1,16 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-delete-builtin-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/delete_builtin.cc" tests/delete_builtin.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/delete_builtin.cc" tests/delete_builtin.pp
+tpcc_build "$tmp/delete_builtin" \
 	"$tmp/delete_builtin.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/delete_builtin"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/delete_builtin"
+	"$tmp/system.cc"
+tpcc_run "$tmp/delete_builtin"
 
-if ./mp -Furtl -o"$tmp/rejected.cc" \
+if tpcc_translate -o"$tmp/rejected.cc" \
 	tests/delete_non_string_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then

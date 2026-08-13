@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-final-method-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/final_methods.cc" \
+tpcc_translate -o"$tmp/final_methods.cc" \
 	tests/final_methods.pp
 
 if test "$(rg -F -c ' override final;' \
@@ -23,21 +19,14 @@ then
 	echo "direct virtual-final declaration was not emitted" >&2
 	exit 1
 fi
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/final_methods" \
 	"$tmp/final_methods.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/final_methods"
+	"$tmp/system.cc"
 "$tmp/final_methods"
 
 for define in TEST_INSTANCE TEST_CLASS
 do
-	if ./mp -Furtl -d"$define" \
+	if tpcc_translate -d"$define" \
 		-o"$tmp/rejected.cc" \
 		tests/final_method_override_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -53,7 +42,7 @@ do
 	fi
 done
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/rejected.cc" \
 	tests/final_nonvirtual_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"

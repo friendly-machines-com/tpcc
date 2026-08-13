@@ -1,27 +1,14 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-sysutils-exception-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/sysutils_exception.cc" tests/sysutils_exception.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/sysutils_exception.cc" tests/sysutils_exception.pp
+tpcc_build "$tmp/sysutils_exception" \
 	"$tmp/sysutils_exception.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/sysutils_exception"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/sysutils_exception"
+	"$tmp/system.cc"
+tpcc_run "$tmp/sysutils_exception"
 
 echo "SysUtils Exception tests passed"

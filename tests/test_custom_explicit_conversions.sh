@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-custom-explicit-conversions.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/custom_explicit_conversions.cc" \
+tpcc_translate -o"$tmp/custom_explicit_conversions.cc" \
 	tests/custom_explicit_conversions.pp
 
 for required in \
@@ -27,23 +23,14 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/custom_explicit_conversions" \
 	"$tmp/custom_explicit_conversions.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/custom_explicit_conversions"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/custom_explicit_conversions"
 
-if ./mp -Furtl -dREJECT_EXPLICIT_AS_IMPLICIT \
+if tpcc_translate -dREJECT_EXPLICIT_AS_IMPLICIT \
 	-o"$tmp/explicit_as_implicit.cc" \
 	tests/custom_explicit_conversions.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -58,7 +45,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl -o"$tmp/custom_explicit_as_rejected.cc" \
+if tpcc_translate -o"$tmp/custom_explicit_as_rejected.cc" \
 	tests/custom_explicit_as_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then

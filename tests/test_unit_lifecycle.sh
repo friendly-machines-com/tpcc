@@ -1,29 +1,20 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-unit-lifecycle-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+. "$(dirname -- "$0")/testlib.sh"
 mkdir -p "$tmp/normal" "$tmp/partial"
 
-cd "$root"
 
-./mp -Furtl -Futests/unit_lifecycle \
+tpcc_translate -Futests/unit_lifecycle \
 	-o"$tmp/normal/lifecycle.cc" \
 	tests/unit_lifecycle/lifecycle.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
+tpcc_build "$tmp/normal/lifecycle" \
 	-I"$tmp/normal" \
-	-Irtl \
 	"$tmp/normal"/*.cc \
-	tests/unit_lifecycle/system_stub.cc \
-	-o "$tmp/normal/lifecycle"
+	tests/unit_lifecycle/system_stub.cc
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/normal/lifecycle" >"$tmp/normal/output"
 if [ "$(cat "$tmp/normal/output")" != "ABECDMdcrseba" ]; then
 	echo "wrong initialization/finalization order:" >&2
@@ -31,23 +22,17 @@ if [ "$(cat "$tmp/normal/output")" != "ABECDMdcrseba" ]; then
 	exit 1
 fi
 
-./mp -Furtl -Futests/unit_lifecycle \
+tpcc_translate -Futests/unit_lifecycle \
 	-o"$tmp/partial/partial.cc" \
 	tests/unit_lifecycle/partial.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
+tpcc_build "$tmp/partial/partial" \
 	-I"$tmp/partial" \
-	-Irtl \
 	"$tmp/partial"/*.cc \
-	tests/unit_lifecycle/system_stub.cc \
-	-o "$tmp/partial/partial"
+	tests/unit_lifecycle/system_stub.cc
 
 set +e
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/partial/partial" >"$tmp/partial/output"
 status=$?
 set -e

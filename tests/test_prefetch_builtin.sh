@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-prefetch-builtin-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/prefetch_builtin.cc" \
 	tests/prefetch_builtin.pp
 
@@ -20,21 +16,12 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
+tpcc_build "$tmp/prefetch_builtin" \
 	-O2 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
 	"$tmp/prefetch_builtin.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/prefetch_builtin"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/prefetch_builtin"
 
 echo "Prefetch builtin tests passed"

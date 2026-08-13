@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-explicit-enum-values-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/explicit_enum_values.cc" \
+tpcc_translate -o"$tmp/explicit_enum_values.cc" \
 	tests/explicit_enum_values.pp
 
 for expected in \
@@ -27,20 +23,12 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/explicit_enum_values" \
 	"$tmp/explicit_enum_values.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/explicit_enum_values"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/explicit_enum_values"
+	"$tmp/system.cc"
+tpcc_run "$tmp/explicit_enum_values"
 
-if ./mp -Furtl -o"$tmp/rejected.cc" \
+if tpcc_translate -o"$tmp/rejected.cc" \
 	tests/explicit_enum_value_out_of_range.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then

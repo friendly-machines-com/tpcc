@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-shortstring-type-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/shortstring_type.cc" \
+tpcc_translate -o"$tmp/shortstring_type.cc" \
 	tests/shortstring_type.pp
 
 for expected in \
@@ -30,31 +26,16 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/shortstring_type_pascal" \
 	"$tmp/shortstring_type.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/shortstring_type_pascal"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_pascal"
+	"$tmp/system.cc"
+tpcc_run "$tmp/shortstring_type_pascal"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	tests/shortstring_type_runtime.cpp \
-	-o "$tmp/shortstring_type_runtime"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/shortstring_type_runtime"
+tpcc_build "$tmp/shortstring_type_runtime" \
+	tests/shortstring_type_runtime.cpp
+tpcc_run "$tmp/shortstring_type_runtime"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/implicit_narrowing.cc" \
 	tests/ansistring_shortstring_implicit.pp
 if ! rg -Fq \
@@ -64,20 +45,12 @@ then
 	echo "missing implicit AnsiString-to-ShortString narrowing" >&2
 	exit 1
 fi
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/implicit_narrowing" \
 	"$tmp/implicit_narrowing.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/implicit_narrowing"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/implicit_narrowing"
+	"$tmp/system.cc"
+tpcc_run "$tmp/implicit_narrowing"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/pchar_ansistring.cc" \
 	tests/pchar_ansistring_implicit.pp
 if ! rg -Fq \
@@ -87,22 +60,14 @@ then
 	echo "missing direct PChar-to-AnsiString conversion" >&2
 	exit 1
 fi
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/pchar_ansistring" \
 	"$tmp/pchar_ansistring.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/pchar_ansistring"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/pchar_ansistring"
+	"$tmp/system.cc"
+tpcc_run "$tmp/pchar_ansistring"
 
 # PChar has no bounded payload length, so the ShortString narrowing conversion
 # remains unavailable until its truncation/range-check contract is specified.
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/pchar_shortstring.cc" \
 	tests/pchar_shortstring_implicit_rejected.pp \
 	>"$tmp/pchar_shortstring.out" \

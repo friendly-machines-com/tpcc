@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-abstract-method-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/abstract_methods.cc" \
+tpcc_translate -o"$tmp/abstract_methods.cc" \
 	tests/abstract_methods.pp
 
 if rg -Fq 'p_missing() = 0' \
@@ -31,16 +27,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/abstract_methods" \
 	"$tmp/abstract_methods.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/abstract_methods"
+	"$tmp/system.cc"
 
 actual=$("$tmp/abstract_methods")
 expected='concrete
@@ -54,18 +43,11 @@ then
 	exit 1
 fi
 
-./mp -Furtl -o"$tmp/abstract_call.cc" \
+tpcc_translate -o"$tmp/abstract_call.cc" \
 	tests/abstract_method_call.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/abstract_call" \
 	"$tmp/abstract_call.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/abstract_call"
+	"$tmp/system.cc"
 set +e
 "$tmp/abstract_call"
 status=$?
@@ -81,7 +63,7 @@ for source in \
 	tests/abstract_implementation_rejected.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "accepted invalid abstract method source: $source" >&2

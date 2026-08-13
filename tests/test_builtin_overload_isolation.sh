@@ -1,12 +1,8 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-builtin-overload-isolation-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
 run_case() {
 	name=$1
@@ -35,7 +31,7 @@ user dispose 37'
 	esac
 
 	source="tests/builtin_overload_${name}.pp"
-	if ! ./mp -Furtl -o"$tmp/$name.cc" "$source" \
+	if ! tpcc_translate -o"$tmp/$name.cc" "$source" \
 	    >"$tmp/$name.compile.out" 2>"$tmp/$name.compile.err"
 	then
 		echo "builtin-name shadowing failed to compile: $source" >&2
@@ -43,24 +39,15 @@ user dispose 37'
 		return 1
 	fi
 
-	if ! "${CXX:-g++}" \
-	    -std=c++20 \
-	    -Wall \
-	    -Wextra \
-	    -Wpedantic \
-	    -fsanitize=address,undefined \
-	    -fno-sanitize-recover=all \
-	    -Irtl \
-	    -I"$tmp" \
+	if ! tpcc_build "$tmp/$name" \
 	    "$tmp/$name.cc" \
-	    "$tmp/system.cc" \
-	    -o "$tmp/$name"
+	    "$tmp/system.cc"
 	then
 		echo "builtin-name shadowing emitted invalid C++: $source" >&2
 		return 1
 	fi
 
-	if ! actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/$name")
+	if ! actual=$(tpcc_run "$tmp/$name")
 	then
 		echo "builtin-name shadowing executable failed: $source" >&2
 		return 1
@@ -94,7 +81,7 @@ then
 fi
 
 source=tests/qualified_builtin_syntax.pp
-if ! ./mp -Furtl -o"$tmp/qualified.cc" "$source" \
+if ! tpcc_translate -o"$tmp/qualified.cc" "$source" \
     >"$tmp/qualified.compile.out" 2>"$tmp/qualified.compile.err"
 then
 	echo "qualified builtin syntax failed to compile: $source" >&2
@@ -102,20 +89,11 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/qualified" \
 	"$tmp/qualified.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/qualified"
+	"$tmp/system.cc"
 
-if ! actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/qualified")
+if ! actual=$(tpcc_run "$tmp/qualified")
 then
 	echo "qualified builtin syntax executable failed: $source" >&2
 	exit 1

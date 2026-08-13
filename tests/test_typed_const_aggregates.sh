@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-typed-const-aggregates-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/typed_const_aggregates.cc" \
+tpcc_translate -o"$tmp/typed_const_aggregates.cc" \
 	tests/typed_const_aggregates.pp
 
 for expected in \
@@ -27,20 +23,12 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/typed_const_aggregates" \
 	"$tmp/typed_const_aggregates.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/typed_const_aggregates"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/typed_const_aggregates"
+	"$tmp/system.cc"
+tpcc_run "$tmp/typed_const_aggregates"
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/custom_conversion_constant_rejected.cc" \
 	tests/custom_conversion_constant_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -56,7 +44,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/character_array_string_too_long.cc" \
 	tests/character_array_string_too_long.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -73,7 +61,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/byte_array_string_initializer_rejected.cc" \
 	tests/byte_array_string_initializer_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"

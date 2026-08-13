@@ -1,29 +1,18 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-loop-control-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/loop_control.cc" tests/loop_control.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/loop_control.cc" tests/loop_control.pp
+tpcc_build "$tmp/loop_control" \
 	"$tmp/loop_control.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/loop_control"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/loop_control"
+	"$tmp/system.cc"
+tpcc_run "$tmp/loop_control"
 
 for source in tests/loop_break_outside.pp tests/loop_continue_outside.pp; do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
 		echo "expected tpcc to reject $source" >&2
 		exit 1
 	fi

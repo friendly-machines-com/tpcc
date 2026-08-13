@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-file-types-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/file_types.cc" tests/file_types.pp
+tpcc_translate -o"$tmp/file_types.cc" tests/file_types.pp
 
 if ! rg -Fq '::u_system::t_file p_binaryfile;' "$tmp/file_types.cc"
 then
@@ -35,24 +31,16 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/file_types" \
 	"$tmp/file_types.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/file_types"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/file_types"
+	"$tmp/system.cc"
+tpcc_run "$tmp/file_types"
 
 for source in \
 	tests/file_types_mismatch.pp \
 	tests/file_types_identity_mismatch.pp
 do
-	if ./mp -Furtl -o"$tmp/mismatch.cc" \
+	if tpcc_translate -o"$tmp/mismatch.cc" \
 		"$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then

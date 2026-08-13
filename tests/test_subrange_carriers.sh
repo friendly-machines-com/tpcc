@@ -1,15 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-subrange-carriers.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp \
-	-Furtl \
+tpcc_translate \
 	-Futests/subrange_carrier_units \
 	-o"$tmp/subrange_carriers.cc" \
 	tests/subrange_carrier_units/subrange_carriers.pp
@@ -36,7 +31,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/subrange_overload_rejected.cc" \
 	tests/subrange_overload_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -51,20 +46,12 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/subrange_carriers" \
 	"$tmp/subrange_carriers.cc" \
 	"$tmp/rangecarrier.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/subrange_carriers"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/subrange_carriers"
 
 echo "subrange carrier tests passed"

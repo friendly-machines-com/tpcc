@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-single-type-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/single_type.cc" \
+tpcc_translate -o"$tmp/single_type.cc" \
 	tests/single_type.pp
 
 if ! rg -q '::u_system::t_single p_s;' "$tmp/single_type.cc"
@@ -24,17 +20,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/single_type" \
 	tests/single_type_runtime.cpp \
-	"$tmp/system.cc" \
-	-o "$tmp/single_type"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/single_type"
+	"$tmp/system.cc"
+tpcc_run "$tmp/single_type"
 
 echo "Single type tests passed"

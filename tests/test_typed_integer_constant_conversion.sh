@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-typed-integer-constant-conversion.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/typed_integer_constant_conversion.cc" \
 	tests/typed_integer_constant_conversion.pp
 
@@ -21,23 +17,14 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/typed_integer_constant_conversion" \
 	"$tmp/typed_integer_constant_conversion.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/typed_integer_constant_conversion"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/typed_integer_constant_conversion"
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/nonconstant.cc" \
 	tests/typed_integer_nonconstant_common_domain.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"

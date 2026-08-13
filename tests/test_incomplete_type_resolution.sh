@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-incomplete-type-resolution-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/incomplete_type_resolution.cc" \
+tpcc_translate -o"$tmp/incomplete_type_resolution.cc" \
 	tests/incomplete_type_resolution.pp
 
 if ! rg -Fq 'struct t_tsecond;' \
@@ -38,20 +34,12 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/incomplete_type_resolution" \
 	"$tmp/incomplete_type_resolution.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/incomplete_type_resolution"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/incomplete_type_resolution"
+	"$tmp/system.cc"
+tpcc_run "$tmp/incomplete_type_resolution"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/incomplete_type_callable_normalization.cc" \
 	tests/incomplete_type_callable_normalization.pp
 
@@ -62,19 +50,12 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/incomplete_type_callable_normalization" \
 	"$tmp/incomplete_type_callable_normalization.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/incomplete_type_callable_normalization"
+	"$tmp/system.cc"
 "$tmp/incomplete_type_callable_normalization"
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/rejected.cc" \
 	tests/aggregate_true_constant_address_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -91,7 +72,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/rejected.cc" \
 	tests/incomplete_type_by_value_cycle.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -121,7 +102,7 @@ for define in \
 	TEST_FILE_FORWARD \
 	TEST_ALIAS_FORWARD
 do
-	if ./mp -Furtl -d"$define" \
+	if tpcc_translate -d"$define" \
 		-o"$tmp/rejected.cc" \
 		tests/invalid_implicit_type_forwards.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -146,7 +127,7 @@ for define in \
 	TEST_ROUTINE_SELF \
 	TEST_ARRAY_SELF
 do
-	if ./mp -Furtl -d"$define" \
+	if tpcc_translate -d"$define" \
 		-o"$tmp/rejected.cc" \
 		tests/invalid_recursive_type_equations.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"

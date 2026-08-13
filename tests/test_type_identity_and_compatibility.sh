@@ -1,18 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-type-identity-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
+tpcc_build_native "$tmp/type_conversion_algebra" \
 	-Isrc \
 	-Irtl \
 	tests/type_conversion_algebra.cc \
@@ -26,12 +18,11 @@ cd "$root"
 	src/operators.o \
 	src/units.o \
 	src/emit.o \
-	src/diagnostic.o \
-	-o "$tmp/type_conversion_algebra"
+	src/diagnostic.o
 
 "$tmp/type_conversion_algebra"
 
-./mp -Furtl -o"$tmp/type_identity.cc" \
+tpcc_translate -o"$tmp/type_identity.cc" \
 	tests/type_identity_and_compatibility.pp
 
 for required in \
@@ -52,53 +43,29 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/type_identity" \
 	"$tmp/type_identity.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/type_identity"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 "$tmp/type_identity"
+tpcc_run "$tmp/type_identity"
 
-./mp -Furtl -o"$tmp/explicit_ordinal_casts.cc" \
+tpcc_translate -o"$tmp/explicit_ordinal_casts.cc" \
 	tests/explicit_ordinal_casts.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/explicit_ordinal_casts" \
 	"$tmp/explicit_ordinal_casts.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/explicit_ordinal_casts"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/explicit_ordinal_casts"
 
-./mp -Furtl -o"$tmp/contextual_values.cc" \
+tpcc_translate -o"$tmp/contextual_values.cc" \
 	tests/contextual_value_immutability.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/contextual_values" \
 	"$tmp/contextual_values.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/contextual_values"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/contextual_values"
 
-if ./mp -Furtl -o"$tmp/class_metaclass.cc" \
+if tpcc_translate -o"$tmp/class_metaclass.cc" \
 	tests/class_instance_overload_category_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then
@@ -125,7 +92,7 @@ done
 
 for source in fixed_array_assignment_rejected set_narrowing_rejected
 do
-	if ./mp -Furtl -o"$tmp/$source.cc" \
+	if tpcc_translate -o"$tmp/$source.cc" \
 		"tests/$source.pp" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
@@ -142,7 +109,7 @@ done
 
 for source in ambiguous_user_conversion_rejected integer_literal_range_rejected
 do
-	if ./mp -Furtl -o"$tmp/$source.cc" \
+	if tpcc_translate -o"$tmp/$source.cc" \
 		"tests/$source.pp" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
@@ -169,7 +136,7 @@ done
 
 for kind in POINTER STRING SET ARRAY FILE ROUTINE CLASSREF
 do
-	if ./mp -Furtl -d"TEST_$kind" \
+	if tpcc_translate -d"TEST_$kind" \
 		-o"$tmp/carrier_collision.cc" \
 		tests/type_carrier_collision_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -208,7 +175,7 @@ done
 
 for kind in POINTER STRING SET RANGE ARRAY FILE ROUTINE CLASSREF
 do
-	if ./mp -Furtl -d"TEST_$kind" \
+	if tpcc_translate -d"TEST_$kind" \
 		-o"$tmp/var_identity.cc" \
 		tests/type_var_identity_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -224,7 +191,7 @@ do
 	fi
 done
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-dTEST_CONVERSION \
 	-o"$tmp/implicit_conversion_erased_target.cc" \
 	tests/type_carrier_collision_rejected.pp \
@@ -259,7 +226,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-dTEST_EXPLICIT_CONVERSION \
 	-o"$tmp/explicit_conversion_erased_target.cc" \
 	tests/type_carrier_collision_rejected.pp \
@@ -292,7 +259,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl -o"$tmp/accidental_override.cc" \
+if tpcc_translate -o"$tmp/accidental_override.cc" \
 	tests/accidental_virtual_carrier_override_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then

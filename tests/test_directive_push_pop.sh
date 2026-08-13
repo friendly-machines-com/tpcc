@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-directive-push-pop-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/directive_push_pop.cc" \
+tpcc_translate -o"$tmp/directive_push_pop.cc" \
 	tests/directive_push_pop.pp
 
 for selected in \
@@ -40,16 +36,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/directive_push_pop" \
 	"$tmp/directive_push_pop.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/directive_push_pop"
+	"$tmp/system.cc"
 "$tmp/directive_push_pop"
 
 for source in \
@@ -57,7 +46,7 @@ for source in \
 	tests/directive_switch_list_invalid.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "accepted invalid directive source: $source" >&2

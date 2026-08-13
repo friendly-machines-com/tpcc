@@ -28,13 +28,9 @@
 
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$(dirname -- "$0")/testlib.sh"
 fixtures="$root/tests/symbol_resolution"
-tmp=${TMPDIR:-/tmp}/tpcc-symbol-resolution-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
 
-cd "$root"
 
 # Compile a positive main + its used-unit closure, link, run, expect exit 0.
 run_positive() {
@@ -42,14 +38,11 @@ run_positive() {
 	main="$2"
 	bin="$tmp/$name"
 	mkdir -p "$bin"
-	./mp -Furtl -Fu"$fixtures" -o"$bin/main.cc" "$main"
-	"${CXX:-g++}" \
-		-std=c++20 -Wall -Wextra \
-		-fsanitize=address,undefined \
-		-I"$bin" -Irtl \
-		"$bin"/*.cc \
-		-o "$bin/run"
-	ASAN_OPTIONS=detect_leaks=1 "$bin/run"
+	tpcc_translate -Fu"$fixtures" -o"$bin/main.cc" "$main"
+	tpcc_build "$bin/run" \
+		-I"$bin" \
+		"$bin"/*.cc
+	tpcc_run "$bin/run"
 }
 
 # Compile a negative main; expect mp to fail with .error[1] as substring.
@@ -60,7 +53,7 @@ run_negative() {
 	mkdir -p "$bin"
 	expected=$(sed -n '1p' "$fixtures/$name.error")
 	set +e
-	./mp -Furtl -Fu"$fixtures" -o"$bin/main.cc" "$main" \
+	tpcc_translate -Fu"$fixtures" -o"$bin/main.cc" "$main" \
 		>"$bin/stdout" 2>"$bin/stderr"
 	status=$?
 	set -e

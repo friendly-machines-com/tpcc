@@ -1,36 +1,27 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-global-overload-scope.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+. "$(dirname -- "$0")/testlib.sh"
 mkdir -p "$tmp/same" "$tmp/merge" "$tmp/shadow" "$tmp/legacy"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/same/main.cc" \
 	tests/global_overload_scope/same_scope.pp
-"${CXX:-g++}" \
-	-std=c++20 -Wall -Wextra \
-	-fsanitize=address,undefined \
-	-Irtl -I"$tmp/same" \
-	"$tmp/same"/*.cc \
-	-o "$tmp/same/main"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/same/main"
+tpcc_build "$tmp/same/main" \
+	-I"$tmp/same" \
+	"$tmp/same"/*.cc
+tpcc_run "$tmp/same/main"
 
-./mp -Furtl -Futests/global_overload_scope \
+tpcc_translate -Futests/global_overload_scope \
 	-o"$tmp/merge/main.cc" \
 	tests/global_overload_scope/merge.pp
-"${CXX:-g++}" \
-	-std=c++20 -Wall -Wextra \
-	-fsanitize=address,undefined \
-	-Irtl -I"$tmp/merge" \
-	"$tmp/merge"/*.cc \
-	-o "$tmp/merge/main"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/merge/main"
+tpcc_build "$tmp/merge/main" \
+	-I"$tmp/merge" \
+	"$tmp/merge"/*.cc
+tpcc_run "$tmp/merge/main"
 
-if ./mp -Furtl -Futests/global_overload_scope \
+if tpcc_translate -Futests/global_overload_scope \
 	-o"$tmp/shadow/main.cc" \
 	tests/global_overload_scope/shadow.pp \
 	>"$tmp/shadow/stdout" 2>"$tmp/shadow/stderr"
@@ -46,18 +37,15 @@ then
 	exit 1
 fi
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/legacy/main.cc" \
 	tests/global_overload_scope/legacy_shadow.pp
-"${CXX:-g++}" \
-	-std=c++20 -Wall -Wextra \
-	-fsanitize=address,undefined \
-	-Irtl -I"$tmp/legacy" \
-	"$tmp/legacy"/*.cc \
-	-o "$tmp/legacy/main"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/legacy/main"
+tpcc_build "$tmp/legacy/main" \
+	-I"$tmp/legacy" \
+	"$tmp/legacy"/*.cc
+tpcc_run "$tmp/legacy/main"
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/legacy/rejected.cc" \
 	tests/global_overload_scope/legacy_no_fallback.pp \
 	>"$tmp/legacy/rejected.stdout" \

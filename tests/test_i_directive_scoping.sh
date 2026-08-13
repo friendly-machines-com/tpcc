@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-i-directive-scoping-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/i_directive_scoping.cc" \
+tpcc_translate -o"$tmp/i_directive_scoping.cc" \
 	tests/i_directive_scoping.pp
 
 generated=$tmp/i_directive_scoping.cc
@@ -68,18 +64,11 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
-	-fsyntax-only \
+tpcc_check_generated \
 	"$generated" \
 	"$tmp/system.cc"
 
-if ./mp -Furtl -o"$tmp/rejected.cc" \
+if tpcc_translate -o"$tmp/rejected.cc" \
 	tests/iochecks_invalid.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then

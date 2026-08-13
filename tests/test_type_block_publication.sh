@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-type-block-publication-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/type_block_publication.cc" \
+tpcc_translate -o"$tmp/type_block_publication.cc" \
 	tests/type_block_publication.pp
 
 if ! rg -Fq 'struct t_tbase : public ::u_system::t_tobject' \
@@ -88,18 +84,10 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/type_block_publication" \
 	"$tmp/type_block_publication.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/type_block_publication"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/type_block_publication"
+	"$tmp/system.cc"
+tpcc_run "$tmp/type_block_publication"
 
 for test_case in \
 	TEST_UNRESOLVED_CLASS_FORWARD \
@@ -108,7 +96,7 @@ for test_case in \
 	TEST_FORWARD_CLASS_SUPER \
 	TEST_EXTERNAL_NIL_REJECTED
 do
-	if ./mp -Furtl -d"$test_case" \
+	if tpcc_translate -d"$test_case" \
 		-o"$tmp/rejected.cc" \
 		tests/type_block_publication.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -118,7 +106,7 @@ do
 	fi
 done
 
-./mp -Furtl -o"$tmp/inherited_overload_scope.cc" \
+tpcc_translate -o"$tmp/inherited_overload_scope.cc" \
 	tests/inherited_overload_scope.pp
 if ! rg -Fq 'this->p_base_select(p_i)' \
 	"$tmp/inherited_overload_scope.cc"
@@ -133,7 +121,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl -o"$tmp/member_global_scope.cc" \
+if tpcc_translate -o"$tmp/member_global_scope.cc" \
 	tests/member_global_scope.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then
@@ -148,7 +136,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl -o"$tmp/rejected.cc" \
+if tpcc_translate -o"$tmp/rejected.cc" \
 	tests/type_block_unresolved_super.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
 then

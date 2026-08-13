@@ -1,15 +1,11 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-omitted-out-pbyte-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/omitted_out_pbyte.cc" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/omitted_out_pbyte.cc" \
 	tests/omitted_out_pbyte.pp
 
 if ! rg -Fq \
@@ -25,20 +21,11 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/omitted_out_pbyte" \
 	"$tmp/omitted_out_pbyte.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/omitted_out_pbyte"
+	"$tmp/system.cc"
 
-actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/omitted_out_pbyte")
+actual=$(tpcc_run "$tmp/omitted_out_pbyte")
 expected='42
 17'
 if test "$actual" != "$expected"
@@ -50,7 +37,7 @@ fi
 
 for rejection in WORD_POINTER VAR_FORMAL EXPLICIT_POINTER
 do
-	if ./mp -Furtl -dREJECT_"$rejection" \
+	if tpcc_translate -dREJECT_"$rejection" \
 		-o"$tmp/rejected.cc" tests/omitted_out_pbyte.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then

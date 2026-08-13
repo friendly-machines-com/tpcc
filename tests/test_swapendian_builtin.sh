@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-swapendian-builtin-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/swapendian_builtin.cc" \
+tpcc_translate -o"$tmp/swapendian_builtin.cc" \
 	tests/swapendian_builtin.pp
 
 if ! rg -Fq \
@@ -19,17 +15,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/swapendian_builtin" \
 	"$tmp/swapendian_builtin.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/swapendian_builtin"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/swapendian_builtin"
+	"$tmp/system.cc"
+tpcc_run "$tmp/swapendian_builtin"
 
 echo "SwapEndian builtin tests passed"

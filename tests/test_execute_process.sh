@@ -1,22 +1,13 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-execute-process-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	tests/execute_process_child.cpp \
-	-o "$tmp/child with space"
+tpcc_build_native "$tmp/child with space" \
+	tests/execute_process_child.cpp
 
-./mp -Furtl -o"$tmp/execute_process.cc" \
+tpcc_translate -o"$tmp/execute_process.cc" \
 	tests/execute_process.pp
 for required in \
 	'::u_sysutils::p_executeprocess_commandline' \
@@ -29,23 +20,14 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/execute_process" \
 	"$tmp/execute_process.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/execute_process"
+	"$tmp/system.cc"
 
 TPCC_EXECUTE_PROCESS_CHILD="$tmp/child with space" \
 TPCC_EXECUTE_PROCESS_INHERITED=present \
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/execute_process"
 
 echo "ExecuteProcess tests passed"

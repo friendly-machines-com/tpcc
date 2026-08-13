@@ -1,43 +1,25 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-packed-record-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/23_packed_record.cc" tests/23_packed_record.pp
+tpcc_translate -o"$tmp/23_packed_record.cc" tests/23_packed_record.pp
 
 diff -u tests/23_packed_record.cc "$tmp/23_packed_record.cc"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/23_packed_record" \
 	"$tmp/23_packed_record.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/23_packed_record"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/23_packed_record"
+	"$tmp/system.cc"
+tpcc_run "$tmp/23_packed_record"
 
-./mp -Furtl -o"$tmp/packed_overlay.cc" tests/packed_overlay.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/packed_overlay.cc" tests/packed_overlay.pp
+tpcc_build "$tmp/packed_overlay" \
 	"$tmp/packed_overlay.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/packed_overlay"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_overlay"
+	"$tmp/system.cc"
+tpcc_run "$tmp/packed_overlay"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/packed_array_field_write.cc" \
 	tests/packed_array_field_write.pp
 for required in \
@@ -52,34 +34,20 @@ do
 		exit 1
 	fi
 done
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/packed_array_field_write" \
 	"$tmp/packed_array_field_write.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/packed_array_field_write"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_array_field_write"
+	"$tmp/system.cc"
+tpcc_run "$tmp/packed_array_field_write"
 
-./mp -Furtl -o"$tmp/packed_variant.cc" tests/packed_variant.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/packed_variant.cc" tests/packed_variant.pp
+tpcc_build "$tmp/packed_variant" \
 	"$tmp/packed_variant.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/packed_variant"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/packed_variant"
+	"$tmp/system.cc"
+tpcc_run "$tmp/packed_variant"
 
 for source in tests/packed_rejected/*.pp; do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
 		echo "expected tpcc to reject $source" >&2
 		exit 1
 	fi

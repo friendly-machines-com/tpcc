@@ -1,35 +1,23 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-implicit-conversion-single-edge.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/single_edge.cc" \
 	tests/implicit_conversion_single_edge.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/single_edge" \
 	"$tmp/single_edge.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/single_edge"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/single_edge"
 
 for kind in RECORD INTEGER NARROW SUBRANGE
 do
-	if ./mp -Furtl -d"OMIT_${kind}_DIRECT" \
+	if tpcc_translate -d"OMIT_${kind}_DIRECT" \
 		-o"$tmp/chained.cc" \
 		tests/implicit_conversion_single_edge.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"

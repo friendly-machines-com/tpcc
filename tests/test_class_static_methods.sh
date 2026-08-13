@@ -1,17 +1,13 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-class-static-method-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/class_static_methods.cc" \
+tpcc_translate -o"$tmp/class_static_methods.cc" \
 	tests/class_static_methods.pp
 
-./mp -Furtl -o"$tmp/class_var_visibility_boundary.cc" \
+tpcc_translate -o"$tmp/class_var_visibility_boundary.cc" \
 	tests/class_var_visibility_boundary.pp
 
 if ! rg -q 'static .* p_staticvalue\(' \
@@ -45,16 +41,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/class_static_methods" \
 	"$tmp/class_static_methods.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/class_static_methods"
+	"$tmp/system.cc"
 
 actual=$("$tmp/class_static_methods")
 test "$actual" = 'class static methods passed'
@@ -67,7 +56,7 @@ for source in \
 	tests/class_method_to_plain_rejected.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "expected tpcc to reject $source" >&2

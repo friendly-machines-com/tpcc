@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-sizeof-layout-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/sizeof_layout.cc" tests/sizeof_layout.pp
+tpcc_translate -o"$tmp/sizeof_layout.cc" tests/sizeof_layout.pp
 
 if [ "$(rg -F -c 'static_cast<::u_system::t_sizeint>(sizeof(' "$tmp/sizeof_layout.cc")" -ne 11 ]; then
 	echo "SizeOf expressions did not remain C++ sizeof expressions" >&2
@@ -54,16 +50,9 @@ if rg -q 'layout_oracle|gnu::packed' "$tmp/sizeof_layout.cc"; then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/sizeof_layout" \
 	"$tmp/sizeof_layout.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/sizeof_layout"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/sizeof_layout"
+	"$tmp/system.cc"
+tpcc_run "$tmp/sizeof_layout"
 
 echo "SizeOf/layout tests passed"

@@ -1,15 +1,11 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-metaclass-lifecycle-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/metaclass_lifecycle.cc" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/metaclass_lifecycle.cc" \
 	tests/metaclass_lifecycle.pp
 
 if test "$(rg -F -c 'void m_init();' \
@@ -40,16 +36,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-I"$tmp" \
-	-Irtl \
+tpcc_build "$tmp/metaclass_lifecycle" \
 	"$tmp/metaclass_lifecycle.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/metaclass_lifecycle"
+	"$tmp/system.cc"
 
 actual=$("$tmp/metaclass_lifecycle")
 expected='base

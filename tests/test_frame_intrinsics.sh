@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-frame-intrinsics-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/frame_intrinsics.cc" \
 	tests/frame_intrinsics.pp
 
@@ -37,18 +33,11 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
+tpcc_build_unsanitized "$tmp/frame_intrinsics" \
 	-O2 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
 	-fno-omit-frame-pointer \
-	-Irtl \
-	-I"$tmp" \
 	"$tmp/frame_intrinsics.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/frame_intrinsics"
+	"$tmp/system.cc"
 "$tmp/frame_intrinsics"
 
 echo "frame intrinsic tests passed"

@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-function-pointers-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/function_pointers.cc" \
+tpcc_translate -o"$tmp/function_pointers.cc" \
 	tests/function_pointers.pp
 
 if ! rg -q \
@@ -52,20 +48,12 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/function_pointers" \
 	tests/function_pointers_runtime.cpp \
-	"$tmp/system.cc" \
-	-o "$tmp/function_pointers"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/function_pointers"
+	"$tmp/system.cc"
+tpcc_run "$tmp/function_pointers"
 
-./mp -Furtl -o"$tmp/routine_value_overload_categories.cc" \
+tpcc_translate -o"$tmp/routine_value_overload_categories.cc" \
 	tests/routine_value_overload_categories.pp
 
 if ! rg -q \
@@ -83,22 +71,14 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/routine_value_overload_categories" \
 	"$tmp/routine_value_overload_categories.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/routine_value_overload_categories"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/routine_value_overload_categories"
 
 mkdir -p "$tmp/routine-const"
-./mp -Furtl -Futests/routine_const \
+tpcc_translate -Futests/routine_const \
 	-o"$tmp/routine-const/program.cc" \
 	tests/routine_const/routine_const_program.pp
 
@@ -110,17 +90,10 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
+tpcc_build "$tmp/routine-const/program" \
 	-I"$tmp/routine-const" \
-	"$tmp/routine-const"/*.cc \
-	-o "$tmp/routine-const/program"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/routine-const"/*.cc
+tpcc_run \
 	"$tmp/routine-const/program"
 
 for source in \
@@ -131,7 +104,7 @@ for source in \
 	tests/function_pointer_method_to_global_rejected.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "expected tpcc to reject $source" >&2

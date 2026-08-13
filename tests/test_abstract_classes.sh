@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-abstract-class-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/abstract_classes.cc" \
+tpcc_translate -o"$tmp/abstract_classes.cc" \
 	tests/abstract_classes.pp
 
 if rg -q '\) = 0;' "$tmp/abstract_classes.cc" ||
@@ -18,16 +14,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/abstract_classes" \
 	"$tmp/abstract_classes.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/abstract_classes"
+	"$tmp/system.cc"
 
 actual=$("$tmp/abstract_classes")
 expected='concrete

@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-custom-checked-operators.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/custom_checked_operators.cc" \
+tpcc_translate -o"$tmp/custom_checked_operators.cc" \
 	tests/custom_checked_operators.pp
 
 rg -Fq 'o_unchecked_add' \
@@ -20,20 +16,11 @@ rg -Fq 'o_operator_plus' \
 rg -Fq 'p_add' \
 	"$tmp/custom_checked_operators.cc"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/custom_checked_operators" \
 	"$tmp/custom_checked_operators.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/custom_checked_operators"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/custom_checked_operators"
 
 echo "custom checked-operator tests passed"

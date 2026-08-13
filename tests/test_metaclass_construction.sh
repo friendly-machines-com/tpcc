@@ -1,15 +1,11 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-metaclass-construction-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/construction.cc" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/construction.cc" \
 	tests/metaclass_construction.pp
 
 if ! rg -Fq 'void t_tbase::p_create(' \
@@ -47,20 +43,11 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-I"$tmp" \
-	-Irtl \
+tpcc_build "$tmp/construction" \
 	"$tmp/construction.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/construction"
+	"$tmp/system.cc"
 
-actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/construction")
+actual=$(tpcc_run "$tmp/construction")
 expected='7
 2
 1'

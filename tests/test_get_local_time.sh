@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-get-local-time-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/get_local_time.cc" \
+tpcc_translate -o"$tmp/get_local_time.cc" \
 	tests/get_local_time.pp
 
 if ! rg -Fq '::u_sysutils::p_getlocaltime' \
@@ -18,35 +14,18 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/get_local_time" \
 	"$tmp/get_local_time.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/get_local_time"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/get_local_time"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	tests/get_local_time_runtime.cpp \
-	-o "$tmp/get_local_time_runtime"
+tpcc_build "$tmp/get_local_time_runtime" \
+	tests/get_local_time_runtime.cpp
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/get_local_time_runtime"
 
 echo "GetLocalTime tests passed"

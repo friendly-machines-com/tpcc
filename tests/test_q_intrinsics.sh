@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-q-intrinsics.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/q_intrinsics.cc" \
+tpcc_translate -o"$tmp/q_intrinsics.cc" \
 	tests/q_intrinsics.pp
 
 for operation in \
@@ -20,43 +16,25 @@ do
 		"$tmp/q_intrinsics.cc"
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/q_intrinsics" \
 	"$tmp/q_intrinsics.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/q_intrinsics"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/q_intrinsics"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/unchecked_constants.cc" \
 	tests/q_intrinsics_unchecked_constants.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/unchecked_constants" \
 	"$tmp/unchecked_constants.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/unchecked_constants"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/unchecked_constants"
 
 for define in TEST_ABS TEST_SUCC TEST_PRED
 do
-	if ./mp -Furtl \
+	if tpcc_translate \
 		-d"$define" \
 		-o"$tmp/checked_constant.cc" \
 		tests/q_intrinsics_checked_constant.pp \

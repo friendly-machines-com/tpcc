@@ -1,28 +1,17 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-generic-intrinsics-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/generic_intrinsics.cc" tests/generic_intrinsics.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/generic_intrinsics.cc" tests/generic_intrinsics.pp
+tpcc_build "$tmp/generic_intrinsics" \
 	"$tmp/generic_intrinsics.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/generic_intrinsics"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/generic_intrinsics"
+	"$tmp/system.cc"
+tpcc_run "$tmp/generic_intrinsics"
 
 source=tests/generic_intrinsic_nonordinal.pp
-if ./mp -Furtl -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
+if tpcc_translate -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then
 	echo "expected tpcc to reject $source" >&2
 	exit 1
 fi

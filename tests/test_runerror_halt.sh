@@ -1,39 +1,23 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-runerror-halt-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/errorcode_builtin.cc" \
+tpcc_translate -o"$tmp/errorcode_builtin.cc" \
 	tests/errorcode_builtin.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/errorcode_builtin" \
 	tests/errorcode_builtin_runtime.cpp \
-	"$tmp/system.cc" \
-	-o "$tmp/errorcode_builtin"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/errorcode_builtin"
+	"$tmp/system.cc"
+tpcc_run "$tmp/errorcode_builtin"
 
 for builtin in halt runerror
 do
-	./mp -Furtl -o"$tmp/${builtin}_builtin.cc" \
+	tpcc_translate -o"$tmp/${builtin}_builtin.cc" \
 		"tests/${builtin}_builtin.pp"
-	"${CXX:-g++}" \
-		-std=c++20 \
-		-Wall \
-		-Wextra \
-		-Irtl \
+	tpcc_build "$tmp/${builtin}_builtin" \
 		"$tmp/${builtin}_builtin.cc" \
-		"$tmp/system.cc" \
-		-o "$tmp/${builtin}_builtin"
+		"$tmp/system.cc"
 done
 
 set +e

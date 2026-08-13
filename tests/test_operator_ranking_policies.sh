@@ -1,31 +1,18 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-operator-ranking-policies.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/operator_ranking_policies.cc" \
 	tests/operator_ranking_policies.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/operator_ranking_policies" \
 	"$tmp/operator_ranking_policies.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/operator_ranking_policies"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/operator_ranking_policies"
 
 for policy in \
@@ -35,7 +22,7 @@ for policy in \
 	CHAR_ARITHMETIC \
 	ARRAY_CONCATENATION
 do
-	if ./mp -Furtl -d"$policy" \
+	if tpcc_translate -d"$policy" \
 		-o"$tmp/rejected.cc" \
 		tests/operator_ranking_policy_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"

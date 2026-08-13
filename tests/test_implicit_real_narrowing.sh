@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-implicit-real-narrowing.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/implicit_real_narrowing.cc" \
 	tests/implicit_real_narrowing.pp
 
@@ -17,24 +13,15 @@ rg -Fq '::u_system::m_real_cast' \
 rg -Fq '::u_system::m_range_checked_real_cast' \
 	"$tmp/implicit_real_narrowing.cc"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/implicit_real_narrowing" \
 	"$tmp/implicit_real_narrowing.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/implicit_real_narrowing"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/implicit_real_narrowing"
 
-if ./mp -Furtl -dCHECK_CONSTANT_REJECTION \
+if tpcc_translate -dCHECK_CONSTANT_REJECTION \
 	-o"$tmp/constant_rejected.cc" \
 	tests/implicit_real_narrowing.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"

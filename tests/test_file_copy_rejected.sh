@@ -1,12 +1,8 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-file-copy-rejected-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
 for source in \
 	file_copy_assignment_rejected \
@@ -14,7 +10,7 @@ for source in \
 	file_value_parameter_rejected \
 	file_const_parameter_rejected
 do
-	if ./mp -Furtl -o"$tmp/$source.cc" \
+	if tpcc_translate -o"$tmp/$source.cc" \
 		"tests/$source.pp" >"$tmp/$source.out" 2>&1
 	then
 		echo "$source was accepted" >&2

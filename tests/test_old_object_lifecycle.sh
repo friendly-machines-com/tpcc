@@ -1,17 +1,13 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-old-object-lifecycle-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/lifecycle.cc" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/lifecycle.cc" \
 	tests/old_object_lifecycle.pp
-./mp -Furtl -o"$tmp/shadow.cc" \
+tpcc_translate -o"$tmp/shadow.cc" \
 	tests/old_object_new_shadow.pp
 
 if ! rg -Fq 'void t_tbase::p_init(' \
@@ -57,7 +53,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl -o"$tmp/bad.cc" \
+if tpcc_translate -o"$tmp/bad.cc" \
 	tests/old_object_virtual_constructor.pp \
 	>"$tmp/bad.out" 2>"$tmp/bad.err"
 then
@@ -72,30 +68,14 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-I"$tmp" \
-	-Irtl \
+tpcc_build "$tmp/lifecycle" \
 	"$tmp/lifecycle.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/lifecycle"
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-I"$tmp" \
-	-Irtl \
+	"$tmp/system.cc"
+tpcc_build "$tmp/shadow" \
 	"$tmp/shadow.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/shadow"
+	"$tmp/system.cc"
 
-actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/lifecycle")
+actual=$(tpcc_run "$tmp/lifecycle")
 expected='base static
 derived virtual
 7

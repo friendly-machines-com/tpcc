@@ -1,38 +1,21 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-pos-builtin-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/pos_builtin.cc" tests/pos_builtin.pp
+tpcc_translate -o"$tmp/pos_builtin.cc" tests/pos_builtin.pp
 if ! rg -F -q 'tpcc_shortstring_from_c<255>("\141\000\142", 3)' "$tmp/pos_builtin.cc"; then
 	echo "embedded-NUL Pascal literal lost its explicit byte length" >&2
 	exit 1
 fi
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/pos_builtin" \
 	"$tmp/pos_builtin.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/pos_builtin"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/pos_builtin"
+	"$tmp/system.cc"
+tpcc_run "$tmp/pos_builtin"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	tests/pos_char_runtime.cpp \
-	-o "$tmp/pos_char_runtime"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/pos_char_runtime"
+tpcc_build "$tmp/pos_char_runtime" \
+	tests/pos_char_runtime.cpp
+tpcc_run "$tmp/pos_char_runtime"
 
 echo "Pos builtin tests passed"

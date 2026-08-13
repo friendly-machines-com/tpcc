@@ -1,9 +1,7 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-rmdir-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+. "$(dirname -- "$0")/testlib.sh"
 mkdir -p \
 	"$tmp/work/short-empty" \
 	"$tmp/work/ansi-empty" \
@@ -11,9 +9,8 @@ mkdir -p \
 	"$tmp/work/nonempty/child"
 printf data >"$tmp/work/regular-file"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/rmdir.cc" tests/rmdir.pp
+tpcc_translate -o"$tmp/rmdir.cc" tests/rmdir.pp
 if ! rg -Fq '::u_system::p_rmdir' "$tmp/rmdir.cc"
 then
 	echo "checked RmDir did not use its System RTL operation" >&2
@@ -25,21 +22,12 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/rmdir" \
 	"$tmp/rmdir.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/rmdir"
+	"$tmp/system.cc"
 
 cd "$tmp/work"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/rmdir"
+tpcc_run "$tmp/rmdir"
 
 echo "RmDir tests passed"

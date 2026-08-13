@@ -1,51 +1,36 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-unit-uses-scope-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+. "$(dirname -- "$0")/testlib.sh"
 mkdir -p "$tmp/positive" "$tmp/no-interface-reexport" \
 	"$tmp/no-implementation-reexport" "$tmp/cycles" \
 	"$tmp/explicit" "$tmp/shadow-type" "$tmp/shadow-value" \
 	"$tmp/late-cycle"
 
-cd "$root"
 
-./mp -Furtl -Futests/unit_uses_scope \
+tpcc_translate -Futests/unit_uses_scope \
 	-o"$tmp/positive/scope_main.cc" \
 	tests/unit_uses_scope/scope_main.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
+tpcc_build "$tmp/positive/scope_main" \
 	-I"$tmp/positive" \
-	-Irtl \
-	"$tmp/positive"/*.cc \
-	-o "$tmp/positive/scope_main"
+	"$tmp/positive"/*.cc
 
-ASAN_OPTIONS=detect_leaks=1 "$tmp/positive/scope_main"
+tpcc_run "$tmp/positive/scope_main"
 
 for case in explicit shadow-type shadow-value
 do
 	source=$(printf '%s' "$case" | tr '-' '_')
-	./mp -Furtl -Futests/unit_uses_scope \
+	tpcc_translate -Futests/unit_uses_scope \
 		-o"$tmp/$case/main.cc" \
 		"tests/unit_uses_scope/scope_$source.pp"
-	"${CXX:-g++}" \
-		-std=c++20 \
-		-Wall \
-		-Wextra \
-		-fsanitize=address,undefined \
+	tpcc_build "$tmp/$case/main" \
 		-I"$tmp/$case" \
-		-Irtl \
-		"$tmp/$case"/*.cc \
-		-o "$tmp/$case/main"
-	ASAN_OPTIONS=detect_leaks=1 "$tmp/$case/main"
+		"$tmp/$case"/*.cc
+	tpcc_run "$tmp/$case/main"
 done
 
-if ./mp -Furtl -Futests/unit_uses_scope \
+if tpcc_translate -Futests/unit_uses_scope \
 	-o"$tmp/no-interface-reexport/main.cc" \
 	tests/unit_uses_scope/scope_no_interface_reexport.pp \
 	>"$tmp/no-interface-reexport/stdout" \
@@ -62,7 +47,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl -Futests/unit_uses_scope \
+if tpcc_translate -Futests/unit_uses_scope \
 	-o"$tmp/no-implementation-reexport/main.cc" \
 	tests/unit_uses_scope/scope_no_implementation_reexport.pp \
 	>"$tmp/no-implementation-reexport/stdout" \
@@ -79,27 +64,21 @@ then
 	exit 1
 fi
 
-./mp -Furtl -Futests/07_mutual_impl \
+tpcc_translate -Futests/07_mutual_impl \
 	-o"$tmp/cycles/implementation.cc" \
 	tests/07_mutual_impl/a.pp
 
-./mp -Furtl -Futests/unit_uses_scope \
+tpcc_translate -Futests/unit_uses_scope \
 	-o"$tmp/late-cycle/main.cc" \
 	tests/unit_uses_scope/late_cycle_main.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
+tpcc_build "$tmp/late-cycle/main" \
 	-I"$tmp/late-cycle" \
-	-Irtl \
-	"$tmp/late-cycle"/*.cc \
-	-o "$tmp/late-cycle/main"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/late-cycle"/*.cc
+tpcc_run \
 	"$tmp/late-cycle/main"
 
-if ./mp -Furtl -Futests/08_mutual_iface \
+if tpcc_translate -Futests/08_mutual_iface \
 	-o"$tmp/cycles/interface.cc" \
 	tests/08_mutual_iface/a.pp \
 	>"$tmp/cycles/stdout" \

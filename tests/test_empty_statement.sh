@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-empty-statement-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/empty_statement.cc" tests/empty_statement.pp
+tpcc_translate -o"$tmp/empty_statement.cc" tests/empty_statement.pp
 
 if ! rg -Uq 'pas_label_emptyatend:\n[[:space:]]*\{\}' \
 	"$tmp/empty_statement.cc"
@@ -17,18 +13,10 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
+tpcc_build "$tmp/empty_statement" \
 	-pedantic-errors \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
 	"$tmp/empty_statement.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/empty_statement"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/empty_statement"
+	"$tmp/system.cc"
+tpcc_run "$tmp/empty_statement"
 
 echo "empty-statement tests passed"

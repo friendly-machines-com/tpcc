@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-custom-in-operator.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/custom_in_operator.cc" \
+tpcc_translate -o"$tmp/custom_in_operator.cc" \
 	tests/custom_in_operator.pp
 
 if ! rg -Fq 'o_in(' "$tmp/custom_in_operator.cc"
@@ -22,25 +18,16 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/custom_in_operator" \
 	"$tmp/custom_in_operator.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/custom_in_operator"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/custom_in_operator"
 
 for rejection in ITEM CONTAINER
 do
-	if ./mp -Furtl -dREJECT_"$rejection" \
+	if tpcc_translate -dREJECT_"$rejection" \
 		-o"$tmp/rejected.cc" \
 		tests/custom_in_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -63,7 +50,7 @@ do
 	done
 done
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/ambiguous.cc" \
 	tests/custom_in_ambiguous.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"

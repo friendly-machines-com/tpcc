@@ -1,15 +1,11 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-ansistring-pointer-cast-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/ansistring_pointer_cast.cc" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/ansistring_pointer_cast.cc" \
 	tests/ansistring_pointer_cast.pp
 
 if ! rg -Fq '.m_pointer()' \
@@ -33,20 +29,11 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/ansistring_pointer_cast" \
 	"$tmp/ansistring_pointer_cast.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/ansistring_pointer_cast"
+	"$tmp/system.cc"
 
-actual=$(ASAN_OPTIONS=detect_leaks=1 \
+actual=$(tpcc_run \
 	"$tmp/ansistring_pointer_cast")
 if test "$actual" != 'XYc'
 then

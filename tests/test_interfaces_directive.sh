@@ -1,26 +1,15 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-interfaces-directive-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/interfaces_directive.cc" \
+tpcc_translate -o"$tmp/interfaces_directive.cc" \
 	tests/interfaces_directive.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/interfaces_directive" \
 	"$tmp/interfaces_directive.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/interfaces_directive"
+	"$tmp/system.cc"
 "$tmp/interfaces_directive"
 
 for source in \
@@ -31,7 +20,7 @@ for source in \
 	tests/interface_directive_invalid.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "accepted invalid interface-model source: $source" >&2

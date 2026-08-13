@@ -1,29 +1,15 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-absolute-alias-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/absolute_alias.cc" tests/absolute_alias.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-fno-strict-aliasing \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/absolute_alias.cc" tests/absolute_alias.pp
+tpcc_build "$tmp/absolute_alias" \
 	"$tmp/absolute_alias.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/absolute_alias"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/absolute_alias"
+	"$tmp/system.cc"
+tpcc_run "$tmp/absolute_alias"
 
 for source in \
 	tests/absolute_var_param_rejected.pp \
@@ -31,7 +17,7 @@ for source in \
 	tests/absolute_size_mismatch_rejected.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 		>"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "accepted invalid absolute source: $source" >&2

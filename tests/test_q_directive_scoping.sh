@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-q-directive-scoping.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/q_directive_scoping.cc" \
 	tests/q_directive_scoping.pp
 
@@ -25,43 +21,25 @@ rg -q \
 	'for \(p_downchecked = .*::u_system::p_pred\(p_downchecked\)' \
 	"$tmp/q_directive_scoping.cc"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/q_directive_scoping" \
 	"$tmp/q_directive_scoping.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/q_directive_scoping"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/q_directive_scoping"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/q_directive_scoping_constants.cc" \
 	tests/q_directive_scoping_constants.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/q_directive_scoping_constants" \
 	"$tmp/q_directive_scoping_constants.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/q_directive_scoping_constants"
-ASAN_OPTIONS=detect_leaks=1 \
+	"$tmp/system.cc"
+tpcc_run \
 	"$tmp/q_directive_scoping_constants"
 
 for define in TEST_ABS TEST_SUCC TEST_PRED
 do
-	if ./mp -Furtl \
+	if tpcc_translate \
 		-d"$define" \
 		-o"$tmp/checked_constant.cc" \
 		tests/q_directive_scoping_checked_constant.pp \

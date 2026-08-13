@@ -1,10 +1,7 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-environment-variable-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
 long=
 i=0
@@ -16,9 +13,8 @@ done
 bytes=$(printf '\200\377')
 unset TPCC_ENV_MISSING
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/environment_variable.cc" \
+tpcc_translate -o"$tmp/environment_variable.cc" \
 	tests/environment_variable.pp
 if ! rg -Fq '::u_sysutils::p_getenvironmentvariable' \
 	"$tmp/environment_variable.cc"
@@ -33,26 +29,17 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/environment_variable" \
 	"$tmp/environment_variable.cc" \
 	"$tmp/baseunix.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/environment_variable"
+	"$tmp/system.cc"
 
 TPCC_ENV_PRESENT='alpha beta:gamma' \
 TPCC_ENV_EMPTY= \
 TPCC_ENV_LONG="$long" \
 TPCC_ENV_BYTES="$bytes" \
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/environment_variable"
 
 echo "GetEnvironmentVariable tests passed"

@@ -1,15 +1,11 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-initialize-finalize.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/initialize_finalize.cc" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/initialize_finalize.cc" \
 	tests/initialize_finalize.pp
 
 for required in \
@@ -25,20 +21,11 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-I"$tmp" \
-	-Irtl \
+tpcc_build "$tmp/initialize_finalize" \
 	"$tmp/initialize_finalize.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/initialize_finalize"
+	"$tmp/system.cc"
 
-actual=$(ASAN_OPTIONS=detect_leaks=1 "$tmp/initialize_finalize")
+actual=$(tpcc_run "$tmp/initialize_finalize")
 if test "$actual" != 'Initialize/Finalize passed'
 then
 	echo "unexpected Initialize/Finalize output: $actual" >&2
@@ -47,7 +34,7 @@ fi
 
 for intrinsic in INITIALIZE FINALIZE
 do
-	if ./mp -Furtl -dTEST_"$intrinsic"_COUNT \
+	if tpcc_translate -dTEST_"$intrinsic"_COUNT \
 		-o"$tmp/count_rejected.cc" \
 		tests/initialize_finalize_count_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"

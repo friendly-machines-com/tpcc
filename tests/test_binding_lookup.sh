@@ -1,29 +1,18 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-binding-lookup-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/binding_lookup.cc" \
+tpcc_translate -o"$tmp/binding_lookup.cc" \
 	tests/binding_lookup.pp
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/binding_lookup" \
 	"$tmp/binding_lookup.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/binding_lookup"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/binding_lookup"
+	"$tmp/system.cc"
+tpcc_run "$tmp/binding_lookup"
 
-if ./mp -Furtl -o"$tmp/rejected.cc" \
+if tpcc_translate -o"$tmp/rejected.cc" \
 	tests/binding_same_scope_rejected.pp \
 	>"$tmp/rejected.out" 2>&1
 then

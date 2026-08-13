@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-diagnostic-context-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-if ./mp -Furtl -Futests \
+if tpcc_translate -Futests \
 	-o"$tmp/diagnostic_context_rejected.cc" \
 	tests/diagnostic_context_rejected.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -60,7 +56,7 @@ do
 	fi
 done
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/diagnostic_context_rich_rejected.cc" \
 	tests/diagnostic_context_rich_rejected.pp \
 	>"$tmp/rich.stdout" 2>"$tmp/rich.stderr"
@@ -103,7 +99,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl \
+if tpcc_translate \
 	-o"$tmp/diagnostic_owner_context_rejected.cc" \
 	tests/diagnostic_owner_context_rejected.pp \
 	>"$tmp/owner.stdout" 2>"$tmp/owner.stderr"

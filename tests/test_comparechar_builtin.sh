@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-comparechar-builtin-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/comparechar_builtin.cc" tests/comparechar_builtin.pp
+tpcc_translate -o"$tmp/comparechar_builtin.cc" tests/comparechar_builtin.pp
 
 if ! rg -q '::u_system::p_comparechar' "$tmp/comparechar_builtin.cc"; then
 	echo "CompareChar did not lower through the RTL" >&2
@@ -31,26 +27,13 @@ if ! rg -q '::u_system::p_compareword' "$tmp/comparechar_builtin.cc"; then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/comparechar_builtin_pascal" \
 	"$tmp/comparechar_builtin.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/comparechar_builtin_pascal"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/comparechar_builtin_pascal"
+	"$tmp/system.cc"
+tpcc_run "$tmp/comparechar_builtin_pascal"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	tests/comparechar_builtin_runtime.cpp \
-	-o "$tmp/comparechar_builtin"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/comparechar_builtin"
+tpcc_build "$tmp/comparechar_builtin" \
+	tests/comparechar_builtin_runtime.cpp
+tpcc_run "$tmp/comparechar_builtin"
 
 echo "CompareChar/CompareByte/CompareWord/IndexByte/IndexWord builtin tests passed"

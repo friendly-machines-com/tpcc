@@ -1,15 +1,11 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-untyped-pointer-dereference-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/system.cc" rtl/system.pp
-./mp -Furtl -o"$tmp/untyped_pointer_dereference.cc" \
+tpcc_translate -o"$tmp/system.cc" rtl/system.pp
+tpcc_translate -o"$tmp/untyped_pointer_dereference.cc" \
 	tests/untyped_pointer_dereference.pp
 
 if ! rg -Fq \
@@ -26,20 +22,11 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/untyped_pointer_dereference" \
 	"$tmp/untyped_pointer_dereference.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/untyped_pointer_dereference"
+	"$tmp/system.cc"
 
-actual=$(ASAN_OPTIONS=detect_leaks=1 \
+actual=$(tpcc_run \
 	"$tmp/untyped_pointer_dereference")
 expected='42
 17'

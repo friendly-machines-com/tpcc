@@ -1,33 +1,22 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-try-statements-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/try_statements.cc" tests/try_statements.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_translate -o"$tmp/try_statements.cc" tests/try_statements.pp
+tpcc_build "$tmp/try_statements" \
 	"$tmp/try_statements.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/try_statements"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/try_statements"
+	"$tmp/system.cc"
+tpcc_run "$tmp/try_statements"
 
 for source in \
 	tests/finally_exit.pp \
 	tests/finally_break.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 	    >"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "expected tpcc to reject $source" >&2

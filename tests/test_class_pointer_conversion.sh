@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-class-pointer-conversion.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/class_pointer_conversion.cc" \
 	tests/class_pointer_conversion.pp
 
@@ -26,19 +22,11 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/class_pointer_conversion" \
 	"$tmp/class_pointer_conversion.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/class_pointer_conversion"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/class_pointer_conversion"
 
 for kind in \
@@ -50,7 +38,7 @@ for kind in \
 	INTERFACE \
 	CHAIN
 do
-	if ./mp -Furtl -d"TEST_$kind" \
+	if tpcc_translate -d"TEST_$kind" \
 		-o"$tmp/rejected.cc" \
 		tests/class_pointer_conversion_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"

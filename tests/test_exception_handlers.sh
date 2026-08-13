@@ -1,47 +1,25 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-exception-handlers-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/exception_handlers.cc" \
+tpcc_translate -o"$tmp/exception_handlers.cc" \
 	tests/exception_handlers.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/exception_handlers" \
 	"$tmp/exception_handlers.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/exception_handlers"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/exception_handlers"
+	"$tmp/system.cc"
+tpcc_run "$tmp/exception_handlers"
 
-./mp -Furtl -o"$tmp/unhandled_exception.cc" \
+tpcc_translate -o"$tmp/unhandled_exception.cc" \
 	tests/unhandled_exception.pp
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/unhandled_exception" \
 	"$tmp/unhandled_exception.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/unhandled_exception"
+	"$tmp/system.cc"
 status=0
-ASAN_OPTIONS=detect_leaks=1 "$tmp/unhandled_exception" \
+tpcc_run "$tmp/unhandled_exception" \
 	>"$tmp/unhandled.stdout" || status=$?
 if test "$status" -ne 217; then
 	echo "unhandled Pascal exception returned $status, expected 217" >&2
@@ -60,7 +38,7 @@ for source in \
 	tests/reraise_inside_nested_try.pp
 do
 	base=${source%.pp}
-	if ./mp -Furtl -o"$tmp/rejected.cc" "$source" \
+	if tpcc_translate -o"$tmp/rejected.cc" "$source" \
 	    >"$tmp/stdout" 2>"$tmp/stderr"
 	then
 		echo "expected tpcc to reject $source" >&2

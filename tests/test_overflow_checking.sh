@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-overflow-checking.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/overflow_checking.cc" \
+tpcc_translate -o"$tmp/overflow_checking.cc" \
 	tests/overflow_checking.pp
 
 rg -Fq '::u_system::o_unchecked_add' \
@@ -32,21 +28,12 @@ rg -Fq '::u_system::o_unchecked_multiply' \
 rg -Fq '::u_system::o_multiply' \
 	"$tmp/overflow_checking.cc"
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/overflow_checking" \
 	"$tmp/overflow_checking.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/overflow_checking"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/overflow_checking"
 
 echo "overflow-checking tests passed"

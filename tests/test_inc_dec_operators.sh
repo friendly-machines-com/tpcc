@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-inc-dec-operators.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl \
+tpcc_translate \
 	-o"$tmp/inc_dec_operators.cc" \
 	tests/inc_dec_operators.pp
 
@@ -20,28 +16,19 @@ do
 		"$tmp/inc_dec_operators.cc"
 done
 
-${CXX:-g++} \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/inc_dec_operators" \
 	"$tmp/inc_dec_operators.cc" \
 	"$tmp/sysutils.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/inc_dec_operators"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/inc_dec_operators"
 
 check_rejected()
 {
 	define=$1
 	expected=$2
-	if ./mp -Furtl \
+	if tpcc_translate \
 		-d"$define" \
 		-o"$tmp/rejected.cc" \
 		tests/inc_dec_operators.pp \

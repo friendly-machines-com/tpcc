@@ -1,30 +1,17 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-emission-semantic-boundaries.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
 compile_and_run()
 {
 	name=$1
-	./mp -Furtl -o"$tmp/$name.cc" "tests/$name.pp"
-	"${CXX:-g++}" \
-		-std=c++20 \
-		-Wall \
-		-Wextra \
-		-Wpedantic \
-		-fsanitize=address,undefined \
-		-fno-sanitize-recover=all \
-		-Irtl \
-		-I"$tmp" \
+	tpcc_translate -o"$tmp/$name.cc" "tests/$name.pp"
+	tpcc_build "$tmp/$name" \
 		"$tmp/$name.cc" \
-		"$tmp/system.cc" \
-		-o "$tmp/$name"
-	ASAN_OPTIONS=detect_leaks=1 \
+		"$tmp/system.cc"
+	tpcc_run \
 		"$tmp/$name"
 }
 

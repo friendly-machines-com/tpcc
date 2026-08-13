@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-pointer-arithmetic.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/pointer_arithmetic.cc" \
+tpcc_translate -o"$tmp/pointer_arithmetic.cc" \
 	tests/pointer_arithmetic.pp
 
 if rg -Fq 'reinterpret_cast<uintptr_t>' \
@@ -19,27 +15,19 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
+tpcc_build "$tmp/pointer_arithmetic" \
 	-fsanitize=address,undefined,pointer-overflow,pointer-subtract \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
 	"$tmp/pointer_arithmetic.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/pointer_arithmetic"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1:detect_invalid_pointer_pairs=2 \
+ASAN_OPTIONS=detect_leaks=1:detect_invalid_pointer_pairs=2 tpcc_run \
 	"$tmp/pointer_arithmetic"
 
 for rejection in \
 	DIFFERENT_TYPES \
 	UNTYPED_DIFFERENCE
 do
-	if ./mp -Furtl -dREJECTION_ONLY -dREJECT_"$rejection" \
+	if tpcc_translate -dREJECTION_ONLY -dREJECT_"$rejection" \
 		-o"$tmp/rejected.cc" \
 		tests/pointer_arithmetic.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"
@@ -55,7 +43,7 @@ do
 	fi
 done
 
-if ./mp -Furtl -dREJECTION_ONLY -dREJECT_UNTYPED_STEP \
+if tpcc_translate -dREJECTION_ONLY -dREJECT_UNTYPED_STEP \
 	-o"$tmp/rejected.cc" \
 	tests/pointer_arithmetic.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"
@@ -72,7 +60,7 @@ then
 	exit 1
 fi
 
-if ./mp -Furtl -dREJECTION_ONLY -dREJECT_POINTER_CAST_ADDRESS \
+if tpcc_translate -dREJECTION_ONLY -dREJECT_POINTER_CAST_ADDRESS \
 	-o"$tmp/rejected.cc" \
 	tests/pointer_arithmetic.pp \
 	>"$tmp/stdout" 2>"$tmp/stderr"

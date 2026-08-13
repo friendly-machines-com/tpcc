@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-predefined-explicit-conversions.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/predefined_explicit_conversions.cc" \
+tpcc_translate -o"$tmp/predefined_explicit_conversions.cc" \
 	tests/predefined_explicit_conversions.pp
 
 for required in \
@@ -24,20 +20,11 @@ do
 	fi
 done
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-fsanitize=address,undefined \
-	-fno-sanitize-recover=all \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/predefined_explicit_conversions" \
 	"$tmp/predefined_explicit_conversions.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/predefined_explicit_conversions"
+	"$tmp/system.cc"
 
-ASAN_OPTIONS=detect_leaks=1 \
+tpcc_run \
 	"$tmp/predefined_explicit_conversions"
 
 for rejection in \
@@ -52,7 +39,7 @@ for rejection in \
 	WRONG_SIZE_BYTE_VIEW \
 	AGGREGATE_BYTE_VIEW
 do
-	if ./mp -Furtl -dREJECT_"$rejection" \
+	if tpcc_translate -dREJECT_"$rejection" \
 		-o"$tmp/rejected.cc" \
 		tests/predefined_explicit_rejected.pp \
 		>"$tmp/stdout" 2>"$tmp/stderr"

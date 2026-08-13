@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-write-builtin-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/write_builtin.cc" tests/write_builtin.pp
+tpcc_translate -o"$tmp/write_builtin.cc" tests/write_builtin.pp
 if ! rg -Fq '::u_system::p_write(' "$tmp/write_builtin.cc"; then
 	echo "Write did not lower through the RTL" >&2
 	exit 1
@@ -30,16 +26,9 @@ if ! rg -Fq '::u_system::p_stderr' "$tmp/write_builtin.cc"; then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-fsanitize=address,undefined \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/write_builtin" \
 	tests/write_builtin_runtime.cpp \
-	"$tmp/system.cc" \
-	-o "$tmp/write_builtin"
-ASAN_OPTIONS=detect_leaks=1 "$tmp/write_builtin"
+	"$tmp/system.cc"
+tpcc_run "$tmp/write_builtin"
 
 echo "Write/WriteLn builtin tests passed"

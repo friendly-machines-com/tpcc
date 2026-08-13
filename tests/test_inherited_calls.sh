@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=${TMPDIR:-/tmp}/tpcc-inherited-calls-test.$$
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+. "$(dirname -- "$0")/testlib.sh"
 
-cd "$root"
 
-./mp -Furtl -o"$tmp/inherited_calls.cc" \
+tpcc_translate -o"$tmp/inherited_calls.cc" \
 	tests/inherited_calls.pp
 
 if ! rg -Fq 't_tbase::p_insert(' \
@@ -30,16 +26,9 @@ then
 	exit 1
 fi
 
-"${CXX:-g++}" \
-	-std=c++20 \
-	-Wall \
-	-Wextra \
-	-Wpedantic \
-	-Irtl \
-	-I"$tmp" \
+tpcc_build "$tmp/inherited_calls" \
 	"$tmp/inherited_calls.cc" \
-	"$tmp/system.cc" \
-	-o "$tmp/inherited_calls"
+	"$tmp/system.cc"
 
 actual=$("$tmp/inherited_calls")
 test "$actual" = 'inherited calls passed'
