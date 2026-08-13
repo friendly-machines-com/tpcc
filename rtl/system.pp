@@ -443,6 +443,10 @@ procedure move(const source; var destination; count: SizeInt); external name '::
 // lifecycle operation; the count overload is not declared.
 procedure initialize(var value); external name '::u_system::p_initialize';
 procedure finalize(var value); external name '::u_system::p_finalize';
+{ IndexByte's length is measured in bytes; IndexWord's is measured in native
+  Word elements. Both return a zero-based element index, or -1 when absent. }
+function indexbyte(const buf; len: SizeInt; value: Byte): SizeInt; external name '::u_system::p_indexbyte';
+function indexword(const buf; len: SizeInt; value: Word): SizeInt; external name '::u_system::p_indexword';
 function comparebyte(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparebyte';
 function comparechar(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparechar';
 function sizeof(const x): SizeInt; external name '::u_system::p_sizeof';

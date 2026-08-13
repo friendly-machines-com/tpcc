@@ -5575,6 +5575,58 @@ inline void p_move(tpcc_const_storage_ref source,
 	std::memmove(destination.data, source.data, byte_count);
 }
 
+inline std::size_t tpcc_index_element_count(
+    tpcc_const_storage_ref buffer, t_sizeint count,
+    std::size_t element_size) {
+	if (count == 0)
+		return 0;
+	if (count < 0) {
+		// FPC deliberately interprets a negative IndexByte/IndexWord length as
+		// an unsigned, effectively unbounded search. Emitted omitted-type
+		// arguments retain their available byte extent, so search that entire
+		// extent instead of allowing the C++ implementation to read beyond it.
+		return buffer.size / element_size;
+	}
+	const std::size_t element_count =
+	    static_cast<std::size_t>(count);
+	if (element_count > buffer.size / element_size)
+		m_runtime_error(201);
+	return element_count;
+}
+
+inline t_sizeint p_indexbyte(tpcc_const_storage_ref buffer,
+    t_sizeint count, t_byte value) {
+	const std::size_t element_count =
+	    tpcc_index_element_count(buffer, count, sizeof(t_byte));
+	if (element_count == 0)
+		return -1;
+	const void* found =
+	    std::memchr(buffer.data, static_cast<int>(value), element_count);
+	if (!found)
+		return -1;
+	return static_cast<t_sizeint>(
+	    static_cast<const std::byte*>(found) - buffer.data);
+}
+
+inline t_sizeint p_indexword(tpcc_const_storage_ref buffer,
+    t_sizeint count, t_word value) {
+	const std::size_t element_count =
+	    tpcc_index_element_count(buffer, count, sizeof(t_word));
+	for (std::size_t index = 0; index < element_count; ++index) {
+		t_word current;
+		// Pascal permits the untyped buffer to be unaligned. memcpy reads the
+		// native Word representation without creating a misaligned t_word*
+		// or violating C++ object-lifetime and aliasing rules.
+		std::memcpy(
+		    std::addressof(current),
+		    buffer.data + index * sizeof(t_word),
+		    sizeof(t_word));
+		if (current == value)
+			return static_cast<t_sizeint>(index);
+	}
+	return -1;
+}
+
 inline t_sizeint p_comparebyte(tpcc_const_storage_ref first,
     tpcc_const_storage_ref second, t_sizeint count) {
 	if (count <= 0)
