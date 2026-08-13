@@ -90,6 +90,10 @@ function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TSearchRec):
 function FindNext(var Rslt: TSearchRec): LongInt; external name '::u_sysutils::p_findnext';
 procedure FindClose(var F: TSearchRec); external name '::u_sysutils::p_findclose';
 
+function Trim(const S: AnsiString): AnsiString;
+function TrimLeft(const S: AnsiString): AnsiString;
+function TrimRight(const S: AnsiString): AnsiString;
+
 implementation
 
 function IntToStr(Value: LongInt): AnsiString;
@@ -303,6 +307,43 @@ constructor Exception.CreateHelp(const Msg: String; AHelpContext: LongInt);
 begin
   FMessage := Msg;
   FHelpContext := AHelpContext
+end;
+
+const
+  Whitespace = [#0..' '];
+
+function Trim(const S: AnsiString): AnsiString;
+var
+  Ofs, Len: LongInt;
+begin
+  Len := Length(S);
+  while (Len > 0) and (S[Len] in Whitespace) do
+    Dec(Len);
+  Ofs := 1;
+  while (Ofs <= Len) and (S[Ofs] in Whitespace) do
+    Inc(Ofs);
+  Result := Copy(S, Ofs, 1 + Len - Ofs)
+end;
+
+function TrimLeft(const S: AnsiString): AnsiString;
+var
+  Index, Len: LongInt;
+begin
+  Len := Length(S);
+  Index := 1;
+  while (Index <= Len) and (S[Index] in Whitespace) do
+    Inc(Index);
+  Result := Copy(S, Index, Len)
+end;
+
+function TrimRight(const S: AnsiString): AnsiString;
+var
+  Len: LongInt;
+begin
+  Len := Length(S);
+  while (Len > 0) and (S[Len] in Whitespace) do
+    Dec(Len);
+  Result := Copy(S, 1, Len)
 end;
 
 initialization
