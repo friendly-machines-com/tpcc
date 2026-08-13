@@ -1016,6 +1016,11 @@ void Emitter::emit_statement(Node* stmt) {
 		bool method_component = method_view && method_view->ty == tmethod_type() && method_field && method_routine && method_routine->kind == METHOD && (method_code || method_data);
 
 		auto writable_cast = dynamic_cast<Cast*>(a->a);
+		const bool writable_byte_array_view =
+		    writable_cast && writable_cast->a &&
+		    predefined_byte_array_storage_view(
+		        writable_cast->ty,
+		        writable_cast->a->ty);
 
 		PropertyAccess* indexed_property = dynamic_cast<PropertyAccess*>(a->a);
 		Node* indexed_receiver = indexed_property ? indexed_property->receiver : nullptr;
@@ -1034,6 +1039,15 @@ void Emitter::emit_statement(Node* stmt) {
 		if (method_component) {
 			fprintf(active, method_code ? "\t::u_system::m_store_tmethod_code(" : "\t::u_system::m_store_tmethod_data(");
 			emit_writable_expression(method_view->a);
+			fprintf(active, ", ");
+			emit_expression(a->b);
+			fprintf(active, ");\n");
+		} else if (writable_byte_array_view) {
+			// Whole-array assignment through a Byte-array scalar view copies
+			// object-representation bytes back to the original scalar. Do not
+			// form a C++ t_fixedarray lvalue at the scalar's address.
+			fprintf(active, "\t::u_system::tpcc_store_byte_array_view(");
+			emit_storage_ref(writable_cast->a);
 			fprintf(active, ", ");
 			emit_expression(a->b);
 			fprintf(active, ");\n");
@@ -3275,6 +3289,11 @@ void Emitter::emit_expression(Node* expr) {
 		auto target_classref = dynamic_cast<ClassRefType*>(ca->ty);
 		auto target_packed = dynamic_cast<PackedRecordType*>(ca->ty);
 		auto source_packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr);
+		auto target_byte_array =
+		    predefined_byte_array_storage_view(
+		        ca->ty, ca->a ? ca->a->ty : nullptr)
+		        ? dynamic_cast<FixedArrayType*>(ca->ty)
+		        : nullptr;
 
 		if (dynamic_cast<RangeCheckedCast*>(ca)) {
 			if (real_conversion) {
@@ -3416,6 +3435,16 @@ void Emitter::emit_expression(Node* expr) {
 			        type_cxx_name(target_class, target_class->cxx_name).c_str(), type_cxx_name(target_class, target_class->cxx_name).c_str(), type_cxx_name(source_class, source_class->cxx_name).c_str());
 			emit_expression(ca->a);
 			fprintf(active, ")))");
+		} else if (target_byte_array) {
+			// An equal-sized fixed array of Byte is a direct view of the
+			// scalar's object representation. The RTL proxy carries the
+			// original address and array bounds without pretending that a C++
+			// t_fixedarray object exists in that scalar's storage.
+			fprintf(active, "::u_system::tpcc_make_byte_array_view<%llu, ", (unsigned long long)target_byte_array->range.length);
+			emit_template_value_arg(target_byte_array->range.lower_bound);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
 		} else if (target_packed) {
 			if (target_packed->cxx_name.empty()) {
 				unhandled_type("anonymous packed overlay", target_packed);

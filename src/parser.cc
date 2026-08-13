@@ -3717,6 +3717,15 @@ static bool is_typed_pointer_index(PropertyAccess* access, Builtin* builtin) {
 	return pointer && !pointer->is_untyped();
 }
 
+static Cast* byte_array_storage_view_cast(Node* node) {
+	auto cast = dynamic_cast<Cast*>(node);
+	return cast && cast->a &&
+	               predefined_byte_array_storage_view(
+	                   cast->ty, cast->a->ty)
+	           ? cast
+	           : nullptr;
+}
+
 bool Parser::is_assignable(Node* n) {
 	if (!n) {
 		return false;
@@ -3738,6 +3747,15 @@ bool Parser::is_assignable(Node* n) {
 			if (is_typed_pointer_index(property, builtin)) {
 				return true;
 			}
+			// A Byte-array cast is a view of the scalar's object
+			// representation. Its indexed byte is writable exactly when the
+			// viewed scalar is a stable writable place.
+			if (auto view =
+			        byte_array_storage_view_cast(
+			            property->receiver)) {
+				return is_referenceable(view->a) &&
+				       !contains_packed_projection(view->a);
+			}
 			// Reference-backed indexing can write only through a stable base.
 			// Packed projections are admitted here solely so the subsequent
 			// is_supported_packed_assignment check can select or reject their
@@ -3757,6 +3775,11 @@ bool Parser::is_assignable(Node* n) {
 		}
 		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
 	} else if (auto cast = dynamic_cast<Cast*>(n)) {
+		if (predefined_byte_array_storage_view(
+		        cast->ty, cast->a ? cast->a->ty : nullptr)) {
+			return is_referenceable(cast->a) &&
+			       !contains_packed_projection(cast->a);
+		}
 		// FPC treats an explicit ordinal cast as a view of its operand's
 		// storage when both ordinal carriers have the same size. Restrict this
 		// to tpcc intrinsic ordinal carriers: C++ enum/Boolean objects cannot
@@ -3786,6 +3809,13 @@ bool Parser::property_read_is_place(PropertyAccess* access) {
 	if (dynamic_cast<StorageSlot*>(accessor)) {
 		return access->receiver->ty && access->receiver->ty->is_reference_type() ? true : is_referenceable(access->receiver);
 	} else if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
+		if (auto view =
+		        byte_array_storage_view_cast(
+		            access->receiver)) {
+			return is_builtin_index_accessor(builtin) &&
+			       is_referenceable(view->a) &&
+			       !contains_packed_projection(view->a);
+		}
 		return is_builtin_index_accessor(builtin) && (is_typed_pointer_index(access, builtin) || is_referenceable(access->receiver));
 	}
 	return false; // ordinary Pascal getter calls return values

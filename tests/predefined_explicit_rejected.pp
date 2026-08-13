@@ -9,6 +9,12 @@ type
   end;
   TArrayA = array[1..2] of Integer;
   TArrayB = array[1..2] of Integer;
+  TWordArray = array[0..3] of Word;
+  TByteArray4 = array[0..3] of Byte;
+  TByteArray3 = array[0..2] of Byte;
+  TFourByteRecord = record
+    Value: LongInt;
+  end;
   TBase = class
   end;
   TUnrelated = class
@@ -55,6 +61,12 @@ var
   PackedSet: TPackedSet;
   ChainA: TChainA;
   ChainC: TChainC;
+  WordArray: TWordArray;
+  ByteArray4: TByteArray4;
+  ByteArray3: TByteArray3;
+  QWordValue: QWord;
+  LongIntValue: LongInt;
+  FourByteRecord: TFourByteRecord;
 
 begin
   {$ifdef REJECT_RECORD}
@@ -77,5 +89,14 @@ begin
   {$endif}
   {$ifdef REJECT_CHAIN}
   ChainC := TChainC(ChainA);
+  {$endif}
+  {$ifdef REJECT_NONBYTE_SCALAR_VIEW}
+  WordArray := TWordArray(QWordValue);
+  {$endif}
+  {$ifdef REJECT_WRONG_SIZE_BYTE_VIEW}
+  ByteArray3 := TByteArray3(LongIntValue);
+  {$endif}
+  {$ifdef REJECT_AGGREGATE_BYTE_VIEW}
+  ByteArray4 := TByteArray4(FourByteRecord);
   {$endif}
 end.

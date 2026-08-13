@@ -47,7 +47,10 @@ for rejection in \
 	UNRELATED_CLASS \
 	MANAGED_PACKED \
 	SET_PACKED \
-	CHAIN
+	CHAIN \
+	NONBYTE_SCALAR_VIEW \
+	WRONG_SIZE_BYTE_VIEW \
+	AGGREGATE_BYTE_VIEW
 do
 	if ./mp -Furtl -dREJECT_"$rejection" \
 		-o"$tmp/rejected.cc" \

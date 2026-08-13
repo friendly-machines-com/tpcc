@@ -737,6 +737,54 @@ std::optional<RecordLayout> packed_record_layout(PackedRecordType* record) {
 namespace {
 static bool predefined_overlay_byte_copyable(const Type* type, std::set<const Type*>& visiting);
 
+static bool predefined_scalar_byte_copyable(const Type* type) {
+	if (!type) {
+		return false;
+	}
+	while (auto incomplete = dynamic_cast<const IncompleteType*>(type)) {
+		if (!incomplete->resolved) {
+			return false;
+		}
+		type = incomplete->resolved;
+	}
+	if (auto distinct = dynamic_cast<const DistinctType*>(type)) {
+		return predefined_scalar_byte_copyable(distinct->base_type);
+	}
+	if (auto range = dynamic_cast<const SubrangeType*>(type)) {
+		return predefined_scalar_byte_copyable(range->base_type);
+	}
+	if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type)) {
+		if (!intrinsic->carrier) {
+			return false;
+		}
+		switch (*intrinsic->carrier) {
+		case IntrinsicCarrier::UInt8:
+		case IntrinsicCarrier::Int8:
+		case IntrinsicCarrier::UInt16:
+		case IntrinsicCarrier::Int16:
+		case IntrinsicCarrier::UInt32:
+		case IntrinsicCarrier::Int32:
+		case IntrinsicCarrier::UInt64:
+		case IntrinsicCarrier::Int64:
+		case IntrinsicCarrier::Float:
+		case IntrinsicCarrier::Double:
+		case IntrinsicCarrier::LongDouble:
+		case IntrinsicCarrier::Character:
+			return true;
+		case IntrinsicCarrier::AnsiString:
+		case IntrinsicCarrier::Text:
+		case IntrinsicCarrier::File:
+			return false;
+		}
+	}
+	return dynamic_cast<const EnumType*>(type) ||
+	       dynamic_cast<const PointerType*>(type) ||
+	       dynamic_cast<const ClassType*>(type) ||
+	       dynamic_cast<const InterfaceType*>(type) ||
+	       dynamic_cast<const ClassRefType*>(type) ||
+	       dynamic_cast<const RoutineType*>(type);
+}
+
 static bool predefined_overlay_variant_byte_copyable(const VariantPart* variant, std::set<const Type*>& visiting) {
 	if (!variant) {
 		return true;
@@ -835,6 +883,20 @@ static bool predefined_overlay_compatible(const Type* target, const Type* source
 }
 } // namespace
 
+bool predefined_byte_array_storage_view(const Type* target, const Type* source) {
+	auto array = dynamic_cast<const FixedArrayType*>(target);
+	if (!array || array->item_type != byte_type() ||
+	    !predefined_scalar_byte_copyable(source)) {
+		return false;
+	}
+	auto target_layout =
+	    type_layout(false, const_cast<Type*>(target));
+	auto source_layout =
+	    type_layout(false, const_cast<Type*>(source));
+	return target_layout && source_layout &&
+	       target_layout->size == source_layout->size;
+}
+
 bool Type::predefined_explicit_conversion_from(const Type* source) const {
 	// Explicit syntax includes every one-edge predefined implicit conversion.
 	// Calling this virtual destination's existing constructor relation does
@@ -843,6 +905,9 @@ bool Type::predefined_explicit_conversion_from(const Type* source) const {
 		return false;
 	}
 	if (this == source || value_conversion_from(source)) {
+		return true;
+	}
+	if (predefined_byte_array_storage_view(this, source)) {
 		return true;
 	}
 	// Packed records are the language's byte-array overlay carrier. Admit the

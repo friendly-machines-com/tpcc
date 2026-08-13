@@ -13,8 +13,12 @@ if ! rg -Fq '::u_system::tpcc_store_writable_cast<' "$tmp/writable_cast.cc"; the
 	echo "writable cast did not lower through typed RTL storage" >&2
 	exit 1
 fi
-if rg -q 'reinterpret_cast' "$tmp/writable_cast.cc"; then
-	echo "writable cast emitted a C++ reinterpret_cast" >&2
+if ! rg -Fq '::u_system::tpcc_make_byte_array_view<8,' "$tmp/writable_cast.cc"; then
+	echo "scalar Byte-array cast did not lower through an object-representation view" >&2
+	exit 1
+fi
+if ! rg -Fq '::u_system::tpcc_store_byte_array_view' "$tmp/writable_cast.cc"; then
+	echo "writable scalar Byte-array cast did not lower through byte copyback" >&2
 	exit 1
 fi
 
@@ -45,5 +49,18 @@ do
 		exit 1
 	fi
 done
+
+if ./mp -Furtl -o"$tmp/rejected.cc" \
+    tests/writable_byte_array_temporary_rejected.pp \
+    >"$tmp/rejected.out" 2>&1
+then
+	echo "writable Byte-array view of a temporary was accepted" >&2
+	exit 1
+fi
+if ! rg -Fq "LHS of ':=' is not assignable" "$tmp/rejected.out"; then
+	echo "writable Byte-array temporary produced the wrong diagnostic" >&2
+	cat "$tmp/rejected.out" >&2
+	exit 1
+fi
 
 echo "writable-cast tests passed"

@@ -3,7 +3,7 @@
 #undef main
 
 int main() {
-	if (tpcc_pascal_main() != 0) {
+	if (tpcc_pascal_main(0, nullptr) != 0) {
 		return 1;
 	}
 	if (p_c.value != 255) {
@@ -20,6 +20,15 @@ int main() {
 	}
 	if (p_indexcalls != 1) {
 		return 6;
+	}
+	if (p_changedfirst == p_originalfirst) {
+		return 7;
+	}
+	if (p_changedbyvar == p_realbytes.items[1]) {
+		return 8;
+	}
+	if (p_realvalue != static_cast<::u_system::t_double>(1.5)) {
+		return 9;
 	}
 	return 0;
 }

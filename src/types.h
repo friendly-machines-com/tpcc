@@ -560,6 +560,10 @@ struct RecordLayout {
 std::optional<TypeLayout> type_layout(bool packed_container, Type* ty);
 std::optional<RecordLayout> record_layout(RecordType* record);
 std::optional<RecordLayout> packed_record_layout(PackedRecordType* record);
+// Pascal permits an equal-sized fixed array of exactly Byte to view a
+// trivially copyable scalar's object representation. This is a directed
+// storage-view relation, not a general equal-layout value conversion.
+bool predefined_byte_array_storage_view(const Type* target, const Type* source);
 
 struct InterfaceType : public Type {
 	Frame* children;
