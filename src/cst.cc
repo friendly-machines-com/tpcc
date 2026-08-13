@@ -160,7 +160,8 @@ ExplicitCast::ExplicitCast(Node* value, Type* target) : Cast(value, target) {
 }
 
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type) : kind(kind), operand_type(operand_type) {
-	this->ty = operand_type;
+	auto array = dynamic_cast<FixedArrayType*>(operand_type);
+	this->ty = array ? array->bounds : operand_type;
 }
 
 ValueBound::ValueBound(TypeBoundKind kind, Node* value, Type* result_type) : UnaryOperation(value), kind(kind) {

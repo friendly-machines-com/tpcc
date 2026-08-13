@@ -3196,12 +3196,16 @@ void Emitter::emit_expression(Node* expr) {
 		emit_expression(bound->a);
 		fprintf(active, ")");
 	} else if (auto tb = dynamic_cast<TypeBound*>(expr)) {
-		if (auto range = dynamic_cast<SubrangeType*>(tb->operand_type)) {
+		Type* bounds_type = tb->operand_type;
+		if (auto array = dynamic_cast<FixedArrayType*>(bounds_type)) {
+			bounds_type = array->bounds;
+		}
+		if (auto range = dynamic_cast<SubrangeType*>(bounds_type)) {
 			// Subranges erase to their base C++ carrier, so p_low<T>() and
 			// p_high<T>() would describe the carrier rather than the Pascal
 			// destination. Emit the declaration's actual constant bounds.
 			emit_expression(tb->kind == TypeBoundKind::Low ? range->lower_bound : range->upper_bound);
-		} else if (auto enum_type = dynamic_cast<EnumType*>(tb->operand_type)) {
+		} else if (auto enum_type = dynamic_cast<EnumType*>(bounds_type)) {
 			const auto* member = tb->kind == TypeBoundKind::Low ? enum_type->min_member() : enum_type->max_member();
 			if (!member) {
 				unhandled_node("low/high of empty enum type", tb);
@@ -3209,7 +3213,7 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "%s", type_cxx_name(enum_type, member->cxx_name).c_str());
 		} else {
 			fprintf(active, tb->kind == TypeBoundKind::Low ? "::u_system::p_low<" : "::u_system::p_high<");
-			emit_type_ref(tb->operand_type);
+			emit_type_ref(bounds_type);
 			fprintf(active, ">()");
 		}
 	} else if (auto size = dynamic_cast<SizeOf*>(expr)) {

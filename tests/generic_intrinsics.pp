@@ -3,12 +3,15 @@ program GenericIntrinsics;
 type
   TChoice = (ChoiceZero, ChoiceOne, ChoiceTwo, ChoiceThree);
   TSmall = 0..10;
+  TIndexedBytes = array[3..7] of Byte;
+  TChoiceBytes = array[TChoice] of Byte;
 
 var
   B: Byte;
   I: LongInt;
   S: TSmall;
   Choice: TChoice;
+  ArrayIndex: 3..7;
   N: LongInt;
 
 procedure AddStep(var Value: LongInt; Step: LongInt = 2);
@@ -80,6 +83,19 @@ begin
     Halt(5);
   if High(S) <> 10 then
     Halt(6);
+
+  ArrayIndex := Low(TIndexedBytes);
+  if ArrayIndex <> 3 then
+    Halt(7);
+  ArrayIndex := High(TIndexedBytes);
+  if ArrayIndex <> 7 then
+    Halt(8);
+  Choice := Low(TChoiceBytes);
+  if Choice <> ChoiceZero then
+    Halt(9);
+  Choice := High(TChoiceBytes);
+  if Choice <> ChoiceThree then
+    Halt(10);
 
   I := High(LongInt);
   Inc(I);

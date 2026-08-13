@@ -705,8 +705,8 @@ class NilLiteral : public Node {
 
 /** Compiler intrinsic `Low(T)` / `High(T)`. The argument is a type, not a
  *  value expression, so this is not a ProcCall. It carries both the queried
- *  type (operand_type) and the expression result type (Node::ty), currently
- *  the same Type*. */
+ *  type (operand_type) and the expression result type (Node::ty). Ordinal
+ *  bounds have their queried type; array bounds have the array's index type. */
 class TypeBound : public Node {
       public:
 	TypeBoundKind kind;

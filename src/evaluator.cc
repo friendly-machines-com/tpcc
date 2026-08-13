@@ -99,7 +99,12 @@ ConstEvalResult const_explicit_ordinal_cast(uint64_t magnitude, bool negative, T
 }
 
 ConstEvalResult const_eval_type_bound(TypeBoundKind kind, Type* ty) {
-	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
+	if (auto a = dynamic_cast<FixedArrayType*>(ty)) {
+		// Low/High(array-type) query the declared index domain. The array
+		// remains the semantic operand, but its value and result type come
+		// from the bounds type rather than from the element or array carrier.
+		return const_eval_type_bound(kind, a->bounds);
+	} else if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		ConstEvalContext ctx;
 		return (kind == TypeBoundKind::Low ? s->lower_bound : s->upper_bound)->const_eval(ctx);
 	} else if (auto e = dynamic_cast<EnumType*>(ty)) {
