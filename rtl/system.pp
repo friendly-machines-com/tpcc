@@ -449,6 +449,8 @@ function indexbyte(const buf; len: SizeInt; value: Byte): SizeInt; external name
 function indexword(const buf; len: SizeInt; value: Word): SizeInt; external name '::u_system::p_indexword';
 function comparebyte(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparebyte';
 function comparechar(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_comparechar';
+{ CompareWord compares len native Word elements lexicographically. }
+function compareword(const buf1, buf2; len: SizeInt): SizeInt; external name '::u_system::p_compareword';
 function sizeof(const x): SizeInt; external name '::u_system::p_sizeof';
 // Write/WriteLn have compiler grammar for a variable number of values and
 // `value:width:precision`; these parameterless declarations provide normal

@@ -26,6 +26,10 @@ if ! rg -q '::u_system::p_indexword' "$tmp/comparechar_builtin.cc"; then
 	echo "IndexWord did not lower through the RTL" >&2
 	exit 1
 fi
+if ! rg -q '::u_system::p_compareword' "$tmp/comparechar_builtin.cc"; then
+	echo "CompareWord did not lower through the RTL" >&2
+	exit 1
+fi
 
 "${CXX:-g++}" \
 	-std=c++20 \
@@ -49,4 +53,4 @@ ASAN_OPTIONS=detect_leaks=1 "$tmp/comparechar_builtin_pascal"
 	-o "$tmp/comparechar_builtin"
 ASAN_OPTIONS=detect_leaks=1 "$tmp/comparechar_builtin"
 
-echo "CompareChar/CompareByte/IndexByte/IndexWord builtin tests passed"
+echo "CompareChar/CompareByte/CompareWord/IndexByte/IndexWord builtin tests passed"

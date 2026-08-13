@@ -5645,6 +5645,38 @@ inline t_sizeint p_comparechar(tpcc_const_storage_ref first,
 	return p_comparebyte(first, second, count);
 }
 
+inline t_sizeint p_compareword(tpcc_const_storage_ref first,
+    tpcc_const_storage_ref second, t_sizeint count) {
+	if (count <= 0)
+		return 0;
+	const std::size_t element_count =
+	    static_cast<std::size_t>(count);
+	if (element_count > first.size / sizeof(t_word))
+		m_runtime_error(201);
+	if (element_count > second.size / sizeof(t_word))
+		m_runtime_error(201);
+	for (std::size_t index = 0; index < element_count; ++index) {
+		t_word first_word;
+		t_word second_word;
+		// The untyped Pascal buffers need not be Word-aligned and need not
+		// contain C++ t_word objects. Copying their representations avoids
+		// alignment, lifetime, and strict-aliasing undefined behavior.
+		std::memcpy(
+		    std::addressof(first_word),
+		    first.data + index * sizeof(t_word),
+		    sizeof(t_word));
+		std::memcpy(
+		    std::addressof(second_word),
+		    second.data + index * sizeof(t_word),
+		    sizeof(t_word));
+		if (first_word < second_word)
+			return -1;
+		if (first_word > second_word)
+			return 1;
+	}
+	return 0;
+}
+
 template<typename Needle, typename Haystack>
 requires
     (tpcc_is_shortstring_v<Needle> ||

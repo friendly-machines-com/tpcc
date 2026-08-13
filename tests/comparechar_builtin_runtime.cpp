@@ -79,6 +79,38 @@ int main() {
 		return EXIT_FAILURE;
 	}
 
+	::u_system::t_fixedarray<::u_system::t_word, 3, 0> other_words{{
+	    static_cast<::u_system::t_word>(0x1234),
+	    static_cast<::u_system::t_word>(0x5679),
+	    static_cast<::u_system::t_word>(0x1234),
+	}};
+	const auto other_word_storage =
+	    ::u_system::tpcc_make_const_storage_ref(other_words, 0);
+	if (::u_system::p_compareword(
+	        word_storage, word_storage, 3) != 0) {
+		return EXIT_FAILURE;
+	}
+	if (::u_system::p_compareword(
+	        word_storage, other_word_storage, 3) != -1) {
+		return EXIT_FAILURE;
+	}
+	if (::u_system::p_compareword(
+	        other_word_storage, word_storage, 3) != 1) {
+		return EXIT_FAILURE;
+	}
+	if (::u_system::p_compareword(
+	        word_storage, other_word_storage, 1) != 0) {
+		return EXIT_FAILURE;
+	}
+	if (::u_system::p_compareword(
+	        word_storage, other_word_storage, 0) != 0) {
+		return EXIT_FAILURE;
+	}
+	if (::u_system::p_compareword(
+	        word_storage, other_word_storage, -1) != 0) {
+		return EXIT_FAILURE;
+	}
+
 	::u_system::t_fixedarray<::u_system::t_byte, 3, 0> unaligned_words{};
 	const ::u_system::t_word unaligned_needle =
 	    static_cast<::u_system::t_word>(0xabcd);
@@ -89,6 +121,21 @@ int main() {
 	if (::u_system::p_indexword(
 	        ::u_system::tpcc_make_const_storage_ref(unaligned_words, 1),
 	        1, unaligned_needle) != 0) {
+		return EXIT_FAILURE;
+	}
+	::u_system::t_fixedarray<::u_system::t_byte, 3, 0>
+	    other_unaligned_words{};
+	const ::u_system::t_word larger_unaligned_word =
+	    static_cast<::u_system::t_word>(0xabce);
+	std::memcpy(
+	    std::addressof(other_unaligned_words.items[1]),
+	    std::addressof(larger_unaligned_word),
+	    sizeof(larger_unaligned_word));
+	if (::u_system::p_compareword(
+	        ::u_system::tpcc_make_const_storage_ref(unaligned_words, 1),
+	        ::u_system::tpcc_make_const_storage_ref(
+	            other_unaligned_words, 1),
+	        1) != -1) {
 		return EXIT_FAILURE;
 	}
 
@@ -121,6 +168,19 @@ int main() {
 	rejected = false;
 	try {
 		::u_system::p_indexword(word_storage, 4, 0);
+	} catch (const runtime_error_code& error) {
+		rejected = error.value == 201;
+	}
+	if (!rejected) {
+		return EXIT_FAILURE;
+	}
+
+	rejected = false;
+	try {
+		::u_system::p_compareword(
+		    word_storage,
+		    ::u_system::tpcc_make_const_storage_ref(words, 1),
+		    3);
 	} catch (const runtime_error_code& error) {
 		rejected = error.value == 201;
 	}
