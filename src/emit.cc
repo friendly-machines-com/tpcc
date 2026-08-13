@@ -1016,11 +1016,6 @@ void Emitter::emit_statement(Node* stmt) {
 		bool method_component = method_view && method_view->ty == tmethod_type() && method_field && method_routine && method_routine->kind == METHOD && (method_code || method_data);
 
 		auto writable_cast = dynamic_cast<Cast*>(a->a);
-		const bool writable_byte_array_view =
-		    writable_cast && writable_cast->a &&
-		    predefined_byte_array_storage_view(
-		        writable_cast->ty,
-		        writable_cast->a->ty);
 
 		PropertyAccess* indexed_property = dynamic_cast<PropertyAccess*>(a->a);
 		Node* indexed_receiver = indexed_property ? indexed_property->receiver : nullptr;
@@ -1042,22 +1037,11 @@ void Emitter::emit_statement(Node* stmt) {
 			fprintf(active, ", ");
 			emit_expression(a->b);
 			fprintf(active, ");\n");
-		} else if (writable_byte_array_view) {
-			// Whole-array assignment through a Byte-array scalar view copies
-			// object-representation bytes back to the original scalar. Do not
-			// form a C++ t_fixedarray lvalue at the scalar's address.
-			fprintf(active, "\t::u_system::tpcc_store_byte_array_view(");
-			emit_storage_ref(writable_cast->a);
-			fprintf(active, ", ");
-			emit_expression(a->b);
-			fprintf(active, ");\n");
 		} else if (writable_cast) {
-			// An assignable explicit ordinal cast is a same-sized view of an
-			// existing Pascal place. Keep it out of ordinary C++ cast syntax:
-			// a static_cast expression is not an lvalue, and reinterpret_cast
-			// would create aliasing/lifetime hazards. The RTL helper bit-copies
-			// the target value into a real source-carrier value, then assigns
-			// that value through the typed storage view.
+			// An assignable explicit same-size cast is a view of an existing
+			// Pascal place. The helper stores the target representation back
+			// through the source carrier; this covers both intrinsic ordinal
+			// views and the sanctioned fixed-Byte-array scalar view.
 			fprintf(active, "\t::u_system::tpcc_store_writable_cast<");
 			emit_type_ref(writable_cast->ty);
 			fprintf(active, ">(");
@@ -3436,12 +3420,13 @@ void Emitter::emit_expression(Node* expr) {
 			emit_expression(ca->a);
 			fprintf(active, ")))");
 		} else if (target_byte_array) {
-			// An equal-sized fixed array of Byte is a direct view of the
-			// scalar's object representation. The RTL proxy carries the
-			// original address and array bounds without pretending that a C++
-			// t_fixedarray object exists in that scalar's storage.
-			fprintf(active, "::u_system::tpcc_make_byte_array_view<%llu, ", (unsigned long long)target_byte_array->range.length);
-			emit_template_value_arg(target_byte_array->range.lower_bound);
+			// This is the same direct storage-alias model as Pascal
+			// `absolute`; TPCC's backend contract requires
+			// -fno-strict-aliasing. The RTL helper adds independent C++
+			// carrier assertions and preserves constness for read-only or
+			// temporary scalar sources.
+			fprintf(active, "::u_system::tpcc_byte_array_storage_view<");
+			emit_type_ref(target_byte_array);
 			fprintf(active, ">(");
 			emit_expression(ca->a);
 			fprintf(active, ")");

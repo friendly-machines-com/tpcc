@@ -1375,110 +1375,47 @@ struct t_fixedarray {
 	}
 };
 
-// A Pascal cast from a trivially copyable scalar to an equal-sized fixed
-// array of Byte exposes the scalar's object representation. Keep that view as
-// a pointer-bearing proxy: constructing a t_fixedarray object over the same
-// address would violate C++ object lifetime and aliasing rules.
-template<std::size_t length, auto low, bool is_const>
-struct tpcc_byte_array_view {
-	using pointer =
-	    std::conditional_t<is_const, const t_byte*, t_byte*>;
-	pointer data;
+template<typename T>
+inline constexpr bool tpcc_is_fixed_byte_array_v = false;
 
-	constexpr t_sizeint m_length() const {
-		return static_cast<t_sizeint>(length);
-	}
+template<std::size_t length, auto low>
+inline constexpr bool
+    tpcc_is_fixed_byte_array_v<
+	t_fixedarray<t_byte, length, low>> = true;
 
-	constexpr auto m_low() const {
-		return low;
-	}
-
-	constexpr auto m_high() const {
-		using value_type = decltype(low);
-		using traits = tpcc_ordinal_storage<value_type>;
-		using storage_type = typename traits::type;
-		return traits::make(
-		    static_cast<storage_type>(
-			traits::get(low) +
-			static_cast<storage_type>(
-			    length - 1)));
-	}
-
-	constexpr pointer m_data() const {
-		return data;
-	}
-
-	operator t_fixedarray<t_byte, length, low>() const {
-		t_fixedarray<t_byte, length, low> result{};
-		std::memcpy(result.items, data, length);
-		return result;
-	}
-};
-
-template<std::size_t length, auto low, typename Scalar>
-requires
-    (!std::is_const_v<Scalar> &&
-     std::is_trivially_copyable_v<Scalar>)
-inline tpcc_byte_array_view<length, low, false>
-tpcc_make_byte_array_view(Scalar& value) {
+// TPCC's C++ backend contract already requires -fno-strict-aliasing for
+// Pascal storage aliases such as `absolute`. A same-sized fixed array of Byte
+// uses that same direct-reference model for a scalar's object representation.
+// Rvalues and const lvalues receive a const view; only a mutable scalar place
+// can produce the writable array reference admitted by the Pascal parser.
+template<typename Array, typename Scalar>
+inline auto& tpcc_byte_array_storage_view(
+    Scalar&& value) {
+	using source_type =
+	    std::remove_reference_t<Scalar>;
+	using bare_source_type =
+	    std::remove_const_t<source_type>;
+	using view_type = std::conditional_t<
+	    std::is_lvalue_reference_v<Scalar&&> &&
+		!std::is_const_v<source_type>,
+	    Array,
+	    const Array>;
+	static_assert(
+	    tpcc_is_fixed_byte_array_v<Array>,
+	    "Pascal object-representation view must be a fixed Byte array");
 	static_assert(
 	    std::is_same_v<t_byte, unsigned char>,
 	    "Pascal Byte object-representation views require unsigned char");
 	static_assert(
-	    sizeof(Scalar) == length,
-	    "Pascal Byte-array view must equal the scalar storage size");
-	static_assert(
-	    sizeof(t_fixedarray<t_byte, length, low>) == length,
-	    "Pascal fixed Byte array must not contain padding");
-	return {
-	    reinterpret_cast<t_byte*>(
-	        std::addressof(value)),
-	};
-}
-
-template<std::size_t length, auto low, typename Scalar>
-requires std::is_trivially_copyable_v<Scalar>
-inline tpcc_byte_array_view<length, low, true>
-tpcc_make_byte_array_view(const Scalar& value) {
-	static_assert(
-	    std::is_same_v<t_byte, unsigned char>,
-	    "Pascal Byte object-representation views require unsigned char");
-	static_assert(
-	    sizeof(Scalar) == length,
-	    "Pascal Byte-array view must equal the scalar storage size");
-	static_assert(
-	    sizeof(t_fixedarray<t_byte, length, low>) == length,
-	    "Pascal fixed Byte array must not contain padding");
-	return {
-	    reinterpret_cast<const t_byte*>(
-	        std::addressof(value)),
-	};
-}
-
-template<typename Array>
-inline void tpcc_store_byte_array_view(
-    tpcc_storage_ref destination, const Array& value) {
+	    std::is_trivially_copyable_v<bare_source_type>,
+	    "Pascal Byte-array view source must be trivially copyable");
 	static_assert(
 	    std::is_trivially_copyable_v<Array>,
-	    "Pascal Byte-array view source must be trivially copyable");
-	if (destination.size < sizeof(Array))
-		m_runtime_error(201);
-	std::memcpy(
-	    destination.data,
-	    std::addressof(value),
-	    sizeof(Array));
-}
-
-template<std::size_t length, auto low, bool is_const>
-inline void tpcc_store_byte_array_view(
-    tpcc_storage_ref destination,
-    tpcc_byte_array_view<length, low, is_const> value) {
-	if (destination.size < length)
-		m_runtime_error(201);
-	std::memcpy(
-	    destination.data,
-	    value.m_data(),
-	    length);
+	    "Pascal fixed Byte array must be trivially copyable");
+	static_assert(
+	    sizeof(Array) == sizeof(bare_source_type),
+	    "Pascal Byte-array view must equal the scalar storage size");
+	return reinterpret_cast<view_type&>(value);
 }
 
 // Pascal indexing is always emitted as an RTL call. The compiler never needs
@@ -1490,21 +1427,6 @@ inline T& p_index(t_fixedarray<T, length, low>& value, I index) {
 	if (actual < first || static_cast<std::size_t>(actual - first) >= length)
 		m_runtime_error(201);
 	return value.items[static_cast<std::size_t>(actual - first)];
-}
-
-template<std::size_t length, auto low, bool is_const, typename I>
-inline auto& p_index(
-    tpcc_byte_array_view<length, low, is_const> value,
-    I index) {
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	const std::ptrdiff_t first =
-	    static_cast<std::ptrdiff_t>(low);
-	if (actual < first ||
-	    static_cast<std::size_t>(actual - first) >= length)
-		m_runtime_error(201);
-	return value.m_data()[
-	    static_cast<std::size_t>(actual - first)];
 }
 
 template<typename T, std::size_t length, auto low, typename I>
@@ -1536,16 +1458,6 @@ inline const T& m_unchecked_index(
 		static_cast<std::ptrdiff_t>(low))];
 }
 
-template<std::size_t length, auto low, bool is_const, typename I>
-inline auto& m_unchecked_index(
-    tpcc_byte_array_view<length, low, is_const> value,
-    I index) {
-	return value.m_data()[
-	    static_cast<std::size_t>(
-		static_cast<std::ptrdiff_t>(index) -
-		static_cast<std::ptrdiff_t>(low))];
-}
-
 template<typename T, std::size_t length, auto low, typename I>
 inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(
     t_fixedarray<T, length, low>& value, I index) {
@@ -1561,29 +1473,6 @@ inline tpcc_typed_storage_ref<T> tpcc_make_storage_ref(
 	        (length - offset) * sizeof(T),
 	    },
 	    std::addressof(value.items[offset]),
-	};
-}
-
-template<std::size_t length, auto low, typename I>
-inline tpcc_typed_storage_ref<t_byte> tpcc_make_storage_ref(
-    tpcc_byte_array_view<length, low, false> value,
-    I index) {
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	const std::ptrdiff_t first =
-	    static_cast<std::ptrdiff_t>(low);
-	if (actual < first ||
-	    static_cast<std::size_t>(actual - first) >= length)
-		m_runtime_error(201);
-	const std::size_t offset =
-	    static_cast<std::size_t>(actual - first);
-	return tpcc_typed_storage_ref<t_byte>{
-	    {
-	        reinterpret_cast<std::byte*>(
-	            value.m_data() + offset),
-	        length - offset,
-	    },
-	    value.m_data() + offset,
 	};
 }
 
@@ -1603,40 +1492,6 @@ inline tpcc_typed_const_storage_ref<T> tpcc_make_const_storage_ref(
 	        (length - offset) * sizeof(T),
 	    },
 	    std::addressof(value.items[offset]),
-	};
-}
-
-template<std::size_t length, auto low, bool is_const, typename I>
-inline tpcc_typed_const_storage_ref<t_byte>
-tpcc_make_const_storage_ref(
-    tpcc_byte_array_view<length, low, is_const> value,
-    I index) {
-	const std::ptrdiff_t actual =
-	    static_cast<std::ptrdiff_t>(index);
-	const std::ptrdiff_t first =
-	    static_cast<std::ptrdiff_t>(low);
-	if (actual < first ||
-	    static_cast<std::size_t>(actual - first) >= length)
-		m_runtime_error(201);
-	const std::size_t offset =
-	    static_cast<std::size_t>(actual - first);
-	return tpcc_typed_const_storage_ref<t_byte>{
-	    {
-	        reinterpret_cast<const std::byte*>(
-	            value.m_data() + offset),
-	        length - offset,
-	    },
-	    value.m_data() + offset,
-	};
-}
-
-template<std::size_t length, auto low, bool is_const>
-inline tpcc_const_storage_ref tpcc_make_const_storage_ref(
-    tpcc_byte_array_view<length, low, is_const> value) {
-	return {
-	    reinterpret_cast<const std::byte*>(
-	        value.m_data()),
-	    length,
 	};
 }
 
@@ -1662,25 +1517,6 @@ m_unchecked_storage_ref(
 	};
 }
 
-template<std::size_t length, auto low, typename I>
-inline tpcc_typed_storage_ref<t_byte>
-m_unchecked_storage_ref(
-    tpcc_byte_array_view<length, low, false> value,
-    I index) {
-	const std::size_t offset =
-	    static_cast<std::size_t>(
-		static_cast<std::ptrdiff_t>(index) -
-		static_cast<std::ptrdiff_t>(low));
-	return tpcc_typed_storage_ref<t_byte>{
-	    {
-	        reinterpret_cast<std::byte*>(
-	            value.m_data() + offset),
-	        length - offset,
-	    },
-	    value.m_data() + offset,
-	};
-}
-
 template<typename T, std::size_t length, auto low, typename I>
 inline tpcc_typed_const_storage_ref<T>
 m_unchecked_const_storage_ref(
@@ -1700,25 +1536,6 @@ m_unchecked_const_storage_ref(
 		(length - offset) * sizeof(T),
 	    },
 	    std::addressof(selected),
-	};
-}
-
-template<std::size_t length, auto low, bool is_const, typename I>
-inline tpcc_typed_const_storage_ref<t_byte>
-m_unchecked_const_storage_ref(
-    tpcc_byte_array_view<length, low, is_const> value,
-    I index) {
-	const std::size_t offset =
-	    static_cast<std::size_t>(
-		static_cast<std::ptrdiff_t>(index) -
-		static_cast<std::ptrdiff_t>(low));
-	return tpcc_typed_const_storage_ref<t_byte>{
-	    {
-	        reinterpret_cast<const std::byte*>(
-	            value.m_data() + offset),
-	        length - offset,
-	    },
-	    value.m_data() + offset,
 	};
 }
 

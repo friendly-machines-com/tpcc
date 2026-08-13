@@ -13,12 +13,8 @@ if ! rg -Fq '::u_system::tpcc_store_writable_cast<' "$tmp/writable_cast.cc"; the
 	echo "writable cast did not lower through typed RTL storage" >&2
 	exit 1
 fi
-if ! rg -Fq '::u_system::tpcc_make_byte_array_view<8,' "$tmp/writable_cast.cc"; then
-	echo "scalar Byte-array cast did not lower through an object-representation view" >&2
-	exit 1
-fi
-if ! rg -Fq '::u_system::tpcc_store_byte_array_view' "$tmp/writable_cast.cc"; then
-	echo "writable scalar Byte-array cast did not lower through byte copyback" >&2
+if ! rg -Fq '::u_system::tpcc_byte_array_storage_view<' "$tmp/writable_cast.cc"; then
+	echo "scalar Byte-array cast did not lower through a direct storage view" >&2
 	exit 1
 fi
 
@@ -27,6 +23,7 @@ fi
 	-Wall \
 	-Wextra \
 	-fsanitize=address,undefined \
+	-fno-strict-aliasing \
 	-Irtl \
 	-I"$tmp" \
 	tests/writable_cast_runtime.cpp \
