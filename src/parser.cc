@@ -38,13 +38,18 @@ static Type* integer_literal_natural_type(const Integer* literal);
 static Integer* untyped_integer_constant(Node* expression);
 static bool is_ordinal_intrinsic_argument(Type* ty);
 static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge);
-static bool is_address_of_omitted_out_formal(Node* value) {
+static StorageSlot* addressed_omitted_formal(Node* value) {
 	auto address = dynamic_cast<AddrOf*>(value);
 	auto slot = address ? dynamic_cast<StorageSlot*>(address->a) : nullptr;
-	return slot && slot->kind == StorageSlot::Kind::OmittedOutFormal &&
-	       slot->ty == unknown_type();
+	if (!slot || slot->ty != unknown_type()) {
+		return nullptr;
+	}
+	return slot->kind == StorageSlot::Kind::OmittedOutFormal ||
+	               slot->kind == StorageSlot::Kind::OmittedConstFormal
+	           ? slot
+	           : nullptr;
 }
-static bool is_omitted_out_byte_pointer_target(Type* type) {
+static bool is_omitted_formal_byte_pointer_target(Type* type) {
 	auto pointer = dynamic_cast<PointerType*>(type);
 	return pointer &&
 	       (pointer->item_type == byte_type() ||
@@ -3068,15 +3073,15 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 					}
 					return new ExplicitCast(value, target_ty);
 				}
-			} else if (is_address_of_omitted_out_formal(value)) {
-				if (is_omitted_out_byte_pointer_target(target_ty)) {
+			} else if (addressed_omitted_formal(value)) {
+				if (is_omitted_formal_byte_pointer_target(target_ty)) {
 					return new ExplicitCast(value, target_ty);
 				}
 				// The source type is only ^unknown; permitting an arbitrary
 				// target here would lose the size and alignment requirements of
 				// the caller's actual object. Byte and character views are the
 				// defined representation-level cases above.
-				raise_type_mismatch("explicit conversion of an omitted-type out formal address is unsupported", target_ty, value->ty);
+				raise_type_mismatch("explicit conversion of an omitted-type formal address is unsupported", target_ty, value->ty);
 			} else if (target_ty->predefined_explicit_conversion_from(value->ty)) {
 				return new ExplicitCast(value, target_ty);
 			} else if (Node* converted = match_explicit_conversion(value, target_ty, true)) {
@@ -8166,10 +8171,14 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	}
 	auto rty = static_cast<RoutineType*>(target->ty);
 	for (auto& p : rty->formals) {
-		StorageSlot::Kind slot_kind =
-		    p.ty == unknown_type() && p.mode == ParamMode::Out
-		        ? StorageSlot::Kind::OmittedOutFormal
-		        : StorageSlot::Kind::Ordinary;
+		StorageSlot::Kind slot_kind = StorageSlot::Kind::Ordinary;
+		if (p.ty == unknown_type()) {
+			if (p.mode == ParamMode::Out) {
+				slot_kind = StorageSlot::Kind::OmittedOutFormal;
+			} else if (p.mode == ParamMode::Const) {
+				slot_kind = StorageSlot::Kind::OmittedConstFormal;
+			}
+		}
 		if (!body_frame->register_variable(
 		        p.pas_name, new StorageSlot(p.cxx_name, p.ty, slot_kind), p.ty)) {
 			raise_parse_error("duplicate parameter identifier: " + p.pas_name);
@@ -9233,8 +9242,8 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, value};
 	}
 
-	if (is_omitted_out_byte_pointer_target(target) &&
-	    is_address_of_omitted_out_formal(actual)) {
+	if (is_omitted_formal_byte_pointer_target(target) &&
+	    addressed_omitted_formal(actual)) {
 		// The source Type alone is merely ^unknown and does not retain whether
 		// its address denotes a storage-view descriptor or caller storage.
 		// Therefore this relation must inspect the expression provenance rather

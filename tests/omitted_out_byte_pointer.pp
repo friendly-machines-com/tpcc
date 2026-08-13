@@ -26,6 +26,11 @@ begin
   P^ := Value
 end;
 
+function ReadByte(P: PByte): Byte;
+begin
+  ReadByte := P^
+end;
+
 procedure EncodeChars(out Buffer);
 var
   P: PChar;
@@ -37,8 +42,29 @@ begin
   P^ := 'B'
 end;
 
+function SumConstBytes(const Buffer): Integer;
+var
+  P: PByte;
+begin
+  P := @Buffer;
+  SumConstBytes := ReadByte(@Buffer);
+  Inc(P);
+  SumConstBytes := SumConstBytes + P^;
+  P := PByte(@Buffer);
+  SumConstBytes := SumConstBytes + P^
+end;
+
 {$ifdef REJECT_WORD_POINTER}
 procedure RejectWordPointer(out Buffer);
+var
+  P: PWord;
+begin
+  P := @Buffer
+end;
+{$endif}
+
+{$ifdef REJECT_CONST_WORD_POINTER}
+procedure RejectConstWordPointer(const Buffer);
 var
   P: PWord;
 begin
@@ -73,5 +99,6 @@ begin
   WriteLn(Bytes[0]);
   WriteLn(Bytes[1]);
   WriteLn(Ord(Chars[0]));
-  WriteLn(Ord(Chars[1]))
+  WriteLn(Ord(Chars[1]));
+  WriteLn(SumConstBytes(Bytes))
 end.

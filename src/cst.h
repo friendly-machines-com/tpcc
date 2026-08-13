@@ -518,6 +518,9 @@ struct StorageSlot : public Node {
 		// than as an object of unknown_type(). Retain that origin because its
 		// Pascal address denotes the caller's bytes, not the C++ descriptor.
 		OmittedOutFormal,
+		// The const descriptor likewise is not the Pascal formal's address.
+		// Keep it distinct because its data pointer is const-qualified in C++.
+		OmittedConstFormal,
 		AggregateMember,
 		// Storage owned by the aggregate rather than by each instance.
 		// Covers both `class var` and initialized storage declared in an

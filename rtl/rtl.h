@@ -1042,7 +1042,7 @@ inline tpcc_storage_ref tpcc_make_storage_ref(tpcc_storage_ref value) {
 }
 
 template<typename Element>
-inline Element* tpcc_omitted_out_byte_pointer(tpcc_storage_ref value) {
+inline Element* tpcc_omitted_formal_byte_pointer(tpcc_storage_ref value) {
 	// Pascal byte and character pointers are one-byte storage views. Char is
 	// a wrapper carrier, so its aliasing semantics rely on the generated-code
 	// contract's -fno-strict-aliasing; these assertions separately enforce the
@@ -1056,6 +1056,20 @@ inline Element* tpcc_omitted_out_byte_pointer(tpcc_storage_ref value) {
 	        std::is_same_v<t_byte, unsigned char>,
 	    "Pascal PByte object-representation access requires Byte to be unsigned char");
 	return reinterpret_cast<Element*>(value.data);
+}
+
+template<typename Element>
+inline Element* tpcc_omitted_formal_byte_pointer(
+    tpcc_const_storage_ref value) {
+	// `const` prevents assignment to the formal designator but does
+	// not make an ordinary pointer obtained from `@formal` pointer-to-const.
+	// Preserve that source-language escape while keeping const qualification
+	// on every operation which consumes the storage descriptor directly.
+	return tpcc_omitted_formal_byte_pointer<Element>(
+	    tpcc_storage_ref{
+	        const_cast<std::byte*>(value.data),
+	        value.size,
+	    });
 }
 
 // Dereferencing Pascal's untyped Pointer does not produce a C++ value: void

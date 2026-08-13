@@ -3252,9 +3252,10 @@ void Emitter::emit_expression(Node* expr) {
 		    source_address
 		        ? dynamic_cast<StorageSlot*>(source_address->a)
 		        : nullptr;
-		const bool omitted_out_byte_pointer =
+		const bool omitted_formal_byte_pointer =
 		    source_slot &&
-		    source_slot->kind == StorageSlot::Kind::OmittedOutFormal &&
+		    (source_slot->kind == StorageSlot::Kind::OmittedOutFormal ||
+		     source_slot->kind == StorageSlot::Kind::OmittedConstFormal) &&
 		    source_slot->ty == unknown_type() && target_pointer &&
 		    (target_pointer->item_type == byte_type() ||
 		     target_pointer->item_type == char_type());
@@ -3357,10 +3358,10 @@ void Emitter::emit_expression(Node* expr) {
 				emit_expression(ca->a);
 				fprintf(active, ").m_pointer())");
 			}
-		} else if (omitted_out_byte_pointer) {
-			// The C++ parameter is a tpcc_storage_ref descriptor. Pascal
-			// `@formal` denotes the caller's storage, not that descriptor.
-			fprintf(active, "::u_system::tpcc_omitted_out_byte_pointer<");
+		} else if (omitted_formal_byte_pointer) {
+			// The C++ parameter is a storage-ref descriptor. Pascal `@formal`
+			// denotes the caller's storage, not that descriptor.
+			fprintf(active, "::u_system::tpcc_omitted_formal_byte_pointer<");
 			emit_type_ref(target_pointer->item_type);
 			fprintf(active, ">(");
 			emit_expression(source_slot);
