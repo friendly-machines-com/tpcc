@@ -1,9 +1,8 @@
 #include <cstdio>
 #include <string>
 
-#define main tpcc_pascal_main
-#include "write_builtin.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "write_builtin.cc"
+#include "generated_program_runtime.h"
 
 static std::string read_output(std::FILE* file) {
 	if (std::fflush(file) != 0) {
@@ -42,7 +41,7 @@ int main() {
 	    .standard_stream = false,
 	};
 
-	const int result = tpcc_pascal_main(0, nullptr);
+	const int result = tpcc_run_generated_program();
 	::u_system::m_stdout_text_state.handle = old_output;
 	::u_system::m_stderr_text_state.handle = old_error;
 

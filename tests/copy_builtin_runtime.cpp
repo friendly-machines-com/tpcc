@@ -1,6 +1,5 @@
-#define main tpcc_pascal_main
-#include "copy_builtin.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "copy_builtin.cc"
+#include "generated_program_runtime.h"
 
 template <std::size_t Capacity> static bool equals(const ::u_system::t_shortstring<Capacity>& value, const char* bytes, std::size_t length) {
 	return value.length == length && std::memcmp(value.data, bytes, length) == 0;
@@ -11,7 +10,7 @@ static bool equals(const ::u_system::t_ansistring& value, const char* bytes, std
 }
 
 int main() {
-	if (tpcc_pascal_main() != 0) {
+	if (tpcc_run_generated_program() != 0) {
 		return 1;
 	}
 	if (!equals(p_middle, "bcd", 3)) {

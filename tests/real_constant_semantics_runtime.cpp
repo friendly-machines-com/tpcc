@@ -1,12 +1,11 @@
 #include <cmath>
 #include <limits>
 
-#define main tpcc_pascal_main
-#include "real_constant_semantics.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "real_constant_semantics.cc"
+#include "generated_program_runtime.h"
 
 int main() {
-	if (tpcc_pascal_main() != 0) {
+	if (tpcc_run_generated_program() != 0) {
 		return 1;
 	}
 	if (p_exactrank != 1 || p_exactaliasrank != p_exactrank) {

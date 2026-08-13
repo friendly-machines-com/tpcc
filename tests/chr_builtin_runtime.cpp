@@ -1,9 +1,8 @@
-#define main tpcc_pascal_main
-#include "chr_builtin.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "chr_builtin.cc"
+#include "generated_program_runtime.h"
 
 int main() {
-	if (tpcc_pascal_main() != 0) {
+	if (tpcc_run_generated_program() != 0) {
 		return 1;
 	}
 	if (p_foldedvalue != ::u_system::t_char{65}) {

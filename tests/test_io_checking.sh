@@ -2,7 +2,6 @@
 set -eu
 
 . "$(dirname -- "$0")/testlib.sh"
-	EXIT HUP INT TERM
 
 
 tpcc_translate -o"$tmp/io_checking.cc" \

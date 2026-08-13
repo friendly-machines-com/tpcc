@@ -1,9 +1,8 @@
-#define main tpcc_pascal_main
-#include "set_literals.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "set_literals.cc"
+#include "generated_program_runtime.h"
 
 int main() {
-	if (tpcc_pascal_main() != 0) {
+	if (tpcc_run_generated_program() != 0) {
 		return 1;
 	}
 	if (p_integerhit != ::u_system::p_true || p_integermiss != ::u_system::p_false || p_rangehit != ::u_system::p_true || p_emptymiss != ::u_system::p_false) {

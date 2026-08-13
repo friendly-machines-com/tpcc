@@ -112,7 +112,8 @@ void tpcc_finalize_initialized_units() noexcept {
 }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+	::u_system::m_set_program_arguments(argc, argv);
 	if (std::atexit(tpcc_finalize_initialized_units) != 0)
 		std::terminate();
 	try {

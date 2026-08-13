@@ -1,6 +1,5 @@
-#define main tpcc_pascal_main
-#include "function_pointers.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "function_pointers.cc"
+#include "generated_program_runtime.h"
 
 namespace {
 
@@ -39,7 +38,7 @@ int main() {
 	static_cast<t_tchild*>(p_receiver)->p_childfactor = 10;
 	static_cast<t_tchild*>(p_otherreceiver)->p_childfactor = 20;
 
-	int result = tpcc_pascal_main();
+	int result = tpcc_run_generated_program();
 	if (result != 0) {
 		return 1;
 	}

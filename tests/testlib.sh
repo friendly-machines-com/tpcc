@@ -44,9 +44,9 @@ tpcc_build()
 		-o "$output"
 )
 
-# A small number of tests intentionally inspect stack frames or process-exit
-# behavior for which sanitizer instrumentation changes the subject. They still
-# use every other generated-code option.
+# The frame-intrinsics test inspects generated stack frames. Sanitizer
+# instrumentation would change the subject, so that one test uses this build
+# while retaining every other generated-code option.
 tpcc_build_unsanitized()
 (
 	output=$1

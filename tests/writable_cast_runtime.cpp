@@ -1,9 +1,8 @@
-#define main tpcc_pascal_main
-#include "writable_cast.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "writable_cast.cc"
+#include "generated_program_runtime.h"
 
 int main() {
-	if (tpcc_pascal_main(0, nullptr) != 0) {
+	if (tpcc_run_generated_program() != 0) {
 		return 1;
 	}
 	if (p_c.value != 255) {

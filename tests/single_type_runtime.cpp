@@ -1,11 +1,10 @@
-#define main tpcc_pascal_main
-#include "single_type.cc"
-#undef main
+#define TPCC_TEST_GENERATED_PROGRAM "single_type.cc"
+#include "generated_program_runtime.h"
 
 int main() {
 	static_assert(sizeof(::u_system::t_single) == 4);
 	p_base = new t_tchild;
-	if (tpcc_pascal_main() != 0) {
+	if (tpcc_run_generated_program() != 0) {
 		return 1;
 	}
 	if (p_foldedcast != 1.25f || p_foldedcoerce != 2.5f) {
