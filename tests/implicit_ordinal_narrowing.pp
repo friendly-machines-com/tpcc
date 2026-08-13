@@ -105,12 +105,12 @@ begin
   Letter := Character;
   if Ord(Letter) <> Ord('z') then
     Halt(5);
-  { With no common lossless integer destination, the earlier common-widening
-    phase selects Extended before either common-integer narrowing candidate. }
+  { With no lossless common integer carrier, mixed 64-bit arithmetic remains
+    integral. Under R- the QWord-to-Int64 conversion keeps its low 64 bits. }
   Signed64 := 0;
   Unsigned64 := High(QWord);
   MixedExtended := Signed64 + Unsigned64;
-  if MixedExtended <> High(QWord) then
+  if MixedExtended <> -1 then
     Halt(22);
   I := -1;
   Unsigned64 := 2;
@@ -274,8 +274,14 @@ begin
 
   Signed64 := 0;
   Unsigned64 := High(QWord);
-  MixedExtended := Signed64 + Unsigned64;
-  if MixedExtended <> High(QWord) then
+  Caught := False;
+  try
+    MixedExtended := Signed64 + Unsigned64
+  except
+    on ERangeError do
+      Caught := True
+  end;
+  if not Caught then
     Halt(24);
 
   I := -1;

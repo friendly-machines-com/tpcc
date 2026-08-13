@@ -289,9 +289,10 @@ begin
     Halt(3);
   if NumericKind(Signed32 + Unsigned32) <> 12 then
     Halt(4);
-  { Neither Int64 -> QWord nor QWord -> Int64 is an implicit assignment
-    edge. Extended is the first declared arithmetic formal accepting both. }
-  if NumericKind(Signed64 + Unsigned64) <> 15 then
+  { Neither 64-bit integer domain contains the other. Integer arithmetic uses
+    the predefined integer carrier order for this necessarily narrowing case;
+    it does not change the operation into floating-point addition. }
+  if NumericKind(Signed64 + Unsigned64) <> 12 then
     Halt(5);
   if NumericKind(Real32 + Real32) <> 14 then
     Halt(6);
@@ -309,9 +310,9 @@ begin
     Halt(12);
   if NumericKind(-SmallConstant) <> 16 then
     Halt(13);
-  if NumericKind(Unsigned64 + Signed32) <> 15 then
+  if NumericKind(Unsigned64 + Signed32) <> 12 then
     Halt(16);
-  if NumericKind(Unsigned64 + Signed64) <> 15 then
+  if NumericKind(Unsigned64 + Signed64) <> 12 then
     Halt(17);
   if NumericKind(Unsigned16 + Signed8) <> 11 then
     Halt(18);
