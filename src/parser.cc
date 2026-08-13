@@ -9376,15 +9376,14 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		MatchFailure* declared_failure = failure ? failure : &local_failure;
 		if (auto declared = match_declared_conversion(actual, target, implicit_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure)) {
 			// A declaration implements the same source-to-result conversion edge
-			// classified by the predefined relation. It produces a value and does
-			// not perform the eventual assignment store. Rank that selected
-			// conversion by its value-domain effect, not by whether its
-			// implementation came from System, user source, or the compiler.
+			// classified by the predefined relation. Rank its type relation
+			// independently of whether constant evaluation proved that this
+			// particular value survives it.
 			if (assignment) {
 				declared->rank.tier =
 				    assignment->kind == AssignmentConversionClass::Equal
 				        ? MatchRank::Tier::Equal
-				    : assignment->kind == AssignmentConversionClass::Narrowing && !value_preserving_typed_integer_conversion
+				    : assignment->kind == AssignmentConversionClass::Narrowing
 				        ? MatchRank::Tier::ConvertNarrowing
 				        : MatchRank::Tier::Convert;
 				declared->rank.distance = assignment->distance;
@@ -9404,7 +9403,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	if (assignment) {
 		MatchRank rank{
 		    assignment->kind == AssignmentConversionClass::Equal       ? MatchRank::Tier::Equal
-		    : assignment->kind == AssignmentConversionClass::Narrowing && !value_preserving_typed_integer_conversion ? MatchRank::Tier::ConvertNarrowing
+		    : assignment->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing
 		                                                               : MatchRank::Tier::Convert,
 		    assignment->distance,
 		};
@@ -9421,13 +9420,10 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			rank.information_losing = !integer_domain_is_exact_in_real(assignment_source, target);
 		}
 		if (value_preserving_typed_integer_conversion) {
-			// The source remains typed, so an exact source-type overload still
-			// wins. For this conversion, however, the semantic constant value
-			// has proved the destination range sufficient. Treat it like a
-			// widening conversion and retain the original expression beneath
-			// an ordinary cast. make_implicit_cast() deliberately reasons
-			// about the complete source type and would add an R+ check which is
-			// unnecessary—and must not affect ranking—after this value proof.
+			// This remains a narrowing type relation for ranking. The separate
+			// value proof only permits a plain cast: make_implicit_cast() reasons
+			// about the complete source domain and would add an unnecessary R+
+			// check for a value already proved to fit.
 			return ArgumentMatch{rank, new Cast(actual, target)};
 		}
 		return ArgumentMatch{rank, make_implicit_cast(actual, target)};

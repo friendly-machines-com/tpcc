@@ -12,12 +12,15 @@ type
   end;
 
 const
-  { Both selected typed results fit ShortInt. ShortInt assigns to Integer but
-    not conversely, so it is the unique least lossless common operand domain. }
+  { Constant folding does not promote fitting narrowings into the widening
+    phase. The selected Integer and Cardinal operands therefore meet in their
+    genuine widening common domain, Int64. }
   ComputedZero = (9 - 16) * Ord(16 < 9);
 
 var
   UnsignedValue: QWord;
+  RuntimeCardinal: Cardinal;
+  RuntimeInteger: Integer;
 
 function Kind(Value: SizeInt): Integer; overload;
 begin
@@ -34,6 +37,21 @@ end;
 function AcceptQWord(Value: QWord): QWord;
 begin
   AcceptQWord := Value
+end;
+
+function AdditionKind(Value: Integer): Integer; overload;
+begin
+  AdditionKind := 1
+end;
+
+function AdditionKind(Value: Cardinal): Integer; overload;
+begin
+  AdditionKind := 2
+end;
+
+function AdditionKind(Value: Int64): Integer; overload;
+begin
+  AdditionKind := 3
 end;
 
 begin
@@ -67,5 +85,15 @@ begin
   if Kind(UnsignedValue div (SizeOf(TProbeRecord) + 0)) <> 2 then
     Halt(7);
   if UnsignedValue div (SizeOf(TProbeRecord) + 0) <> 10 then
-    Halt(8)
+    Halt(8);
+
+  { The constant and runtime forms have the same typed operand domains.
+    Widening to Int64 outranks Byte/ShortInt candidates which merely happen
+    to contain the two constant values. }
+  if AdditionKind(Ord('a') + 299 mod 26) <> 3 then
+    Halt(10);
+  RuntimeCardinal := Ord('a');
+  RuntimeInteger := 299 mod 26;
+  if AdditionKind(RuntimeCardinal + RuntimeInteger) <> 3 then
+    Halt(11)
 end.
