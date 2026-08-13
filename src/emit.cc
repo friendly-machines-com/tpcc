@@ -3252,11 +3252,12 @@ void Emitter::emit_expression(Node* expr) {
 		    source_address
 		        ? dynamic_cast<StorageSlot*>(source_address->a)
 		        : nullptr;
-		const bool omitted_out_byte_view =
+		const bool omitted_out_byte_pointer =
 		    source_slot &&
 		    source_slot->kind == StorageSlot::Kind::OmittedOutFormal &&
 		    source_slot->ty == unknown_type() && target_pointer &&
-		    target_pointer->item_type == byte_type();
+		    (target_pointer->item_type == byte_type() ||
+		     target_pointer->item_type == char_type());
 		const bool source_object_reference = ca->a && (dynamic_cast<ClassType*>(ca->a->ty) || dynamic_cast<InterfaceType*>(ca->a->ty));
 		const bool target_object_reference = dynamic_cast<ClassType*>(ca->ty) || dynamic_cast<InterfaceType*>(ca->ty);
 		OrdinalBounds source_integer_bounds;
@@ -3356,10 +3357,12 @@ void Emitter::emit_expression(Node* expr) {
 				emit_expression(ca->a);
 				fprintf(active, ").m_pointer())");
 			}
-		} else if (omitted_out_byte_view) {
+		} else if (omitted_out_byte_pointer) {
 			// The C++ parameter is a tpcc_storage_ref descriptor. Pascal
 			// `@formal` denotes the caller's storage, not that descriptor.
-			fprintf(active, "::u_system::tpcc_omitted_out_pbyte(");
+			fprintf(active, "::u_system::tpcc_omitted_out_byte_pointer<");
+			emit_type_ref(target_pointer->item_type);
+			fprintf(active, ">(");
 			emit_expression(source_slot);
 			fprintf(active, ")");
 		} else if (pointer_conversion) {

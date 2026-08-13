@@ -44,6 +44,12 @@ static bool is_address_of_omitted_out_formal(Node* value) {
 	return slot && slot->kind == StorageSlot::Kind::OmittedOutFormal &&
 	       slot->ty == unknown_type();
 }
+static bool is_omitted_out_byte_pointer_target(Type* type) {
+	auto pointer = dynamic_cast<PointerType*>(type);
+	return pointer &&
+	       (pointer->item_type == byte_type() ||
+	        pointer->item_type == char_type());
+}
 enum class BracketIntegerPreference {
 	Array,
 	Set,
@@ -3063,10 +3069,13 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 					return new ExplicitCast(value, target_ty);
 				}
 			} else if (is_address_of_omitted_out_formal(value)) {
-				// This source is a storage-view address rather than an ordinary
-				// C++ object pointer. Explicit reinterpretation would bypass the
-				// provenance-sensitive assignment rule and could make emission
-				// address the descriptor instead of the caller's storage.
+				if (is_omitted_out_byte_pointer_target(target_ty)) {
+					return new ExplicitCast(value, target_ty);
+				}
+				// The source type is only ^unknown; permitting an arbitrary
+				// target here would lose the size and alignment requirements of
+				// the caller's actual object. Byte and character views are the
+				// defined representation-level cases above.
 				raise_type_mismatch("explicit conversion of an omitted-type out formal address is unsupported", target_ty, value->ty);
 			} else if (target_ty->predefined_explicit_conversion_from(value->ty)) {
 				return new ExplicitCast(value, target_ty);
@@ -9224,8 +9233,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, value};
 	}
 
-	auto target_pointer = dynamic_cast<PointerType*>(target);
-	if (target_pointer && target_pointer->item_type == byte_type() &&
+	if (is_omitted_out_byte_pointer_target(target) &&
 	    is_address_of_omitted_out_formal(actual)) {
 		// The source Type alone is merely ^unknown and does not retain whether
 		// its address denotes a storage-view descriptor or caller storage.
