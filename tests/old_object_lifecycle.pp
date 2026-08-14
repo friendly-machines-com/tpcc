@@ -23,8 +23,14 @@ type
 
   TPlain = record
     Value: Integer;
+    procedure CopyFrom(const Source: TPlain);
   end;
   PPlain = ^TPlain;
+
+  TValueObject = object
+    Value: Integer;
+    procedure CopyFrom(const Source: TValueObject);
+  end;
 
   TFailingClass = class(TObject)
     constructor Create;
@@ -88,6 +94,16 @@ begin
   Fail
 end;
 
+procedure TPlain.CopyFrom(const Source: TPlain);
+begin
+  Self := Source
+end;
+
+procedure TValueObject.CopyFrom(const Source: TValueObject);
+begin
+  Self := Source
+end;
+
 var
   Derived: PDerived;
   DerivedDefault: PDerived;
@@ -96,6 +112,10 @@ var
   NilDerived: PDerived;
   Plain: PPlain;
   PlainFunctional: PPlain;
+  PlainSource: TPlain;
+  PlainDestination: TPlain;
+  ObjectSource: TValueObject;
+  ObjectDestination: TValueObject;
   FailingClass: TFailingClass;
 begin
   Derived := New(PDerived, Init(7));
@@ -132,6 +152,16 @@ begin
   PlainFunctional^.Value := 29;
   WriteLn(PlainFunctional^.Value);
   Dispose(PlainFunctional);
+
+  PlainSource.Value := 31;
+  PlainDestination.Value := 0;
+  PlainDestination.CopyFrom(PlainSource);
+  WriteLn(PlainDestination.Value);
+
+  ObjectSource.Value := 37;
+  ObjectDestination.Value := 0;
+  ObjectDestination.CopyFrom(ObjectSource);
+  WriteLn(ObjectDestination.Value);
 
   NilDerived := nil;
   Dispose(NilDerived, Done)

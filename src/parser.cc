@@ -8131,29 +8131,40 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 			push_scope(owner_frame, owner_qualifier);
 			pushed_owner_scope = true;
 		} else {
-			// Pascal class-method Self is the class reference, not an instance.
-			// Keep that as the same Type used for `class of Foo`. Its C++ carrier
-			// is Foo's empty metaclass marker base; the emitter recovers the exact
-			// Foo::m_meta receiver only when applying a class operation.
-			//
-			// Instance Self is a reference to the owner instance. ClassType and
-			// InterfaceType are already reference-shaped; ObjectType is value-shaped
-			// and needs a pointer wrapper for member-access emission.
-			Type* self_ty = nullptr;
+			// The hidden receiver and Pascal-visible Self are the same value
+			// only for reference-shaped owners. A record or old-style object is
+			// a value type: C++ supplies `this : ^Owner`, while Pascal Self is
+			// the assignable `this^ : Owner`. Keep the hidden pointer as the
+			// implicit member-lookup qualifier, but never expose that backend
+			// carrier as the Pascal Self expression.
+			Type* receiver_ty = nullptr;
 			if (target->ty->kind == CLASS_METHOD || target->ty->kind == CLASS_CONSTRUCTOR || target->ty->kind == CLASS_DESTRUCTOR) {
-				self_ty = new ClassRefType(current_location(), m->owner_class);
+				// A class-method Self is a class reference. Its C++ carrier is
+				// the metaclass marker; emission recovers the exact Owner::m_meta
+				// receiver when applying a class operation.
+				receiver_ty = new ClassRefType(current_location(), m->owner_class);
 			} else if (dynamic_cast<ClassType*>(m->owner_class) || dynamic_cast<InterfaceType*>(m->owner_class)) {
-				self_ty = m->owner_class;
+				receiver_ty = m->owner_class;
 			} else {
-				self_ty = new PointerType(current_location(), m->owner_class);
+				receiver_ty = new PointerType(current_location(), m->owner_class);
 			}
-			receiver_slot = new StorageSlot("this", self_ty);
+			receiver_slot = new StorageSlot("this", receiver_ty);
 			// The generated m_meta lifecycle body needs a C++ receiver so class
 			// members can be lowered through the exact class reference. FPC treats
 			// both lifecycle hooks as static class methods, so neither has a
 			// Pascal-visible Self identifier.
 			if (target->ty->kind != CLASS_CONSTRUCTOR && target->ty->kind != CLASS_DESTRUCTOR) {
-				if (!body_frame->register_variable("self", receiver_slot, self_ty)) {
+				Node* pascal_self = receiver_slot;
+				Type* pascal_self_ty = receiver_ty;
+				if (dynamic_cast<RecordType*>(m->owner_class) ||
+				    dynamic_cast<PackedRecordType*>(m->owner_class) ||
+				    dynamic_cast<ObjectType*>(m->owner_class)) {
+					auto value_self = new Dereference(receiver_slot);
+					value_self->ty = m->owner_class;
+					pascal_self = value_self;
+					pascal_self_ty = m->owner_class;
+				}
+				if (!body_frame->register_variable("self", pascal_self, pascal_self_ty)) {
 					raise_parse_error("duplicate identifier: self");
 				}
 			}

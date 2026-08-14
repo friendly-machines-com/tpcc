@@ -94,7 +94,9 @@ derived virtual
 0
 1
 23
-29'
+29
+31
+37'
 if test "$actual" != "$expected"
 then
 	echo "unexpected old-object lifecycle result" >&2
