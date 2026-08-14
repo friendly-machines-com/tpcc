@@ -164,11 +164,11 @@ void Emitter::emit_enum_decl(EnumType* e) {
 		unhandled_type("enum underlying carrier", e);
 	}
 	fprintf(active, ": %s { ", underlying);
-	for (size_t i = 0; i < e->members.size(); i++) {
+	for (size_t i = 0; i < e->members().size(); i++) {
 		if (i) {
 			fprintf(active, ", ");
 		}
-		const auto& member = e->members[i];
+		const auto& member = e->members()[i];
 		fprintf(active, "%s", member.cxx_name.c_str());
 		if (member.explicit_value) {
 			fprintf(active, " = %lld", static_cast<long long>(member.value));
@@ -939,19 +939,69 @@ void Emitter::emit_for_in_cleanup_control_epilogue(unsigned try_depth, RoutineTy
 }
 
 void Emitter::emit_formatted_value(const FormattedValue& formatted) {
-	fprintf(active, "::u_system::tpcc_make_formatted_value("
-	                "static_cast<");
-	emit_type_ref(formatted.value->ty);
-	fprintf(active, ">(");
-	emit_expression(formatted.value);
-	fprintf(active, ")");
+	EnumType* enumeration =
+	    enum_root_type(formatted.value->ty);
+	const bool named_enumeration =
+	    enumeration && enumeration != boolean_type();
+
+	fprintf(active,
+	        "::u_system::tpcc_make_formatted_value(");
+	if (named_enumeration) {
+		// C++20 has no enum reflection, and local Pascal enum types cannot
+		// own namespace metadata. Emit the finite ordinal/name equation at
+		// the use site. The switch evaluates the Pascal value once, and the
+		// parser's unique-ordinal invariant makes every case unambiguous.
+		fprintf(active, "([&]() -> std::string {\n");
+		fprintf(active,
+		        "\tconst int64_t tpcc_enum_ordinal = "
+		        "static_cast<int64_t>("
+		        "::u_system::tpcc_ordinal_storage<");
+		emit_type_ref(formatted.value->ty);
+		fprintf(active, ">::get(static_cast<");
+		emit_type_ref(formatted.value->ty);
+		fprintf(active, ">(");
+		emit_expression(formatted.value);
+		fprintf(active, ")));\n");
+		fprintf(active,
+		        "\tstd::string tpcc_enum_text;\n"
+		        "\tswitch (tpcc_enum_ordinal) {\n");
+		for (const EnumType::Member& member :
+		     enumeration->members()) {
+			fprintf(active,
+			        "\tcase %lld: tpcc_enum_text = \"",
+			        static_cast<long long>(member.value));
+			// Encode the spelling as bytes instead of assuming that every
+			// future Pascal identifier syntax is also C++-literal-safe.
+			for (unsigned char ch : member.display_name) {
+				fprintf(active, "\\%03o",
+				        static_cast<unsigned>(ch));
+			}
+			fprintf(active, "\"; break;\n");
+		}
+		fprintf(active,
+		        "\tdefault: ::u_system::p_runerror(107);\n"
+		        "\t}\n");
+		fprintf(active,
+		        "\treturn tpcc_enum_text;\n"
+		        "}())");
+	} else {
+		fprintf(active, "static_cast<");
+		emit_type_ref(formatted.value->ty);
+		fprintf(active, ">(");
+		emit_expression(formatted.value);
+		fprintf(active, ")");
+	}
+	// Width and precision describe the formatted field, independently of
+	// which Pascal value family produced its unpadded text.
 	if (formatted.width) {
-		fprintf(active, ", static_cast<::u_system::t_sizeint>(");
+		fprintf(active,
+		        ", static_cast<::u_system::t_sizeint>(");
 		emit_expression(formatted.width);
 		fprintf(active, ")");
 	}
 	if (formatted.precision) {
-		fprintf(active, ", static_cast<::u_system::t_sizeint>(");
+		fprintf(active,
+		        ", static_cast<::u_system::t_sizeint>(");
 		emit_expression(formatted.precision);
 		fprintf(active, ")");
 	}

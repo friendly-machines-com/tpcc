@@ -12,7 +12,6 @@ for expected in \
 	'p_lowest = -2' \
 	'p_highest = 9' \
 	'p_back = 1' \
-	'p_alias = 9' \
 	'p_indextwo = 2, p_indexthree, p_indexfour' \
 	'p_calculated = 16' \
 	'p_charactera = 65'
@@ -43,5 +42,23 @@ then
 	sed -n '1,20p' "$tmp/stderr" >&2
 	exit 1
 fi
+
+for source in \
+	tests/duplicate_enum_ordinal.pp \
+	tests/duplicate_enum_implicit_collision.pp
+do
+	if tpcc_translate -o"$tmp/rejected-duplicate.cc" \
+		"$source" \
+		>"$tmp/stdout" 2>"$tmp/stderr"
+	then
+		echo "accepted duplicate enum ordinal in $source" >&2
+		exit 1
+	fi
+	if ! grep -Fq 'duplicate enum ordinal' "$tmp/stderr"; then
+		echo "wrong diagnostic for duplicate enum ordinal in $source" >&2
+		sed -n '1,20p' "$tmp/stderr" >&2
+		exit 1
+	fi
+done
 
 echo "explicit enum value tests passed"

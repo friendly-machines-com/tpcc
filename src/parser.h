@@ -441,6 +441,10 @@ class Parser {
 
       protected:
 	std::string input_token;
+	// Identifiers retain their source spelling separately from input_token.
+	// Pascal lookup continues using the normalized token; observable features
+	// such as enum Str use the spelling that appeared in the declaration.
+	std::string input_token_spelling;
 	void parse_block_body();
 	void parse_unit_statement_sequence(bool stop_at_finalization);
 	void maybe_parse_const_block();

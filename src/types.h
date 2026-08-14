@@ -3,6 +3,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -457,7 +458,11 @@ struct EnumType : public Type {
 	bool carrier_signed = true;
 
 	struct Member {
+		// Normalized Pascal lookup spelling. Enum text formatting uses
+		// display_name because identifier lookup is case-insensitive while
+		// the string returned by Str is observable data.
 		std::string pas_name;
+		std::string display_name;
 		std::string cxx_name;
 		int64_t value;
 		// True for source forms `Member := constant` and
@@ -466,10 +471,21 @@ struct EnumType : public Type {
 		bool explicit_value = false;
 	};
 
-	// Source order, not ordinal order. Explicit values may jump, decrease, or
-	// repeat; emission preserves declaration order while Low/High and enum
-	// index ranges query min_member()/max_member().
-	std::vector<Member> members;
+      private:
+	// Source order, not ordinal order. Explicit values may jump or decrease,
+	// but one ordinal always denotes exactly one declared member.
+	std::vector<Member> member_list;
+	std::unordered_map<int64_t, std::size_t> member_index_by_value;
+
+      public:
+	// Returns the existing member on an ordinal collision; otherwise inserts
+	// MEMBER and returns null. Keeping construction behind this operation
+	// makes uniqueness an EnumType invariant rather than a parser convention.
+	const Member* add_member(Member member);
+	const Member* member_for_value(int64_t value) const;
+	const std::vector<Member>& members() const {
+		return member_list;
+	}
 	const Member* min_member() const;
 	const Member* max_member() const;
 	EnumType(SourceLocation source_location, std::string cxx_name, std::string a, std::string b, unsigned carrier_bits = 32, bool carrier_signed = true);
@@ -480,6 +496,11 @@ struct EnumType : public Type {
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
+
+// Return the nominal enum supplying the value names for TYPE. Ordinary aliases
+// already share their Type*; this additionally peels strong storage aliases
+// and enum subranges so every enum consumer uses one definition of the domain.
+EnumType* enum_root_type(Type* type);
 
 struct RecordType : public Type {
 	Frame* children;

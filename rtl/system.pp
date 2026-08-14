@@ -494,7 +494,9 @@ procedure exclude(var values; const item); external name '::u_system::p_exclude'
 // distinct managed carrier rather than a member of the string[N] family.
 // Concrete source/destination families still participate in normal overload
 // ranking; the all-generic declarations are last-resort extension points for
-// compiler-owned families such as enumerations.
+// compiler-owned families such as enumerations. The compiler retains the
+// selected enum type so generated formatting can map its ordinal to the
+// declaration spelling and reject unnamed values.
 procedure str(const x: Int64; var s); overload; external name '::u_system::p_str';
 procedure str(const x: QWord; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s); overload; external name '::u_system::p_str';

@@ -4856,14 +4856,21 @@ template<typename T>
 inline std::string tpcc_render_unpadded_value(
     const T& value, bool has_precision, t_sizeint precision) {
 	std::ostringstream out;
-	if constexpr (tpcc_is_shortstring_v<T> ||
+	if constexpr (std::is_same_v<T, std::string>) {
+		// Generated enum-name selection produces an internal C++ string
+		// after validating its ordinal. It remains inside the formatter and
+		// never becomes Pascal-managed storage.
+		return value;
+	} else if constexpr (tpcc_is_shortstring_v<T> ||
 		              std::is_same_v<T, t_ansistring>) {
 		return value.m_string();
 	} else if constexpr (std::is_same_v<T, t_char>) {
 		return std::string(
 		    1, static_cast<char>(value.value));
 	} else if constexpr (std::is_same_v<T, t_boolean>) {
-		return value == p_true ? "TRUE" : "FALSE";
+		// Boolean is a truth value rather than a general named enumeration:
+		// zero formats as FALSE and every nonzero carrier formats as TRUE.
+		return value != p_false ? "TRUE" : "FALSE";
 	} else if constexpr (std::is_integral_v<T>) {
 		// uint8_t/int8_t stream as characters, so widen every Pascal
 		// integer carrier before insertion.

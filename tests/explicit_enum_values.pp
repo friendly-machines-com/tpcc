@@ -5,8 +5,7 @@ type
     Middle := 5,
     Lowest := -2,
     Highest := 9,
-    Back := 1,
-    Alias := Highest
+    Back := 1
   );
   TIndex = (
     IndexTwo = 2,
@@ -24,6 +23,9 @@ type
   TIndexArray = array[TIndex] of LongInt;
 
 const
+  { An untyped constant is a second source name for the same enum member,
+    not a second member competing for its ordinal. }
+  Alias = Highest;
   Values: TIndexArray = (20, 30, 40);
 
 begin

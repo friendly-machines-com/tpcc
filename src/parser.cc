@@ -1090,16 +1090,20 @@ void Parser::handle_directive(const std::string& body, SourceLocation directive_
 
 std::string Parser::consume() {
 	std::stringstream sst;
+	std::stringstream spelling;
 	sst.str("");
+	spelling.str("");
 	while (input_char == ' ' || input_char == '\n' || input_char == '\r' || input_char == '\t') {
 		consume_lowlevel();
 	}
 	if (input_char == EOF) {
 		input_token = "";
+		input_token_spelling = "";
 		return "";
 	}
 	if ((input_char >= 'a' && input_char <= 'z') | (input_char >= 'A' && input_char <= 'Z') || input_char == '_') {
 		while ((input_char >= 'a' && input_char <= 'z') || (input_char >= 'A' && input_char <= 'Z') || input_char == '_' || (input_char >= '0' && input_char <= '9')) {
+			spelling << (char)input_char;
 			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
@@ -1301,6 +1305,8 @@ std::string Parser::consume() {
 	}
 	auto text = sst.str();
 	input_token = text;
+	input_token_spelling =
+	    spelling.str().empty() ? text : spelling.str();
 	// Drop any token produced while an outer `{$ifdef}`/`{$if}` frame is
 	// inactive. Directives are already handled in-line and never reach
 	// here, so they still update the ifdef stack correctly.
@@ -2396,7 +2402,7 @@ static Type* natural_real_origin_type(Node* value) {
 enum class StrValueFamily {
 	Integer,
 	ExistingReal,
-	EnumerationTodo,
+	Enumeration,
 	Unsupported,
 };
 
@@ -2409,10 +2415,8 @@ static StrValueFamily str_value_family(Type* ty) {
 		// Preserve the already-modelled concrete real overloads. Width and
 		// precision still have a separate, deliberately unimplemented path.
 		return StrValueFamily::ExistingReal;
-	} else if (dynamic_cast<EnumType*>(ty)) {
-		// TODO: select either enum-name or ordinal-number formatting here once
-		// generated enum metadata has an explicit runtime representation.
-		return StrValueFamily::EnumerationTodo;
+	} else if (enum_root_type(ty)) {
+		return StrValueFamily::Enumeration;
 	}
 	// TODO: Currency and Comp belong in distinct cases here after their
 	// Pascal types and runtime carriers exist. Do not identify them by C++
@@ -2909,11 +2913,8 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 				raise_type_kind_mismatch("Str destination", "ShortString or AnsiString", destination_type);
 			}
 			const StrValueFamily family = str_value_family(item.value ? item.value->ty : nullptr);
-			if (family == StrValueFamily::EnumerationTodo) {
-				raise_parse_error("Str enumeration formatting is not implemented");
-			}
 			if (family == StrValueFamily::Unsupported) {
-				raise_type_kind_mismatch("Str value", "integer or predefined real", item.value ? item.value->ty : nullptr);
+				raise_type_kind_mismatch("Str value", "integer, enumeration, or predefined real", item.value ? item.value->ty : nullptr);
 			}
 			if (item.precision && family != StrValueFamily::ExistingReal) {
 				// Pascal's second colon is the fractional-digit count of a
@@ -5339,6 +5340,8 @@ Type* Parser::parse_enum_type() {
 	et->owning_unit = declaration_unit(current_declaration_frame());
 	int64_t next_value = 0;
 	do {
+		const SourceLocation member_location = current_location();
+		const std::string display_name = input_token_spelling;
 		auto pas = parse_identifier();
 		auto cxx = cxx_value_name(pas);
 		int64_t value = next_value;
@@ -5380,7 +5383,22 @@ Type* Parser::parse_enum_type() {
 			                 et);
 		}
 
-		et->members.push_back({pas, cxx, value, explicit_value});
+		if (const EnumType::Member* existing =
+		        et->add_member({
+		            .pas_name = pas,
+		            .display_name = display_name,
+		            .cxx_name = cxx,
+		            .value = value,
+		            .explicit_value = explicit_value,
+		        })) {
+			std::ostringstream message;
+			message << "duplicate enum ordinal " << value
+			        << ": member '" << display_name
+			        << "' conflicts with earlier member '"
+			        << existing->display_name << "'";
+			emit_parse_error_at(
+			    member_location, message.str());
+		}
 		// Register the member as a value in the enclosing scope so bare uses
 		// (`c := Red`) resolve. Pascal's default is unscoped enum members:
 		// they live in the same scope as the enum type itself, NOT inside
@@ -5398,9 +5416,9 @@ Type* Parser::parse_enum_type() {
 	} while (true);
 	parse_closing_paren();
 
-	int64_t min_value = et->members.front().value;
-	int64_t max_value = et->members.front().value;
-	for (const auto& m : et->members) {
+	int64_t min_value = et->members().front().value;
+	int64_t max_value = et->members().front().value;
+	for (const auto& m : et->members()) {
 		if (m.value < min_value) {
 			min_value = m.value;
 		}
@@ -5653,11 +5671,10 @@ static bool enum_range_has_gaps(Type* ty, const OrdinalRange& range) {
 	if (!enumeration) {
 		return false;
 	}
-	// Builtin ordinal iteration advances the carrier by one. Sparse or
-	// duplicate enum ordinals would therefore either manufacture values that
-	// have no Pascal enumerator or make one carrier value name two members.
+	// Builtin ordinal iteration advances the carrier by one. Sparse enum
+	// ordinals would therefore manufacture values with no declared member.
 	std::vector<int64_t> values;
-	for (const EnumType::Member& member : enumeration->members) {
+	for (const EnumType::Member& member : enumeration->members()) {
 		OrdinalRange::Value value = ordinal_value(member.value);
 		if (compare_ordinal_value(value, range.lower_ordinal) >= 0 && compare_ordinal_value(value, range.upper_ordinal) <= 0) {
 			values.push_back(member.value);
@@ -8992,10 +9009,10 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			return std::nullopt;
 		}
 		if (builtin && builtin->generic_kind == BuiltinGenericKind::StrOutput) {
-			if (parameter_index == 0 && str_value_family(source) != StrValueFamily::Integer && str_value_family(source) != StrValueFamily::EnumerationTodo) {
+			if (parameter_index == 0 && str_value_family(source) != StrValueFamily::Integer && str_value_family(source) != StrValueFamily::Enumeration) {
 				// The concrete Extended declaration handles the real family.
-				// The generic source exists only as the future enum
-				// extension point, not as an accept-anything escape hatch.
+				// The generic source exists for compiler-owned enum
+				// formatting, not as an accept-anything escape hatch.
 				return std::nullopt;
 			}
 			if (parameter_index == 1 && !dynamic_cast<ShortStringType*>(source)) {

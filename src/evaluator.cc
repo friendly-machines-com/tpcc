@@ -85,10 +85,12 @@ ConstEvalResult const_explicit_ordinal_cast(uint64_t magnitude, bool negative, T
 		if (signed_target && (raw & (uint64_t{1} << (bits - 1)))) {
 			stepped = -static_cast<int64_t>(((~raw) & mask) + 1);
 		}
-		for (const auto& member : enumeration->members) {
-			if (member.value == stepped) {
-				return ConstEvalResult::success(new EnumMemberRef(member.cxx_name, member.value, to_ty));
-			}
+		if (const auto* member =
+		        enumeration->member_for_value(stepped)) {
+			return ConstEvalResult::success(
+			    new EnumMemberRef(
+				member->cxx_name,
+				member->value, to_ty));
 		}
 	}
 	if (signed_target && (raw & (uint64_t{1} << (bits - 1)))) {

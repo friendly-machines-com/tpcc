@@ -2,6 +2,14 @@ program StrBuiltin;
 
 type
   TSmallText = string[32];
+  TMixedEnum = (
+    FirstName := -2,
+    SparseName := 3
+  );
+  TMixedEnumRange = FirstName..SparseName;
+
+const
+  EnumAlias = SparseName;
 
 var
   Value: Extended;
@@ -11,6 +19,8 @@ var
   WideSigned: Int64;
   WideUnsigned: QWord;
   SmallText: TSmallText;
+  EnumValue: TMixedEnum;
+  EnumRangeValue: TMixedEnumRange;
 
 begin
   Value := 3 / 2;
@@ -57,5 +67,36 @@ begin
   WideUnsigned := High(QWord);
   Str(WideUnsigned, DynamicText);
   if DynamicText <> '18446744073709551615' then
-    Halt(10)
+    Halt(10);
+
+  EnumValue := FirstName;
+  Str(EnumValue, SmallText);
+  if SmallText <> 'FirstName' then
+    Halt(11);
+
+  { An untyped alias must format exactly like the member. Enum text obeys
+    the same left-padded field-width rule as every other Str value. }
+  Str(EnumAlias:12, SmallText);
+  if SmallText <> '  SparseName' then
+    Halt(12);
+
+  Str(EnumAlias, DynamicText);
+  if DynamicText <> 'SparseName' then
+    Halt(13);
+
+  EnumRangeValue := FirstName;
+  Str(EnumRangeValue, SmallText);
+  if SmallText <> 'FirstName' then
+    Halt(14);
+
+  Str(True:6, SmallText);
+  if SmallText <> '  TRUE' then
+    Halt(15);
+
+  Str(Boolean(2), SmallText);
+  if SmallText <> 'TRUE' then
+    Halt(16);
+
+  { Write and Str share the same FormattedValue lowering. }
+  Writeln(EnumAlias:12)
 end.

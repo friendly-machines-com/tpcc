@@ -84,30 +84,70 @@ EnumType::EnumType(SourceLocation source_location) : Type(std::move(source_locat
 }
 
 EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::string a, std::string b, unsigned p_carrier_bits, bool p_carrier_signed) : Type(std::move(source_location)), cxx_name(std::move(p_cxx_name)), carrier_bits(p_carrier_bits), carrier_signed(p_carrier_signed) {
-	members.push_back(Member{
+	const Member* first_collision = add_member(Member{
 	    .pas_name = a,
+	    .display_name = a,
 	    .cxx_name = cxx_name + "::p_" + a,
 	    .value = 0,
 	});
-	members.push_back(Member{
+	const Member* second_collision = add_member(Member{
 	    .pas_name = b,
+	    .display_name = b,
 	    .cxx_name = cxx_name + "::p_" + b,
 	    .value = 1,
 	});
+	assert(!first_collision && !second_collision);
+	(void)first_collision;
+	(void)second_collision;
+}
+
+const EnumType::Member* EnumType::add_member(Member member) {
+	auto [position, inserted] =
+	    member_index_by_value.emplace(
+		member.value, member_list.size());
+	if (!inserted) {
+		return &member_list[position->second];
+	}
+	member_list.push_back(std::move(member));
+	return nullptr;
+}
+
+const EnumType::Member* EnumType::member_for_value(
+    int64_t value) const {
+	auto position = member_index_by_value.find(value);
+	return position == member_index_by_value.end()
+	           ? nullptr
+	           : &member_list[position->second];
 }
 
 const EnumType::Member* EnumType::min_member() const {
-	if (members.empty()) {
+	if (member_list.empty()) {
 		return nullptr;
 	}
-	return &*std::min_element(members.begin(), members.end(), [](const Member& a, const Member& b) { return a.value < b.value; });
+	return &*std::min_element(member_list.begin(), member_list.end(), [](const Member& a, const Member& b) { return a.value < b.value; });
 }
 
 const EnumType::Member* EnumType::max_member() const {
-	if (members.empty()) {
+	if (member_list.empty()) {
 		return nullptr;
 	}
-	return &*std::max_element(members.begin(), members.end(), [](const Member& a, const Member& b) { return a.value < b.value; });
+	return &*std::max_element(member_list.begin(), member_list.end(), [](const Member& a, const Member& b) { return a.value < b.value; });
+}
+
+EnumType* enum_root_type(Type* type) {
+	for (;;) {
+		if (auto distinct =
+		        dynamic_cast<DistinctType*>(type)) {
+			type = distinct->base_type;
+			continue;
+		}
+		if (auto subrange =
+		        dynamic_cast<SubrangeType*>(type)) {
+			type = subrange->base_type;
+			continue;
+		}
+		return dynamic_cast<EnumType*>(type);
+	}
 }
 
 FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type) : Type(std::move(source_location)) {
@@ -2047,7 +2087,7 @@ void EnumType::collect_diagnostic_edges(ErrorLetContext*) const {
 
 void EnumType::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
 	out << "";
-	for (const auto& m : members) {
+	for (const auto& m : members()) {
 		out << "\n";
 		ctx->indent(out, indent + 1);
 		out << (m.pas_name.empty() ? "<member>" : m.pas_name) << " = " << m.value;
