@@ -1622,7 +1622,9 @@ void Parser::maybe_parse_statement() {
 		}
 	} else if (peek_keyword("if")) {
 		parse_keyword("if");
-		auto condition = parse_expression();
+		auto condition = maybe_auto_call(
+		    parse_expression(),
+		    directive_state.leading_token_directives());
 		parse_keyword("then");
 		if (emitter) {
 			emitter->emit_if_prologue(condition);
@@ -1639,7 +1641,9 @@ void Parser::maybe_parse_statement() {
 		}
 	} else if (peek_keyword("case")) {
 		parse_keyword("case");
-		Node* selector = parse_expression();
+		Node* selector = maybe_auto_call(
+		    parse_expression(),
+		    directive_state.leading_token_directives());
 		parse_keyword("of");
 
 		// Every emitted case owns a C++ block, so a fixed tpcc-owned
@@ -1716,7 +1720,9 @@ void Parser::maybe_parse_statement() {
 		}
 	} else if (peek_keyword("while")) {
 		parse_keyword("while");
-		auto condition = parse_expression();
+		auto condition = maybe_auto_call(
+		    parse_expression(),
+		    directive_state.leading_token_directives());
 		parse_keyword("do");
 		if (emitter) {
 			emitter->emit_while_prologue(condition);
@@ -1781,7 +1787,9 @@ void Parser::maybe_parse_statement() {
 			if (!visible_value && maybe_resolve_type(input_token)) {
 				ordinal_designator = parse_type_expression(false);
 			} else {
-				collection = parse_expression();
+				collection = maybe_auto_call(
+				    parse_expression(),
+				    directive_state.leading_token_directives());
 			}
 			parse_keyword("do");
 
@@ -1904,7 +1912,9 @@ void Parser::maybe_parse_statement() {
 		loop_try_targets.pop_back();
 		--loop_depth;
 		parse_keyword("until");
-		auto condition = parse_expression();
+		auto condition = maybe_auto_call(
+		    parse_expression(),
+		    directive_state.leading_token_directives());
 		if (emitter) {
 			emitter->emit_repeat_epilogue(condition);
 		}
@@ -3374,7 +3384,7 @@ Node* Parser::maybe_auto_call(Node* n, LeadingTokenDirectives directives) {
 			raise_value_error("write-only property '" + property->property->pas_name + "' cannot be read", property->property);
 		}
 		return n;
-	} else if (!node_is_bare_callable(n)) {
+	} else if (!node_is_bare_callable(n) && !(n && dynamic_cast<RoutineType*>(n->ty))) {
 		return n;
 	}
 	// finalize_call handles the empty-args case: for a Callable it checks
@@ -3384,6 +3394,25 @@ Node* Parser::maybe_auto_call(Node* n, LeadingTokenDirectives directives) {
 	std::vector<Node*> args;
 	auto fc = finalize_call(n, args, /*name for error*/ "", current_location());
 	return make_call(fc, std::move(args), directives);
+}
+
+Node* Parser::try_auto_call_routine_value(Node* value, LeadingTokenDirectives directives) {
+	auto routine = value ? dynamic_cast<RoutineType*>(value->ty) : nullptr;
+	if (!routine) {
+		return nullptr;
+	}
+	for (const Parameter& formal : routine->formals) {
+		if (!formal.default_value) {
+			// This is candidate-local overload testing. A routine which needs
+			// an explicit argument merely makes the proposed non-routine
+			// destination inapplicable; it must not abort consideration of a
+			// different routine-typed formal which can consume the value.
+			return nullptr;
+		}
+	}
+	std::vector<Node*> args;
+	auto finalized = finalize_call(value, args, "", current_location());
+	return make_call(finalized, std::move(args), directives);
 }
 
 static Frame* body_frame_of(Type* ty) {
@@ -4078,6 +4107,12 @@ static std::string operator_expression_identifier(OperatorInvocation invocation,
 }
 
 Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives directives, bool mutation_step) {
+	// An operator is an ordinary value context, not a destination for a
+	// procedural value. Runtime routine operands therefore mean calls here.
+	// Routine-valued call actuals remain deferred to match_argument because a
+	// routine-typed formal consumes the routine itself.
+	a = maybe_auto_call(a, directives);
+	b = maybe_auto_call(b, directives);
 	const std::string pascal_identifier = operator_expression_identifier(OperatorInvocation::BinaryToken, id, 2, directives.overflow_checks, (a && a->ty == boolean_type()) || (b && b->ty == boolean_type()));
 	auto fn = resolve_value(pascal_identifier);
 	// Operators and named routines share one argument matcher. Preserve the
@@ -4128,30 +4163,45 @@ Node* Parser::mk_assign(Node* a, Node* b) {
 Node* Parser::mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirectives directives) {
 	RoutineType* a_routine = a ? dynamic_cast<RoutineType*>(a->ty) : nullptr;
 	RoutineType* b_routine = b ? dynamic_cast<RoutineType*>(b->ty) : nullptr;
-	if (!a_routine && dynamic_cast<NilLiteral*>(a) && b_routine) {
-		a = cast(a, b_routine);
-		a_routine = b_routine;
-	}
-	if (!b_routine && dynamic_cast<NilLiteral*>(b) && a_routine) {
-		b = cast(b, a_routine);
-		b_routine = a_routine;
-	}
-	if (a_routine || b_routine) {
-		if (id != "=") {
-			raise_type_error("routine values can only be compared for equality", a_routine ? static_cast<Type*>(a_routine) : static_cast<Type*>(b_routine));
+
+	auto explicit_code = [](Node* value) {
+		return dynamic_cast<RoutineRef*>(value) ||
+		       dynamic_cast<RoutineCode*>(value);
+	};
+	const bool a_nil = dynamic_cast<NilLiteral*>(a);
+	const bool b_nil = dynamic_cast<NilLiteral*>(b);
+
+	if (a_routine && (b_nil || explicit_code(b))) {
+		// The source dialect uses `Hook <> @DefaultHook` and routine-value
+		// tests against nil. Both are comparisons of the Code word. They do
+		// not define equality between two procedural values, and a method's
+		// receiver/Data word is intentionally irrelevant at this boundary.
+		a = routine_code_pointer(a);
+		if (auto reference = dynamic_cast<RoutineRef*>(b)) {
+			b = routine_code_pointer(reference, a_routine);
+		} else if (b_nil) {
+			b = new NilLiteral();
+			b->ty = pointer_type();
 		}
-		if (!a_routine) {
-			raise_type_mismatch("routine-value comparison left operand", b_routine, a ? a->ty : nullptr);
+	} else if (b_routine && (a_nil || explicit_code(a))) {
+		b = routine_code_pointer(b);
+		if (auto reference = dynamic_cast<RoutineRef*>(a)) {
+			a = routine_code_pointer(reference, b_routine);
+		} else if (a_nil) {
+			a = new NilLiteral();
+			a->ty = pointer_type();
 		}
-		if (!b_routine) {
-			raise_type_mismatch("routine-value comparison right operand", a_routine, b ? b->ty : nullptr);
+	} else {
+		// A bare procedural variable in an ordinary expression denotes a
+		// call. In particular `M1 = M2` is not method identity: each side
+		// must be callable without explicit arguments, after which the
+		// selected equality operator compares their result values.
+		if (a_routine) {
+			a = maybe_auto_call(a, directives);
 		}
-		if (!a_routine->accepts_routine_value_from(b_routine)) {
-			raise_type_mismatch("routine-value comparison", a_routine, b_routine);
+		if (b_routine) {
+			b = maybe_auto_call(b, directives);
 		}
-		auto equal = new RoutineEqual(a, b);
-		equal->ty = boolean_type();
-		return equal;
 	}
 
 	const std::string pascal_identifier = operator_expression_identifier(OperatorInvocation::BinaryToken, id, 2, directives.overflow_checks, (a && a->ty == boolean_type()) || (b && b->ty == boolean_type()));
@@ -4175,6 +4225,8 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirective
 }
 
 Node* Parser::mk_membership(Node* item, Node* set, LeadingTokenDirectives directives) {
+	item = maybe_auto_call(item, directives);
+	set = maybe_auto_call(set, directives);
 	const std::string pascal_identifier = operator_expression_identifier(OperatorInvocation::BinaryToken, "in", 2, directives.overflow_checks);
 	Node* fn = resolve_value(pascal_identifier);
 	// Preserve both source operands until the ordinary operator family has
@@ -4189,6 +4241,7 @@ Node* Parser::mk_membership(Node* item, Node* set, LeadingTokenDirectives direct
 }
 
 Node* Parser::mk_unary_same(std::string id, Node* x, LeadingTokenDirectives directives) {
+	x = maybe_auto_call(x, directives);
 	if (auto integer = untyped_integer_constant(x)) {
 		if (id == "-") {
 			if (!integer->negative && integer->value > (uint64_t{1} << 63)) {
@@ -4226,7 +4279,16 @@ Node* Parser::mk_unary_same(std::string id, Node* x, LeadingTokenDirectives dire
 }
 
 Node* Parser::parse_power_tail(Node* result, LeadingTokenDirectives leading_directives) {
-	result = maybe_auto_call(result, leading_directives);
+	// A named routine declaration is unambiguously a call in expression
+	// syntax. A runtime routine value is deferred: a later routine-typed
+	// assignment/formal consumes it, while an ordinary value context calls
+	// it. Property validation remains eager even when its value is routine
+	// typed.
+	if (node_is_bare_callable(result) ||
+	    dynamic_cast<PropertyAccess*>(result) ||
+	    !(result && dynamic_cast<RoutineType*>(result->ty))) {
+		result = maybe_auto_call(result, leading_directives);
+	}
 	while (true) {
 		const LeadingTokenDirectives operation_directives = directive_state.leading_token_directives();
 		if (!maybe_parse_star_star()) {
@@ -4263,6 +4325,12 @@ Node* Parser::parse_power() {
 				}
 			}
 			return parse_power_tail(new RoutineRef(receiver, candidates), operation_directives);
+		}
+		if (x && dynamic_cast<RoutineType*>(x->ty)) {
+			// A procedural variable already contains an address (and, for a
+			// method, a receiver). `@` exposes its Code word; it never takes
+			// the address of the storage holding that carrier.
+			return parse_power_tail(routine_code_pointer(x), operation_directives);
 		}
 		if (contains_packed_projection(x)) {
 			raise_value_error("address of a packed-record field is not available", x);
@@ -4437,7 +4505,9 @@ Node* Parser::parse_expression() {
 
 FormattedValue Parser::parse_formatted_value() {
 	FormattedValue result{
-	    .value = parse_expression(),
+	    .value = maybe_auto_call(
+	        parse_expression(),
+	        directive_state.leading_token_directives()),
 	    .width = nullptr,
 	    .precision = nullptr,
 	};
@@ -8989,7 +9059,7 @@ static std::optional<ArgumentMatch> contextual_subrange_constant_match(const Par
 	return ArgumentMatch{{MatchRank::Tier::Equal, 0}, new Cast(bound->node, subrange)};
 }
 
-std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion, MatchFailure* failure, DeclaredConversionFailure* conversion_failure) {
+std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion, MatchFailure* failure, DeclaredConversionFailure* conversion_failure, bool allow_routine_autocall) {
 	if (failure) {
 		*failure = MatchFailure::Incompatible;
 	}
@@ -8999,6 +9069,26 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 
 	if (builtin && builtin->generic_kind == BuiltinGenericKind::Assigned && parameter_index == 0 && (dynamic_cast<RoutineType*>(source) || (source && source->is_reference_type()))) {
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, actual};
+	}
+
+	if (allow_routine_autocall &&
+	    dynamic_cast<RoutineType*>(source) &&
+	    !dynamic_cast<RoutineType*>(target) &&
+	    formal.mode != ParamMode::Var &&
+	    formal.mode != ParamMode::Out) {
+		if (Node* called = try_auto_call_routine_value(
+		        actual,
+		        directive_state.leading_token_directives())) {
+			// Autocall is a contextual interpretation of the same source
+			// expression, not an implicit conversion edge and therefore adds
+			// no ranking tier. Disable it on re-entry so a function returning
+			// another routine value is called exactly once at this occurrence.
+			return match_argument(
+			    formal, called, builtin, parameter_index,
+			    allow_declared_conversion, failure,
+			    conversion_failure, false);
+		}
+		return std::nullopt;
 	}
 
 	if (target == unknown_type()) {
@@ -10404,16 +10494,18 @@ Node* Parser::try_resolve_routine_code_reference(RoutineRef* reference) {
 
 	auto result = new RoutineRef(reference->receiver, reference->candidates);
 	result->resolved = candidate;
-	result->code_only = true;
-	result->ty = pointer_type();
+	result->ty = candidate->ty;
+	Node* routine_value = result;
 	if (auto method = dynamic_cast<Method*>(candidate); method && method->is_static) {
 		Node* qualifier = result->receiver;
 		result->receiver = nullptr;
 		if (qualifier && !dynamic_cast<ClassRefValue*>(qualifier) && !dynamic_cast<TypeMemberQualifier*>(qualifier)) {
-			return new EvaluateThen(qualifier, result);
+			routine_value = new EvaluateThen(qualifier, result);
 		}
 	}
-	return result;
+	auto code = new RoutineCode(routine_value);
+	code->ty = pointer_type();
+	return code;
 }
 
 Node* Parser::resolve_routine_code_reference(RoutineRef* reference) {
@@ -10435,6 +10527,31 @@ Node* Parser::resolve_routine_code_reference(RoutineRef* reference) {
 	raise_routine_reference_error("Pointer routine reference does not name a plain routine or bound "
 	                              "instance method",
 	                              reference, pointer_type());
+}
+
+Node* Parser::routine_code_pointer(Node* value, RoutineType* contextual_type) {
+	if (!value) {
+		raise_value_error("routine code extraction requires a value", value);
+	}
+	if (dynamic_cast<RoutineCode*>(value)) {
+		return value;
+	}
+	if (auto reference = dynamic_cast<RoutineRef*>(value)) {
+		if (contextual_type) {
+			// Resolve overload/category using the routine value on the other
+			// side. Code extraction remains a separate CST operation; the
+			// resolved reference always denotes the complete routine carrier.
+			value = resolve_routine_reference(reference, contextual_type);
+		} else {
+			return resolve_routine_code_reference(reference);
+		}
+	}
+	if (!dynamic_cast<RoutineType*>(value->ty)) {
+		raise_type_kind_mismatch("routine code extraction", "routine value", value->ty);
+	}
+	auto result = new RoutineCode(value);
+	result->ty = pointer_type();
+	return result;
 }
 
 static bool callable_accepts_receiver(Callable* callable, Node* receiver) {

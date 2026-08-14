@@ -42,8 +42,12 @@ int main() {
 	if (result != 0) {
 		return 1;
 	}
-	if (p_functionresult != 18 || p_mutationresult != 8) {
+	if (p_functionresult != 61 || p_mutationresult != 8) {
 		return 2;
+	}
+	if (p_autocallvalueargument != 42 ||
+	    p_autocallroutineargument != 42) {
+		return 11;
 	}
 	if (p_resultvalue != 126) {
 		return 3;
@@ -51,13 +55,15 @@ int main() {
 	if (p_methodfunctionresult != 130) {
 		return 4;
 	}
-	if (p_plainequal != ::u_system::p_true || p_methodequal != ::u_system::p_true) {
+	if (p_plaincodeequal != ::u_system::p_true ||
+	    p_methodcodeequal != ::u_system::p_true ||
+	    p_autocallequal != ::u_system::p_true) {
 		return 5;
 	}
 	if (p_plainnil != ::u_system::p_true || p_plainnilequal != ::u_system::p_true || p_methodnil != ::u_system::p_true || p_methodnilequal != ::u_system::p_true) {
 		return 6;
 	}
-	if (p_rawcode == nullptr || p_rawdata != static_cast<::u_system::t_pointer>(p_receiver) || p_globalcode == nullptr || p_methodcode == nullptr) {
+	if (p_rawcode == nullptr || p_rawdata != static_cast<::u_system::t_pointer>(p_receiver) || p_globalcode == nullptr || p_globalcodefromvalue == nullptr || p_methodcode == nullptr) {
 		return 7;
 	}
 	if (p_staticpointercastresult != static_cast<::u_system::t_pointer>(p_receiver) || p_methodpointercastresult != static_cast<::u_system::t_pointer>(p_otherreceiver)) {

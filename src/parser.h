@@ -419,7 +419,7 @@ class Parser {
 	Node* mk_membership(Node* item, Node* set, LeadingTokenDirectives directives);
 	Node* mk_unary_same(std::string id, Node* x, LeadingTokenDirectives directives);
 	Node* mk_assign(Node* a, Node* b);
-	std::optional<ArgumentMatch> match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion = true, MatchFailure* failure = nullptr, DeclaredConversionFailure* conversion_failure = nullptr);
+	std::optional<ArgumentMatch> match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion = true, MatchFailure* failure = nullptr, DeclaredConversionFailure* conversion_failure = nullptr, bool allow_routine_autocall = true);
 	std::optional<CallableMatch> match_callable_arguments(Callable* callable, const std::vector<Node*>& args, bool allow_declared_conversion = true, OverloadResolutionPolicy resolution_policy = OverloadResolutionPolicy::Ordinary);
 	std::optional<ArgumentMatch> match_declared_conversion(Node* actual, Type* target, std::string_view operator_identifier, MatchFailure* failure, DeclaredConversionFailure* conversion_failure);
 	bool has_direct_assignment_edge(Type* source, Type* target);
@@ -432,6 +432,8 @@ class Parser {
 	Node* try_resolve_routine_reference(RoutineRef* reference, RoutineType* target_ty, bool* ambiguous);
 	Node* try_resolve_routine_code_reference(RoutineRef* reference);
 	Node* resolve_routine_code_reference(RoutineRef* reference);
+	Node* routine_code_pointer(Node* value, RoutineType* contextual_type = nullptr);
+	Node* try_auto_call_routine_value(Node* value, LeadingTokenDirectives directives);
 	uint64_t next_subrange_type_number = 0;
 	std::string next_subrange_cxx_name();
 	Type* parse_subrange_type(Node* lower_bound, Node* upper_bound);
@@ -527,11 +529,12 @@ class Parser {
 	 * collection has no GetEnumerator member and builtin iteration may be
 	 * considered; a malformed member protocol is diagnosed here. */
 	std::optional<CustomForInResolution> maybe_resolve_custom_for_in(Node* collection, Node* control);
-	/** If NODE is a bare callable (Callable, OverloadSet, or MemberAccess
-	 *  whose member is either) AND at least one candidate can be invoked
-	 *  parameterlessly (no formals or all formals defaulted), wrap it in a
-	 *  no-arg ProcCall via finalize_call and return that. Otherwise return
-	 *  NODE unchanged. */
+	/** Force NODE to produce an ordinary expression value. Bare declarations
+	 *  and runtime routine values are called with no explicit arguments;
+	 *  defaults are materialized by finalize_call. Routine-valued actuals are
+	 *  deliberately not sent here until their destination is known, because
+	 *  a routine-typed assignment or formal consumes the routine value itself.
+	 */
 	Node* maybe_auto_call(Node* n, LeadingTokenDirectives directives);
 	/** True when NODE is a syntactic form assignable to via `:=`: a bare
 	 *  StorageSlot, a MemberAccess whose member is a StorageSlot, a

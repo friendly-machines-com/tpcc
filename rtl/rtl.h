@@ -6716,21 +6716,6 @@ inline t_boolean p_assigned(const m_method<Signature>& p) {
 	return tpcc_bool_to_boolean(p.p_code != nullptr);
 }
 
-template<typename Signature>
-inline t_boolean m_equal(
-    m_proc<Signature> a, m_proc<Signature> b) {
-	return tpcc_bool_to_boolean(a == b);
-}
-
-template<typename Signature>
-inline t_boolean m_equal(
-    const m_method<Signature>& a,
-    const m_method<Signature>& b) {
-	// FPC's method-routine equality compares the code word. Data is copied
-	// but is not part of this operation.
-	return tpcc_bool_to_boolean(a.p_code == b.p_code);
-}
-
 template<typename T>
 requires std::is_integral_v<
     typename tpcc_ordinal_storage<T>::type>

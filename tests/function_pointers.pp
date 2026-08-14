@@ -3,6 +3,8 @@ program function_pointers;
 type
   TPlainProcedure = procedure(Value: Integer);
   TPlainFunction = function(Value: Integer): Integer;
+  TNoArgFunction = function: Integer;
+  TNoArgBoolean = function: Boolean;
   TMutation = procedure(var Value: Integer; const Delta: Integer);
   TBoundProcedure = procedure(Value: Integer) of object;
   TBoundFunction = function(Value: Integer): Integer of object;
@@ -32,6 +34,9 @@ var
   PlainProcedure: TPlainProcedure;
   PlainProcedureCopy: TPlainProcedure;
   PlainFunction: TPlainFunction;
+  NoArgFunction: TNoArgFunction;
+  NoArgFunctionCopy: TNoArgFunction;
+  NoArgBoolean: TNoArgBoolean;
   Mutation: TMutation;
   BoundProcedure: TBoundProcedure;
   BoundProcedureCopy: TBoundProcedure;
@@ -47,7 +52,11 @@ var
   FunctionResult: Integer;
   MutationResult: Integer;
   MethodFunctionResult: Integer;
-  PlainEqual: Boolean;
+  PlainCodeEqual: Boolean;
+  MethodCodeEqual: Boolean;
+  AutoCallEqual: Boolean;
+  AutoCallValueArgument: Integer;
+  AutoCallRoutineArgument: Integer;
   PlainNil: Boolean;
   PlainNilEqual: Boolean;
   MethodEqual: Boolean;
@@ -56,6 +65,7 @@ var
   RawCode: Pointer;
   RawData: Pointer;
   GlobalCode: Pointer;
+  GlobalCodeFromValue: Pointer;
   MethodCode: Pointer;
   StaticPointerCastResult: Pointer;
   MethodPointerCastResult: Pointer;
@@ -78,6 +88,28 @@ end;
 function DoubleValue(Value: QWord): Integer; overload;
 begin
   DoubleValue := Integer(Value)
+end;
+
+function FortyTwo: Integer;
+begin
+  FortyTwo := 42
+end;
+
+function Yes: Boolean;
+begin
+  Yes := True
+end;
+
+procedure AcceptValue(Value: Integer);
+begin
+  AutoCallValueArgument := Value
+end;
+
+procedure AcceptRoutine(Value: TNoArgFunction);
+begin
+  { The routine-typed formal receives the carrier. Its later use in an
+    Integer assignment is the value context which performs the call. }
+  AutoCallRoutineArgument := Value
 end;
 
 procedure Mutate(var Value: Integer; const Delta: Integer);
@@ -134,13 +166,27 @@ begin
   PlainProcedure := @SetResult;
   PlainProcedure(7);
   PlainProcedureCopy := PlainProcedure;
-  PlainEqual := PlainProcedure = PlainProcedureCopy;
+  { `@` projects Code. Direct procedural-value equality is not a language
+    operation; the bootstrap source's Hook <> @DefaultHook form has this same
+    explicit code-address meaning. }
+  PlainCodeEqual := not (PlainProcedure <> @SetResult);
+  GlobalCodeFromValue := @PlainProcedure;
   PlainProcedure := nil;
   PlainNilEqual := PlainProcedure = nil;
   PlainNil := not Assigned(PlainProcedure);
 
   PlainFunction := @DoubleValue;
   FunctionResult := PlainFunction(9);
+
+  NoArgFunction := @FortyTwo;
+  NoArgFunctionCopy := NoArgFunction;
+  AutoCallEqual := NoArgFunction = NoArgFunctionCopy;
+  FunctionResult := FunctionResult + NoArgFunction;
+  AcceptValue(NoArgFunction);
+  AcceptRoutine(NoArgFunction);
+  NoArgBoolean := @Yes;
+  if NoArgBoolean then
+    FunctionResult := FunctionResult + 1;
 
   MutationResult := 5;
   Mutation := @Mutate;
@@ -149,7 +195,7 @@ begin
   BoundProcedure := @Receiver.Accumulate;
   BoundProcedure(4);
   BoundProcedureCopy := @OtherReceiver.Accumulate;
-  MethodEqual := BoundProcedure = BoundProcedureCopy;
+  MethodCodeEqual := @BoundProcedure = @BoundProcedureCopy;
 
   RawMethod := TMethod(BoundProcedure);
   RawCode := RawMethod.Code;

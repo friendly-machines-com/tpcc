@@ -786,9 +786,6 @@ class RoutineRef : public Node {
 	Node* receiver;
 	Node* candidates;
 	Callable* resolved = nullptr;
-	// Pointer context asks for only the ABI code word. Routine-type context
-	// leaves this false and emits the complete m_proc/m_method value.
-	bool code_only = false;
 	RoutineRef(Node* receiver, Node* candidates);
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
@@ -796,12 +793,18 @@ class RoutineRef : public Node {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
-/** Equality of compatible routine values. Method routine equality
- * follows FPC and compares Code only; the RTL implements that distinction. */
-class RoutineEqual : public BinaryOperation {
+/** Explicit extraction of the code address from a runtime routine value.
+ *
+ * `@RoutineVariable` denotes the routine's code address, not the address of
+ * the variable which stores the one- or two-word routine value. Keeping this
+ * operation distinct from AddrOf prevents a method value's Data word from
+ * accidentally participating in address comparison.
+ */
+class RoutineCode : public UnaryOperation {
       public:
-	RoutineEqual(Node* a, Node* b);
+	RoutineCode(Node* value);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 };
 
 /** Shared base of standalone procedures/functions and methods. Holds

@@ -34,7 +34,7 @@ then
 	echo "runtime static-method qualifier was not sequenced" >&2
 	exit 1
 fi
-if ! grep -Fq 'static_cast<void>(p_getobject()), &t_tbase::p_staticvalue' \
+if ! grep -Fq 'static_cast<void>(p_getobject()), static_cast<::u_system::t_integer (*)(::u_system::t_integer)>(&t_tbase::p_staticvalue)' \
 	"$tmp/class_static_methods.cc"
 then
 	echo "runtime static-method-reference qualifier was not sequenced" >&2

@@ -43,7 +43,7 @@ for expectation in \
 	'::u_system::m_unchecked_reset(p_anchoreduncheckedfile' \
 	'::u_system::m_unchecked_reset(p_aliasuncheckedfile' \
 	'::u_system::p_reset(p_aliascheckedfile' \
-	'p_resetproc = &::u_system::p_reset' \
+	'p_resetproc = static_cast<void (*)(::u_system::t_file&, ::u_system::t_integer)>(&::u_system::p_reset)' \
 	'p_defaultiison'
 do
 	if ! grep -Fq "$expectation" "$generated"

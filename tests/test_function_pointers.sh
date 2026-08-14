@@ -82,11 +82,11 @@ tpcc_translate -Futests/routine_const \
 	-o"$tmp/routine-const/program.cc" \
 	tests/routine_const/routine_const_program.pp
 
-if ! grep -Fq \
-	'p_dostatus = &::u_routineconstunit::p_defstatus' \
+if ! grep -Eq \
+	'p_dostatus = static_cast<.*>\(&::u_routineconstunit::p_defstatus\)' \
 	"$tmp/routine-const/routineconstunit.h"
 then
-	echo "typed routine constant did not preserve @Routine" >&2
+	echo "typed routine constant did not preserve the selected @Routine signature" >&2
 	exit 1
 fi
 
@@ -101,7 +101,9 @@ for source in \
 	tests/function_pointer_explicit_nonpointer_rejected.pp \
 	tests/function_pointer_implicit_pointer_mismatch_rejected.pp \
 	tests/function_pointer_global_to_method_rejected.pp \
-	tests/function_pointer_method_to_global_rejected.pp
+	tests/function_pointer_method_to_global_rejected.pp \
+	tests/function_pointer_direct_plain_equality_rejected.pp \
+	tests/function_pointer_direct_method_equality_rejected.pp
 do
 	base=${source%.pp}
 	if tpcc_translate -o"$tmp/rejected.cc" "$source" \

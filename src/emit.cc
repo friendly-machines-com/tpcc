@@ -2447,15 +2447,14 @@ void Emitter::emit_routine_reference(RoutineRef* reference) {
 		if (reference->receiver) {
 			unhandled_node("standalone routine reference has a receiver", reference);
 		}
-		if (reference->code_only) {
-			fprintf(active, "::u_system::m_function_to_code_pointer(static_cast<");
-			emit_type_ref(procedure->ty->return_type);
-			fprintf(active, " (*)");
-			emit_formal_parameters(procedure->ty, false, nullptr);
-			fprintf(active, ">(&%s))", node_cxx_name(procedure, callable_cxx_name(procedure)).c_str());
-		} else {
-			fprintf(active, "&%s", node_cxx_name(procedure, callable_cxx_name(procedure)).c_str());
-		}
+		// Always state the selected Pascal signature. Besides documenting the
+		// complete routine value, this keeps a later RoutineCode wrapper from
+		// losing overload selection inside a C++ function-template argument.
+		fprintf(active, "static_cast<");
+		emit_type_ref(procedure->ty->return_type);
+		fprintf(active, " (*)");
+		emit_formal_parameters(procedure->ty, false, nullptr);
+		fprintf(active, ">(&%s)", node_cxx_name(procedure, callable_cxx_name(procedure)).c_str());
 	} else {
 		auto method = dynamic_cast<Method*>(reference->resolved);
 		if (!method) {
@@ -2469,15 +2468,11 @@ void Emitter::emit_routine_reference(RoutineRef* reference) {
 			if (owner.empty()) {
 				unhandled_type("static method routine reference owner has no C++ name", method->owner_class);
 			}
-			if (reference->code_only) {
-				fprintf(active, "::u_system::m_function_to_code_pointer(static_cast<");
-				emit_type_ref(method->ty->return_type);
-				fprintf(active, " (*)");
-				emit_formal_parameters(method->ty, false, nullptr);
-				fprintf(active, ">(&%s::%s))", owner.c_str(), callable_cxx_name(method).c_str());
-			} else {
-				fprintf(active, "&%s::%s", owner.c_str(), callable_cxx_name(method).c_str());
-			}
+			fprintf(active, "static_cast<");
+			emit_type_ref(method->ty->return_type);
+			fprintf(active, " (*)");
+			emit_formal_parameters(method->ty, false, nullptr);
+			fprintf(active, ">(&%s::%s)", owner.c_str(), callable_cxx_name(method).c_str());
 		} else {
 			if (!reference->receiver || (method->ty->kind != METHOD && method->ty->kind != CLASS_METHOD)) {
 				unhandled_node("method routine reference is not receiver-bearing", reference);
@@ -2511,9 +2506,6 @@ void Emitter::emit_routine_reference(RoutineRef* reference) {
 					fprintf(active, ")");
 				}
 				fprintf(active, ")");
-				if (reference->code_only) {
-					fprintf(active, ".p_code");
-				}
 			} else {
 				fprintf(active, "::u_system::m_bind_method<static_cast<");
 				emit_type_ref(method->ty->return_type);
@@ -2543,9 +2535,6 @@ void Emitter::emit_routine_reference(RoutineRef* reference) {
 					fprintf(active, ")");
 				}
 				fprintf(active, ")");
-				if (reference->code_only) {
-					fprintf(active, ".p_code");
-				}
 			}
 		}
 	}
@@ -2951,6 +2940,22 @@ void Emitter::emit_expression(Node* expr) {
 		fprintf(active, "%.*s", (int)b->desc->cxx_name.size(), b->desc->cxx_name.data());
 	} else if (auto reference = dynamic_cast<RoutineRef*>(expr)) {
 		emit_routine_reference(reference);
+	} else if (auto code = dynamic_cast<RoutineCode*>(expr)) {
+		auto routine = code->a ? dynamic_cast<RoutineType*>(code->a->ty) : nullptr;
+		if (!routine) {
+			unhandled_node("routine-code operand has no routine-value type", code);
+		}
+		if (routine->kind == ROUTINE) {
+			fprintf(active, "::u_system::m_function_to_code_pointer(");
+			emit_expression(code->a);
+			fprintf(active, ")");
+		} else if (routine->kind == METHOD || routine->kind == CLASS_METHOD) {
+			fprintf(active, "(");
+			emit_expression(code->a);
+			fprintf(active, ").p_code");
+		} else {
+			unhandled_type("routine-code operand has unsupported routine category", routine);
+		}
 	} else if (auto c = dynamic_cast<Callable*>(expr)) {
 		fprintf(active, "%s", node_cxx_name(c, c->cxx_name).c_str());
 	} else if (auto property = dynamic_cast<PropertyAccess*>(expr)) {
@@ -3059,12 +3064,6 @@ void Emitter::emit_expression(Node* expr) {
 		}
 		emit_expression(o->b);
 		fprintf(active, ")))");
-	} else if (auto equal = dynamic_cast<RoutineEqual*>(expr)) {
-		fprintf(active, "::u_system::m_equal(");
-		emit_expression(equal->a);
-		fprintf(active, ", ");
-		emit_expression(equal->b);
-		fprintf(active, ")");
 	} else if (auto ix = dynamic_cast<Index*>(expr)) {
 		fprintf(active, "::u_system::p_index(");
 		emit_expression(ix->a);

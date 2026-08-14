@@ -130,7 +130,7 @@ AddrOf::AddrOf(Node* a) : UnaryOperation(a) {
 RoutineRef::RoutineRef(Node* receiver, Node* candidates) : receiver(receiver), candidates(candidates) {
 }
 
-RoutineEqual::RoutineEqual(Node* a, Node* b) : BinaryOperation(a, b) {
+RoutineCode::RoutineCode(Node* value) : UnaryOperation(value) {
 }
 
 Cast::Cast(Node* value, Type* target) : UnaryOperation(value) {
@@ -1317,7 +1317,6 @@ ConstEvalResult RoutineRef::const_eval(ConstEvalContext&) const {
 	}
 	auto result = new RoutineRef(nullptr, candidates);
 	result->resolved = resolved;
-	result->code_only = code_only;
 	result->ty = ty;
 	return ConstEvalResult::success(result);
 }
@@ -1344,15 +1343,20 @@ void RoutineRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostrings
 		ctx->indent(out, indent + 1);
 		out << "resolved: " << ctx->known_value_ref(resolved);
 	}
-	if (code_only) {
-		out << "\n";
-		ctx->indent(out, indent + 1);
-		out << "code_only: true";
-	}
 }
 
-const char* RoutineEqual::diagnostic_kind() const {
-	return "routine_equal";
+const char* RoutineCode::diagnostic_kind() const {
+	return "routine_code";
+}
+
+ConstEvalResult RoutineCode::const_eval(ConstEvalContext& ctx) const {
+	ConstEvalResult folded = a->const_eval(ctx);
+	if (folded.kind != ConstEvalResult::Kind::Success) {
+		return folded;
+	}
+	auto result = new RoutineCode(folded.node);
+	result->ty = ty;
+	return ConstEvalResult::success(result);
 }
 
 static bool diagnostic_pas_ident_char(char ch) {
