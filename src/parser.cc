@@ -1160,9 +1160,24 @@ std::string Parser::consume() {
 	} else if (input_char == '#') {
 		sst << (char)input_char;
 		consume_lowlevel();
-		while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
+		// A Pascal character-code fragment includes its numeric base marker.
+		// Keeping `#$66` in one token lets the literal combiner below treat it
+		// exactly like `#102`, including in adjacent runs such as `#$66#$90`.
+		if (input_char == '$') {
 			sst << (char)input_char;
 			consume_lowlevel();
+			while ((input_char >= '0' && input_char <= '9') ||
+			       (input_char >= 'a' && input_char <= 'f') ||
+			       (input_char >= 'A' && input_char <= 'F') ||
+			       input_char == '_') {
+				sst << (char)tolower(input_char);
+				consume_lowlevel();
+			}
+		} else {
+			while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
+				sst << (char)input_char;
+				consume_lowlevel();
+			}
 		}
 	} else if (input_char == '<') {
 		sst << (char)input_char;
@@ -2750,8 +2765,9 @@ Node* Parser::parse_value(LeadingTokenDirectives* leading_directives) {
 		//
 		//   'A'          -> one byte, Char
 		//   #13          -> one byte, Char
+		//   #$0D         -> one byte, Char
 		//   'A'#0'B'     -> three bytes, string
-		//   #13#10       -> two bytes, string
+		//   #13#$0A      -> two bytes, string
 		//
 		// tpcc's tokenizer currently returns each fragment separately, so
 		// combine the run here before assigning its semantic type. This also
@@ -2763,10 +2779,13 @@ Node* Parser::parse_value(LeadingTokenDirectives* leading_directives) {
 			if (input_token.front() == '\'') {
 				s += extract_string_literal(input_token);
 			} else {
-				const char* first = input_token.data() + 1;
+				const bool hexadecimal =
+				    input_token.size() >= 2 && input_token[1] == '$';
+				const char* first = input_token.data() + (hexadecimal ? 2 : 1);
 				const char* last = input_token.data() + input_token.size();
 				uint64_t value = 0;
-				auto [end, error] = std::from_chars(first, last, value, 10);
+				auto [end, error] =
+				    std::from_chars(first, last, value, hexadecimal ? 16 : 10);
 				if (first == last || error != std::errc() || end != last || value > 255) {
 					raise_parse_error("malformed character-code literal: " + input_token);
 				}
