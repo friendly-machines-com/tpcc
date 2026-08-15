@@ -5,6 +5,39 @@
 #include "types.h"
 #include <string>
 
+std::optional<FoldedOrdinal> folded_ordinal_value(Node* node) {
+	if (!node) {
+		return std::nullopt;
+	}
+	if (auto integer = dynamic_cast<Integer*>(node)) {
+		return FoldedOrdinal{
+		    node,
+		    integer->ty,
+		    ordinal_value(integer->negative, integer->value),
+		};
+	}
+	if (auto member = dynamic_cast<EnumMemberRef*>(node)) {
+		return FoldedOrdinal{
+		    node,
+		    member->ty,
+		    ordinal_value(member->value),
+		};
+	}
+	if (auto character = dynamic_cast<String*>(node);
+	    character && character->ty == char_type() &&
+	    character->value.size() == 1) {
+		return FoldedOrdinal{
+		    node,
+		    character->ty,
+		    ordinal_value(
+		        false,
+		        static_cast<unsigned char>(
+		            character->value.front())),
+		};
+	}
+	return std::nullopt;
+}
+
 static ConstEvalResult integer_result(uint64_t magnitude, bool negative, Type* ty) {
 	OrdinalBounds b;
 	if (!integer_bounds(ty, &b)) {

@@ -265,14 +265,21 @@ bool integer_bounds(const Type* ty, OrdinalBounds* out) {
 }
 
 static const Integer* const_integer_arg(Node* n) {
-	return dynamic_cast<const Integer*>(n);
+	auto integer = dynamic_cast<const Integer*>(n);
+	if (!integer) {
+		return nullptr;
+	}
+	auto domain = ordinal_type_domain(integer->ty);
+	return domain && domain->family == OrdinalFamily::Integer
+	           ? integer
+	           : nullptr;
 }
 
 static bool const_numeric_as_long_double(Node* n, long double* out) {
 	// Selected operator calls must already have materialized every origin into
 	// their formal types. Rejecting an origin here prevents the folder from
 	// silently inventing a second, host-long-double operator semantics.
-	if (auto i = dynamic_cast<const Integer*>(n)) {
+	if (auto i = const_integer_arg(n)) {
 		*out = static_cast<long double>(i->value);
 		if (i->negative) {
 			*out = -*out;
@@ -395,25 +402,14 @@ static std::optional<ConstantOrdinalCarrier> constant_ordinal_carrier(Type* type
 	return std::nullopt;
 }
 
-static std::optional<std::pair<bool, uint64_t>> constant_ordinal_value(Node* value) {
-	if (auto integer = dynamic_cast<Integer*>(value)) {
-		return std::pair{integer->negative, integer->value};
-	} else if (auto member = dynamic_cast<EnumMemberRef*>(value)) {
-		const bool negative = member->value < 0;
-		const uint64_t magnitude = negative ? static_cast<uint64_t>(-(member->value + 1)) + 1 : static_cast<uint64_t>(member->value);
-		return std::pair{negative, magnitude};
-	} else if (auto character = dynamic_cast<String*>(value); character && character->ty == char_type() && character->value.size() == 1) {
-		return std::pair{false, static_cast<uint64_t>(static_cast<unsigned char>(character->value.front()))};
-	}
-	return std::nullopt;
-}
-
 static uint64_t constant_ordinal_mask(unsigned bits) {
 	return bits == 64 ? UINT64_MAX : (uint64_t{1} << bits) - 1;
 }
 
-static uint64_t constant_ordinal_bits(bool negative, uint64_t magnitude, unsigned bits) {
-	const uint64_t raw = negative ? uint64_t{0} - magnitude : magnitude;
+static uint64_t constant_ordinal_bits(OrdinalValue value, unsigned bits) {
+	const uint64_t raw =
+	    value.negative ? uint64_t{0} - value.magnitude
+	                   : value.magnitude;
 	return raw & constant_ordinal_mask(bits);
 }
 
@@ -421,7 +417,7 @@ static ConstEvalResult fold_ord(ConstEvalContext&, Type* result_ty, const std::v
 	if (args.size() != 1 || !args[0]) {
 		return ConstEvalResult::not_constant();
 	}
-	auto value = constant_ordinal_value(args[0]);
+	auto value = folded_ordinal_value(args[0]);
 	if (!value) {
 		return ConstEvalResult::not_constant();
 	}
@@ -429,7 +425,9 @@ static ConstEvalResult fold_ord(ConstEvalContext&, Type* result_ty, const std::v
 	// two's-complement representation of negative enumeration values. Use the
 	// same ordinary ordinal cast here so a constant call has exactly that
 	// result rather than acquiring separate constant-only semantics.
-	return const_explicit_ordinal_cast(value->second, value->first, result_ty);
+	return const_explicit_ordinal_cast(
+	    value->value.magnitude,
+	    value->value.negative, result_ty);
 }
 
 enum class ComparisonKind {
@@ -439,23 +437,6 @@ enum class ComparisonKind {
 	GreaterThan,
 	GreaterThanOrEqual,
 };
-
-static int compare_ordinal_constants(const std::pair<bool, uint64_t>& a, const std::pair<bool, uint64_t>& b) {
-	if (a.first != b.first) {
-		return a.first ? -1 : 1;
-	}
-	if (a.first) {
-		// Both negative: larger magnitude is the smaller value.
-		if (a.second != b.second) {
-			return a.second > b.second ? -1 : 1;
-		}
-		return 0;
-	}
-	if (a.second != b.second) {
-		return a.second < b.second ? -1 : 1;
-	}
-	return 0;
-}
 
 static ConstEvalResult fold_comparison(ComparisonKind kind, const std::vector<Node*>& args) {
 	if (args.size() != 2 || !args[0] || !args[1]) {
@@ -484,12 +465,12 @@ static ConstEvalResult fold_comparison(ComparisonKind kind, const std::vector<No
 		}
 		return ConstEvalResult::success(new EnumMemberRef(result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false", result ? 1 : 0, boolean_type()));
 	}
-	auto a = constant_ordinal_value(args[0]);
-	auto b = constant_ordinal_value(args[1]);
+	auto a = folded_ordinal_value(args[0]);
+	auto b = folded_ordinal_value(args[1]);
 	if (!a || !b) {
 		return ConstEvalResult::not_constant();
 	}
-	const int c = compare_ordinal_constants(*a, *b);
+	const int c = compare_ordinal_values(a->value, b->value);
 	bool result;
 	switch (kind) {
 	case ComparisonKind::LessThan:
@@ -547,16 +528,20 @@ static ConstEvalResult fold_shift(Type* result_ty, const std::vector<Node*>& arg
 	if (args.size() != 2 || !args[0] || !args[1]) {
 		return ConstEvalResult::not_constant();
 	}
-	auto value = constant_ordinal_value(args[0]);
-	auto count = constant_ordinal_value(args[1]);
+	auto value = folded_ordinal_value(args[0]);
+	auto count = folded_ordinal_value(args[1]);
 	auto carrier = constant_ordinal_carrier(result_ty);
 	if (!value || !count || !carrier || carrier->bits == 0) {
 		return ConstEvalResult::not_constant();
 	}
 
 	const uint64_t mask = constant_ordinal_mask(carrier->bits);
-	const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
-	const uint64_t raw_count = count->first ? uint64_t{0} - count->second : count->second;
+	const uint64_t raw =
+	    constant_ordinal_bits(value->value, carrier->bits);
+	const uint64_t raw_count =
+	    count->value.negative
+	        ? uint64_t{0} - count->value.magnitude
+	        : count->value.magnitude;
 	// System's runtime shift helpers mask the count at the promoted result
 	// width, including negative counts. Mirror their unsigned operation here:
 	// besides keeping constant and runtime evaluation identical, it avoids
@@ -574,7 +559,7 @@ static ConstEvalResult fold_rightshift(ConstEvalContext&, Type* result_ty, const
 	return fold_shift(result_ty, args, false);
 }
 
-using ConstantSetKey = std::pair<bool, uint64_t>;
+using ConstantSetKey = OrdinalValue;
 
 struct ConstantSetRange {
 	ConstantSetKey lower;
@@ -582,45 +567,36 @@ struct ConstantSetRange {
 };
 
 static int compare_constant_set_keys(const ConstantSetKey& first, const ConstantSetKey& second) {
-	if (first.first != second.first) {
-		return first.first ? -1 : 1;
-	}
-	if (first.second == second.second) {
-		return 0;
-	}
-	if (first.first) {
-		return first.second > second.second ? -1 : 1;
-	}
-	return first.second < second.second ? -1 : 1;
+	return compare_ordinal_values(first, second);
 }
 
 static std::optional<ConstantSetKey> constant_set_predecessor(ConstantSetKey value) {
-	if (value.first) {
-		if (value.second == UINT64_MAX) {
+	if (value.negative) {
+		if (value.magnitude == UINT64_MAX) {
 			return std::nullopt;
 		}
-		++value.second;
+		++value.magnitude;
 		return value;
 	}
-	if (value.second != 0) {
-		--value.second;
+	if (value.magnitude != 0) {
+		--value.magnitude;
 		return value;
 	}
 	return ConstantSetKey{true, 1};
 }
 
 static std::optional<ConstantSetKey> constant_set_successor(ConstantSetKey value) {
-	if (value.first) {
-		if (value.second > 1) {
-			--value.second;
+	if (value.negative) {
+		if (value.magnitude > 1) {
+			--value.magnitude;
 			return value;
 		}
 		return ConstantSetKey{false, 0};
 	}
-	if (value.second == UINT64_MAX) {
+	if (value.magnitude == UINT64_MAX) {
 		return std::nullopt;
 	}
-	++value.second;
+	++value.magnitude;
 	return value;
 }
 
@@ -631,12 +607,14 @@ static std::optional<std::vector<ConstantSetRange>> constant_set_ranges(SetLiter
 	std::vector<ConstantSetRange> ranges;
 	ranges.reserve(set->items.size());
 	for (const SetLiteral::Item& item : set->items) {
-		auto lower = constant_ordinal_value(item.lower);
-		auto upper = constant_ordinal_value(item.upper ? item.upper : item.lower);
+		auto lower = folded_ordinal_value(item.lower);
+		auto upper =
+		    folded_ordinal_value(
+		        item.upper ? item.upper : item.lower);
 		if (!lower || !upper) {
 			return std::nullopt;
 		}
-		ConstantSetRange range{*lower, *upper};
+		ConstantSetRange range{lower->value, upper->value};
 		if (compare_constant_set_keys(range.lower, range.upper) <= 0) {
 			ranges.push_back(range);
 		}
@@ -652,13 +630,17 @@ static ConstEvalResult constant_set_literal(Type* result_ty, const std::vector<C
 	std::vector<SetLiteral::Item> items;
 	items.reserve(ranges.size());
 	for (const ConstantSetRange& range : ranges) {
-		ConstEvalResult lower = const_explicit_ordinal_cast(range.lower.second, range.lower.first, result_set->item_type);
+		ConstEvalResult lower = const_explicit_ordinal_cast(
+		    range.lower.magnitude,
+		    range.lower.negative, result_set->item_type);
 		if (lower.kind != ConstEvalResult::Kind::Success) {
 			return lower;
 		}
 		Node* upper_node = nullptr;
 		if (compare_constant_set_keys(range.lower, range.upper) != 0) {
-			ConstEvalResult upper = const_explicit_ordinal_cast(range.upper.second, range.upper.first, result_set->item_type);
+			ConstEvalResult upper = const_explicit_ordinal_cast(
+			    range.upper.magnitude,
+			    range.upper.negative, result_set->item_type);
 			if (upper.kind != ConstEvalResult::Kind::Success) {
 				return upper;
 			}
@@ -824,16 +806,23 @@ static ConstEvalResult fold_abs_impl(Type* result_ty, const std::vector<Node*>& 
 		}
 		return fold_real_result(::fabsl(real->value), result_ty);
 	} else {
-		auto value = constant_ordinal_value(args[0]);
+		auto value = folded_ordinal_value(args[0]);
 		auto carrier = constant_ordinal_carrier(result_ty);
 		if (!value || !carrier) {
 			return ConstEvalResult::not_constant();
 		}
-		const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
-		if (checked && value->first && carrier->signed_type && raw == (uint64_t{1} << (carrier->bits - 1))) {
+		const uint64_t raw =
+		    constant_ordinal_bits(value->value, carrier->bits);
+		if (checked && value->value.negative &&
+		    carrier->signed_type &&
+		    raw == (uint64_t{1} << (carrier->bits - 1))) {
 			return ConstEvalResult::error("integer constant overflow");
 		}
-		const uint64_t absolute = value->first ? (uint64_t{0} - raw) & constant_ordinal_mask(carrier->bits) : raw;
+		const uint64_t absolute =
+		    value->value.negative
+		        ? (uint64_t{0} - raw) &
+		              constant_ordinal_mask(carrier->bits)
+		        : raw;
 		return const_explicit_ordinal_cast(absolute, false, result_ty);
 	}
 }
@@ -850,13 +839,14 @@ static ConstEvalResult fold_ordinal_step(Type* result_ty, const std::vector<Node
 	if (args.size() != 1 || !args[0]) {
 		return ConstEvalResult::not_constant();
 	}
-	auto value = constant_ordinal_value(args[0]);
+	auto value = folded_ordinal_value(args[0]);
 	auto carrier = constant_ordinal_carrier(result_ty);
 	if (!value || !carrier || carrier->bits == 0) {
 		return ConstEvalResult::not_constant();
 	}
 	const uint64_t mask = constant_ordinal_mask(carrier->bits);
-	const uint64_t raw = constant_ordinal_bits(value->first, value->second, carrier->bits);
+	const uint64_t raw =
+	    constant_ordinal_bits(value->value, carrier->bits);
 	if (checked) {
 		const uint64_t minimum = carrier->signed_type ? uint64_t{1} << (carrier->bits - 1) : 0;
 		const uint64_t maximum = carrier->signed_type ? minimum - 1 : mask;
@@ -1296,7 +1286,7 @@ static ConstEvalResult fold_chr(ConstEvalContext&, Type* result_ty, const std::v
 	if (args.size() != 1) {
 		return ConstEvalResult::not_constant();
 	}
-	auto value = dynamic_cast<const Integer*>(args[0]);
+	auto value = const_integer_arg(args[0]);
 	if (!value || value->negative || value->value > 255) {
 		return ConstEvalResult::not_constant();
 	}

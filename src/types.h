@@ -256,18 +256,43 @@ struct DistinctType : public Type {
 Type* distinct_storage_type(Type* type);
 const Type* distinct_storage_type(const Type* type);
 
-struct OrdinalRange {
-	struct Value {
-		bool negative = false;
-		uint64_t magnitude = 0;
-	};
+/** One exact value in a Pascal ordinal domain. Signed magnitude keeps every
+ * predefined 64-bit integer endpoint representable without using a wider host
+ * integer, and it is also the value representation used for Char and enum
+ * constants after their semantic type has been recorded separately. */
+struct OrdinalValue {
+	bool negative = false;
+	uint64_t magnitude = 0;
+};
 
+OrdinalValue ordinal_value(bool negative, uint64_t magnitude);
+OrdinalValue ordinal_value(int64_t value);
+int compare_ordinal_values(OrdinalValue left, OrdinalValue right);
+
+enum class OrdinalFamily {
+	Integer,
+	Character,
+	Enumeration,
+};
+
+/** Semantic ordinal classification of TYPE. nominal_root is Char or the
+ * defining EnumType for nominal ordinal families, and null for the predefined
+ * integer family. The caller retains the original Type* when exact identity
+ * matters; this query only answers the domain-family question. */
+struct OrdinalTypeDomain {
+	OrdinalFamily family;
+	Type* nominal_root = nullptr;
+};
+
+std::optional<OrdinalTypeDomain> ordinal_type_domain(Type* type);
+
+struct OrdinalRange {
 	Type* index_type = nullptr;
 	Type* base_type = nullptr;
 	Node* lower_bound = nullptr;
 	Node* upper_bound = nullptr;
-	Value lower_ordinal;
-	Value upper_ordinal;
+	OrdinalValue lower_ordinal;
+	OrdinalValue upper_ordinal;
 	uint64_t length = 0;
 };
 

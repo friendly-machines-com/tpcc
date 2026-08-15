@@ -740,38 +740,6 @@ const char* Cast::diagnostic_kind() const {
 	return "cast";
 }
 
-struct ConstantOrdinal {
-	bool negative;
-	uint64_t magnitude;
-};
-
-static std::optional<ConstantOrdinal> constant_ordinal(Node* node) {
-	if (auto integer = dynamic_cast<Integer*>(node)) {
-		return ConstantOrdinal{integer->negative, integer->value};
-	} else if (auto member = dynamic_cast<EnumMemberRef*>(node)) {
-		if (member->value < 0) {
-			return ConstantOrdinal{true, static_cast<uint64_t>(-(member->value + 1)) + 1};
-		}
-		return ConstantOrdinal{false, static_cast<uint64_t>(member->value)};
-	} else if (auto character = dynamic_cast<String*>(node); character && character->ty == char_type() && character->value.size() == 1) {
-		return ConstantOrdinal{false, static_cast<unsigned char>(character->value.front())};
-	}
-	return std::nullopt;
-}
-
-static int compare_constant_ordinals(const ConstantOrdinal& left, const ConstantOrdinal& right) {
-	if (left.negative != right.negative) {
-		return left.negative ? -1 : 1;
-	}
-	if (left.magnitude == right.magnitude) {
-		return 0;
-	}
-	if (left.negative) {
-		return left.magnitude > right.magnitude ? -1 : 1;
-	}
-	return left.magnitude < right.magnitude ? -1 : 1;
-}
-
 ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult r = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (r.kind != ConstEvalResult::Kind::Success) {
@@ -784,14 +752,21 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 		// conversion.
 		return ConstEvalResult::success(new SetLiteral(set->items, ty));
 	}
-	if (auto ordinal = constant_ordinal(r.node)) {
-		ConstEvalResult converted = const_explicit_ordinal_cast(ordinal->magnitude, ordinal->negative, ty);
+	if (auto ordinal = folded_ordinal_value(r.node)) {
+		ConstEvalResult converted =
+		    const_explicit_ordinal_cast(
+		        ordinal->value.magnitude,
+		        ordinal->value.negative, ty);
 		if (converted.kind != ConstEvalResult::Kind::Error) {
 			return converted;
 		}
-		if (auto i = dynamic_cast<Integer*>(r.node)) {
-			return const_convert_integer(i->value, i->negative, i->ty, ty);
-		}
+			if (auto i = dynamic_cast<Integer*>(r.node);
+			    i &&
+			    ordinal_type_domain(i->ty) &&
+			    ordinal_type_domain(i->ty)->family ==
+			        OrdinalFamily::Integer) {
+				return const_convert_integer(i->value, i->negative, i->ty, ty);
+			}
 	}
 	if (auto real = dynamic_cast<Real*>(r.node)) {
 		if (real->is_origin() && is_real_semantic_type(ty)) {
@@ -842,7 +817,7 @@ ConstEvalResult RangeCheckedCast::const_eval(ConstEvalContext& ctx) const {
 		}
 		return Cast::const_eval(ctx);
 	} else {
-		auto ordinal = constant_ordinal(value.node);
+		auto ordinal = folded_ordinal_value(value.node);
 		if (!ordinal) {
 			return Cast::const_eval(ctx);
 		}
@@ -854,15 +829,22 @@ ConstEvalResult RangeCheckedCast::const_eval(ConstEvalContext& ctx) const {
 		if (upper.kind != ConstEvalResult::Kind::Success) {
 			return upper;
 		}
-		auto lower_ordinal = constant_ordinal(lower.node);
-		auto upper_ordinal = constant_ordinal(upper.node);
+		auto lower_ordinal = folded_ordinal_value(lower.node);
+		auto upper_ordinal = folded_ordinal_value(upper.node);
 		if (!lower_ordinal || !upper_ordinal) {
 			return ConstEvalResult::error("range-checked conversion has non-ordinal bounds");
 		}
-		if (compare_constant_ordinals(*ordinal, *lower_ordinal) < 0 || compare_constant_ordinals(*ordinal, *upper_ordinal) > 0) {
+		if (compare_ordinal_values(
+		        ordinal->value,
+		        lower_ordinal->value) < 0 ||
+		    compare_ordinal_values(
+		        ordinal->value,
+		        upper_ordinal->value) > 0) {
 			return ConstEvalResult::error("integer constant out of range for target type");
 		}
-		return const_explicit_ordinal_cast(ordinal->magnitude, ordinal->negative, ty);
+		return const_explicit_ordinal_cast(
+		    ordinal->value.magnitude,
+		    ordinal->value.negative, ty);
 	}
 }
 
@@ -875,14 +857,10 @@ ConstEvalResult ExplicitCast::const_eval(ConstEvalContext& ctx) const {
 	if (value.kind != ConstEvalResult::Kind::Success) {
 		return value;
 	}
-	if (auto integer = dynamic_cast<Integer*>(value.node)) {
-		return const_explicit_ordinal_cast(integer->value, integer->negative, ty);
-	} else if (auto member = dynamic_cast<EnumMemberRef*>(value.node)) {
-		const bool negative = member->value < 0;
-		const uint64_t magnitude = negative ? static_cast<uint64_t>(-(member->value + 1)) + 1 : static_cast<uint64_t>(member->value);
-		return const_explicit_ordinal_cast(magnitude, negative, ty);
-	} else if (auto character = dynamic_cast<String*>(value.node); character && character->ty == char_type() && character->value.size() == 1) {
-		return const_explicit_ordinal_cast(static_cast<unsigned char>(character->value.front()), false, ty);
+	if (auto ordinal = folded_ordinal_value(value.node)) {
+		return const_explicit_ordinal_cast(
+		    ordinal->value.magnitude,
+		    ordinal->value.negative, ty);
 	}
 	return Cast::const_eval(ctx);
 }

@@ -2641,8 +2641,8 @@ Node* Parser::parse_bracket_literal() {
 		range.base_type = integer_type();
 		range.lower_bound = lower;
 		range.upper_bound = upper;
-		range.lower_ordinal = OrdinalRange::Value{false, 0};
-		range.upper_ordinal = OrdinalRange::Value{false, length - 1};
+		range.lower_ordinal = OrdinalValue{false, 0};
+		range.upper_ordinal = OrdinalValue{false, length - 1};
 		range.length = length;
 		default_array_type = new FixedArrayType(location, integer_type(), range, array_item_type);
 	}
@@ -5448,24 +5448,39 @@ Type* Parser::parse_enum_type() {
 				raise_value_error(folded.message, expression);
 			}
 
-			if (auto integer = dynamic_cast<Integer*>(folded.node)) {
-				const uint64_t maximum = integer->negative ? uint64_t{static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) + 1} : static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
-				if (integer->value > maximum) {
-					raise_value_error("explicit enum value is outside "
-					                  "signed 32-bit range",
-					                  integer);
-				}
-				value = integer->negative ? -static_cast<int64_t>(integer->value) : static_cast<int64_t>(integer->value);
-			} else if (auto member = dynamic_cast<EnumMemberRef*>(folded.node)) {
-				if (member->ty != et) {
-					raise_type_mismatch("explicit enum member value", et, member->ty);
-				}
-				value = member->value;
-			} else if (auto character = dynamic_cast<String*>(folded.node); character && character->ty == char_type() && character->value.size() == 1) {
-				value = static_cast<unsigned char>(character->value[0]);
-			} else {
+			auto ordinal = folded_ordinal_value(folded.node);
+			auto domain =
+			    ordinal
+			        ? ordinal_type_domain(ordinal->exact_type)
+			        : std::nullopt;
+			if (!ordinal || !domain) {
 				raise_type_kind_mismatch("explicit enum value", "integer, character, or member of the same enum", folded.node ? folded.node->ty : nullptr);
 			}
+			if (domain->family == OrdinalFamily::Enumeration &&
+			    domain->nominal_root != et) {
+				raise_type_mismatch(
+				    "explicit enum member value",
+				    et, ordinal->exact_type);
+			}
+			const uint64_t maximum =
+			    ordinal->value.negative
+			        ? uint64_t{
+			              static_cast<uint64_t>(
+			                  std::numeric_limits<int32_t>::max()) +
+			              1}
+			        : static_cast<uint64_t>(
+			              std::numeric_limits<int32_t>::max());
+			if (ordinal->value.magnitude > maximum) {
+				raise_value_error(
+				    "explicit enum value is outside signed 32-bit "
+				    "range",
+				    ordinal->representation);
+			}
+			value = ordinal->value.negative
+			            ? -static_cast<int64_t>(
+			                  ordinal->value.magnitude)
+			            : static_cast<int64_t>(
+			                  ordinal->value.magnitude);
 		} else if (next_value > std::numeric_limits<int32_t>::max()) {
 			raise_type_error("implicit enum value is outside signed 32-bit "
 			                 "range",
@@ -5573,30 +5588,6 @@ static bool ordinal_bounds_contains(const OrdinalBounds& bounds, bool negative, 
 	return magnitude <= bounds.max_positive;
 }
 
-static OrdinalRange::Value ordinal_value(bool negative, uint64_t magnitude) {
-	return OrdinalRange::Value{magnitude != 0 && negative, magnitude};
-}
-
-static OrdinalRange::Value ordinal_value(int64_t value) {
-	if (value < 0) {
-		return ordinal_value(true, static_cast<uint64_t>(-(value + 1)) + 1);
-	}
-	return ordinal_value(false, static_cast<uint64_t>(value));
-}
-
-static int compare_ordinal_value(OrdinalRange::Value a, OrdinalRange::Value b) {
-	if (a.negative != b.negative) {
-		return a.negative ? -1 : 1;
-	}
-	if (a.magnitude == b.magnitude) {
-		return 0;
-	}
-	if (a.negative) {
-		return a.magnitude > b.magnitude ? -1 : 1;
-	}
-	return a.magnitude < b.magnitude ? -1 : 1;
-}
-
 static bool checked_add(uint64_t a, uint64_t b, uint64_t* out) {
 	if (a > UINT64_MAX - b) {
 		return false;
@@ -5619,60 +5610,70 @@ struct FoldedSubrangeBound {
 	Type* ty = nullptr;
 	bool negative = false;
 	uint64_t magnitude = 0;
-	OrdinalRange::Value ordinal_value;
+	OrdinalValue ordinal_value;
 };
 
 static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, std::string* error) {
-	if (auto i = dynamic_cast<Integer*>(node)) {
-		Type* ty = subrange_range_type(i->ty);
-		if (ty == char_type()) {
-			OrdinalBounds bounds;
-			if (!intrinsic_ordinal_bounds(ty, &bounds) || !ordinal_bounds_contains(bounds, i->negative, i->value)) {
-				*error = "character subrange bound is outside Char range";
-				return {};
-			}
-			return FoldedSubrangeBound{
-			    FoldedSubrangeBound::Kind::Char, node, ty, false, i->value, ordinal_value(false, i->value),
-			};
-		}
-		if (!is_integer_semantic_type(ty)) {
-			*error = "integer subrange bound has a non-integer type";
-			return {};
-		}
+	auto ordinal = folded_ordinal_value(node);
+	if (!ordinal) {
+		*error = "subrange bound must fold to an ordinal constant";
+		return {};
+	}
+	auto domain = ordinal_type_domain(ordinal->exact_type);
+	if (!domain) {
+		*error = "subrange bound has a non-ordinal type";
+		return {};
+	}
+	switch (domain->family) {
+	case OrdinalFamily::Integer:
 		return FoldedSubrangeBound{
-		    FoldedSubrangeBound::Kind::Integer, node, ty, i->negative, i->value, ordinal_value(i->negative, i->value),
+		    FoldedSubrangeBound::Kind::Integer,
+		    ordinal->representation,
+		    subrange_range_type(ordinal->exact_type),
+		    ordinal->value.negative,
+		    ordinal->value.magnitude,
+		    ordinal->value,
 		};
-	} else if (auto s = dynamic_cast<String*>(node)) {
-		if (s->value.size() != 1) {
-			*error = "string literal subrange bound must contain exactly one character";
-			return {};
-		}
-		auto value = static_cast<unsigned char>(s->value[0]);
+	case OrdinalFamily::Character: {
 		OrdinalBounds bounds;
-		if (!intrinsic_ordinal_bounds(char_type(), &bounds) || !ordinal_bounds_contains(bounds, false, value)) {
+		if (!intrinsic_ordinal_bounds(char_type(), &bounds) ||
+		    !ordinal_bounds_contains(
+		        bounds,
+		        ordinal->value.negative,
+		        ordinal->value.magnitude)) {
 			*error = "character subrange bound is outside Char range";
 			return {};
 		}
-		auto as_char = new Integer(value, char_type());
-		return FoldedSubrangeBound{
-		    FoldedSubrangeBound::Kind::Char, as_char, char_type(), false, value, ordinal_value(false, value),
-		};
-	} else if (auto e = dynamic_cast<EnumMemberRef*>(node)) {
-		Type* ty = subrange_range_type(e->ty);
-		if (!dynamic_cast<EnumType*>(ty)) {
-			*error = "enum subrange bound has a non-enum type";
-			return {};
+		Node* as_char = ordinal->representation;
+		if (dynamic_cast<String*>(as_char)) {
+			as_char = new Integer(
+			    ordinal->value.magnitude, char_type());
 		}
 		return FoldedSubrangeBound{
-		    FoldedSubrangeBound::Kind::Enum, node, ty, false, 0, ordinal_value(e->value),
+		    FoldedSubrangeBound::Kind::Char,
+		    as_char,
+		    char_type(),
+		    ordinal->value.negative,
+		    ordinal->value.magnitude,
+		    ordinal->value,
 		};
 	}
-	*error = "subrange bound must fold to an ordinal constant";
+	case OrdinalFamily::Enumeration:
+		return FoldedSubrangeBound{
+		    FoldedSubrangeBound::Kind::Enum,
+		    ordinal->representation,
+		    domain->nominal_root,
+		    ordinal->value.negative,
+		    ordinal->value.magnitude,
+		    ordinal->value,
+		};
+	}
+	*error = "subrange bound has an unsupported ordinal type";
 	return {};
 }
 
-static bool ordinal_length(OrdinalRange::Value lo, OrdinalRange::Value hi, uint64_t* out, std::string* error) {
-	if (compare_ordinal_value(lo, hi) > 0) {
+static bool ordinal_length(OrdinalValue lo, OrdinalValue hi, uint64_t* out, std::string* error) {
+	if (compare_ordinal_values(lo, hi) > 0) {
 		*error = "array index type has an empty range";
 		return false;
 	}
@@ -5694,7 +5695,7 @@ static bool ordinal_length(OrdinalRange::Value lo, OrdinalRange::Value hi, uint6
 	return true;
 }
 
-static bool make_ordinal_range(Type* index_type, Type* base_type, Node* lower_bound, Node* upper_bound, OrdinalRange::Value lower_ordinal, OrdinalRange::Value upper_ordinal, OrdinalRange* out, std::string* error) {
+static bool make_ordinal_range(Type* index_type, Type* base_type, Node* lower_bound, Node* upper_bound, OrdinalValue lower_ordinal, OrdinalValue upper_ordinal, OrdinalRange* out, std::string* error) {
 	uint64_t length = 0;
 	if (!ordinal_length(lower_ordinal, upper_ordinal, &length, error)) {
 		return false;
@@ -5764,8 +5765,8 @@ static bool enum_range_has_gaps(Type* ty, const OrdinalRange& range) {
 	// ordinals would therefore manufacture values with no declared member.
 	std::vector<int64_t> values;
 	for (const EnumType::Member& member : enumeration->members()) {
-		OrdinalRange::Value value = ordinal_value(member.value);
-		if (compare_ordinal_value(value, range.lower_ordinal) >= 0 && compare_ordinal_value(value, range.upper_ordinal) <= 0) {
+		OrdinalValue value = ordinal_value(member.value);
+		if (compare_ordinal_values(value, range.lower_ordinal) >= 0 && compare_ordinal_values(value, range.upper_ordinal) <= 0) {
 			values.push_back(member.value);
 		}
 	}
@@ -5781,7 +5782,7 @@ static bool enum_range_has_gaps(Type* ty, const OrdinalRange& range) {
 	return false;
 }
 
-static Type* infer_integer_subrange_host(OrdinalRange::Value lo, OrdinalRange::Value hi, std::string* error) {
+static Type* infer_integer_subrange_host(OrdinalValue lo, OrdinalValue hi, std::string* error) {
 	// Match the BP/FPC-style storage choice: choose the smallest builtin
 	// integer type that can represent the whole range, preferring signed
 	// carriers before same-width unsigned carriers. The concrete C++ subrange
@@ -5795,9 +5796,9 @@ static Type* infer_integer_subrange_host(OrdinalRange::Value lo, OrdinalRange::V
 		if (!integer_bounds(candidate, &bounds)) {
 			continue;
 		}
-		OrdinalRange::Value min_value = ordinal_value(bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0);
-		OrdinalRange::Value max_value = ordinal_value(false, bounds.max_positive);
-		if (compare_ordinal_value(lo, min_value) >= 0 && compare_ordinal_value(hi, max_value) <= 0) {
+		OrdinalValue min_value = ordinal_value(bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0);
+		OrdinalValue max_value = ordinal_value(false, bounds.max_positive);
+		if (compare_ordinal_values(lo, min_value) >= 0 && compare_ordinal_values(hi, max_value) <= 0) {
 			return candidate;
 		}
 	}
@@ -5889,7 +5890,7 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	};
 	switch (lower->kind) {
 	case FoldedSubrangeBound::Kind::Integer: {
-		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0) {
+		if (compare_ordinal_values(upper->ordinal_value, lower->ordinal_value) < 0) {
 			raise_values_error("subrange upper bound is lower than lower bound", {{"lower bound", lower->node}, {"upper bound", upper->node}});
 		}
 		Type* host = infer_integer_subrange_host(lower->ordinal_value, upper->ordinal_value, &error);
@@ -5907,7 +5908,7 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 		return make_subrange(host, typed_lower, typed_upper);
 	}
 	case FoldedSubrangeBound::Kind::Char:
-		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0) {
+		if (compare_ordinal_values(upper->ordinal_value, lower->ordinal_value) < 0) {
 			raise_values_error("subrange upper bound is lower than lower bound", {{"lower bound", lower->node}, {"upper bound", upper->node}});
 		}
 		return make_subrange(char_type(), lower->node, upper->node);
@@ -5915,7 +5916,7 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 		if (lower->ty != upper->ty) {
 			return raise_type_mismatch("subrange constructor with bounds from the same enum type", lower->ty, upper->ty);
 		}
-		if (compare_ordinal_value(upper->ordinal_value, lower->ordinal_value) < 0) {
+		if (compare_ordinal_values(upper->ordinal_value, lower->ordinal_value) < 0) {
 			raise_values_error("subrange upper bound is lower than lower bound", {{"lower bound", lower->node}, {"upper bound", upper->node}});
 		}
 		return make_subrange(lower->ty, lower->node, upper->node);
@@ -5960,15 +5961,34 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		if (folded.kind == ConstEvalResult::Kind::Error) {
 			raise_value_error(folded.message, capacity_expression);
 		}
-		auto capacity = dynamic_cast<Integer*>(folded.node);
-		if (!capacity || capacity->negative || capacity->value == 0 || capacity->value > 255) {
-			raise_value_error("shortstring capacity must be in 1..255", folded.node ? folded.node : capacity_expression);
-		}
+			auto capacity = folded_ordinal_value(folded.node);
+			auto capacity_domain =
+			    capacity
+			        ? ordinal_type_domain(
+			              capacity->exact_type)
+			        : std::nullopt;
+			if (!capacity_domain ||
+			    capacity_domain->family !=
+			        OrdinalFamily::Integer) {
+				raise_value_error(
+				    "shortstring capacity must have an integer "
+				    "type",
+				    folded.node ? folded.node
+				                : capacity_expression);
+			}
+			if (capacity->value.negative ||
+			    capacity->value.magnitude == 0 ||
+			    capacity->value.magnitude > 255) {
+				raise_value_error("shortstring capacity must be in 1..255", folded.node ? folded.node : capacity_expression);
+			}
 		// Bracketed string syntax is a type constructor. Do not reuse the
 		// builtin capacity cache: identical constructor operands still
 		// create distinct Pascal definitions, with compatibility handled
 		// separately from identity.
-		return new ShortStringType(current_location(), static_cast<uint8_t>(capacity->value));
+			return new ShortStringType(
+			    current_location(),
+			    static_cast<uint8_t>(
+			        capacity->value.magnitude));
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
@@ -6385,7 +6405,7 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		if (!ordinal_constant_matches_range_type(range.base_type, *bound)) {
 			raise_type_mismatch("constant initializer has incompatible ordinal type", range.base_type, bound->node ? bound->node->ty : nullptr);
 		}
-		if (compare_ordinal_value(bound->ordinal_value, range.lower_ordinal) < 0 || compare_ordinal_value(bound->ordinal_value, range.upper_ordinal) > 0) {
+		if (compare_ordinal_values(bound->ordinal_value, range.lower_ordinal) < 0 || compare_ordinal_values(bound->ordinal_value, range.upper_ordinal) > 0) {
 			raise_type_error("constant initializer out of range for target type", s);
 		}
 		// The constant has already been proven inside this exact declaration's
@@ -8662,7 +8682,7 @@ static bool integer_type_contains_literal(Type* target, const Integer* literal) 
 			return false;
 		}
 		auto value = ordinal_value(literal->negative, literal->value);
-		return compare_ordinal_value(value, classified_lower->ordinal_value) >= 0 && compare_ordinal_value(value, classified_upper->ordinal_value) <= 0;
+		return compare_ordinal_values(value, classified_lower->ordinal_value) >= 0 && compare_ordinal_values(value, classified_upper->ordinal_value) <= 0;
 	}
 	OrdinalBounds bounds;
 	return intrinsic_ordinal_bounds(target, &bounds) && ordinal_bounds_contains(bounds, literal->negative, literal->value);
@@ -8780,7 +8800,10 @@ static Integer* typed_integer_constant(Node* expression) {
 	if (folded.kind != ConstEvalResult::Kind::Success) {
 		return nullptr;
 	}
-	return dynamic_cast<Integer*>(folded.node);
+		auto integer = dynamic_cast<Integer*>(folded.node);
+		return integer && is_integer_semantic_type(integer->ty)
+		           ? integer
+		           : nullptr;
 }
 
 static std::optional<uint64_t> integer_literal_target_preference(Type* target) {
@@ -8883,7 +8906,7 @@ static int real_range_rank(Type* type) {
 	return -1;
 }
 
-static bool ordinal_interval_for_conversion(Type* type, OrdinalRange::Value* lower, OrdinalRange::Value* upper) {
+static bool ordinal_interval_for_conversion(Type* type, OrdinalValue* lower, OrdinalValue* upper) {
 	if (auto range = dynamic_cast<SubrangeType*>(type)) {
 		ConstEvalContext context;
 		ConstEvalResult folded_lower = range->lower_bound->const_eval(context);
@@ -8926,8 +8949,8 @@ static Type* infer_bracket_common_item_type(const std::vector<BracketLiteral::It
 	bool saw_untyped_integer = false;
 	bool all_integer = true;
 	bool have_integer_interval = false;
-	OrdinalRange::Value common_lower;
-	OrdinalRange::Value common_upper;
+	OrdinalValue common_lower;
+	OrdinalValue common_upper;
 
 	for (const auto& item : items) {
 		for (Node* bound : {item.lower, item.upper}) {
@@ -8935,8 +8958,8 @@ static Type* infer_bracket_common_item_type(const std::vector<BracketLiteral::It
 				continue;
 			}
 
-			OrdinalRange::Value lower;
-			OrdinalRange::Value upper;
+			OrdinalValue lower;
+			OrdinalValue upper;
 			if (auto literal = untyped_integer_constant(bound)) {
 				saw_untyped_integer = true;
 				lower = ordinal_value(literal->negative, literal->value);
@@ -8958,10 +8981,10 @@ static Type* infer_bracket_common_item_type(const std::vector<BracketLiteral::It
 				common_upper = upper;
 				have_integer_interval = true;
 			} else {
-				if (compare_ordinal_value(lower, common_lower) < 0) {
+				if (compare_ordinal_values(lower, common_lower) < 0) {
 					common_lower = lower;
 				}
-				if (compare_ordinal_value(upper, common_upper) > 0) {
+				if (compare_ordinal_values(upper, common_upper) > 0) {
 					common_upper = upper;
 				}
 			}
@@ -9008,7 +9031,7 @@ static Type* infer_bracket_common_item_type(const std::vector<BracketLiteral::It
 		}
 		const auto lower = ordinal_value(bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0);
 		const auto upper = ordinal_value(false, bounds.max_positive);
-		if (compare_ordinal_value(common_lower, lower) >= 0 && compare_ordinal_value(common_upper, upper) <= 0) {
+		if (compare_ordinal_values(common_lower, lower) >= 0 && compare_ordinal_values(common_upper, upper) <= 0) {
 			return candidate;
 		}
 	}
@@ -9022,10 +9045,10 @@ static bool conversion_requires_range_check(Type* source, Type* target) {
 		return source_real > target_real;
 	}
 
-	OrdinalRange::Value source_lower;
-	OrdinalRange::Value source_upper;
-	OrdinalRange::Value target_lower;
-	OrdinalRange::Value target_upper;
+	OrdinalValue source_lower;
+	OrdinalValue source_upper;
+	OrdinalValue target_lower;
+	OrdinalValue target_upper;
 	if (!source || !target || !ordinal_interval_for_conversion(source, &source_lower, &source_upper) || !ordinal_interval_for_conversion(target, &target_lower, &target_upper)) {
 		return false;
 	}
@@ -9037,7 +9060,7 @@ static bool conversion_requires_range_check(Type* source, Type* target) {
 	// ordinal_range_for_type here: that helper also computes an array element
 	// count and necessarily rejects a complete 64-bit domain of 2^64 values,
 	// while a conversion needs only endpoints.
-	return compare_ordinal_value(source_lower, target_lower) < 0 || compare_ordinal_value(source_upper, target_upper) > 0;
+	return compare_ordinal_values(source_lower, target_lower) < 0 || compare_ordinal_values(source_upper, target_upper) > 0;
 }
 
 // A bracket-literal item matched against a subrange element formal is
@@ -9072,7 +9095,7 @@ static std::optional<ArgumentMatch> contextual_subrange_constant_match(const Par
 	if (!ordinal_constant_matches_range_type(range.base_type, *bound)) {
 		return std::nullopt;
 	}
-	if (compare_ordinal_value(bound->ordinal_value, range.lower_ordinal) < 0 || compare_ordinal_value(bound->ordinal_value, range.upper_ordinal) > 0) {
+	if (compare_ordinal_values(bound->ordinal_value, range.lower_ordinal) < 0 || compare_ordinal_values(bound->ordinal_value, range.upper_ordinal) > 0) {
 		return std::nullopt;
 	}
 	return ArgumentMatch{{MatchRank::Tier::Equal, 0}, new Cast(bound->node, subrange)};

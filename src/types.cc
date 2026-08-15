@@ -14,6 +14,32 @@
 Type::Type(SourceLocation source_location) : source_location(std::move(source_location)) {
 }
 
+OrdinalValue ordinal_value(bool negative, uint64_t magnitude) {
+	return OrdinalValue{magnitude != 0 && negative, magnitude};
+}
+
+OrdinalValue ordinal_value(int64_t value) {
+	if (value < 0) {
+		return ordinal_value(
+		    true,
+		    static_cast<uint64_t>(-(value + 1)) + 1);
+	}
+	return ordinal_value(false, static_cast<uint64_t>(value));
+}
+
+int compare_ordinal_values(OrdinalValue left, OrdinalValue right) {
+	if (left.negative != right.negative) {
+		return left.negative ? -1 : 1;
+	}
+	if (left.magnitude == right.magnitude) {
+		return 0;
+	}
+	if (left.negative) {
+		return left.magnitude > right.magnitude ? -1 : 1;
+	}
+	return left.magnitude < right.magnitude ? -1 : 1;
+}
+
 std::optional<ValueConversion> Type::value_conversion_from(const Type*) const {
 	return std::nullopt;
 }
@@ -148,6 +174,39 @@ EnumType* enum_root_type(Type* type) {
 		}
 		return dynamic_cast<EnumType*>(type);
 	}
+}
+
+std::optional<OrdinalTypeDomain> ordinal_type_domain(Type* type) {
+	if (!type) {
+		return std::nullopt;
+	}
+	for (;;) {
+		if (auto distinct = dynamic_cast<DistinctType*>(type)) {
+			type = distinct->base_type;
+			continue;
+		}
+		if (auto subrange = dynamic_cast<SubrangeType*>(type)) {
+			type = subrange->base_type;
+			continue;
+		}
+		break;
+	}
+	if (type == &untyped_integer_type()) {
+		return OrdinalTypeDomain{OrdinalFamily::Integer, nullptr};
+	}
+	if (type == char_type()) {
+		return OrdinalTypeDomain{
+		    OrdinalFamily::Character, char_type()};
+	}
+	if (dynamic_cast<EnumType*>(type)) {
+		return OrdinalTypeDomain{
+		    OrdinalFamily::Enumeration, type};
+	}
+	auto intrinsic = dynamic_cast<IntrinsicType*>(type);
+	if (intrinsic && intrinsic->rank && intrinsic->ordinal_bounds) {
+		return OrdinalTypeDomain{OrdinalFamily::Integer, nullptr};
+	}
+	return std::nullopt;
 }
 
 FixedArrayType::FixedArrayType(SourceLocation source_location, Type* bounds, OrdinalRange range, Type* item_type) : Type(std::move(source_location)) {
@@ -1015,20 +1074,28 @@ static bool integer_like_bounds(const Type* ty, OrdinalBounds* out) {
 		return true;
 	}
 	if (auto s = dynamic_cast<const SubrangeType*>(ty)) {
+		auto domain =
+		    ordinal_type_domain(s->base_type);
+		if (!domain ||
+		    domain->family != OrdinalFamily::Integer) {
+			return false;
+		}
 		ConstEvalContext ctx;
 		ConstEvalResult lower = s->lower_bound->const_eval(ctx);
 		ConstEvalResult upper = s->upper_bound->const_eval(ctx);
 		if (lower.kind != ConstEvalResult::Kind::Success || upper.kind != ConstEvalResult::Kind::Success) {
 			return false;
 		}
-		auto lo = dynamic_cast<Integer*>(lower.node);
-		auto hi = dynamic_cast<Integer*>(upper.node);
+		auto lo = folded_ordinal_value(lower.node);
+		auto hi = folded_ordinal_value(upper.node);
 		if (!lo || !hi) {
 			return false;
 		}
-		out->signed_type = lo->negative;
-		out->min_magnitude = lo->negative ? lo->value : 0;
-		out->max_positive = hi->negative ? 0 : hi->value;
+		out->signed_type = lo->value.negative;
+		out->min_magnitude =
+		    lo->value.negative ? lo->value.magnitude : 0;
+		out->max_positive =
+		    hi->value.negative ? 0 : hi->value.magnitude;
 		return true;
 	}
 	return false;
@@ -1536,12 +1603,7 @@ bool PointerType::predefined_explicit_conversion_from(const Type* source) const 
 	return dynamic_cast<const PointerType*>(source) || predefined_integer_family_type(source) || predefined_object_reference_type(source) || source == ansistring_type();
 }
 
-struct FoldedOrdinalValue {
-	bool negative;
-	uint64_t magnitude;
-};
-
-static std::optional<FoldedOrdinalValue> fold_ordinal_value(Node* node) {
+static std::optional<OrdinalValue> fold_ordinal_value(Node* node) {
 	if (!node) {
 		return std::nullopt;
 	}
@@ -1550,42 +1612,17 @@ static std::optional<FoldedOrdinalValue> fold_ordinal_value(Node* node) {
 	if (folded.kind != ConstEvalResult::Kind::Success) {
 		return std::nullopt;
 	}
-	if (auto integer = dynamic_cast<Integer*>(folded.node)) {
-		return FoldedOrdinalValue{integer->negative, integer->value};
-	} else if (auto member = dynamic_cast<EnumMemberRef*>(folded.node)) {
-		if (member->value < 0) {
-			return FoldedOrdinalValue{true, static_cast<uint64_t>(-(member->value + 1)) + 1};
-		}
-		return FoldedOrdinalValue{false, static_cast<uint64_t>(member->value)};
-	}
-	return std::nullopt;
-}
-
-static int compare_folded_ordinals(const FoldedOrdinalValue& a, const FoldedOrdinalValue& b) {
-	if (a.negative != b.negative) {
-		return a.negative ? -1 : 1;
-	}
-	if (a.magnitude == b.magnitude) {
-		return 0;
-	}
-	if (a.negative) {
-		return a.magnitude > b.magnitude ? -1 : 1;
-	}
-	return a.magnitude < b.magnitude ? -1 : 1;
+	auto ordinal = folded_ordinal_value(folded.node);
+	return ordinal ? std::optional<OrdinalValue>{ordinal->value}
+	               : std::nullopt;
 }
 
 namespace {
-enum class OrdinalDomainFamily {
-	Integer,
-	Character,
-	Enumeration,
-};
-
 struct OrdinalDomain {
-	OrdinalDomainFamily family;
+	OrdinalFamily family;
 	const Type* nominal_root = nullptr;
-	FoldedOrdinalValue lower;
-	FoldedOrdinalValue upper;
+	OrdinalValue lower;
+	OrdinalValue upper;
 };
 
 static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
@@ -1599,39 +1636,46 @@ static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
 		if (!lower || !upper) {
 			return std::nullopt;
 		}
-		if (dynamic_cast<const EnumType*>(range->base_type)) {
-			return OrdinalDomain{OrdinalDomainFamily::Enumeration, range->base_type, *lower, *upper};
+		auto domain = ordinal_type_domain(range->base_type);
+		if (!domain) {
+			return std::nullopt;
 		}
-		if (range->base_type == char_type()) {
-			return OrdinalDomain{OrdinalDomainFamily::Character, char_type(), *lower, *upper};
-		}
-		OrdinalBounds bounds;
-		if (integer_bounds(range->base_type, &bounds)) {
-			return OrdinalDomain{OrdinalDomainFamily::Integer, nullptr, *lower, *upper};
-		}
-		return std::nullopt;
+		return OrdinalDomain{
+		    domain->family,
+		    domain->nominal_root,
+		    *lower, *upper};
 	} else if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type); intrinsic && intrinsic->rank && intrinsic->ordinal_bounds) {
 		const OrdinalBounds& bounds = *intrinsic->ordinal_bounds;
-		return OrdinalDomain{OrdinalDomainFamily::Integer, nullptr, FoldedOrdinalValue{bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0}, FoldedOrdinalValue{false, bounds.max_positive}};
+		return OrdinalDomain{
+		    OrdinalFamily::Integer,
+		    nullptr,
+		    ordinal_value(
+		        bounds.signed_type,
+		        bounds.signed_type
+		            ? bounds.min_magnitude
+		            : 0),
+		    ordinal_value(false, bounds.max_positive)};
 	} else if (type == char_type()) {
 		OrdinalBounds bounds;
 		if (!intrinsic_ordinal_bounds(char_type(), &bounds)) {
 			return std::nullopt;
 		}
-		return OrdinalDomain{OrdinalDomainFamily::Character, char_type(), FoldedOrdinalValue{false, 0}, FoldedOrdinalValue{false, bounds.max_positive}};
+		return OrdinalDomain{
+		    OrdinalFamily::Character,
+		    char_type(),
+		    ordinal_value(false, 0),
+		    ordinal_value(false, bounds.max_positive)};
 	} else if (auto enumeration = dynamic_cast<const EnumType*>(type)) {
 		const auto* lower = enumeration->min_member();
 		const auto* upper = enumeration->max_member();
 		if (!lower || !upper) {
 			return std::nullopt;
 		}
-		auto as_folded = [](int64_t value) {
-			if (value < 0) {
-				return FoldedOrdinalValue{true, static_cast<uint64_t>(-(value + 1)) + 1};
-			}
-			return FoldedOrdinalValue{false, static_cast<uint64_t>(value)};
-		};
-		return OrdinalDomain{OrdinalDomainFamily::Enumeration, type, as_folded(lower->value), as_folded(upper->value)};
+		return OrdinalDomain{
+		    OrdinalFamily::Enumeration,
+		    type,
+		    ordinal_value(lower->value),
+		    ordinal_value(upper->value)};
 	}
 	return std::nullopt;
 }
@@ -1642,10 +1686,15 @@ static bool ordinal_domain_is_subset(const Type* source, const Type* target) {
 	if (!source_domain || !target_domain || source_domain->family != target_domain->family) {
 		return false;
 	}
-	if (source_domain->family != OrdinalDomainFamily::Integer && source_domain->nominal_root != target_domain->nominal_root) {
+	if (source_domain->family != OrdinalFamily::Integer && source_domain->nominal_root != target_domain->nominal_root) {
 		return false;
 	}
-	return compare_folded_ordinals(target_domain->lower, source_domain->lower) <= 0 && compare_folded_ordinals(target_domain->upper, source_domain->upper) >= 0;
+	return compare_ordinal_values(
+	           target_domain->lower,
+	           source_domain->lower) <= 0 &&
+	       compare_ordinal_values(
+	           target_domain->upper,
+	           source_domain->upper) >= 0;
 }
 
 static bool ordinal_domains_are_compatible(const Type* a, const Type* b) {
@@ -1654,7 +1703,8 @@ static bool ordinal_domains_are_compatible(const Type* a, const Type* b) {
 	if (!a_domain || !b_domain || a_domain->family != b_domain->family) {
 		return false;
 	}
-	return a_domain->family == OrdinalDomainFamily::Integer || a_domain->nominal_root == b_domain->nominal_root;
+	return a_domain->family == OrdinalFamily::Integer ||
+	       a_domain->nominal_root == b_domain->nominal_root;
 }
 } // namespace
 
