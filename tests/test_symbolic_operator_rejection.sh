@@ -12,5 +12,9 @@ do
 		echo "$source unexpectedly compiled" >&2
 		exit 1
 	fi
-	grep -Fq 'unknown input character' "$tmp/${spelling}.stderr"
+	if [ "$spelling" = ampersand ]; then
+		grep -Fq "malformed numeral: &" "$tmp/${spelling}.stderr"
+	else
+		grep -Fq 'unknown input character' "$tmp/${spelling}.stderr"
+	fi
 done

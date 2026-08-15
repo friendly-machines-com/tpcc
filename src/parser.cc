@@ -126,6 +126,29 @@ static bool token_is_identifier(const std::string& token) {
 	return (is_letter(token.front()) || token.front() == '_') && std::all_of(token.begin() + 1, token.end(), is_identifier_character);
 }
 
+static int based_integer_base(int marker) {
+	switch (marker) {
+	case '$':
+		return 16;
+	case '%':
+		return 2;
+	case '&':
+		return 8;
+	default:
+		return 0;
+	}
+}
+
+static bool is_based_integer_digit(int value, int base) {
+	if (value >= '0' && value <= '9') {
+		return value - '0' < base;
+	}
+	if (base == 16 && value >= 'a' && value <= 'f') {
+		return true;
+	}
+	return base == 16 && value >= 'A' && value <= 'F';
+}
+
 Parser::Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options) : unit_registry(unit_registry), emitter(emitter), options(options) {
 }
 
@@ -1107,18 +1130,18 @@ std::string Parser::consume() {
 			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
-	} else if (input_char == '$') {
+	} else if (int base = based_integer_base(input_char); base != 0) {
+		// The base marker is part of one numeral token. In particular, `&`
+		// reaches this rule only as the octal marker; it is never exposed to
+		// expression parsing as an alternative spelling of `and`.
+		const char marker = (char)input_char;
 		sst << (char)input_char;
 		consume_lowlevel();
-		while ((input_char >= '0' && input_char <= '9') || (input_char >= 'a' && input_char <= 'f') || (input_char >= 'A' && input_char <= 'F') || input_char == '.' || input_char == '_') {
-			sst << (char)tolower(input_char);
-			consume_lowlevel();
+		if (!is_based_integer_digit(input_char, base) && input_char != '_') {
+			raise_parse_error(std::string("malformed numeral: ") + marker);
 		}
-	} else if (input_char == '%') {
-		sst << (char)input_char;
-		consume_lowlevel();
-		while ((input_char >= '0' && input_char <= '9') || input_char == '_') {
-			sst << (char)input_char;
+		while (is_based_integer_digit(input_char, base) || input_char == '_') {
+			sst << (char)tolower(input_char);
 			consume_lowlevel();
 		}
 	} else if ((input_char >= '0' && input_char <= '9') || input_char == '_') {
@@ -2042,16 +2065,13 @@ std::string Parser::parse_identifier() {
 Node* Parser::maybe_parse_numeral() {
 	auto input = input_token.data();
 	auto input_size = input_token.size();
-	int base = 10;
-	if (input_size > 0 && (isdigit(*input) || *input == '$' || *input == '%' || *input == '.')) {
-		if (*input == '$') {
-			base = 16;
+	int base = input_size > 0 ? based_integer_base(*input) : 0;
+	if (input_size > 0 && (isdigit(*input) || base != 0 || *input == '.')) {
+		if (base != 0) {
 			++input;
 			--input_size;
-		} else if (*input == '%') {
-			base = 2;
-			++input;
-			--input_size;
+		} else {
+			base = 10;
 		}
 		if (input_size == 0) {
 			raise_parse_error("malformed numeral: " + input_token);

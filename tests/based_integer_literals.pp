@@ -8,6 +8,9 @@ const
   CombinedMask = $1000 or $8000;
   IntersectedMask = $FFFF and $8000;
   ToggledMask = $1000 xor $8000;
+  HexFortyTwo = $2A;
+  BinaryFortyTwo = %101010;
+  OctalFortyTwo = &52;
 
 var
   Signed64: Int64;
@@ -75,5 +78,10 @@ begin
   BooleanOr := True or False;
   BooleanXor := True xor True;
   if BooleanAnd or (not BooleanOr) or BooleanXor then
-    Halt(13)
+    Halt(13);
+
+  if (HexFortyTwo <> 42) or
+     (BinaryFortyTwo <> 42) or
+     (OctalFortyTwo <> 42) then
+    Halt(14)
 end.
