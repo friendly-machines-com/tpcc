@@ -1260,7 +1260,7 @@ std::string Parser::consume() {
 			}
 			return consume();
 		}
-	} else if (input_char != EOF && strchr("=;,[])@+-^|&", input_char)) {
+	} else if (input_char != EOF && strchr("=;,[])@+-^", input_char)) {
 		sst << (char)input_char;
 		consume_lowlevel();
 	} else if (input_char == '\'') {
@@ -4384,7 +4384,7 @@ Node* Parser::parse_product_tail(Node* result) {
 			result = mk_arith("div", result, parse_power(), operation_directives);
 		} else if (maybe_parse_keyword("mod")) {
 			result = mk_arith("mod", result, parse_power(), operation_directives);
-		} else if (maybe_parse_keyword("and") || maybe_parse_ampersand()) {
+		} else if (maybe_parse_keyword("and")) {
 			auto b = parse_power();
 			if (result->ty == boolean_type() && b->ty == boolean_type()) {
 				auto n = new ShortCircuitOperation(AND, result, b);
@@ -4444,7 +4444,7 @@ Node* Parser::parse_sum_tail(Node* result) {
 			result = mk_arith("+", result, parse_product(), operation_directives);
 		} else if (maybe_parse_minus()) {
 			result = mk_arith("-", result, parse_product(), operation_directives);
-		} else if (maybe_parse_keyword("or") || maybe_parse_pipe()) {
+		} else if (maybe_parse_keyword("or")) {
 			auto b = parse_product();
 			if (result->ty == boolean_type() && b->ty == boolean_type()) {
 				auto n = new ShortCircuitOperation(OR, result, b);
@@ -5925,7 +5925,7 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 }
 
 static bool token_continues_subrange_bound_after_primary(const std::string& token) {
-	return token == "." || token == "(" || token == "[" || token == "^" || token == "**" || token == "*" || token == "/" || token == "div" || token == "mod" || token == "and" || token == "shl" || token == "shr" || token == "as" || token == "is" || token == "<<" || token == ">>" || token == "><" || token == "+" || token == "-" || token == "or" || token == "|" || token == "xor";
+	return token == "." || token == "(" || token == "[" || token == "^" || token == "**" || token == "*" || token == "/" || token == "div" || token == "mod" || token == "and" || token == "shl" || token == "shr" || token == "as" || token == "is" || token == "<<" || token == ">>" || token == "><" || token == "+" || token == "-" || token == "or" || token == "xor";
 }
 
 /** allow_forward: if true, an unresolved identifier at this parse position may
@@ -7582,24 +7582,6 @@ bool Parser::maybe_parse_star() {
 
 bool Parser::maybe_parse_star_star() {
 	if (input_token == "**") {
-		consume();
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool Parser::maybe_parse_ampersand() {
-	if (input_token == "&") {
-		consume();
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool Parser::maybe_parse_pipe() {
-	if (input_token == "|") {
 		consume();
 		return true;
 	} else {

@@ -679,8 +679,6 @@ class Parser {
 	bool maybe_parse_less_less();
 	bool maybe_parse_greater_greater();
 	bool maybe_parse_star_star();
-	bool maybe_parse_ampersand();
-	bool maybe_parse_pipe();
 	bool maybe_parse_symdiff();
 	bool maybe_parse_equal();
 	bool maybe_parse_less_greater();
