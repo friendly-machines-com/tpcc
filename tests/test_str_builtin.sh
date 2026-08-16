@@ -20,6 +20,21 @@ tpcc_build "$tmp/str_builtin" \
 	tests/str_builtin_runtime.cpp
 tpcc_run "$tmp/str_builtin"
 
+if tpcc_translate -o"$tmp/text-precision.cc" \
+	tests/str_text_precision_rejected.pp \
+	>"$tmp/text-precision.stdout" \
+	2>"$tmp/text-precision.stderr"; then
+	echo "Str accepted a precision qualifier for an existing textual value" >&2
+	exit 1
+fi
+if ! grep -Fq \
+	"Str precision requires a predefined real value" \
+	"$tmp/text-precision.stderr"; then
+	echo "wrong diagnostic for a textual Str precision qualifier" >&2
+	cat "$tmp/text-precision.stderr" >&2
+	exit 1
+fi
+
 for mode in unchecked checked
 do
 	definition=

@@ -4893,6 +4893,25 @@ inline std::string tpcc_render_unpadded_value(
 	} else if constexpr (std::is_same_v<T, t_char>) {
 		return std::string(
 		    1, static_cast<char>(value.value));
+	} else if constexpr (
+	    std::is_pointer_v<T> &&
+	    std::is_same_v<
+	        std::remove_cv_t<
+	            std::remove_pointer_t<T>>,
+	        t_char>) {
+		// PChar is a borrowed zero-terminated character sequence. Unlike
+		// counted Pascal strings, its first zero ends the projection; nil is
+		// the empty sequence. No encoding conversion is possible because the
+		// pointer carries bytes but no code-page metadata.
+		if (!value)
+			return {};
+		std::string result;
+		for (std::size_t i = 0;
+		     value[i].value != 0; ++i)
+			result.push_back(
+			    static_cast<char>(
+			        value[i].value));
+		return result;
 	} else if constexpr (std::is_same_v<T, t_boolean>) {
 		// Boolean is a truth value rather than a general named enumeration:
 		// zero formats as FALSE and every nonzero carrier formats as TRUE.
@@ -4956,29 +4975,59 @@ tpcc_render_formatted_value(
 }
 
 template<typename T>
-inline t_word tpcc_write_one(
-    std::FILE* out,
-    const tpcc_formatted_value<T>& argument) {
-	// fputc and fwrite report this operation through their return values.
-	// ferror is deliberately not used: unlike Pascal's IOResult status, it is
-	// sticky and does not identify which host operation failed.
+inline void p_str(
+    const tpcc_formatted_value<T>& argument,
+    t_ansistring& destination) {
 	tpcc_rendered_formatted_value rendered =
 	    tpcc_render_formatted_value(
 		argument);
+	// AnsiString is the unbounded Str destination: retain the complete field.
+	// Building the replacement before touching DESTINATION also makes
+	// Str(S, S), and a PChar view into S, observe the complete source value.
+	// The trailing zero belongs to the managed carrier and is not part of its
+	// Pascal length.
+	std::vector<t_char> replacement(
+	    rendered.left_padding +
+		rendered.value.size() + 1,
+	    t_char{0});
+	std::fill_n(
+	    replacement.data(),
+	    rendered.left_padding,
+	    t_char{
+		static_cast<uint8_t>(' ')});
 	for (std::size_t i = 0;
-	     i < rendered.left_padding; ++i) {
-		errno = 0;
-		if (std::fputc(' ', out) == EOF)
-			return m_consume_stdio_error(
-			    out, 101);
-	}
-	if (rendered.value.empty())
+	     i < rendered.value.size(); ++i)
+		replacement[
+		    rendered.left_padding + i] =
+		    t_char{
+			static_cast<uint8_t>(
+			    static_cast<unsigned char>(
+				rendered.value[i]))};
+	destination.storage.m_replace(
+	    std::move(replacement));
+}
+
+template<typename T>
+inline t_word tpcc_write_one(
+    std::FILE* out,
+    const tpcc_formatted_value<T>& argument) {
+	t_ansistring projected;
+	// Write is Str followed by a Text sink. Keeping this as an actual p_str
+	// call makes textual, numeric, enumeration, width, and embedded-zero
+	// semantics identical instead of maintaining a second formatter.
+	p_str(argument, projected);
+	const std::size_t length =
+	    static_cast<std::size_t>(
+	        projected.m_length());
+	// fputc and fwrite report this operation through their return values.
+	// ferror is deliberately not used: unlike Pascal's IOResult status, it is
+	// sticky and does not identify which host operation failed.
+	if (length == 0)
 		return 0;
 	errno = 0;
 	if (std::fwrite(
-	        rendered.value.data(), 1,
-	        rendered.value.size(), out) ==
-	    rendered.value.size())
+	        projected.m_data(), 1,
+	        length, out) == length)
 		return 0;
 	return m_consume_stdio_error(
 	    out, 101);
@@ -7080,8 +7129,10 @@ template<typename T, std::size_t Capacity>
 inline void p_str(
     const tpcc_formatted_value<T>& argument,
     t_shortstring<Capacity>& destination) {
-	// Str stores the shared formatter's result in its destination string;
-	// Write sends the same rendered value to a FILE-backed Text output.
+	// Bounded Str keeps the prefix which fits. Write instead calls the
+	// AnsiString overload above, so its Text sink never truncates the field.
+	// Rendering precedes every destination write, preserving a source which
+	// aliases this string directly or through a PChar view.
 	tpcc_rendered_formatted_value rendered =
 	    tpcc_render_formatted_value(
 		argument);
@@ -7106,37 +7157,6 @@ inline void p_str(
 	destination.length =
 	    static_cast<uint8_t>(
 		spaces + copied);
-}
-
-template<typename T>
-inline void p_str(
-    const tpcc_formatted_value<T>& argument,
-    t_ansistring& destination) {
-	tpcc_rendered_formatted_value rendered =
-	    tpcc_render_formatted_value(
-		argument);
-	// AnsiString is the unbounded Str destination: retain the complete field
-	// instead of applying ShortString's compile-time capacity. The trailing
-	// zero belongs to the managed carrier and is not part of its Pascal length.
-	std::vector<t_char> replacement(
-	    rendered.left_padding +
-		rendered.value.size() + 1,
-	    t_char{0});
-	std::fill_n(
-	    replacement.data(),
-	    rendered.left_padding,
-	    t_char{
-		static_cast<uint8_t>(' ')});
-	for (std::size_t i = 0;
-	     i < rendered.value.size(); ++i)
-		replacement[
-		    rendered.left_padding + i] =
-		    t_char{
-			static_cast<uint8_t>(
-			    static_cast<unsigned char>(
-				rendered.value[i]))};
-	destination.storage.m_replace(
-	    std::move(replacement));
 }
 
 // Convenience entry points retain the direct RTL surface while delegating

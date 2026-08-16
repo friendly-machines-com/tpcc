@@ -2448,6 +2448,7 @@ enum class StrValueFamily {
 	Integer,
 	ExistingReal,
 	Enumeration,
+	Textual,
 	Unsupported,
 };
 
@@ -2462,6 +2463,17 @@ static StrValueFamily str_value_family(Type* ty) {
 		return StrValueFamily::ExistingReal;
 	} else if (enum_root_type(ty)) {
 		return StrValueFamily::Enumeration;
+	} else if (ty == char_type() ||
+	           dynamic_cast<ShortStringType*>(ty) ||
+	           ty == ansistring_type()) {
+		// Str is a projection to text, so an existing counted textual value
+		// retains every character, including embedded zero bytes.
+		return StrValueFamily::Textual;
+	} else if (auto pointer = dynamic_cast<PointerType*>(ty);
+	           pointer && pointer->item_type == char_type()) {
+		// PChar is the one textual view without a stored length. Its first
+		// zero byte supplies the projection boundary; nil denotes empty text.
+		return StrValueFamily::Textual;
 	}
 	// TODO: Currency and Comp belong in distinct cases here after their
 	// Pascal types and runtime carriers exist. Do not identify them by C++
@@ -2963,7 +2975,7 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			}
 			const StrValueFamily family = str_value_family(item.value ? item.value->ty : nullptr);
 			if (family == StrValueFamily::Unsupported) {
-				raise_type_kind_mismatch("Str value", "integer, enumeration, or predefined real", item.value ? item.value->ty : nullptr);
+				raise_type_kind_mismatch("Str value", "integer, enumeration, predefined real, Char, string, or PChar", item.value ? item.value->ty : nullptr);
 			}
 			if (item.precision && family != StrValueFamily::ExistingReal) {
 				// Pascal's second colon is the fractional-digit count of a
@@ -2994,9 +3006,6 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 							}
 							formatted.value = cast(formatted.value, natural);
 						}
-						if (formatted.precision && formatted.value->ty != single_type() && formatted.value->ty != double_type() && formatted.value->ty != extended_type()) {
-							raise_type_kind_mismatch("a second Write/WriteLn colon qualifier", "real", formatted.value->ty);
-						}
 						items.push_back(formatted);
 					} while (maybe_parse_comma());
 				}
@@ -3016,6 +3025,24 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 					                  file);
 				}
 				items.erase(items.begin());
+			}
+			for (const FormattedValue& item : items) {
+				const StrValueFamily family =
+				    str_value_family(
+				        item.value ? item.value->ty : nullptr);
+				if (family == StrValueFamily::Unsupported) {
+					raise_type_kind_mismatch(
+					    "Write/WriteLn value",
+					    "type supported by Str",
+					    item.value ? item.value->ty : nullptr);
+				}
+				if (item.precision &&
+				    family != StrValueFamily::ExistingReal) {
+					raise_type_kind_mismatch(
+					    "a second Write/WriteLn colon qualifier",
+					    "predefined real",
+					    item.value ? item.value->ty : nullptr);
+				}
 			}
 			const BuiltinDesc* implementation = builtin_implementation_at_call_site(builtin_desc_for_node(value), identifier_directives);
 			assert(implementation);

@@ -498,19 +498,20 @@ function length(const x): SizeInt; overload; external name '::u_system::p_length
 // checks the missing relationship `values: set of T; item: T`.
 procedure include(var values; const item); external name '::u_system::p_include'; // generic set intrinsic
 procedure exclude(var values; const item); external name '::u_system::p_exclude'; // generic set intrinsic
-// The omitted storage types are intentional compiler contracts, not Pascal
-// var/out covariance. They keep string[N] and the selected integer/subrange
-// destination intact until the Str/Val semantic handlers validate and lower
-// the call. AnsiString has exact Val source declarations because it is a
-// distinct managed carrier rather than a member of the string[N] family.
-// Concrete source/destination families still participate in normal overload
-// ranking; the all-generic declarations are last-resort extension points for
-// compiler-owned families such as enumerations. The compiler retains the
-// selected enum type so generated formatting can map its ordinal to the
-// declaration spelling and reject unnamed values.
+// Str is the textual projection used by Write/WriteLn. Textual inputs project
+// their existing character sequence; numeric and enumeration inputs produce
+// their declared textual representation. The omitted destination preserves
+// each String[N] type's exact capacity rather than introducing var-parameter
+// covariance. The omitted source remains only for compiler-owned families
+// which Pascal cannot quantify over directly, such as integer subranges and
+// named enumerations.
 procedure str(const x: Int64; var s); overload; external name '::u_system::p_str';
 procedure str(const x: QWord; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s); overload; external name '::u_system::p_str';
+procedure str(const x: Char; var s); overload; external name '::u_system::p_str';
+procedure str(const x: ShortString; var s); overload; external name '::u_system::p_str';
+procedure str(const x: AnsiString; var s); overload; external name '::u_system::p_str';
+procedure str(const x: PChar; var s); overload; external name '::u_system::p_str';
 procedure str(const x; var s); overload; external name '::u_system::p_str';
 // AnsiString needs concrete overloads because `var` parameters do not perform
 // ShortString-to-AnsiString assignment conversion. These select the unbounded
@@ -519,6 +520,10 @@ procedure str(const x; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Int64; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: QWord; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: Char; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: ShortString; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: AnsiString; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: PChar; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure val(const s: ShortString; out value); overload; external name '::u_system::p_val';
 procedure val(const s: ShortString; out value; out code); overload; external name '::u_system::p_val';
