@@ -34,6 +34,9 @@ check_rejected \
 	tests/typed_static_address_automatic_rejected.pp \
 	"typed address initializer requires static storage or a receiverless routine"
 check_rejected \
+	tests/typed_static_address_arithmetic_rejected.pp \
+	"constant expression expected"
+check_rejected \
 	tests/untyped_data_address_constant_rejected.pp \
 	"constant expression expected"
 check_rejected \

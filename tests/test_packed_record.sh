@@ -45,6 +45,14 @@ tpcc_build "$tmp/packed_variant" \
 	"$tmp/system.cc"
 tpcc_run "$tmp/packed_variant"
 
+tpcc_translate \
+	-o"$tmp/packed_class_reference.cc" \
+	tests/packed_class_reference.pp
+tpcc_build "$tmp/packed_class_reference" \
+	"$tmp/packed_class_reference.cc" \
+	"$tmp/system.cc"
+tpcc_run "$tmp/packed_class_reference"
+
 for source in tests/packed_rejected/*.pp; do
 	base=${source%.pp}
 	if tpcc_translate -o"$tmp/rejected.cc" "$source" >"$tmp/stdout" 2>"$tmp/stderr"; then

@@ -785,6 +785,16 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 	} else if (auto enumeration = dynamic_cast<EnumType*>(ty)) {
 		uint64_t bytes = enumeration->carrier_bits / 8;
 		return enumeration->carrier_bits != 0 && enumeration->carrier_bits % 8 == 0 ? std::optional<TypeLayout>{TypeLayout{bytes, bytes}} : std::nullopt;
+	} else if (dynamic_cast<ClassType*>(ty)) {
+		// A Pascal class instance value is one reference, not the class
+		// object's fields embedded at the use site. A direct field in a packed
+		// record therefore occupies one pointer even when its byte offset is
+		// unaligned. The packed-record backend stores all fields in byte
+		// storage and loads/stores them with memcpy, so it never forms an
+		// unaligned C++ pointer lvalue. Keep the natural alignment here: the
+		// FixedArrayType branch above deliberately continues to reject arrays
+		// of pointer-aligned elements inside packed records.
+		return TypeLayout{8, 8}; // FIXME: target-dependent
 	} else if (packed_container) {
 		// The others are not allowed inside packed records.
 		return std::nullopt;
@@ -800,7 +810,7 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 		return TypeLayout{24, 8}; // FIXME: target-dependent, impl-dependent
 	} else if (dynamic_cast<TypedFileType*>(ty)) {
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
-	} else if (dynamic_cast<PointerType*>(ty) || dynamic_cast<ClassType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ClassRefType*>(ty)) {
+	} else if (dynamic_cast<PointerType*>(ty) || dynamic_cast<InterfaceType*>(ty) || dynamic_cast<ClassRefType*>(ty)) {
 		return TypeLayout{8, 8}; // FIXME: target-dependent, impl-dependent
 	} else if (auto record = dynamic_cast<RecordType*>(ty)) {
 		auto layout = record_layout_impl(record, visiting);
