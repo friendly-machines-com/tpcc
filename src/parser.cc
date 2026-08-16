@@ -10091,6 +10091,28 @@ std::optional<ArgumentMatch> Parser::match_declared_conversion(Node* actual, Typ
 		if (match.rank.tier == MatchRank::Tier::Exact) {
 			return true;
 		}
+		if (match.rank.tier == MatchRank::Tier::Equal &&
+		    actual && actual->ty && formal.ty) {
+			auto formal_from_source =
+			    formal.ty->value_conversion_from(actual->ty);
+			auto source_from_formal =
+			    actual->ty->value_conversion_from(formal.ty);
+			if (formal_from_source && source_from_formal &&
+			    formal_from_source->kind ==
+			        ValueConversionClass::Direct &&
+			    source_from_formal->kind ==
+			        ValueConversionClass::Direct) {
+				// Mutual Direct assignment is the zero-cost equivalence
+				// relation inside the conversion lattice. Nominally
+				// different representatives (notably `T = type Base`,
+				// Base, and sibling strong types) still distinguish Exact
+				// overloads, but presenting one as the other's source
+				// formal does not add a conversion edge before the declared
+				// B -> C operation. One-way Direct subtyping, widening,
+				// narrowing, and declared conversions remain excluded.
+				return match.value && match.value->ty == formal.ty;
+			}
+		}
 		// An uncommitted literal has no typed A value which must first
 		// undergo an A -> B conversion. Candidate-local construction of
 		// that literal directly as the declared source formal B therefore

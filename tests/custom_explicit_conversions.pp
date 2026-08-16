@@ -19,6 +19,10 @@ type
   TExplicitOnlySource = record
     Value: Integer;
   end;
+  TStrongExtended = type Extended;
+  TCompLike = record
+    Value: Int64;
+  end;
   TTarget = record
     Value: Integer;
   end;
@@ -35,6 +39,8 @@ var
   ExplicitOnlySource: TExplicitOnlySource;
   Target: TTarget;
   OtherTarget: TOtherTarget;
+  StrongExtended: TStrongExtended;
+  CompLike: TCompLike;
   Selected: Integer;
   Small: Byte;
 
@@ -103,6 +109,12 @@ operator Explicit(
 begin
   Selected := 10;
   Result.Value := Value.Value + 1000
+end;
+
+operator Explicit(const Value: Extended): TCompLike;
+begin
+  Selected := 11;
+  Result.Value := Round(Value)
 end;
 
 { An ordinary function with this source name is not an operator declaration
@@ -186,6 +198,16 @@ begin
 
   if Explicit(7) <> 10007 then
     Halt(11);
+
+  { A `type Base` actual needs no value conversion to enter a Base formal.
+    The distinct identity remains relevant to overload selection, but the
+    shared carrier must not make this look like an A -> B -> C chain. }
+  StrongExtended := 12.0;
+  Selected := 0;
+  CompLike := TCompLike(StrongExtended);
+  if (Selected <> 11) or
+     (CompLike.Value <> 12) then
+    Halt(12);
 
   {$ifdef REJECT_EXPLICIT_AS_IMPLICIT}
   Target := ExplicitOnlySource;

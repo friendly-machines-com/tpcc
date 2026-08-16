@@ -35,6 +35,9 @@ type
   TChainC = record
     Value: Integer;
   end;
+  TNumericConversionTarget = record
+    Value: Int64;
+  end;
 
 operator Implicit(const Value: TChainA): TChainB;
 begin
@@ -44,6 +47,11 @@ end;
 operator Explicit(const Value: TChainB): TChainC;
 begin
   Result.Value := Value.Value
+end;
+
+operator Explicit(const Value: Int64): TNumericConversionTarget;
+begin
+  Result.Value := Value
 end;
 
 var
@@ -61,6 +69,7 @@ var
   PackedSet: TPackedSet;
   ChainA: TChainA;
   ChainC: TChainC;
+  NumericConversionTarget: TNumericConversionTarget;
   WordArray: TWordArray;
   ByteArray4: TByteArray4;
   ByteArray3: TByteArray3;
@@ -89,6 +98,9 @@ begin
   {$endif}
   {$ifdef REJECT_CHAIN}
   ChainC := TChainC(ChainA);
+  {$endif}
+  {$ifdef REJECT_OPERATOR_SOURCE_WIDENING}
+  NumericConversionTarget := TNumericConversionTarget(IntegerValue);
   {$endif}
   {$ifdef REJECT_NONBYTE_SCALAR_VIEW}
   WordArray := TWordArray(QWordValue);
