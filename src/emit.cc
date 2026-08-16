@@ -1299,11 +1299,7 @@ void Emitter::emit_statement(Node* stmt) {
 				unhandled_node("Write/WriteLn item has no selected System.Str declaration", write);
 			}
 			fprintf(active, "\t\t::u_system::t_ansistring tpcc_write_item_%zu{};\n", index);
-			fprintf(active,
-			        "\t\t%s(",
-			        node_cxx_name(item.str_callee,
-			                      callable_cxx_name(item.str_callee))
-			            .c_str());
+			fprintf(active, "\t\t%s(", node_cxx_name(item.str_callee, callable_cxx_name(item.str_callee)).c_str());
 			emit_formatted_value(item);
 			fprintf(active, ", tpcc_write_item_%zu);\n", index);
 		}
@@ -1326,11 +1322,7 @@ void Emitter::emit_statement(Node* stmt) {
 		if (!str->formatted.str_callee) {
 			unhandled_node("Str has no selected callable declaration", str);
 		}
-		fprintf(active,
-		        "\t%s(",
-		        node_cxx_name(str->formatted.str_callee,
-		                      callable_cxx_name(str->formatted.str_callee))
-		            .c_str());
+		fprintf(active, "\t%s(", node_cxx_name(str->formatted.str_callee, callable_cxx_name(str->formatted.str_callee)).c_str());
 		emit_formatted_value(str->formatted);
 		fprintf(active, ", ");
 		emit_writable_expression(str->destination);
@@ -2788,6 +2780,14 @@ void Emitter::emit_expression(Node* expr) {
 			}
 			fprintf(active, ")");
 		}
+	} else if (auto currency = dynamic_cast<CurrencyValue*>(expr)) {
+		fprintf(active, "::u_system::m_currency_from_raw(");
+		if (currency->raw == INT64_MIN) {
+			fprintf(active, "std::numeric_limits<::u_system::t_int64>::min()");
+		} else {
+			fprintf(active, "static_cast<::u_system::t_int64>(%lld)", static_cast<long long>(currency->raw));
+		}
+		fprintf(active, ")");
 	} else if (auto s = dynamic_cast<String*>(expr)) {
 		if (s->ty == char_type()) {
 			if (s->value.size() != 1) {
@@ -3329,6 +3329,8 @@ void Emitter::emit_expression(Node* expr) {
 			source_integer_type = range->base_type;
 		}
 		const bool source_integer = ca->a && (source_integer_type == &untyped_integer_type() || integer_bounds(source_integer_type, &source_integer_bounds));
+		const bool source_currency = ca->a && is_currency_semantic_type(ca->a->ty);
+		const bool target_currency = is_currency_semantic_type(ca->ty);
 		const bool pointer_conversion = (source_pointer && (target_pointer || target_pointer_integer || target_object_reference)) || (source_object_reference && (target_pointer || target_pointer_integer)) || (source_integer && target_pointer);
 		auto source_routine = dynamic_cast<RoutineType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_routine = dynamic_cast<RoutineType*>(ca->ty);
@@ -3338,7 +3340,35 @@ void Emitter::emit_expression(Node* expr) {
 		auto source_packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_byte_array = predefined_byte_array_storage_view(ca->ty, ca->a ? ca->a->ty : nullptr) ? dynamic_cast<FixedArrayType*>(ca->ty) : nullptr;
 
-		if (dynamic_cast<RangeCheckedCast*>(ca)) {
+		if (target_currency && ca->a && (source_integer || real_type(ca->a->ty) || (source_real_origin && source_real_origin->is_origin()))) {
+			if (source_real_origin && source_real_origin->is_origin()) {
+				CurrencyMaterialization converted = materialize_currency_origin(*source_real_origin->origin);
+				if (!dynamic_cast<RangeCheckedCast*>(ca) || converted.kind != RealMaterializationKind::OutOfRange) {
+					// Candidate matching materializes every executable origin
+					// into CurrencyValue. Only the deferred failure of a
+					// checked out-of-range origin may retain origin syntax.
+					unhandled_node("unmaterialized Currency origin reached cast emission", ca);
+				}
+				fprintf(active, "([]() -> ::u_system::t_currency { "
+				                "::u_system::m_runtime_error(201); return {}; }())");
+			} else {
+				fprintf(active, dynamic_cast<RangeCheckedCast*>(ca) ? "::u_system::m_range_checked_currency_cast(" : "::u_system::m_currency_cast(");
+				emit_expression(ca->a);
+				fprintf(active, ")");
+			}
+		} else if (source_currency && real_type(ca->ty)) {
+			fprintf(active, "::u_system::m_currency_to_real<");
+			emit_type_ref(ca->ty);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+		} else if (source_currency && ordinal_type(ca->ty)) {
+			fprintf(active, "::u_system::m_currency_to_integer<");
+			emit_type_ref(ca->ty);
+			fprintf(active, ">(");
+			emit_expression(ca->a);
+			fprintf(active, ")");
+		} else if (dynamic_cast<RangeCheckedCast*>(ca)) {
 			if (real_conversion) {
 				if (source_real_origin && source_real_origin->is_origin()) {
 					// Overload selection already established that this exact

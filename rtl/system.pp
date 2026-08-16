@@ -14,6 +14,7 @@ type
   LongInt = Integer;
   QWord = external name '::u_system::t_qword';
   Int64 = external name '::u_system::t_int64';
+  PInt64 = ^Int64;
   Boolean = external name '::u_system::t_boolean';
   Char = external name '::u_system::t_char';
   AnsiChar = Char;
@@ -23,6 +24,8 @@ type
   Real = type Double;
   TDateTime = type Double;
   Extended = external name '::u_system::t_extended';
+  Currency = external name '::u_system::t_currency';
+  PCurrency = ^Currency;
   Pointer = external name '::u_system::t_pointer';
   Comp = type Int64;
   // TPCC supports only flat 32/64-bit targets, where code and data addresses
@@ -137,6 +140,16 @@ operator :=(a: Integer): Int64; external name '::u_system::o_implicit';
 operator :=(a: Cardinal): Int64; external name '::u_system::o_implicit';
 operator :=(a: Cardinal): QWord; external name '::u_system::o_implicit';
 
+// These complete integer domains fit after Currency's factor-of-10000
+// scaling. Int64 and QWord remain compiler-classified narrowing conversions;
+// declaring them here as ordinary direct edges would falsely order overloads.
+operator :=(a: Byte): Currency; external name '::u_system::o_implicit';
+operator :=(a: ShortInt): Currency; external name '::u_system::o_implicit';
+operator :=(a: Word): Currency; external name '::u_system::o_implicit';
+operator :=(a: SmallInt): Currency; external name '::u_system::o_implicit';
+operator :=(a: Cardinal): Currency; external name '::u_system::o_implicit';
+operator :=(a: Integer): Currency; external name '::u_system::o_implicit';
+
 // The parser chooses one of these ordinary operator families before overload
 // resolution. Keeping both rows explicit also lets user-defined arithmetic
 // make the same checked/unchecked promise as System arithmetic.
@@ -164,6 +177,8 @@ operator Add(a, b: Int64): Int64; external name '::u_system::o_add';
 operator Add(a, b: Single): Single; external name '::u_system::o_add';
 operator Add(a, b: Double): Double; external name '::u_system::o_add';
 operator Add(a, b: Extended): Extended; external name '::u_system::o_add';
+operator UncheckedAdd(a, b: Currency): Currency; external name '::u_system::o_unchecked_add';
+operator Add(a, b: Currency): Currency; external name '::u_system::o_add';
 
 operator UncheckedNegative(a: Cardinal): Cardinal; external name '::u_system::o_unchecked_negative';
 operator UncheckedNegative(a: Integer): Integer; external name '::u_system::o_unchecked_negative';
@@ -179,6 +194,9 @@ operator Negative(a: Int64): Int64; external name '::u_system::o_negative';
 operator Negative(a: Single): Single; external name '::u_system::o_negative';
 operator Negative(a: Double): Double; external name '::u_system::o_negative';
 operator Negative(a: Extended): Extended; external name '::u_system::o_negative';
+operator Positive(a: Currency): Currency; external name '::u_system::o_positive';
+operator UncheckedNegative(a: Currency): Currency; external name '::u_system::o_unchecked_negative';
+operator Negative(a: Currency): Currency; external name '::u_system::o_negative';
 
 operator UncheckedSubtract(a, b: Byte): Integer; external name '::u_system::o_unchecked_subtract';
 operator UncheckedSubtract(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_subtract';
@@ -202,6 +220,8 @@ operator Subtract(a, b: Int64): Int64; external name '::u_system::o_subtract';
 operator Subtract(a, b: Single): Single; external name '::u_system::o_subtract';
 operator Subtract(a, b: Double): Double; external name '::u_system::o_subtract';
 operator Subtract(a, b: Extended): Extended; external name '::u_system::o_subtract';
+operator UncheckedSubtract(a, b: Currency): Currency; external name '::u_system::o_unchecked_subtract';
+operator Subtract(a, b: Currency): Currency; external name '::u_system::o_subtract';
 
 operator UncheckedMultiply(a, b: Byte): Integer; external name '::u_system::o_unchecked_multiply';
 operator UncheckedMultiply(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_multiply';
@@ -225,6 +245,8 @@ operator Multiply(a, b: Int64): Int64; external name '::u_system::o_multiply';
 operator Multiply(a, b: Single): Single; external name '::u_system::o_multiply';
 operator Multiply(a, b: Double): Double; external name '::u_system::o_multiply';
 operator Multiply(a, b: Extended): Extended; external name '::u_system::o_multiply';
+operator UncheckedMultiply(a, b: Currency): Currency; external name '::u_system::o_unchecked_multiply';
+operator Multiply(a, b: Currency): Currency; external name '::u_system::o_multiply';
 
 // FIXME: FPC uses Double, Delphi uses Extended
 operator Divide(a, b: Byte): Double; external name '::u_system::o_divide';
@@ -238,6 +260,10 @@ operator Divide(a, b: Int64): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Single): Single; external name '::u_system::o_divide';
 operator Divide(a, b: Double): Double; external name '::u_system::o_divide';
 operator Divide(a, b: Extended): Extended; external name '::u_system::o_divide';
+// Real division does not rescale back into Currency. The result domain is
+// named here, just like the integer `/` rows, rather than manufactured from a
+// target-dependent compiler "best real" rule.
+operator Divide(a, b: Currency): Double; external name '::u_system::o_divide';
 
 { Exponentiation is asymmetric: the base selects the result domain, while the
   exponent has its own destination. It therefore does not use the homogeneous
@@ -294,6 +320,7 @@ operator <(a, b: Int64): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Single): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Double): Boolean; external name '::u_system::o_lessthan';
 operator <(a, b: Extended): Boolean; external name '::u_system::o_lessthan';
+operator <(a, b: Currency): Boolean; external name '::u_system::o_lessthan';
 
 operator <=(a, b: Byte): Boolean; external name '::u_system::o_lessthanorequal';
 operator <=(a, b: ShortInt): Boolean; external name '::u_system::o_lessthanorequal';
@@ -306,6 +333,7 @@ operator <=(a, b: Int64): Boolean; external name '::u_system::o_lessthanorequal'
 operator <=(a, b: Single): Boolean; external name '::u_system::o_lessthanorequal';
 operator <=(a, b: Double): Boolean; external name '::u_system::o_lessthanorequal';
 operator <=(a, b: Extended): Boolean; external name '::u_system::o_lessthanorequal';
+operator <=(a, b: Currency): Boolean; external name '::u_system::o_lessthanorequal';
 
 operator =(a, b: Byte): Boolean; external name '::u_system::o_equal';
 operator =(a, b: ShortInt): Boolean; external name '::u_system::o_equal';
@@ -318,6 +346,7 @@ operator =(a, b: Int64): Boolean; external name '::u_system::o_equal';
 operator =(a, b: Single): Boolean; external name '::u_system::o_equal';
 operator =(a, b: Double): Boolean; external name '::u_system::o_equal';
 operator =(a, b: Extended): Boolean; external name '::u_system::o_equal';
+operator =(a, b: Currency): Boolean; external name '::u_system::o_equal';
 
 operator >(a, b: Byte): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: ShortInt): Boolean; external name '::u_system::o_greaterthan';
@@ -330,6 +359,7 @@ operator >(a, b: Int64): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: Single): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: Double): Boolean; external name '::u_system::o_greaterthan';
 operator >(a, b: Extended): Boolean; external name '::u_system::o_greaterthan';
+operator >(a, b: Currency): Boolean; external name '::u_system::o_greaterthan';
 
 operator >=(a, b: Byte): Boolean; external name '::u_system::o_greaterthanorequal';
 operator >=(a, b: ShortInt): Boolean; external name '::u_system::o_greaterthanorequal';
@@ -342,6 +372,7 @@ operator >=(a, b: Int64): Boolean; external name '::u_system::o_greaterthanorequ
 operator >=(a, b: Single): Boolean; external name '::u_system::o_greaterthanorequal';
 operator >=(a, b: Double): Boolean; external name '::u_system::o_greaterthanorequal';
 operator >=(a, b: Extended): Boolean; external name '::u_system::o_greaterthanorequal';
+operator >=(a, b: Currency): Boolean; external name '::u_system::o_greaterthanorequal';
 
 operator UncheckedIntDivide(a, b: Byte): Integer; external name '::u_system::o_unchecked_intdivide';
 operator UncheckedIntDivide(a, b: ShortInt): Integer; external name '::u_system::o_unchecked_intdivide';
@@ -508,6 +539,7 @@ procedure exclude(var values; const item); external name '::u_system::p_exclude'
 procedure str(const x: Int64; var s); overload; external name '::u_system::p_str';
 procedure str(const x: QWord; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s); overload; external name '::u_system::p_str';
+procedure str(const x: Currency; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Char; var s); overload; external name '::u_system::p_str';
 procedure str(const x: ShortString; var s); overload; external name '::u_system::p_str';
 procedure str(const x: AnsiString; var s); overload; external name '::u_system::p_str';
@@ -520,6 +552,7 @@ procedure str(const x; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Int64; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: QWord; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: Currency; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: Char; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: ShortString; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: AnsiString; var s: AnsiString); overload; external name '::u_system::p_str';
@@ -544,10 +577,11 @@ procedure val(const s: ShortString; out value: Extended; out code); overload; ex
 procedure val(const s: AnsiString; out value: Extended); overload; external name '::u_system::p_val';
 procedure val(const s: AnsiString; out value: Extended; out code); overload; external name '::u_system::p_val';
 // TODO: Comp is absent.
-// FIXME: Currency is absent because tpcc has no Pascal Currency type or
-// fixed-scale representation.
-// FIXME: Enumeration Val needs generated name-to-ordinal metadata; tpcc
-// currently emits enum values but no runtime lookup table for their names.
+procedure val(const s: ShortString; out value: Currency); overload; external name '::u_system::p_val';
+procedure val(const s: ShortString; out value: Currency; out code); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Currency); overload; external name '::u_system::p_val';
+procedure val(const s: AnsiString; out value: Currency; out code); overload; external name '::u_system::p_val';
+// FIXME: Enumeration Val: use generated name-to-ordinal metadata.
 function hexstr(value: LongInt; count: Byte): ShortString; overload; external name '::u_system::p_hexstr';
 function hexstr(value: Int64; count: Byte): ShortString; overload; external name '::u_system::p_hexstr';
 function hexstr(value: QWord; count: Byte): ShortString; overload; external name '::u_system::p_hexstr';

@@ -78,8 +78,7 @@ int main() {
 	    .mode = ::u_system::text_file_mode::Output,
 	    .standard_stream = false,
 	}};
-	const ::u_system::t_ansistring failed_field =
-	    ::u_system::tpcc_ansistring_literal("7", 1);
+	const ::u_system::t_ansistring failed_field = ::u_system::tpcc_ansistring_literal("7", 1);
 	::u_system::m_unchecked_write(failed_text, failed_field);
 	if (::u_system::p_ioresult() != 101) {
 		return 7;

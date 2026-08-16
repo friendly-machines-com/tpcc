@@ -214,6 +214,10 @@ Real::Real(DecimalOrigin origin) : origin(std::move(origin)) {
 	this->ty = &untyped_real_type();
 }
 
+CurrencyValue::CurrencyValue(int64_t raw) : raw(raw) {
+	this->ty = currency_type();
+}
+
 FixedArrayLiteral::FixedArrayLiteral(std::vector<Node*> elements, Type* ty) : elements(std::move(elements)) {
 	this->ty = ty;
 }
@@ -747,6 +751,29 @@ const char* Cast::diagnostic_kind() const {
 	return "cast";
 }
 
+static std::optional<ConstEvalResult> const_convert_to_currency(Node* value, bool checked) {
+	// Cast, RangeCheckedCast, and ExplicitCast are different CST operations,
+	// but they materialize the same Currency value. Keep the conversion here
+	// so constant evaluation differs only in whether an out-of-range value
+	// reports the R+ error or retains the R- low carrier bits.
+	CurrencyMaterialization converted;
+	const char* source_kind = nullptr;
+	if (auto integer = dynamic_cast<Integer*>(value)) {
+		converted = materialize_currency_integer(integer->value, integer->negative);
+		source_kind = "integer";
+	} else if (auto real = dynamic_cast<Real*>(value)) {
+		converted = real->is_origin() ? materialize_currency_origin(*real->origin) : materialize_currency_real(real->value);
+		source_kind = "real";
+	} else {
+		return std::nullopt;
+	}
+
+	if (converted.kind == RealMaterializationKind::OutOfRange && (checked || !converted.unchecked_value_available)) {
+		return ConstEvalResult::error(std::string(source_kind) + " constant out of range for Currency");
+	}
+	return ConstEvalResult::success(new CurrencyValue(converted.raw));
+}
+
 ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult r = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (r.kind != ConstEvalResult::Kind::Success) {
@@ -758,6 +785,11 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 		// m_set_cast operation; the bounds themselves need no value
 		// conversion.
 		return ConstEvalResult::success(new SetLiteral(set->items, ty));
+	}
+	if (is_currency_semantic_type(ty)) {
+		if (auto converted = const_convert_to_currency(r.node, false)) {
+			return *converted;
+		}
 	}
 	if (auto ordinal = folded_ordinal_value(r.node)) {
 		ConstEvalResult converted = const_explicit_ordinal_cast(ordinal->value.magnitude, ordinal->value.negative, ty);
@@ -784,6 +816,24 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 			}
 		}
 	}
+	if (auto currency = dynamic_cast<CurrencyValue*>(r.node)) {
+		if (is_real_semantic_type(ty)) {
+			RealMaterialization converted = materialize_decimal_origin(currency_decimal_origin(currency->raw), ty);
+			if (converted.kind == RealMaterializationKind::OutOfRange) {
+				return ConstEvalResult::error("Currency constant out of range for real target type");
+			}
+			if (converted.kind != RealMaterializationKind::InvalidTarget) {
+				return ConstEvalResult::success(new Real(converted.value, ty));
+			}
+		}
+		OrdinalBounds bounds;
+		if (integer_bounds(ty, &bounds)) {
+			const int64_t integral = currency->raw / 10000;
+			const bool negative = integral < 0;
+			const uint64_t magnitude = integral == INT64_MIN ? uint64_t{1} << 63 : static_cast<uint64_t>(negative ? -integral : integral);
+			return const_convert_integer(magnitude, negative, currency_type(), ty);
+		}
+	}
 	if (auto string = dynamic_cast<String*>(r.node)) {
 		ConstEvalResult converted = const_convert_string(string->value, ty);
 		if (converted.kind != ConstEvalResult::Kind::Error) {
@@ -805,6 +855,11 @@ ConstEvalResult RangeCheckedCast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult value = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (value.kind != ConstEvalResult::Kind::Success) {
 		return value;
+	}
+	if (is_currency_semantic_type(ty)) {
+		if (auto converted = const_convert_to_currency(value.node, true)) {
+			return *converted;
+		}
 	}
 	if (auto real = dynamic_cast<Real*>(value.node)) {
 		if (real->is_origin()) {
@@ -849,6 +904,11 @@ ConstEvalResult ExplicitCast::const_eval(ConstEvalContext& ctx) const {
 	ConstEvalResult value = a ? a->const_eval(ctx) : ConstEvalResult::not_constant();
 	if (value.kind != ConstEvalResult::Kind::Success) {
 		return value;
+	}
+	if (is_currency_semantic_type(ty)) {
+		if (auto converted = const_convert_to_currency(value.node, false)) {
+			return *converted;
+		}
 	}
 	if (auto ordinal = folded_ordinal_value(value.node)) {
 		return const_explicit_ordinal_cast(ordinal->value.magnitude, ordinal->value.negative, ty);
@@ -983,6 +1043,18 @@ void Real::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream&
 	} else {
 		out << "real " << std::setprecision(std::numeric_limits<long double>::max_digits10) << value << " : " << ctx->known_type_ref(ty);
 	}
+}
+
+const char* CurrencyValue::diagnostic_kind() const {
+	return "currency";
+}
+
+ConstEvalResult CurrencyValue::const_eval(ConstEvalContext&) const {
+	return ConstEvalResult::success(new CurrencyValue(raw));
+}
+
+void CurrencyValue::print_diagnostic_definition(ErrorLetContext*, std::ostringstream& out, unsigned) const {
+	out << "currency raw " << raw;
 }
 
 const char* FixedArrayLiteral::diagnostic_kind() const {

@@ -4,6 +4,7 @@
 #include "frame.h"
 #include "operators.h"
 #include "types.h"
+#include <bit>
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
@@ -49,6 +50,7 @@ IntrinsicType k_set(SourceLocation::builtin(), "::u_system::t_set", {});
 IntrinsicType k_single(SourceLocation::builtin(), "::u_system::t_single", {}, {}, TypeLayout{4, 4}, IntrinsicCarrier::Float);
 IntrinsicType k_double(SourceLocation::builtin(), "::u_system::t_double", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::Double);
 IntrinsicType k_extended(SourceLocation::builtin(), "::u_system::t_extended", {}, {}, TypeLayout{16, 16}, IntrinsicCarrier::LongDouble);
+IntrinsicType k_currency(SourceLocation::builtin(), "::u_system::t_currency", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::Currency);
 EnumType k_boolean(SourceLocation::builtin(), "::u_system::t_boolean", "false", "true", 8, false);
 IntrinsicType k_char(SourceLocation::builtin(), "::u_system::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1}, IntrinsicCarrier::Character);
 IntrinsicType k_widechar(SourceLocation::builtin(), "::u_system::t_widechar", {}, unsigned_bounds(16), TypeLayout{2, 2}, IntrinsicCarrier::WideCharacter);
@@ -81,7 +83,7 @@ TMethodDefinition& tmethod_definition() {
 }
 
 Type* const k_all_intrinsics[] = {
-    &k_byte, &k_shortint, &k_word, &k_smallint, &k_longword, &k_integer, &k_longint, &k_qword, &k_int64, &k_set, &k_single, &k_double, &k_extended, &k_boolean, &k_char, &k_widechar, &k_shortstring, &k_ansistring, &k_text, &k_file, &k_pointer, &k_fixedarray, &k_unknown,
+    &k_byte, &k_shortint, &k_word, &k_smallint, &k_longword, &k_integer, &k_longint, &k_qword, &k_int64, &k_set, &k_single, &k_double, &k_extended, &k_currency, &k_boolean, &k_char, &k_widechar, &k_shortstring, &k_ansistring, &k_text, &k_file, &k_pointer, &k_fixedarray, &k_unknown,
     //    &k_m_iobject,
 };
 } // namespace
@@ -199,6 +201,10 @@ Type* double_type() {
 
 Type* extended_type() {
 	return &k_extended;
+}
+
+Type* currency_type() {
+	return &k_currency;
 }
 
 Type* set_type() {
@@ -322,7 +328,16 @@ static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const s
 		return ConstEvalResult::not_constant();
 	}
 	if (const Integer* value = const_integer_arg(args[0])) {
+		if (is_currency_semantic_type(result_ty)) {
+			CurrencyMaterialization converted = materialize_currency_integer(value->value, value->negative);
+			return converted.kind == RealMaterializationKind::OutOfRange ? ConstEvalResult::error("integer constant out of range for Currency") : ConstEvalResult::success(new CurrencyValue(converted.raw));
+		}
 		return fold_integer_result(value->value, value->negative, result_ty);
+	} else if (const auto* value = dynamic_cast<const CurrencyValue*>(args[0])) {
+		if (is_real_semantic_type(result_ty)) {
+			RealMaterialization converted = materialize_decimal_origin(currency_decimal_origin(value->raw), result_ty);
+			return converted.kind == RealMaterializationKind::InvalidTarget ? ConstEvalResult::not_constant() : ConstEvalResult::success(new Real(converted.value, result_ty));
+		}
 	} else if (const auto* value = dynamic_cast<const String*>(args[0])) {
 		return const_convert_string(value->value, result_ty);
 	}
@@ -332,6 +347,80 @@ static ConstEvalResult fold_implicit(ConstEvalContext&, Type* result_ty, const s
 static uint64_t unchecked_integer_bits(const Integer* value) {
 	return value->negative ? uint64_t{0} - value->value : value->value;
 }
+
+namespace {
+struct CurrencyU128 {
+	uint64_t high = 0;
+	uint64_t low = 0;
+};
+
+static CurrencyU128 currency_multiply_u64(uint64_t first, uint64_t second) {
+	const uint64_t first_low = static_cast<uint32_t>(first);
+	const uint64_t first_high = first >> 32;
+	const uint64_t second_low = static_cast<uint32_t>(second);
+	const uint64_t second_high = second >> 32;
+	const uint64_t low_product = first_low * second_low;
+	const uint64_t cross_first = first_high * second_low;
+	const uint64_t cross_second = first_low * second_high;
+	const uint64_t high_product = first_high * second_high;
+	const uint64_t middle = (low_product >> 32) + static_cast<uint32_t>(cross_first) + static_cast<uint32_t>(cross_second);
+	return CurrencyU128{
+	    high_product + (cross_first >> 32) + (cross_second >> 32) + (middle >> 32),
+	    (middle << 32) | static_cast<uint32_t>(low_product),
+	};
+}
+
+static bool currency_u128_bit(CurrencyU128 value, unsigned bit) {
+	return bit < 64 ? ((value.low >> bit) & 1) != 0 : ((value.high >> (bit - 64)) & 1) != 0;
+}
+
+static std::pair<CurrencyU128, uint64_t> currency_divide_u128_small(CurrencyU128 dividend, uint64_t divisor) {
+	CurrencyU128 quotient;
+	uint64_t remainder = 0;
+	for (unsigned remaining = 128; remaining != 0; --remaining) {
+		const unsigned bit = remaining - 1;
+		remainder = remainder * 2 + (currency_u128_bit(dividend, bit) ? 1 : 0);
+		if (remainder >= divisor) {
+			remainder -= divisor;
+			if (bit < 64) {
+				quotient.low |= uint64_t{1} << bit;
+			} else {
+				quotient.high |= uint64_t{1} << (bit - 64);
+			}
+		}
+	}
+	return {quotient, remainder};
+}
+
+static uint64_t currency_magnitude(int64_t value) {
+	const uint64_t bits = static_cast<uint64_t>(value);
+	return value < 0 ? uint64_t{0} - bits : bits;
+}
+
+static ConstEvalResult fold_currency_product(const std::vector<Node*>& args, bool checked) {
+	if (args.size() != 2) {
+		return ConstEvalResult::not_constant();
+	}
+	auto first = dynamic_cast<CurrencyValue*>(args[0]);
+	auto second = dynamic_cast<CurrencyValue*>(args[1]);
+	if (!first || !second) {
+		return ConstEvalResult::not_constant();
+	}
+	const bool negative = (first->raw < 0) != (second->raw < 0);
+	auto [quotient, remainder] = currency_divide_u128_small(currency_multiply_u64(currency_magnitude(first->raw), currency_magnitude(second->raw)), 10000);
+	if (remainder > 5000 || (remainder == 5000 && (quotient.low & 1) != 0)) {
+		if (++quotient.low == 0) {
+			++quotient.high;
+		}
+	}
+	const uint64_t limit = negative ? uint64_t{1} << 63 : static_cast<uint64_t>(INT64_MAX);
+	if (checked && (quotient.high != 0 || quotient.low > limit)) {
+		return ConstEvalResult::error("Currency constant overflow");
+	}
+	uint64_t bits = negative ? uint64_t{0} - quotient.low : quotient.low;
+	return ConstEvalResult::success(new CurrencyValue(std::bit_cast<int64_t>(bits)));
+}
+} // namespace
 
 static ConstEvalResult fold_unchecked_integer_bits(uint64_t bits, Type* result_ty) {
 	// The explicit ordinal cast is TPCC's existing representation conversion:
@@ -350,6 +439,12 @@ static ConstEvalResult fold_unary_minus(ConstEvalContext&, Type* result_ty, cons
 	if (auto real = dynamic_cast<Real*>(args[0]); real && !real->is_origin()) {
 		return fold_real_result(-real->value, result_ty);
 	}
+	if (auto currency = dynamic_cast<CurrencyValue*>(args[0])) {
+		if (currency->raw == INT64_MIN) {
+			return ConstEvalResult::error("Currency constant overflow");
+		}
+		return ConstEvalResult::success(new CurrencyValue(-currency->raw));
+	}
 	return ConstEvalResult::not_constant();
 }
 
@@ -363,6 +458,10 @@ static ConstEvalResult fold_unchecked_unary_minus(ConstEvalContext&, Type* resul
 	if (auto real = dynamic_cast<Real*>(args[0]); real && !real->is_origin()) {
 		return fold_real_result(-real->value, result_ty);
 	}
+	if (auto currency = dynamic_cast<CurrencyValue*>(args[0])) {
+		const uint64_t bits = uint64_t{0} - static_cast<uint64_t>(currency->raw);
+		return ConstEvalResult::success(new CurrencyValue(std::bit_cast<int64_t>(bits)));
+	}
 	return ConstEvalResult::not_constant();
 }
 
@@ -375,6 +474,9 @@ static ConstEvalResult fold_unary_plus(ConstEvalContext&, Type* result_ty, const
 	}
 	if (auto real = dynamic_cast<Real*>(args[0]); real && !real->is_origin()) {
 		return fold_real_result(real->value, result_ty);
+	}
+	if (auto currency = dynamic_cast<CurrencyValue*>(args[0])) {
+		return ConstEvalResult::success(new CurrencyValue(currency->raw));
 	}
 	return ConstEvalResult::not_constant();
 }
@@ -460,6 +562,29 @@ static ConstEvalResult fold_comparison(ComparisonKind kind, const std::vector<No
 			break;
 		case ComparisonKind::GreaterThanOrEqual:
 			result = real_a->value >= real_b->value;
+			break;
+		}
+		return ConstEvalResult::success(new EnumMemberRef(result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false", result ? 1 : 0, boolean_type()));
+	}
+	auto currency_a = dynamic_cast<CurrencyValue*>(args[0]);
+	auto currency_b = dynamic_cast<CurrencyValue*>(args[1]);
+	if (currency_a && currency_b) {
+		bool result = false;
+		switch (kind) {
+		case ComparisonKind::LessThan:
+			result = currency_a->raw < currency_b->raw;
+			break;
+		case ComparisonKind::LessThanOrEqual:
+			result = currency_a->raw <= currency_b->raw;
+			break;
+		case ComparisonKind::Equal:
+			result = currency_a->raw == currency_b->raw;
+			break;
+		case ComparisonKind::GreaterThan:
+			result = currency_a->raw > currency_b->raw;
+			break;
+		case ComparisonKind::GreaterThanOrEqual:
+			result = currency_a->raw >= currency_b->raw;
 			break;
 		}
 		return ConstEvalResult::success(new EnumMemberRef(result ? "::u_system::t_boolean::p_true" : "::u_system::t_boolean::p_false", result ? 1 : 0, boolean_type()));
@@ -936,6 +1061,29 @@ static bool add_u64_checked(uint64_t a, uint64_t b, uint64_t* out) {
 	return *out >= a;
 }
 
+static ConstEvalResult fold_currency_add_sub(const std::vector<Node*>& args, bool subtract, bool checked) {
+	if (args.size() != 2) {
+		return ConstEvalResult::not_constant();
+	}
+	auto first = dynamic_cast<CurrencyValue*>(args[0]);
+	auto second = dynamic_cast<CurrencyValue*>(args[1]);
+	if (!first || !second) {
+		return ConstEvalResult::not_constant();
+	}
+	if (checked) {
+		int64_t raw;
+		const bool overflow = subtract ? __builtin_sub_overflow(first->raw, second->raw, &raw) : __builtin_add_overflow(first->raw, second->raw, &raw);
+		if (overflow) {
+			return ConstEvalResult::error("Currency constant overflow");
+		}
+		return ConstEvalResult::success(new CurrencyValue(raw));
+	}
+	const uint64_t first_bits = static_cast<uint64_t>(first->raw);
+	const uint64_t second_bits = static_cast<uint64_t>(second->raw);
+	const uint64_t result_bits = subtract ? first_bits - second_bits : first_bits + second_bits;
+	return ConstEvalResult::success(new CurrencyValue(std::bit_cast<int64_t>(result_bits)));
+}
+
 static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& args, bool subtract) {
 	if (!subtract && args.size() == 2) {
 		auto left = dynamic_cast<String*>(args[0]);
@@ -950,6 +1098,9 @@ static ConstEvalResult fold_add_sub(Type* result_ty, const std::vector<Node*>& a
 			auto result = eval_typed_real_binary(subtract ? RealBinaryOperation::Subtract : RealBinaryOperation::Add, a, b, result_ty);
 			return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
 		}
+	}
+	if (is_currency_semantic_type(result_ty)) {
+		return fold_currency_add_sub(args, subtract, true);
 	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
@@ -997,6 +1148,9 @@ static ConstEvalResult fold_unchecked_add_sub(Type* result_ty, const std::vector
 			return result ? ConstEvalResult::success(new Real(*result, result_ty)) : ConstEvalResult::not_constant();
 		}
 	}
+	if (is_currency_semantic_type(result_ty)) {
+		return fold_currency_add_sub(args, subtract, false);
+	}
 	if (args.size() != 2 || !const_integer_arg(args[0]) || !const_integer_arg(args[1])) {
 		return ConstEvalResult::not_constant();
 	}
@@ -1014,6 +1168,9 @@ static ConstEvalResult fold_unchecked_subtract(ConstEvalContext&, Type* result_t
 }
 
 static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (is_currency_semantic_type(result_ty)) {
+		return fold_currency_product(args, true);
+	}
 	if (args.size() == 2 && is_real_semantic_type(result_ty)) {
 		long double a = 0.0L, b = 0.0L;
 		if (const_numeric_as_long_double(args[0], &a) && const_numeric_as_long_double(args[1], &b)) {
@@ -1036,6 +1193,9 @@ static ConstEvalResult fold_multiply(ConstEvalContext&, Type* result_ty, const s
 }
 
 static ConstEvalResult fold_unchecked_multiply(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
+	if (is_currency_semantic_type(result_ty)) {
+		return fold_currency_product(args, false);
+	}
 	if (args.size() == 2 && is_real_semantic_type(result_ty)) {
 		long double a = 0.0L, b = 0.0L;
 		if (const_numeric_as_long_double(args[0], &a) && const_numeric_as_long_double(args[1], &b)) {
@@ -1151,6 +1311,16 @@ static ConstEvalResult fold_length(ConstEvalContext&, Type* result_ty, const std
 static ConstEvalResult fold_divide(ConstEvalContext&, Type* result_ty, const std::vector<Node*>& args) {
 	if (args.size() != 2) {
 		return ConstEvalResult::not_constant();
+	}
+	auto first_currency = dynamic_cast<CurrencyValue*>(args[0]);
+	auto second_currency = dynamic_cast<CurrencyValue*>(args[1]);
+	if (first_currency && second_currency) {
+		if (second_currency->raw == 0) {
+			return ConstEvalResult::error("Currency constant division by zero");
+		}
+		const long double quotient = static_cast<long double>(first_currency->raw) / static_cast<long double>(second_currency->raw);
+		auto rounded = round_typed_real(quotient, result_ty);
+		return rounded ? ConstEvalResult::success(new Real(*rounded, result_ty)) : ConstEvalResult::not_constant();
 	}
 	long double a = 0.0, b = 0.0;
 	if (!const_numeric_as_long_double(args[0], &a) || !const_numeric_as_long_double(args[1], &b)) {

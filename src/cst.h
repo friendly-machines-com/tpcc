@@ -618,6 +618,18 @@ class Real : public Node {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** One already-materialized Currency value. `raw` is the canonical signed
+ * scaled integer; it is not an ordinal Pascal value and must never be folded
+ * through Integer merely because the runtime carrier contains an Int64. */
+class CurrencyValue : public Node {
+      public:
+	int64_t raw;
+	explicit CurrencyValue(int64_t raw);
+	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 class FixedArrayLiteral : public Node {
       public:
 	std::vector<Node*> elements;

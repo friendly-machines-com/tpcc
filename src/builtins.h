@@ -204,6 +204,7 @@ enum class IntrinsicCarrier {
 	Float,
 	Double,
 	LongDouble,
+	Currency,
 	Character,
 	WideCharacter,
 	AnsiString,
@@ -286,6 +287,7 @@ Type* file_type();
 Type* single_type();
 Type* double_type();
 Type* extended_type();
+Type* currency_type();
 Type* set_type();
 Type* fixedarray_type();
 Type* unknown_type();

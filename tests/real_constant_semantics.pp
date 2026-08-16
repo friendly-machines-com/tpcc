@@ -26,7 +26,10 @@ var
   FoldedRank: Integer;
   ExactMixedRank: Integer;
   RoundedMixedRank: Integer;
+  AddRank: Integer;
+  MultiplyRank: Integer;
   DivideRank: Integer;
+  MixedLess: Boolean;
   SingleValue: Single;
   Milliseconds: Word;
   FoldedZ: Extended;
@@ -93,7 +96,10 @@ begin
   RoundedMixedRank := Domain(SingleValue + 0.1);
 
   Milliseconds := 500;
+  AddRank := Domain(Milliseconds + 1000.0);
+  MultiplyRank := Domain(Milliseconds * 1000.0);
   DivideRank := Domain(Milliseconds / 1000.0);
+  MixedLess := Milliseconds < 1000.0;
 
   FoldedZ := Z;
   RuntimeX := X;

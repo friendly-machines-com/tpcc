@@ -20,7 +20,7 @@ int main() {
 	if (p_exactmixedrank != 1 || p_roundedmixedrank != 3) {
 		return 5;
 	}
-	if (p_dividerank != 1) {
+	if (p_addrank != 1 || p_multiplyrank != 1 || p_dividerank != 1 || p_mixedless != ::u_system::p_true) {
 		return 6;
 	}
 	if (p_foldedz != p_runtimez) {

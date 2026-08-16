@@ -42,6 +42,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <system_error>
@@ -227,6 +228,28 @@ using t_sizeuint = t_qword;
 using t_single = float;
 using t_double = double;
 using t_extended = long double;
+
+// Currency is a signed decimal fixed-point value whose mathematical value is
+// raw/10000. A wrapper preserves that Pascal domain boundary in generated C++;
+// using an Int64 alias would silently admit integer operators and overloads.
+struct t_currency {
+	t_int64 raw;
+};
+
+static_assert(sizeof(t_currency) == sizeof(t_int64));
+static_assert(alignof(t_currency) == alignof(t_int64));
+static_assert(std::is_trivially_copyable_v<t_currency>);
+static_assert(std::is_standard_layout_v<t_currency>);
+
+// These helpers are deliberately internal: Pascal Currency-to-Int64 is a
+// numeric conversion, not permission to observe or manufacture scaled bits.
+inline constexpr t_currency m_currency_from_raw(t_int64 raw) {
+	return t_currency{raw};
+}
+
+inline constexpr t_int64 m_currency_raw(t_currency value) {
+	return value.raw;
+}
 
 inline t_pointer m_frame_word(t_pointer frame, std::size_t index) {
 	if (!frame) {
@@ -668,11 +691,241 @@ inline Target m_range_checked_real_cast(Source source) {
 	return m_real_cast<Target>(source);
 }
 
-using tpcc_unknown_type = void*;
+template <typename Source>
+        requires std::is_integral_v<Source>
+inline t_currency m_currency_cast(Source source) {
+	// R- integer-to-Currency conversion has the same defined low-bit behavior
+	// as other unchecked ordinal narrowing. Multiply unsigned carrier bits so
+	// signed overflow is never evaluated by C++.
+	const uint64_t bits = static_cast<uint64_t>(source);
+	return m_currency_from_raw(std::bit_cast<t_int64>(bits * uint64_t{10000}));
+}
+
+template <typename Source>
+        requires std::is_integral_v<Source>
+inline t_currency m_range_checked_currency_cast(Source source) {
+	constexpr uint64_t positive_limit = static_cast<uint64_t>(std::numeric_limits<t_int64>::max()) / 10000;
+	constexpr uint64_t negative_limit = (uint64_t{1} << 63) / 10000;
+	const auto [negative, magnitude] = m_ordinal_sign_magnitude(source);
+	if ((!negative && magnitude > positive_limit) || (negative && magnitude > negative_limit)) {
+		m_runtime_error(201);
+	}
+	return m_currency_cast(source);
+}
+
+inline t_currency m_currency_from_scaled_real(long double scaled, bool checked) {
+	constexpr long double limit = 0x1p63L;
+	if (!__builtin_isfinite(scaled)) {
+		m_runtime_error(201);
+	}
+	if (scaled < -limit || scaled >= limit) {
+		if (checked) {
+			m_runtime_error(201);
+		}
+		long double remainder = ::fmodl(scaled, 0x1p64L);
+		if (remainder < 0) {
+			remainder += 0x1p64L;
+		}
+		return m_currency_from_raw(std::bit_cast<t_int64>(static_cast<uint64_t>(remainder)));
+	}
+	return m_currency_from_raw(static_cast<t_int64>(scaled));
+}
+
+template <typename Source>
+        requires std::is_floating_point_v<Source>
+inline t_currency m_currency_cast(Source source) {
+	return m_currency_from_scaled_real(::nearbyintl(static_cast<long double>(source) * 10000.0L), false);
+}
+
+template <typename Source>
+        requires std::is_floating_point_v<Source>
+inline t_currency m_range_checked_currency_cast(Source source) {
+	return m_currency_from_scaled_real(::nearbyintl(static_cast<long double>(source) * 10000.0L), true);
+}
+
+template <typename Target>
+        requires std::is_floating_point_v<Target>
+inline Target m_currency_to_real(t_currency source) {
+	return static_cast<Target>(static_cast<long double>(m_currency_raw(source)) / 10000.0L);
+}
+
+template <typename Target>
+        requires std::is_integral_v<Target>
+inline Target m_currency_to_integer(t_currency source) {
+	return m_ordinal_cast<Target>(m_currency_raw(source) / 10000);
+}
+
+template <typename Source>
+        requires std::is_integral_v<Source>
+inline t_currency o_implicit(Source source, m_conversion_target<t_currency>) {
+	return m_currency_cast(source);
+}
 
 inline t_boolean tpcc_bool_to_boolean(bool value) {
 	return value ? p_true : p_false;
 }
+
+struct m_currency_u128 {
+	uint64_t high;
+	uint64_t low;
+};
+
+inline constexpr m_currency_u128 m_currency_multiply_u64(uint64_t first, uint64_t second) {
+	const uint64_t first_low = static_cast<uint32_t>(first);
+	const uint64_t first_high = first >> 32;
+	const uint64_t second_low = static_cast<uint32_t>(second);
+	const uint64_t second_high = second >> 32;
+	const uint64_t low_product = first_low * second_low;
+	const uint64_t cross_first = first_high * second_low;
+	const uint64_t cross_second = first_low * second_high;
+	const uint64_t high_product = first_high * second_high;
+	const uint64_t middle = (low_product >> 32) + static_cast<uint32_t>(cross_first) + static_cast<uint32_t>(cross_second);
+	return m_currency_u128{
+	    high_product + (cross_first >> 32) + (cross_second >> 32) + (middle >> 32),
+	    (middle << 32) | static_cast<uint32_t>(low_product),
+	};
+}
+
+inline constexpr bool m_currency_u128_bit(m_currency_u128 value, unsigned bit) {
+	return bit < 64 ? ((value.low >> bit) & 1) != 0 : ((value.high >> (bit - 64)) & 1) != 0;
+}
+
+inline constexpr void m_currency_u128_set_bit(m_currency_u128* value, unsigned bit) {
+	if (bit < 64) {
+		value->low |= uint64_t{1} << bit;
+	} else {
+		value->high |= uint64_t{1} << (bit - 64);
+	}
+}
+
+inline constexpr std::pair<m_currency_u128, uint64_t> m_currency_divide_u128_small(m_currency_u128 dividend, uint64_t divisor) {
+	m_currency_u128 quotient{};
+	uint64_t remainder = 0;
+	for (unsigned remaining = 128; remaining != 0; --remaining) {
+		const unsigned bit = remaining - 1;
+		remainder = remainder * 2 + (m_currency_u128_bit(dividend, bit) ? 1 : 0);
+		if (remainder >= divisor) {
+			remainder -= divisor;
+			m_currency_u128_set_bit(&quotient, bit);
+		}
+	}
+	return {quotient, remainder};
+}
+
+inline constexpr void m_currency_u128_increment(m_currency_u128* value) {
+	if (++value->low == 0) {
+		++value->high;
+	}
+}
+
+inline constexpr uint64_t m_currency_magnitude(t_int64 value) {
+	const uint64_t bits = static_cast<uint64_t>(value);
+	return value < 0 ? uint64_t{0} - bits : bits;
+}
+
+inline t_currency m_currency_product(t_currency first, t_currency second, bool checked) {
+	const t_int64 first_raw = m_currency_raw(first);
+	const t_int64 second_raw = m_currency_raw(second);
+	const bool negative = (first_raw < 0) != (second_raw < 0);
+	const auto product = m_currency_multiply_u64(m_currency_magnitude(first_raw), m_currency_magnitude(second_raw));
+	auto [quotient, remainder] = m_currency_divide_u128_small(product, 10000);
+	// Currency materialization uses a fixed nearest-even rule. Keep the tie
+	// decision in integer arithmetic so it is independent of the ambient FPU
+	// mode and identical on targets with different long-double formats.
+	if (remainder > 5000 || (remainder == 5000 && (quotient.low & 1) != 0)) {
+		m_currency_u128_increment(&quotient);
+	}
+	const uint64_t limit = negative ? uint64_t{1} << 63 : static_cast<uint64_t>(std::numeric_limits<t_int64>::max());
+	if (checked && (quotient.high != 0 || quotient.low > limit)) {
+		m_runtime_error(215);
+	}
+	uint64_t bits = quotient.low;
+	if (negative) {
+		bits = uint64_t{0} - bits;
+	}
+	return m_currency_from_raw(std::bit_cast<t_int64>(bits));
+}
+
+inline t_currency o_positive(t_currency value) {
+	return value;
+}
+
+inline t_currency o_unchecked_negative(t_currency value) {
+	const uint64_t bits = uint64_t{0} - static_cast<uint64_t>(m_currency_raw(value));
+	return m_currency_from_raw(std::bit_cast<t_int64>(bits));
+}
+
+inline t_currency o_negative(t_currency value) {
+	if (m_currency_raw(value) == std::numeric_limits<t_int64>::min()) {
+		m_runtime_error(215);
+	}
+	return m_currency_from_raw(-m_currency_raw(value));
+}
+
+inline t_currency o_unchecked_add(t_currency first, t_currency second) {
+	const uint64_t bits = static_cast<uint64_t>(m_currency_raw(first)) + static_cast<uint64_t>(m_currency_raw(second));
+	return m_currency_from_raw(std::bit_cast<t_int64>(bits));
+}
+
+inline t_currency o_add(t_currency first, t_currency second) {
+	t_int64 raw;
+	if (__builtin_add_overflow(m_currency_raw(first), m_currency_raw(second), &raw)) {
+		m_runtime_error(215);
+	}
+	return m_currency_from_raw(raw);
+}
+
+inline t_currency o_unchecked_subtract(t_currency first, t_currency second) {
+	const uint64_t bits = static_cast<uint64_t>(m_currency_raw(first)) - static_cast<uint64_t>(m_currency_raw(second));
+	return m_currency_from_raw(std::bit_cast<t_int64>(bits));
+}
+
+inline t_currency o_subtract(t_currency first, t_currency second) {
+	t_int64 raw;
+	if (__builtin_sub_overflow(m_currency_raw(first), m_currency_raw(second), &raw)) {
+		m_runtime_error(215);
+	}
+	return m_currency_from_raw(raw);
+}
+
+inline t_currency o_unchecked_multiply(t_currency first, t_currency second) {
+	return m_currency_product(first, second, false);
+}
+
+inline t_currency o_multiply(t_currency first, t_currency second) {
+	return m_currency_product(first, second, true);
+}
+
+inline t_double o_divide(t_currency first, t_currency second) {
+	if (m_currency_raw(second) == 0) {
+		m_runtime_error(200);
+	}
+	// The scale cancels exactly. Compute from the raw ratio instead of first
+	// approximating each Currency operand as a binary real.
+	return static_cast<t_double>(static_cast<long double>(m_currency_raw(first)) / static_cast<long double>(m_currency_raw(second)));
+}
+
+inline t_boolean o_lessthan(t_currency first, t_currency second) {
+	return tpcc_bool_to_boolean(m_currency_raw(first) < m_currency_raw(second));
+}
+
+inline t_boolean o_lessthanorequal(t_currency first, t_currency second) {
+	return tpcc_bool_to_boolean(m_currency_raw(first) <= m_currency_raw(second));
+}
+
+inline t_boolean o_equal(t_currency first, t_currency second) {
+	return tpcc_bool_to_boolean(m_currency_raw(first) == m_currency_raw(second));
+}
+
+inline t_boolean o_greaterthan(t_currency first, t_currency second) {
+	return tpcc_bool_to_boolean(m_currency_raw(first) > m_currency_raw(second));
+}
+
+inline t_boolean o_greaterthanorequal(t_currency first, t_currency second) {
+	return tpcc_bool_to_boolean(m_currency_raw(first) >= m_currency_raw(second));
+}
+
+using tpcc_unknown_type = void*;
 
 template <std::size_t Capacity> struct t_shortstring {
 	static_assert(Capacity >= 1 && Capacity <= 255, "Pascal ShortString capacity must be in 1..255");
@@ -3700,6 +3953,71 @@ inline std::string tpcc_render_default_extended(t_extended value) {
 	return result;
 }
 
+inline std::string tpcc_render_currency(t_currency value, bool has_precision, t_sizeint requested_precision) {
+	// Currency already contains the exact decimal integer raw/10000. Format
+	// that carrier directly so Str and Write cannot introduce a binary-real
+	// round trip.
+	const t_int64 raw = m_currency_raw(value);
+	const bool negative = raw < 0;
+	const uint64_t raw_bits = static_cast<uint64_t>(raw);
+	uint64_t magnitude = negative ? uint64_t{0} - raw_bits : raw_bits;
+	if (has_precision && requested_precision < 0) {
+		// A negative fractional-digit count has no fixed-decimal meaning.
+		// Reject it independently of {$R}; it is an invalid Str operation,
+		// not a numeric narrowing conversion.
+		m_runtime_error(201);
+	}
+	const t_sizeint precision = has_precision ? requested_precision : 4;
+
+	if (precision < 4) {
+		static constexpr uint64_t powers_of_ten[] = {1, 10, 100, 1000, 10000};
+		const unsigned discarded = static_cast<unsigned>(4 - precision);
+		const uint64_t divisor = powers_of_ten[discarded];
+		uint64_t quotient = magnitude / divisor;
+		const uint64_t remainder = magnitude % divisor;
+		const uint64_t half = divisor / 2;
+		// Formatting and Val use the same ties-to-even decimal reduction.
+		if (remainder > half || (remainder == half && (quotient & 1) != 0)) {
+			++quotient;
+		}
+		magnitude = quotient;
+	}
+
+	std::string result;
+	if (negative) {
+		result.push_back('-');
+	}
+	if (precision == 0) {
+		result += std::to_string(magnitude);
+		return result;
+	}
+
+	if (precision < 4) {
+		static constexpr uint64_t powers_of_ten[] = {1, 10, 100, 1000, 10000};
+		const uint64_t scale = powers_of_ten[static_cast<unsigned>(precision)];
+		result += std::to_string(magnitude / scale);
+		result.push_back('.');
+		const std::string fraction = std::to_string(magnitude % scale);
+		result.append(static_cast<std::size_t>(precision) - fraction.size(), '0');
+		result += fraction;
+		return result;
+	}
+
+	const uint64_t integer_part = magnitude / 10000;
+	const uint64_t fraction_part = magnitude % 10000;
+	result += std::to_string(integer_part);
+	result.push_back('.');
+	const std::string fraction = std::to_string(fraction_part);
+	result.append(4 - fraction.size(), '0');
+	result += fraction;
+	const uint64_t extra_digits = static_cast<uint64_t>(precision - 4);
+	if (extra_digits > static_cast<uint64_t>(result.max_size() - result.size())) {
+		throw std::length_error("Currency precision is too large");
+	}
+	result.append(static_cast<std::size_t>(extra_digits), '0');
+	return result;
+}
+
 template <typename T> inline std::string tpcc_render_unpadded_value(const T& value, bool has_precision, t_sizeint precision) {
 	std::ostringstream out;
 	if constexpr (std::is_same_v<T, std::string>) {
@@ -3728,6 +4046,8 @@ template <typename T> inline std::string tpcc_render_unpadded_value(const T& val
 		// Boolean is a truth value rather than a general named enumeration:
 		// zero formats as FALSE and every nonzero carrier formats as TRUE.
 		return value != p_false ? "TRUE" : "FALSE";
+	} else if constexpr (std::is_same_v<T, t_currency>) {
+		return tpcc_render_currency(value, has_precision, precision);
 	} else if constexpr (std::is_integral_v<T>) {
 		// uint8_t/int8_t stream as characters, so widen every Pascal
 		// integer carrier before insertion.
@@ -3800,7 +4120,7 @@ inline t_word tpcc_write_one(std::FILE* out, const t_ansistring& projected) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline t_word tpcc_write_many(std::FILE* out, const Projected&... arguments) {
 	if (!out) {
 		return 103;
@@ -3855,13 +4175,13 @@ inline void m_unchecked_flush(t_text& file) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline t_word m_do_write(std::FILE* out, const Projected&... arguments) {
 	return tpcc_write_many(out, arguments...);
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline t_word m_do_writeln(std::FILE* out, const Projected&... arguments) {
 	const t_word write_error = tpcc_write_many(out, arguments...);
 	if (write_error != 0) {
@@ -3875,14 +4195,14 @@ inline t_word m_do_writeln(std::FILE* out, const Projected&... arguments) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void p_write(const Projected&... arguments) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(m_do_write(m_stdout_text_state.handle, arguments...));
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void p_write(t_text& file, const Projected&... arguments) {
 	m_raise_pending_io_error();
 	const auto output = tpcc_text_output(file);
@@ -3891,7 +4211,7 @@ inline void p_write(t_text& file, const Projected&... arguments) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void m_unchecked_write(const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
@@ -3900,7 +4220,7 @@ inline void m_unchecked_write(const Projected&... arguments) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void m_unchecked_write(t_text& file, const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
@@ -3914,14 +4234,14 @@ inline void m_unchecked_write(t_text& file, const Projected&... arguments) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void p_writeln(const Projected&... arguments) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(m_do_writeln(m_stdout_text_state.handle, arguments...));
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void p_writeln(t_text& file, const Projected&... arguments) {
 	m_raise_pending_io_error();
 	const auto output = tpcc_text_output(file);
@@ -3930,7 +4250,7 @@ inline void p_writeln(t_text& file, const Projected&... arguments) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void m_unchecked_writeln(const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
@@ -3939,7 +4259,7 @@ inline void m_unchecked_writeln(const Projected&... arguments) {
 }
 
 template <typename... Projected>
-	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+        requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
 inline void m_unchecked_writeln(t_text& file, const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
@@ -5816,6 +6136,198 @@ inline void p_val(const Source& source, T& destination, t_integer& code) {
 	code = 0;
 }
 
+inline bool tpcc_currency_append_decimal_digit(uint64_t* value, unsigned digit, uint64_t limit) {
+	if (*value > (limit - digit) / 10) {
+		return false;
+	}
+	*value = *value * 10 + digit;
+	return true;
+}
+
+inline int tpcc_currency_compare_remainder_with_half(std::string_view remainder) {
+	if (remainder.empty() || remainder.front() < '5') {
+		return -1;
+	}
+	if (remainder.front() > '5') {
+		return 1;
+	}
+	for (char digit : remainder.substr(1)) {
+		if (digit != '0') {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+template <typename Source>
+        requires tpcc_val_source_v<Source>
+inline void p_val(const Source& source, t_currency& destination, t_integer& code) {
+	// Parse into the fixed-point carrier itself. A binary floating
+	// intermediary would make Val('0.1', Currency) depend on its rounding and
+	// would disagree with exact Currency literal materialization.
+	destination = m_currency_from_raw(0);
+	const std::size_t source_length = static_cast<std::size_t>(source.m_length());
+	const t_char* data = source.m_data();
+	std::size_t length = 0;
+	while (length < source_length && data[length].value != 0) {
+		++length;
+	}
+
+	std::size_t position = 0;
+	while (position < length && (data[position].value == ' ' || data[position].value == '\t')) {
+		++position;
+	}
+	code = static_cast<t_integer>(position + 1);
+
+	bool negative = false;
+	if (position < length && (data[position].value == '+' || data[position].value == '-')) {
+		negative = data[position].value == '-';
+		++position;
+	}
+
+	std::string digits;
+	digits.reserve(length - position);
+	bool saw_digit = false;
+	bool saw_point = false;
+	std::size_t fractional_digits = 0;
+	for (; position < length; ++position) {
+		const uint8_t character = data[position].value;
+		if (character >= '0' && character <= '9') {
+			digits.push_back(static_cast<char>(character));
+			saw_digit = true;
+			if (saw_point) {
+				++fractional_digits;
+			}
+		} else if (character == '.' && !saw_point) {
+			saw_point = true;
+		} else {
+			break;
+		}
+	}
+	if (!saw_digit) {
+		code = static_cast<t_integer>(position + 1);
+		return;
+	}
+
+	int64_t exponent10 = 0;
+	if (position < length && (data[position].value == 'e' || data[position].value == 'E')) {
+		++position;
+		bool exponent_negative = false;
+		if (position < length && (data[position].value == '+' || data[position].value == '-')) {
+			exponent_negative = data[position].value == '-';
+			++position;
+		}
+		const std::size_t exponent_start = position;
+		uint64_t exponent_magnitude = 0;
+		const uint64_t exponent_limit = exponent_negative ? uint64_t{1} << 63 : static_cast<uint64_t>(INT64_MAX);
+		for (; position < length; ++position) {
+			const uint8_t character = data[position].value;
+			if (character < '0' || character > '9') {
+				break;
+			}
+			const unsigned digit = character - '0';
+			if (exponent_magnitude > (exponent_limit - digit) / 10) {
+				code = static_cast<t_integer>(position + 1);
+				return;
+			}
+			exponent_magnitude = exponent_magnitude * 10 + digit;
+		}
+		if (position == exponent_start) {
+			code = static_cast<t_integer>(position + 1);
+			return;
+		}
+		if (exponent_negative && exponent_magnitude == (uint64_t{1} << 63)) {
+			exponent10 = INT64_MIN;
+		} else {
+			exponent10 = exponent_negative ? -static_cast<int64_t>(exponent_magnitude) : static_cast<int64_t>(exponent_magnitude);
+		}
+	}
+	if (position != length) {
+		code = static_cast<t_integer>(position + 1);
+		return;
+	}
+
+	const std::size_t first_nonzero = digits.find_first_not_of('0');
+	if (first_nonzero == std::string::npos) {
+		code = 0;
+		return;
+	}
+	digits.erase(0, first_nonzero);
+
+	int64_t scaled_exponent;
+	if (fractional_digits > static_cast<std::size_t>(INT64_MAX) || exponent10 < INT64_MIN + static_cast<int64_t>(fractional_digits)) {
+		scaled_exponent = INT64_MIN;
+	} else {
+		scaled_exponent = exponent10 - static_cast<int64_t>(fractional_digits);
+	}
+	if (scaled_exponent > INT64_MAX - 4) {
+		scaled_exponent = INT64_MAX;
+	} else if (scaled_exponent != INT64_MIN) {
+		scaled_exponent += 4;
+	}
+
+	const uint64_t limit = negative ? uint64_t{1} << 63 : static_cast<uint64_t>(std::numeric_limits<t_int64>::max());
+	uint64_t magnitude = 0;
+	if (scaled_exponent >= 0) {
+		if (scaled_exponent > 19 || digits.size() > 19 - static_cast<std::size_t>(scaled_exponent)) {
+			code = static_cast<t_integer>(length + 1);
+			return;
+		}
+		for (char character : digits) {
+			if (!tpcc_currency_append_decimal_digit(&magnitude, static_cast<unsigned>(character - '0'), limit)) {
+				code = static_cast<t_integer>(length + 1);
+				return;
+			}
+		}
+		for (int64_t i = 0; i < scaled_exponent; ++i) {
+			if (!tpcc_currency_append_decimal_digit(&magnitude, 0, limit)) {
+				code = static_cast<t_integer>(length + 1);
+				return;
+			}
+		}
+	} else {
+		const uint64_t discarded_digits = scaled_exponent == INT64_MIN ? UINT64_MAX : static_cast<uint64_t>(-scaled_exponent);
+		std::size_t quotient_digits = 0;
+		if (discarded_digits < digits.size()) {
+			quotient_digits = digits.size() - static_cast<std::size_t>(discarded_digits);
+		}
+		if (quotient_digits > 19) {
+			code = static_cast<t_integer>(length + 1);
+			return;
+		}
+		for (std::size_t i = 0; i < quotient_digits; ++i) {
+			if (!tpcc_currency_append_decimal_digit(&magnitude, static_cast<unsigned>(digits[i] - '0'), limit)) {
+				code = static_cast<t_integer>(length + 1);
+				return;
+			}
+		}
+
+		int half_comparison = -1;
+		if (discarded_digits <= digits.size()) {
+			const std::size_t remainder_start = quotient_digits;
+			half_comparison = tpcc_currency_compare_remainder_with_half(std::string_view(digits).substr(remainder_start));
+		}
+		if (half_comparison > 0 || (half_comparison == 0 && (magnitude & 1) != 0)) {
+			if (magnitude == limit) {
+				code = static_cast<t_integer>(length + 1);
+				return;
+			}
+			++magnitude;
+		}
+	}
+
+	t_int64 raw;
+	if (!negative) {
+		raw = static_cast<t_int64>(magnitude);
+	} else if (magnitude == (uint64_t{1} << 63)) {
+		raw = std::numeric_limits<t_int64>::min();
+	} else {
+		raw = -static_cast<t_int64>(magnitude);
+	}
+	destination = m_currency_from_raw(raw);
+	code = 0;
+}
+
 template <typename Source, typename T, typename Code>
         requires tpcc_val_source_v<Source> && ((std::is_integral_v<typename tpcc_ordinal_storage<T>::type> && (!std::is_same_v<typename tpcc_ordinal_storage<T>::type, bool>)) || std::is_floating_point_v<T>) && std::is_integral_v<typename tpcc_ordinal_storage<Code>::type> && (!std::is_same_v<typename tpcc_ordinal_storage<Code>::type, bool>)
 inline void p_val(const Source& source, T& destination, tpcc_typed_storage_ref<Code> code) {
@@ -5826,9 +6338,26 @@ inline void p_val(const Source& source, T& destination, tpcc_typed_storage_ref<C
 	*code.value = code_traits::make(static_cast<code_storage>(parsed_code));
 }
 
+template <typename Source, typename Code>
+        requires tpcc_val_source_v<Source> && std::is_integral_v<typename tpcc_ordinal_storage<Code>::type> && (!std::is_same_v<typename tpcc_ordinal_storage<Code>::type, bool>)
+inline void p_val(const Source& source, t_currency& destination, tpcc_typed_storage_ref<Code> code) {
+	using code_traits = tpcc_ordinal_storage<Code>;
+	using code_storage = typename code_traits::type;
+	t_integer parsed_code = 0;
+	p_val(source, destination, parsed_code);
+	*code.value = code_traits::make(static_cast<code_storage>(parsed_code));
+}
+
 template <typename Source, typename T>
         requires tpcc_val_source_v<Source> && ((std::is_integral_v<typename tpcc_ordinal_storage<T>::type> && (!std::is_same_v<typename tpcc_ordinal_storage<T>::type, bool>)) || std::is_floating_point_v<T>)
 inline void p_val(const Source& source, T& destination) {
+	t_integer code = 0;
+	p_val(source, destination, code);
+}
+
+template <typename Source>
+        requires tpcc_val_source_v<Source>
+inline void p_val(const Source& source, t_currency& destination) {
 	t_integer code = 0;
 	p_val(source, destination, code);
 }

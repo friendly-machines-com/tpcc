@@ -135,13 +135,15 @@ enum class MatchFailure {
  * Common binary operators require one formal operand type once conversion is
  * needed. IntegerBinary restricts both formal domains to integers while
  * retaining heterogeneous declarations such as integer exponentiation;
- * CommonIntegerBinary additionally requires one common integer type.
+ * CommonIntegerBinary additionally requires one common integer type;
+ * CommonRealBinary does the same for ordinary binary-real types.
  * Pointer +/- offset is the agreed asymmetric exception. */
 enum class OverloadResolutionPolicy {
 	Ordinary,
 	CommonBinary,
 	IntegerBinary,
 	CommonIntegerBinary,
+	CommonRealBinary,
 	CommonBinaryPointerLeft,
 	CommonBinaryPointerLeftOrEnumStep,
 };

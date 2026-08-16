@@ -28,7 +28,7 @@ if tpcc_translate -o"$tmp/text-precision.cc" \
 	exit 1
 fi
 if ! grep -Fq \
-	"Str precision requires a predefined real value" \
+	"Str precision requires a predefined real or Currency value" \
 	"$tmp/text-precision.stderr"; then
 	echo "wrong diagnostic for a textual Str precision qualifier" >&2
 	cat "$tmp/text-precision.stderr" >&2

@@ -15,6 +15,14 @@ grep -Fq 'p_domain(std::numeric_limits<::u_system::t_single>::infinity())' \
 grep -Fq 'p_domain(([]() -> ::u_system::t_single { ::u_system::m_runtime_error(201); return {}; }()))' \
 	"$tmp/real_constant_semantics.cc"
 
+# An ordinary integer paired with an ordinary-real origin stays in the
+# integer/binary-real family. Merely declaring another exact fixed-point
+# domain must not inject that domain into source which never mentions it.
+if grep -Fq 't_currency' "$tmp/real_constant_semantics.cc"; then
+	echo "ordinary integer/real arithmetic selected Currency" >&2
+	exit 1
+fi
+
 tpcc_translate -dCPUX86_64 \
 	-o"$tmp/x86_64.cc" \
 	tests/real_constant_semantics.pp
