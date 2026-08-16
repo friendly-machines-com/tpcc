@@ -473,6 +473,23 @@ function SwapEndian(const value: LongInt): LongInt; overload; external name '::u
 function SwapEndian(const value: DWord): DWord; overload; external name '::u_system::p_swapendian';
 function SwapEndian(const value: Int64): Int64; overload; external name '::u_system::p_swapendian';
 function SwapEndian(const value: QWord): QWord; overload; external name '::u_system::p_swapendian';
+{ Lo and Hi select the lower and higher of two parts of an integer slot. }
+function Lo(const value: Byte): Byte; overload;
+function Lo(const value: ShortInt): Byte; overload;
+function Lo(const value: Word): Byte; overload;
+function Lo(const value: SmallInt): Byte; overload;
+function Lo(const value: LongInt): Word; overload;
+function Lo(const value: DWord): Word; overload;
+function Lo(const value: Int64): DWord; overload;
+function Lo(const value: QWord): DWord; overload;
+function Hi(const value: Byte): Byte; overload;
+function Hi(const value: ShortInt): Byte; overload;
+function Hi(const value: Word): Byte; overload;
+function Hi(const value: SmallInt): Byte; overload;
+function Hi(const value: LongInt): Word; overload;
+function Hi(const value: DWord): Word; overload;
+function Hi(const value: Int64): DWord; overload;
+function Hi(const value: QWord): DWord; overload;
 procedure fillchar(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillchar';
 procedure fillchar(var destination; count: SizeInt; value: Char); external name '::u_system::p_fillchar';
 procedure fillbyte(var destination; count: SizeInt; value: Byte); external name '::u_system::p_fillbyte';
@@ -752,6 +769,86 @@ end;
 operator Explicit(const Value: Extended): Comp;
 begin
   Result := Round(Value)
+end;
+
+function Lo(const value: Byte): Byte;
+begin
+  Result := Byte(value and $0F)
+end;
+
+function Lo(const value: ShortInt): Byte;
+begin
+  Result := Byte(value)
+end;
+
+function Lo(const value: Word): Byte;
+begin
+  Result := Byte(value)
+end;
+
+function Lo(const value: SmallInt): Byte;
+begin
+  Result := Byte(value)
+end;
+
+function Lo(const value: LongInt): Word;
+begin
+  Result := Word(value)
+end;
+
+function Lo(const value: DWord): Word;
+begin
+  Result := Word(value)
+end;
+
+function Lo(const value: Int64): DWord;
+begin
+  Result := DWord(value)
+end;
+
+function Lo(const value: QWord): DWord;
+begin
+  Result := DWord(value)
+end;
+
+function Hi(const value: Byte): Byte;
+begin
+  Result := Byte(value shr 4)
+end;
+
+function Hi(const value: ShortInt): Byte;
+begin
+  Result := Byte(value shr 8)
+end;
+
+function Hi(const value: Word): Byte;
+begin
+  Result := Byte(value shr 8)
+end;
+
+function Hi(const value: SmallInt): Byte;
+begin
+  Result := Byte(value shr 8)
+end;
+
+function Hi(const value: LongInt): Word;
+begin
+  Result := Word(value shr 16)
+end;
+
+function Hi(const value: DWord): Word;
+begin
+  Result := Word(value shr 16)
+end;
+
+function Hi(const value: Int64): DWord;
+begin
+  Result := DWord(value shr 32)
+end;
+
+function Hi(const value: QWord): DWord;
+begin
+  Result := DWord(value shr 32)
 end;
 
 end.

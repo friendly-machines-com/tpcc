@@ -209,6 +209,9 @@ test-shortstring-type: mp
 test-swapendian-builtin: mp
 	sh tests/test_swapendian_builtin.sh
 
+test-lo-hi-builtin: mp
+	sh tests/test_lo_hi_builtin.sh
+
 test-setstring-builtin: mp
 	sh tests/test_setstring_builtin.sh
 
@@ -435,6 +438,7 @@ test-absolute-alias: mp
 
 test: test-predefined-explicit-conversions test-class-pointer-conversion test-custom-in-operator test-emission-semantic-boundaries test-pointer-arithmetic test-set-arithmetic test-diagnostic-context test-frame-intrinsics test-binding-lookup test-global-overload-scope test-absolute-alias
 test: test-currency-type
+test: test-lo-hi-builtin
 test: test-function-result-designator
 test: test-file-error-state
 test: test-omitted-out-byte-pointer
@@ -466,3 +470,4 @@ test: test-packed-record test-ifopt test-directive-push-pop test-h-directive-str
 .PHONY: test-set-arithmetic
 .PHONY: test-diagnostic-context
 .PHONY: test-frame-intrinsics
+.PHONY: test-lo-hi-builtin
