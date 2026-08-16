@@ -2017,8 +2017,12 @@ void Emitter::emit_aggregate_decl(std::string cxx_name, Type* ty, bool in_meta) 
 		// metaclass object for T. Class methods are intentionally not mirrored
 		// as outer C++ static proxies: such proxies have no metaclass `this`
 		// and therefore cannot preserve derived class-method dispatch.
-		fprintf(active, "\tpublic: inline static m_meta* p_classtype() {\n");
-		fprintf(active, "\t\tstatic m_meta meta{};\n");
+		// The metaclass object is an inline class member, so its address is a
+		// link-time constant: the constexpr accessor then makes every
+		// class-reference expression, including a typed-constant initializer,
+		// a constant expression with no dynamic initialization order.
+		fprintf(active, "\tprivate: inline static m_meta meta{};\n");
+		fprintf(active, "\tpublic: constexpr static m_meta* p_classtype() {\n");
 		fprintf(active, "\t\treturn &meta;\n");
 		fprintf(active, "\t}\n");
 		// A class name already has an exact class-reference value through the

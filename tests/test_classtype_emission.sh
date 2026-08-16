@@ -13,7 +13,7 @@ then
 	exit 1
 fi
 classtype_count=$(
-	grep -F -c 'inline static m_meta* p_classtype()' \
+	grep -F -c 'constexpr static m_meta* p_classtype()' \
 		"$tmp/system.h" || true
 )
 if test "${classtype_count:-0}" -ne 1
