@@ -753,17 +753,21 @@ end;
 
 class function TObject.ClassName: shortstring;
 begin
-  Result := ClassType().ClassName
+  Result := 'TObject'
 end;
 
+{ ClassType() of a metaclass is the metaclass itself, so a root body that
+  delegates through ClassType() redispatches this same virtual operation
+  forever. The root answers directly; descendants' generated defaults chain
+  into these bodies only after their own receiver check fails. }
 class function TObject.InheritsFrom(klass: TClass): Boolean;
 begin
-  Result := ClassType().InheritsFrom(klass)
+  Result := klass = TObject
 end;
 
 class function TObject.ClassParent: TClass;
 begin
-  Result := ClassType().ClassParent
+  Result := nil
 end;
 
 operator Explicit(const Value: Extended): Comp;
