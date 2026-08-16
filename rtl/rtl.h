@@ -3781,12 +3781,10 @@ template <typename T> inline void p_str(const tpcc_formatted_value<T>& argument,
 	destination.storage.m_replace(std::move(replacement));
 }
 
-template <typename T> inline t_word tpcc_write_one(std::FILE* out, const tpcc_formatted_value<T>& argument) {
-	t_ansistring projected;
-	// Write is Str followed by a Text sink. Keeping this as an actual p_str
-	// call makes textual, numeric, enumeration, width, and embedded-zero
-	// semantics identical instead of maintaining a second formatter.
-	p_str(argument, projected);
+inline t_word tpcc_write_one(std::FILE* out, const t_ansistring& projected) {
+	// Pascal overload resolution and the generated Str call have already
+	// produced this counted field. The Text sink deliberately knows no source
+	// type, so C++ overload lookup cannot select a different formatter.
 	const std::size_t length = static_cast<std::size_t>(projected.m_length());
 	// fputc and fwrite report this operation through their return values.
 	// ferror is deliberately not used: unlike Pascal's IOResult status, it is
@@ -3801,12 +3799,14 @@ template <typename T> inline t_word tpcc_write_one(std::FILE* out, const tpcc_fo
 	return m_consume_stdio_error(out, 101);
 }
 
-template <typename... Values> inline t_word tpcc_write_many(std::FILE* out, const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline t_word tpcc_write_many(std::FILE* out, const Projected&... arguments) {
 	if (!out) {
 		return 103;
 	}
 	t_word error = 0;
-	if constexpr (sizeof...(Values) > 0) {
+	if constexpr (sizeof...(Projected) > 0) {
 		auto write_one = [out, &error](const auto& argument) {
 			if (error != 0) {
 				return;
@@ -3854,11 +3854,15 @@ inline void m_unchecked_flush(t_text& file) {
 	m_finish_unchecked_io(m_do_flush(file));
 }
 
-template <typename... Values> inline t_word m_do_write(std::FILE* out, const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline t_word m_do_write(std::FILE* out, const Projected&... arguments) {
 	return tpcc_write_many(out, arguments...);
 }
 
-template <typename... Values> inline t_word m_do_writeln(std::FILE* out, const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline t_word m_do_writeln(std::FILE* out, const Projected&... arguments) {
 	const t_word write_error = tpcc_write_many(out, arguments...);
 	if (write_error != 0) {
 		return write_error;
@@ -3870,26 +3874,34 @@ template <typename... Values> inline t_word m_do_writeln(std::FILE* out, const t
 	return m_consume_stdio_error(out, 101);
 }
 
-template <typename... Values> inline void p_write(const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void p_write(const Projected&... arguments) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(m_do_write(m_stdout_text_state.handle, arguments...));
 }
 
-template <typename... Values> inline void p_write(t_text& file, const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void p_write(t_text& file, const Projected&... arguments) {
 	m_raise_pending_io_error();
 	const auto output = tpcc_text_output(file);
 	m_finish_checked_io(output.error);
 	m_finish_checked_io(m_do_write(output.value, arguments...));
 }
 
-template <typename... Values> inline void m_unchecked_write(const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void m_unchecked_write(const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
 	}
 	m_finish_unchecked_io(m_do_write(m_stdout_text_state.handle, arguments...));
 }
 
-template <typename... Values> inline void m_unchecked_write(t_text& file, const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void m_unchecked_write(t_text& file, const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
 	}
@@ -3901,26 +3913,34 @@ template <typename... Values> inline void m_unchecked_write(t_text& file, const 
 	m_finish_unchecked_io(m_do_write(output.value, arguments...));
 }
 
-template <typename... Values> inline void p_writeln(const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void p_writeln(const Projected&... arguments) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(m_do_writeln(m_stdout_text_state.handle, arguments...));
 }
 
-template <typename... Values> inline void p_writeln(t_text& file, const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void p_writeln(t_text& file, const Projected&... arguments) {
 	m_raise_pending_io_error();
 	const auto output = tpcc_text_output(file);
 	m_finish_checked_io(output.error);
 	m_finish_checked_io(m_do_writeln(output.value, arguments...));
 }
 
-template <typename... Values> inline void m_unchecked_writeln(const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void m_unchecked_writeln(const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
 	}
 	m_finish_unchecked_io(m_do_writeln(m_stdout_text_state.handle, arguments...));
 }
 
-template <typename... Values> inline void m_unchecked_writeln(t_text& file, const tpcc_formatted_value<Values>&... arguments) {
+template <typename... Projected>
+	requires((std::is_same_v<std::remove_cvref_t<Projected>, t_ansistring>) && ...)
+inline void m_unchecked_writeln(t_text& file, const Projected&... arguments) {
 	if (m_inoutres != 0) {
 		return;
 	}

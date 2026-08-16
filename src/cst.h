@@ -224,6 +224,10 @@ struct FormattedValue {
 	Node* value;
 	Node* width;
 	Node* precision;
+	// The exact System.Str declaration selected by ordinary Pascal overload
+	// resolution. Write must invoke this declaration; the C++ Text sink must
+	// not perform a second formatter lookup from VALUE's backend type.
+	Callable* str_callee = nullptr;
 };
 
 /** One Pascal Write/WriteLn invocation. These routines have compiler grammar,

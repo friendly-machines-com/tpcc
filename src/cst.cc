@@ -537,6 +537,7 @@ void WriteCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 		ctx->add_value_edge(item.value);
 		ctx->add_value_edge(item.width);
 		ctx->add_value_edge(item.precision);
+		ctx->add_value_edge(item.str_callee);
 	}
 }
 
@@ -557,6 +558,7 @@ void WriteCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringst
 		if (item.precision) {
 			out << " precision " << ctx->known_value_ref(item.precision);
 		}
+		out << " via " << ctx->known_value_ref(item.str_callee);
 	}
 }
 
@@ -569,6 +571,7 @@ void StrCall::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_value_edge(formatted.value);
 	ctx->add_value_edge(formatted.width);
 	ctx->add_value_edge(formatted.precision);
+	ctx->add_value_edge(formatted.str_callee);
 	ctx->add_value_edge(destination);
 }
 
@@ -586,6 +589,9 @@ void StrCall::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstre
 		ctx->indent(out, indent + 1);
 		out << "precision: " << ctx->known_value_ref(formatted.precision);
 	}
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "callee: " << ctx->known_value_ref(formatted.str_callee);
 	out << "\n";
 	ctx->indent(out, indent + 1);
 	out << "destination: " << ctx->known_value_ref(destination);

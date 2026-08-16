@@ -1285,22 +1285,52 @@ void Emitter::emit_statement(Node* stmt) {
 		if (!write->lowering_builtin_desc) {
 			unhandled_node("Write/WriteLn has no selected RTL implementation", write);
 		}
-		fprintf(active, "\t%.*s(", static_cast<int>(write->lowering_builtin_desc->cxx_name.size()), write->lowering_builtin_desc->cxx_name.data());
+		fprintf(active, "\t{\n");
+		if (write->file) {
+			// The Text designator is the first Pascal argument. Retain its
+			// storage once while the following Str projections are evaluated.
+			fprintf(active, "\t\tauto& tpcc_write_file = ");
+			emit_writable_expression(write->file);
+			fprintf(active, ";\n");
+		}
+		for (size_t index = 0; index < write->items.size(); ++index) {
+			const FormattedValue& item = write->items[index];
+			if (!item.str_callee) {
+				unhandled_node("Write/WriteLn item has no selected System.Str declaration", write);
+			}
+			fprintf(active, "\t\t::u_system::t_ansistring tpcc_write_item_%zu{};\n", index);
+			fprintf(active,
+			        "\t\t%s(",
+			        node_cxx_name(item.str_callee,
+			                      callable_cxx_name(item.str_callee))
+			            .c_str());
+			emit_formatted_value(item);
+			fprintf(active, ", tpcc_write_item_%zu);\n", index);
+		}
+		fprintf(active, "\t\t%.*s(", static_cast<int>(write->lowering_builtin_desc->cxx_name.size()), write->lowering_builtin_desc->cxx_name.data());
 		bool need_comma = false;
 		if (write->file) {
-			emit_writable_expression(write->file);
+			fprintf(active, "tpcc_write_file");
 			need_comma = true;
 		}
-		for (const FormattedValue& item : write->items) {
+		for (size_t index = 0; index < write->items.size(); ++index) {
 			if (need_comma) {
 				fprintf(active, ", ");
 			}
-			emit_formatted_value(item);
+			fprintf(active, "tpcc_write_item_%zu", index);
 			need_comma = true;
 		}
-		fprintf(active, ");\n");
+		fprintf(active, ");\n"
+		                "\t}\n");
 	} else if (auto str = dynamic_cast<StrCall*>(stmt)) {
-		fprintf(active, "\t::u_system::p_str(");
+		if (!str->formatted.str_callee) {
+			unhandled_node("Str has no selected callable declaration", str);
+		}
+		fprintf(active,
+		        "\t%s(",
+		        node_cxx_name(str->formatted.str_callee,
+		                      callable_cxx_name(str->formatted.str_callee))
+		            .c_str());
 		emit_formatted_value(str->formatted);
 		fprintf(active, ", ");
 		emit_writable_expression(str->destination);

@@ -2431,7 +2431,6 @@ enum class StrValueFamily {
 	Integer,
 	ExistingReal,
 	Enumeration,
-	Textual,
 	Unsupported,
 };
 
@@ -2446,14 +2445,6 @@ static StrValueFamily str_value_family(Type* ty) {
 		return StrValueFamily::ExistingReal;
 	} else if (enum_root_type(ty)) {
 		return StrValueFamily::Enumeration;
-	} else if (ty == char_type() || dynamic_cast<ShortStringType*>(ty) || ty == ansistring_type()) {
-		// Str is a projection to text, so an existing counted textual value
-		// retains every character, including embedded zero bytes.
-		return StrValueFamily::Textual;
-	} else if (auto pointer = dynamic_cast<PointerType*>(ty); pointer && pointer->item_type == char_type()) {
-		// PChar is the one textual view without a stored length. Its first
-		// zero byte supplies the projection boundary; nil denotes empty text.
-		return StrValueFamily::Textual;
 	}
 	// TODO: Currency and Comp belong in distinct cases here after their
 	// Pascal types and runtime carriers exist. Do not identify them by C++
@@ -2946,6 +2937,11 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			}
 
 			item.value = args[0];
+			item.str_callee = dynamic_cast<Callable*>(finalized.callee);
+			if (!item.str_callee) {
+				raise_parse_error("internal error: predefined Str resolved "
+				                  "without a callable declaration");
+			}
 			destination = args[1];
 			Type* destination_type = destination ? destination->ty : nullptr;
 			if (!dynamic_cast<ShortStringType*>(destination_type) && destination_type != ansistring_type()) {
@@ -2999,16 +2995,20 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 				// Str(item, AnsiStringTemporary). Besides defining the
 				// admissible source domains, ordinary call matching
 				// materializes literals and applies the selected Str
-				// overload's source conversion. The temporary is semantic
-				// matching storage only; tpcc_write_one owns the actual
-				// runtime AnsiString.
+				// overload's source conversion. The emitter retains this
+				// exact declaration and creates the actual temporary.
 				StorageSlot projection_destination{"", ansistring_type()};
 				std::vector<Node*> projection_arguments{item.value, &projection_destination};
 				FinalizedCall projection = finalize_call(system_str, projection_arguments, "System.Str projection for Write/WriteLn", call_location);
 				const BuiltinDesc* selected_projection = builtin_desc_for_node(projection.callee);
 				if (!selected_projection || selected_projection->generic_kind != BuiltinGenericKind::StrOutput) {
 					emit_parse_error_at(call_location, "Write/WriteLn selected a System.Str overload "
-					                                   "without predefined formatting semantics");
+				                                   "without predefined formatting semantics");
+				}
+				item.str_callee = dynamic_cast<Callable*>(projection.callee);
+				if (!item.str_callee) {
+					emit_parse_error_at(call_location, "internal error: System.Str projection "
+					                                   "resolved without a callable declaration");
 				}
 				item.value = projection_arguments[0];
 				const StrValueFamily family = str_value_family(item.value ? item.value->ty : nullptr);
@@ -6936,12 +6936,12 @@ struct TypeBlockResolver {
 				return false;
 			}
 			for (auto& item : n->items) {
-				if (!normalize_node(item.value) || !normalize_node(item.width) || !normalize_node(item.precision)) {
+				if (!normalize_node(item.value) || !normalize_node(item.width) || !normalize_node(item.precision) || !normalize_node(item.str_callee)) {
 					return false;
 				}
 			}
 		} else if (auto n = dynamic_cast<StrCall*>(node)) {
-			if (!normalize_node(n->formatted.value) || !normalize_node(n->formatted.width) || !normalize_node(n->formatted.precision) || !normalize_node(n->destination)) {
+			if (!normalize_node(n->formatted.value) || !normalize_node(n->formatted.width) || !normalize_node(n->formatted.precision) || !normalize_node(n->formatted.str_callee) || !normalize_node(n->destination)) {
 				return false;
 			}
 		} else if (auto n = dynamic_cast<ValCall*>(node)) {

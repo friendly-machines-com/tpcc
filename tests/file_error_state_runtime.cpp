@@ -29,7 +29,9 @@ static int test_text_eof_error() {
 	// Consuming IOResult must make a later, valid operation depend only on
 	// that operation, not on stdio's indicator from the failed read.
 	file.state->mode = ::u_system::text_file_mode::Output;
-	::u_system::m_unchecked_write(file, ::u_system::tpcc_make_formatted_value(static_cast<::u_system::t_integer>(1)));
+	const ::u_system::t_ansistring field =
+	    ::u_system::tpcc_ansistring_literal("1", 1);
+	::u_system::m_unchecked_write(file, field);
 	if (::u_system::p_ioresult() != 0) {
 		return 4;
 	}
@@ -132,7 +134,9 @@ static int test_write_error() {
 	    .standard_stream = false,
 	}};
 
-	::u_system::m_unchecked_write(file, ::u_system::tpcc_make_formatted_value(static_cast<::u_system::t_integer>(1)));
+	const ::u_system::t_ansistring field =
+	    ::u_system::tpcc_ansistring_literal("1", 1);
+	::u_system::m_unchecked_write(file, field);
 	if (!consume_pascal_error()) {
 		return 3;
 	}
