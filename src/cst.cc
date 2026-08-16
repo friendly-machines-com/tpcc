@@ -415,6 +415,12 @@ const char* ClassRefValue::diagnostic_kind() const {
 	return "class_reference_value";
 }
 
+ConstEvalResult ClassRefValue::const_eval(ConstEvalContext&) const {
+	// A class name denotes exactly one static metaclass object, a
+	// link-time constant.
+	return ConstEvalResult::success(const_cast<ClassRefValue*>(this));
+}
+
 const char* TypeMemberQualifier::diagnostic_kind() const {
 	return "type_member_qualifier";
 }
@@ -785,6 +791,15 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 		// m_set_cast operation; the bounds themselves need no value
 		// conversion.
 		return ConstEvalResult::success(new SetLiteral(set->items, ty));
+	}
+	if (auto reference = dynamic_cast<ClassRefValue*>(r.node)) {
+		if (dynamic_cast<ClassRefType*>(ty)) {
+			// A class-reference conversion denotes the same one static
+			// metaclass object, only the static reference type changes.
+			auto folded = new ClassRefValue(reference->target);
+			folded->ty = ty;
+			return ConstEvalResult::success(folded);
+		}
 	}
 	if (is_currency_semantic_type(ty)) {
 		if (auto converted = const_convert_to_currency(r.node, false)) {

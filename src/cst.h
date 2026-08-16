@@ -135,6 +135,7 @@ class ClassRefValue : public Node {
 	ClassType* target;
 	explicit ClassRefValue(ClassType* target);
 	const char* diagnostic_kind() const override;
+	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
