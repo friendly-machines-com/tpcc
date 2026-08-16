@@ -23,6 +23,7 @@ type
   TDateTime = type Double;
   Extended = external name '::u_system::t_extended';
   Pointer = external name '::u_system::t_pointer';
+  Comp = type Int64;
   // TPCC supports only flat 32/64-bit targets, where code and data addresses
   // share the same pointer representation. The distinct Pascal name remains
   // useful in the public stack-inspection signatures.
@@ -527,7 +528,7 @@ procedure val(const s: ShortString; out value: Extended); overload; external nam
 procedure val(const s: ShortString; out value: Extended; out code); overload; external name '::u_system::p_val';
 procedure val(const s: AnsiString; out value: Extended); overload; external name '::u_system::p_val';
 procedure val(const s: AnsiString; out value: Extended; out code); overload; external name '::u_system::p_val';
-// FIXME: Comp is absent because tpcc has no Pascal Comp type or carrier.
+// TODO: Comp is absent.
 // FIXME: Currency is absent because tpcc has no Pascal Currency type or
 // fixed-scale representation.
 // FIXME: Enumeration Val needs generated name-to-ordinal metadata; tpcc
@@ -660,6 +661,8 @@ procedure SetLength(var destination: AnsiString; value: SizeInt); overload; exte
 procedure SetLength(var destination; value: SizeInt); overload; external name '::u_system::p_setlength';
 procedure UniqueString(var value: AnsiString); external name '::u_system::p_uniquestring';
 
+operator Explicit(const Value: Extended): Comp;
+
 implementation
 
 function tpcc_new_instance(meta: TClass): TObject;
@@ -695,6 +698,11 @@ end;
 class function TObject.ClassParent: TClass;
 begin
   Result := ClassType().ClassParent
+end;
+
+operator Explicit(const Value: Extended): Comp;
+begin
+  Result := Round(Value)
 end;
 
 end.
