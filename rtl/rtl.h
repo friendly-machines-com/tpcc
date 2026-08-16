@@ -573,6 +573,21 @@ static_assert(sizeof(t_char) == 1);
 static_assert(alignof(t_char) == 1);
 static_assert(std::is_trivially_copyable_v<t_char>);
 
+// WideChar is a character-domain value, not another spelling of Word.
+// Keeping a separate trivial wrapper preserves Pascal overload identity while
+// fixing the representation at one unsigned 16-bit UTF-16 code unit on every
+// backend target.
+struct t_widechar {
+	uint16_t value;
+
+	constexpr t_widechar() = default;
+	constexpr t_widechar(uint16_t value) : value(value) {}
+	constexpr operator uint16_t() const { return value; }
+};
+static_assert(sizeof(t_widechar) == 2);
+static_assert(alignof(t_widechar) == 2);
+static_assert(std::is_trivially_copyable_v<t_widechar>);
+
 template<typename T, typename Enable = void>
 struct tpcc_ordinal_storage {
 	using type = T;
@@ -604,6 +619,17 @@ struct tpcc_ordinal_storage<t_char, void> {
 	}
 	static constexpr t_char make(type value) {
 		return t_char{value};
+	}
+};
+
+template<>
+struct tpcc_ordinal_storage<t_widechar, void> {
+	using type = uint16_t;
+	static constexpr type get(t_widechar value) {
+		return value.value;
+	}
+	static constexpr t_widechar make(type value) {
+		return t_widechar{value};
 	}
 };
 
@@ -6138,6 +6164,11 @@ inline t_boolean o_lessthanorequal(t_char a, t_char b) { return tpcc_bool_to_boo
 inline t_boolean o_equal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value == b.value); }
 inline t_boolean o_greaterthan(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value > b.value); }
 inline t_boolean o_greaterthanorequal(t_char a, t_char b) { return tpcc_bool_to_boolean(a.value >= b.value); }
+inline t_boolean o_lessthan(t_widechar a, t_widechar b) { return tpcc_bool_to_boolean(a.value < b.value); }
+inline t_boolean o_lessthanorequal(t_widechar a, t_widechar b) { return tpcc_bool_to_boolean(a.value <= b.value); }
+inline t_boolean o_equal(t_widechar a, t_widechar b) { return tpcc_bool_to_boolean(a.value == b.value); }
+inline t_boolean o_greaterthan(t_widechar a, t_widechar b) { return tpcc_bool_to_boolean(a.value > b.value); }
+inline t_boolean o_greaterthanorequal(t_widechar a, t_widechar b) { return tpcc_bool_to_boolean(a.value >= b.value); }
 
 // Pascal enumerations are nominal, but equality and ordering are defined
 // between values of one exact enum type. The parser establishes that nominal
@@ -6213,12 +6244,16 @@ inline t_longword p_ord(tpcc_typed_const_storage_ref<T> x) {
 template<typename T> inline T p_low() {
 	if constexpr (std::is_same_v<T, t_char>)
 		return t_char{0};
+	else if constexpr (std::is_same_v<T, t_widechar>)
+		return t_widechar{0};
 	else
 		return std::numeric_limits<T>::lowest();
 }
 template<typename T> inline T p_high() {
 	if constexpr (std::is_same_v<T, t_char>)
 		return t_char{255};
+	else if constexpr (std::is_same_v<T, t_widechar>)
+		return t_widechar{65535};
 	else
 		return std::numeric_limits<T>::max();
 }

@@ -17,6 +17,7 @@ type
   Boolean = external name '::u_system::t_boolean';
   Char = external name '::u_system::t_char';
   AnsiChar = Char;
+  WideChar = external name '::u_system::t_widechar';
   Single = external name '::u_system::t_single';
   Double = external name '::u_system::t_double';
   Real = type Double;
@@ -254,6 +255,12 @@ operator <=(a, b: Char): Boolean; external name '::u_system::o_lessthanorequal';
 operator =(a, b: Char): Boolean; external name '::u_system::o_equal';
 operator >(a, b: Char): Boolean; external name '::u_system::o_greaterthan';
 operator >=(a, b: Char): Boolean; external name '::u_system::o_greaterthanorequal';
+
+operator <(a, b: WideChar): Boolean; external name '::u_system::o_lessthan';
+operator <=(a, b: WideChar): Boolean; external name '::u_system::o_lessthanorequal';
+operator =(a, b: WideChar): Boolean; external name '::u_system::o_equal';
+operator >(a, b: WideChar): Boolean; external name '::u_system::o_greaterthan';
+operator >=(a, b: WideChar): Boolean; external name '::u_system::o_greaterthanorequal';
 
 // Compare PChar by address, not by the characters they point to.
 operator <(a, b: PChar): Boolean; external name '::u_system::o_lessthan';

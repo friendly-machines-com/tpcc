@@ -5859,7 +5859,7 @@ static bool checked_add_one(uint64_t value, uint64_t* out) {
 }
 
 struct FoldedSubrangeBound {
-	enum class Kind { Integer, Char, Enum } kind;
+	enum class Kind { Integer, Character, Enum } kind;
 	Node* node = nullptr;
 	Type* ty = nullptr;
 	bool negative = false;
@@ -5890,23 +5890,24 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 		};
 	case OrdinalFamily::Character: {
 		OrdinalBounds bounds;
-		if (!intrinsic_ordinal_bounds(char_type(), &bounds) ||
+		if (!domain->nominal_root ||
+		    !intrinsic_ordinal_bounds(domain->nominal_root, &bounds) ||
 		    !ordinal_bounds_contains(
 		        bounds,
 		        ordinal->value.negative,
 		        ordinal->value.magnitude)) {
-			*error = "character subrange bound is outside Char range";
+			*error = "character subrange bound is outside its character type";
 			return {};
 		}
 		Node* as_char = ordinal->representation;
 		if (dynamic_cast<String*>(as_char)) {
 			as_char = new Integer(
-			    ordinal->value.magnitude, char_type());
+			    ordinal->value.magnitude, domain->nominal_root);
 		}
 		return FoldedSubrangeBound{
-		    FoldedSubrangeBound::Kind::Char,
+		    FoldedSubrangeBound::Kind::Character,
 		    as_char,
-		    char_type(),
+		    domain->nominal_root,
 		    ordinal->value.negative,
 		    ordinal->value.magnitude,
 		    ordinal->value,
@@ -6161,11 +6162,16 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 		}
 		return make_subrange(host, typed_lower, typed_upper);
 	}
-	case FoldedSubrangeBound::Kind::Char:
+	case FoldedSubrangeBound::Kind::Character:
+		if (lower->ty != upper->ty) {
+			return raise_type_mismatch(
+			    "subrange constructor with bounds from the same character type",
+			    lower->ty, upper->ty);
+		}
 		if (compare_ordinal_values(upper->ordinal_value, lower->ordinal_value) < 0) {
 			raise_values_error("subrange upper bound is lower than lower bound", {{"lower bound", lower->node}, {"upper bound", upper->node}});
 		}
-		return make_subrange(char_type(), lower->node, upper->node);
+		return make_subrange(lower->ty, lower->node, upper->node);
 	case FoldedSubrangeBound::Kind::Enum:
 		if (lower->ty != upper->ty) {
 			return raise_type_mismatch("subrange constructor with bounds from the same enum type", lower->ty, upper->ty);
@@ -6435,8 +6441,10 @@ void Parser::parse_label_block() {
 
 static bool ordinal_constant_matches_range_type(Type* base_type, const FoldedSubrangeBound& value) {
 	base_type = subrange_range_type(base_type);
-	if (base_type == char_type()) {
-		return value.kind == FoldedSubrangeBound::Kind::Char;
+	auto domain = ordinal_type_domain(base_type);
+	if (domain && domain->family == OrdinalFamily::Character) {
+		return value.kind == FoldedSubrangeBound::Kind::Character &&
+		       value.ty == domain->nominal_root;
 	}
 	if (dynamic_cast<EnumType*>(base_type)) {
 		return value.kind == FoldedSubrangeBound::Kind::Enum && value.ty == base_type;
@@ -8930,7 +8938,10 @@ static bool generic_ordinal_operation_accepts(BuiltinGenericKind kind, Type* ope
 			return !pointer->is_untyped();
 		}
 		operand = subrange_range_type(operand);
-		return dynamic_cast<EnumType*>(operand) != nullptr || operand == char_type();
+		auto domain = ordinal_type_domain(operand);
+		return dynamic_cast<EnumType*>(operand) != nullptr ||
+		       (domain &&
+		        domain->family == OrdinalFamily::Character);
 	}
 	return false;
 }
@@ -9981,7 +9992,10 @@ std::optional<CallableMatch> Parser::match_callable_arguments(Callable* callable
 		// available to the separately specified Inc/Dec mutation operations,
 		// while expression syntax requires an explicitly matching declaration.
 		Type* first = overload_rank_type(args[0]->ty);
-		if (dynamic_cast<EnumType*>(first) || first == char_type()) {
+		auto domain = ordinal_type_domain(first);
+		if (dynamic_cast<EnumType*>(first) ||
+		    (domain &&
+		     domain->family == OrdinalFamily::Character)) {
 			return std::nullopt;
 		}
 	}

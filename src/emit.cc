@@ -2728,7 +2728,10 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ")");
 		} else {
 			Type* ordinal_type = c->ty;
-			const bool wrapped_ordinal = ordinal_type == char_type() || dynamic_cast<EnumType*>(ordinal_type);
+			const bool wrapped_ordinal =
+			    ordinal_type == char_type() ||
+			    ordinal_type == widechar_type() ||
+			    dynamic_cast<EnumType*>(ordinal_type);
 			if (wrapped_ordinal) {
 				fprintf(active, "static_cast<");
 				emit_type_ref(c->ty);
@@ -3287,7 +3290,10 @@ void Emitter::emit_expression(Node* expr) {
 				break;
 			}
 			OrdinalBounds bounds;
-			return type == char_type() || dynamic_cast<EnumType*>(type) || integer_bounds(type, &bounds);
+			return type == char_type() ||
+			       type == widechar_type() ||
+			       dynamic_cast<EnumType*>(type) ||
+			       integer_bounds(type, &bounds);
 		};
 		auto source_real_origin = dynamic_cast<Real*>(ca->a);
 		const bool real_conversion = ca->a && ((source_real_origin && source_real_origin->is_origin()) || real_type(ca->a->ty)) && real_type(ca->ty);

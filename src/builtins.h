@@ -205,6 +205,7 @@ enum class IntrinsicCarrier {
 	Double,
 	LongDouble,
 	Character,
+	WideCharacter,
 	AnsiString,
 	Text,
 	File,
@@ -277,6 +278,7 @@ Type* ptrint_type();
 Type* ptruint_type();
 Type* boolean_type();
 Type* char_type();
+Type* widechar_type();
 ShortStringType* shortstring_type(uint8_t capacity = 255);
 Type* ansistring_type();
 Type* text_type();

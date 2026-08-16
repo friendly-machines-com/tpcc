@@ -95,8 +95,8 @@ ConstEvalResult const_explicit_ordinal_cast(uint64_t magnitude, bool negative, T
 			++bits;
 			high_bit >>= 1;
 		} while (high_bit != 0);
-	} else if (carrier == char_type()) {
-		bits = 8;
+	} else if (carrier == char_type() || carrier == widechar_type()) {
+		bits = carrier == char_type() ? 8 : 16;
 	} else if (auto enumeration = dynamic_cast<EnumType*>(carrier)) {
 		bits = enumeration->carrier_bits;
 		signed_target = enumeration->carrier_signed;

@@ -51,6 +51,7 @@ IntrinsicType k_double(SourceLocation::builtin(), "::u_system::t_double", {}, {}
 IntrinsicType k_extended(SourceLocation::builtin(), "::u_system::t_extended", {}, {}, TypeLayout{16, 16}, IntrinsicCarrier::LongDouble);
 EnumType k_boolean(SourceLocation::builtin(), "::u_system::t_boolean", "false", "true", 8, false);
 IntrinsicType k_char(SourceLocation::builtin(), "::u_system::t_char", {}, unsigned_bounds(8), TypeLayout{1, 1}, IntrinsicCarrier::Character);
+IntrinsicType k_widechar(SourceLocation::builtin(), "::u_system::t_widechar", {}, unsigned_bounds(16), TypeLayout{2, 2}, IntrinsicCarrier::WideCharacter);
 ShortStringType k_shortstring(SourceLocation::builtin(), 255);
 IntrinsicType k_ansistring(SourceLocation::builtin(), "::u_system::t_ansistring", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::AnsiString);
 IntrinsicType k_text(SourceLocation::builtin(), "::u_system::t_text", {}, {}, TypeLayout{8, 8}, IntrinsicCarrier::Text);
@@ -80,7 +81,7 @@ TMethodDefinition& tmethod_definition() {
 }
 
 Type* const k_all_intrinsics[] = {
-    &k_byte, &k_shortint, &k_word, &k_smallint, &k_longword, &k_integer, &k_longint, &k_qword, &k_int64, &k_set, &k_single, &k_double, &k_extended, &k_boolean, &k_char, &k_shortstring, &k_ansistring, &k_text, &k_file, &k_pointer, &k_fixedarray, &k_unknown,
+    &k_byte, &k_shortint, &k_word, &k_smallint, &k_longword, &k_integer, &k_longint, &k_qword, &k_int64, &k_set, &k_single, &k_double, &k_extended, &k_boolean, &k_char, &k_widechar, &k_shortstring, &k_ansistring, &k_text, &k_file, &k_pointer, &k_fixedarray, &k_unknown,
     //    &k_m_iobject,
 };
 } // namespace
@@ -158,6 +159,10 @@ Type* boolean_type() {
 
 Type* char_type() {
 	return &k_char;
+}
+
+Type* widechar_type() {
+	return &k_widechar;
 }
 
 ShortStringType* shortstring_type(uint8_t capacity) {
@@ -394,8 +399,9 @@ static std::optional<ConstantOrdinalCarrier> constant_ordinal_carrier(Type* type
 			high_bit >>= 1;
 		} while (high_bit != 0);
 		return ConstantOrdinalCarrier{bits, bounds.signed_type};
-	} else if (type == char_type()) {
-		return ConstantOrdinalCarrier{8, false};
+	} else if (type == char_type() || type == widechar_type()) {
+		return ConstantOrdinalCarrier{
+		    type == char_type() ? 8u : 16u, false};
 	} else if (auto enumeration = dynamic_cast<EnumType*>(type)) {
 		return ConstantOrdinalCarrier{enumeration->carrier_bits, enumeration->carrier_signed};
 	}

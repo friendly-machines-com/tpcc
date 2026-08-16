@@ -194,9 +194,9 @@ std::optional<OrdinalTypeDomain> ordinal_type_domain(Type* type) {
 	if (type == &untyped_integer_type()) {
 		return OrdinalTypeDomain{OrdinalFamily::Integer, nullptr};
 	}
-	if (type == char_type()) {
+	if (type == char_type() || type == widechar_type()) {
 		return OrdinalTypeDomain{
-		    OrdinalFamily::Character, char_type()};
+		    OrdinalFamily::Character, type};
 	}
 	if (dynamic_cast<EnumType*>(type)) {
 		return OrdinalTypeDomain{
@@ -879,6 +879,7 @@ static bool predefined_scalar_byte_copyable(const Type* type) {
 		case IntrinsicCarrier::Double:
 		case IntrinsicCarrier::LongDouble:
 		case IntrinsicCarrier::Character:
+		case IntrinsicCarrier::WideCharacter:
 			return true;
 		case IntrinsicCarrier::AnsiString:
 		case IntrinsicCarrier::Text:
@@ -938,6 +939,7 @@ static bool predefined_overlay_byte_copyable(const Type* type, std::set<const Ty
 		case IntrinsicCarrier::Double:
 		case IntrinsicCarrier::LongDouble:
 		case IntrinsicCarrier::Character:
+		case IntrinsicCarrier::WideCharacter:
 			return true;
 		case IntrinsicCarrier::AnsiString:
 		case IntrinsicCarrier::Text:
@@ -1665,14 +1667,15 @@ static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
 		            ? bounds.min_magnitude
 		            : 0),
 		    ordinal_value(false, bounds.max_positive)};
-	} else if (type == char_type()) {
+	} else if (type == char_type() || type == widechar_type()) {
 		OrdinalBounds bounds;
-		if (!intrinsic_ordinal_bounds(char_type(), &bounds)) {
+		if (!intrinsic_ordinal_bounds(
+		        const_cast<Type*>(type), &bounds)) {
 			return std::nullopt;
 		}
 		return OrdinalDomain{
 		    OrdinalFamily::Character,
-		    char_type(),
+		    type,
 		    ordinal_value(false, 0),
 		    ordinal_value(false, bounds.max_positive)};
 	} else if (auto enumeration = dynamic_cast<const EnumType*>(type)) {
@@ -1696,7 +1699,8 @@ static bool ordinal_domain_is_subset(const Type* source, const Type* target) {
 	if (!source_domain || !target_domain || source_domain->family != target_domain->family) {
 		return false;
 	}
-	if (source_domain->family != OrdinalFamily::Integer && source_domain->nominal_root != target_domain->nominal_root) {
+	if (source_domain->family != OrdinalFamily::Integer &&
+	    source_domain->nominal_root != target_domain->nominal_root) {
 		return false;
 	}
 	return compare_ordinal_values(
@@ -1722,8 +1726,8 @@ bool IntrinsicType::is_subtype_of(const Type* target) const {
 	if (this == target) {
 		return true;
 	}
-	// Only predefined integer-family types use range subtyping. Char has an
-	// ordinal range too, but it remains a distinct nominal ordinal family.
+	// Only predefined integer-family types use range subtyping. Character
+	// types have ordinal ranges too, but retain separate nominal domains.
 	return rank && ordinal_domain_is_subset(this, target);
 }
 
