@@ -12,7 +12,7 @@ const
 type
   { Equal ordinal payloads do not make Integer and TRegister the same Pascal
     domain. }
-  TBadRange = $05000000..NR_GS;
+  TBadRange = $05000000 .. NR_GS;
 
 begin
 end.

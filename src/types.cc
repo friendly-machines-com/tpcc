@@ -1792,8 +1792,8 @@ std::optional<ValueConversion> RoutineType::value_conversion_from(const Type* so
 	return std::nullopt;
 }
 
-bool RoutineType::same_parameter_and_result_types_as(const RoutineType* other) const {
-	if (!other || return_type != other->return_type || formals.size() != other->formals.size()) {
+bool RoutineType::same_parameter_types_as(const RoutineType* other) const {
+	if (!other || formals.size() != other->formals.size()) {
 		return false;
 	}
 	auto overload_identity_type = [](const Type* type) {
@@ -1810,6 +1810,11 @@ bool RoutineType::same_parameter_and_result_types_as(const RoutineType* other) c
 		}
 	}
 	return true;
+}
+
+bool RoutineType::same_parameter_and_result_types_as(const RoutineType* other) const {
+	return other && return_type == other->return_type &&
+	       same_parameter_types_as(other);
 }
 
 bool RoutineType::same_signature_as(const RoutineType* other) const {

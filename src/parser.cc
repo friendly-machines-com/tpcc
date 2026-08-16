@@ -3154,9 +3154,13 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 }
 
 // `inherited Name[(args)]` or anonymous `inherited;`. Calls the parent
-// type's method. The parser resolves the target at parse time by walking
-// current_routine's owner_class parent chain. The enclosing routine must be
-// a Method on a composite type with a parent (else: parse error). For
+// type's method. Anonymous inherited is not a zero-argument call: it selects
+// the ancestor declaration with the current method's exact visible parameter
+// contract and forwards the current formal slots. Explicitly named forms
+// retain normal argument/default matching. The parser resolves the target at
+// parse time by walking current_routine's owner_class parent chain. The
+// enclosing routine must be a Method on a composite type with a parent (else:
+// parse error). For
 // destructor-from-destructor the call is redundant in C++ (destructors
 // auto-chain); we mark the node `dropped` and emit produces nothing.
 // Statement and expression context both flow through here.
@@ -3167,11 +3171,13 @@ Node* Parser::parse_inherited() {
 	}
 
 	std::string name;
+	bool anonymous = false;
 	auto opt = maybe_parse_identifier();
 	if (opt) {
 		name = *opt;
 	} else if (current_routine) {
 		name = current_routine->pas_name;
+		anonymous = true;
 	} else {
 		raise_parse_error("inherited requires an enclosing method");
 	}
@@ -3198,7 +3204,44 @@ Node* Parser::parse_inherited() {
 	}
 
 	std::vector<Node*> args;
-	if (maybe_parse_opening_paren()) {
+	if (anonymous) {
+		std::vector<Callable*> exact;
+		auto consider = [&](Callable* candidate) {
+			auto candidate_type = candidate ? dynamic_cast<RoutineType*>(candidate->ty) : nullptr;
+			if (candidate_type &&
+			    current_routine->ty->same_parameter_types_as(candidate_type)) {
+				exact.push_back(candidate);
+			}
+		};
+		if (auto candidate = dynamic_cast<Callable*>(hit)) {
+			consider(candidate);
+		} else if (auto overloads = dynamic_cast<OverloadSet*>(hit)) {
+			for (Callable* candidate : overloads->members) {
+				consider(candidate);
+			}
+		}
+		if (exact.empty()) {
+			raise_parse_error("inherited: no ancestor declaration of '" + name +
+			                  "' has the current method's signature");
+		}
+		if (exact.size() != 1) {
+			raise_parse_error("inherited: more than one ancestor declaration of '" +
+			                  name + "' has the current method's signature");
+		}
+		hit = exact.front();
+
+		if (!current_routine->body_frame) {
+			raise_parse_error("inherited: enclosing method has no formal storage");
+		}
+		for (const Parameter& formal : current_routine->ty->formals) {
+			Node* actual = current_routine->body_frame->lookup_value(formal.pas_name);
+			if (!actual) {
+				raise_parse_error("inherited: current parameter '" +
+				                  formal.pas_name + "' has no storage");
+			}
+			args.push_back(actual);
+		}
+	} else if (maybe_parse_opening_paren()) {
 		if (input_token != ")") {
 			args.push_back(parse_expression());
 			while (maybe_parse_comma()) {
@@ -3207,8 +3250,9 @@ Node* Parser::parse_inherited() {
 		}
 		parse_closing_paren();
 	} else {
-		// No-parens form: must be a single Callable, not a multi-member
-		// overload set.
+		// A named no-parens form is an ordinary zero-actual/default-parameter
+		// call. It must name one declaration because there are no actuals with
+		// which to rank a multi-member family here.
 		Callable* resolved = dynamic_cast<Callable*>(hit);
 		if (!resolved) {
 			if (auto os = dynamic_cast<OverloadSet*>(hit)) {

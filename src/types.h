@@ -815,6 +815,10 @@ class RoutineType : public Type {
 	RoutineType(SourceLocation source_location, std::vector<Parameter> formals, Type* return_type, RoutineKind kind);
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
+	/** Names, defaults, and the result type are excluded. Parameter modes and
+	 * source-visible type contracts are exact; subranges retain their
+	 * established overload identity through their base ordinal type. */
+	bool same_parameter_types_as(const RoutineType* other) const;
 	/** Names and default expressions are not part of a routine's type.
 	 * Parameter modes and Type* identities are; the result is exact as well.
 	 * This shape helper deliberately leaves the representation category to
