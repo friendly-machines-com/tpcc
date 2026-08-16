@@ -2974,9 +2974,6 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 				raise_type_kind_mismatch("Str destination", "ShortString or AnsiString", destination_type);
 			}
 			const StrValueFamily family = str_value_family(item.value ? item.value->ty : nullptr);
-			if (family == StrValueFamily::Unsupported) {
-				raise_type_kind_mismatch("Str value", "integer, enumeration, predefined real, Char, string, or PChar", item.value ? item.value->ty : nullptr);
-			}
 			if (item.precision && family != StrValueFamily::ExistingReal) {
 				// Pascal's second colon is the fractional-digit count of a
 				// real value, not a generic third formatting operand.
@@ -2989,24 +2986,14 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			}
 			return result;
 		} else if (syntax_kind == BuiltinSyntaxKind::Write || syntax_kind == BuiltinSyntaxKind::WriteLn) {
+			const SourceLocation call_location =
+			    current_location();
 			std::vector<FormattedValue> items;
 			if (maybe_parse_opening_paren()) {
 				if (input_token != ")") {
 					do {
-						FormattedValue formatted = parse_formatted_value();
-						// Unlike an ordinary call, Write has no formal
-						// parameter to give an untyped integer literal its
-						// default Pascal carrier.
-						if (formatted.value->ty == &untyped_integer_type()) {
-							formatted.value = cast(formatted.value, integer_type());
-						} else if (formatted.value->ty == &untyped_real_type()) {
-							Type* natural = natural_real_origin_type(formatted.value);
-							if (!natural) {
-								raise_value_error("real Write/WriteLn value is outside every predefined real domain", formatted.value);
-							}
-							formatted.value = cast(formatted.value, natural);
-						}
-						items.push_back(formatted);
+						items.push_back(
+						    parse_formatted_value());
 					} while (maybe_parse_comma());
 				}
 				parse_closing_paren();
@@ -3026,16 +3013,53 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 				}
 				items.erase(items.begin());
 			}
-			for (const FormattedValue& item : items) {
+			Unit* system_unit =
+			    unit_registry
+			        ? unit_registry->lookup("system")
+			        : nullptr;
+			Node* system_str =
+			    system_unit && system_unit->frame
+			        ? system_unit->frame->lookup_value("str")
+			        : nullptr;
+			if (!system_str) {
+				emit_parse_error_at(
+				    call_location,
+				    "Write/WriteLn requires System.Str");
+			}
+			for (FormattedValue& item : items) {
+				// Resolve exactly the call which Write performs at runtime:
+				// Str(item, AnsiStringTemporary). Besides defining the
+				// admissible source domains, ordinary call matching
+				// materializes literals and applies the selected Str
+				// overload's source conversion. The temporary is semantic
+				// matching storage only; tpcc_write_one owns the actual
+				// runtime AnsiString.
+				StorageSlot projection_destination{
+				    "", ansistring_type()};
+				std::vector<Node*> projection_arguments{
+				    item.value,
+				    &projection_destination};
+				FinalizedCall projection =
+				    finalize_call(
+				        system_str,
+				        projection_arguments,
+				        "System.Str projection for Write/WriteLn",
+				        call_location);
+				const BuiltinDesc* selected_projection =
+				    builtin_desc_for_node(
+				        projection.callee);
+				if (!selected_projection ||
+				    selected_projection->generic_kind !=
+				        BuiltinGenericKind::StrOutput) {
+					emit_parse_error_at(
+					    call_location,
+					    "Write/WriteLn selected a System.Str overload "
+					    "without predefined formatting semantics");
+				}
+				item.value = projection_arguments[0];
 				const StrValueFamily family =
 				    str_value_family(
 				        item.value ? item.value->ty : nullptr);
-				if (family == StrValueFamily::Unsupported) {
-					raise_type_kind_mismatch(
-					    "Write/WriteLn value",
-					    "type supported by Str",
-					    item.value ? item.value->ty : nullptr);
-				}
 				if (item.precision &&
 				    family != StrValueFamily::ExistingReal) {
 					raise_type_kind_mismatch(
