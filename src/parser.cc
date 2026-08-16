@@ -4371,11 +4371,8 @@ static bool ordinary_real_binary_operands(Node* first, Node* second) {
 	// operands to belong to that numeric family so a distinct fixed-point
 	// domain, pointer equation, or other heterogeneous declaration remains
 	// available through the general common-domain policy.
-	auto ordinary_numeric = [](Node* value) {
-		return value && (is_integer_semantic_type(value->ty) || ordinary_real_operand(value));
-	};
-	return ordinary_numeric(first) && ordinary_numeric(second) &&
-	       (ordinary_real_operand(first) || ordinary_real_operand(second));
+	auto ordinary_numeric = [](Node* value) { return value && (is_integer_semantic_type(value->ty) || ordinary_real_operand(value)); };
+	return ordinary_numeric(first) && ordinary_numeric(second) && (ordinary_real_operand(first) || ordinary_real_operand(second));
 }
 
 Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives directives, bool mutation_step) {

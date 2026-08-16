@@ -13,3 +13,4 @@ InsertBraces: true
 AllowShortBlocksOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
+AlignEscapedNewlines: DontAlign
