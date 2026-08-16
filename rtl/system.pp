@@ -398,22 +398,25 @@ operator xor(a, b: Integer): Integer; external name '::u_system::o_bitwisexor';
 operator xor(a, b: QWord): QWord; external name '::u_system::o_bitwisexor';
 operator xor(a, b: Int64): Int64; external name '::u_system::o_bitwisexor';
 
-operator shl(a: Byte; b: Integer): Cardinal; external name '::u_system::o_leftshift';
-operator shl(a: ShortInt; b: Integer): Integer; external name '::u_system::o_leftshift';
-operator shl(a: Word; b: Integer): Cardinal; external name '::u_system::o_leftshift';
-operator shl(a: SmallInt; b: Integer): Integer; external name '::u_system::o_leftshift';
-operator shl(a: Cardinal; b: Integer): Cardinal; external name '::u_system::o_leftshift';
-operator shl(a: Integer; b: Integer): Integer; external name '::u_system::o_leftshift';
-operator shl(a: Int64; b: Integer): Int64; external name '::u_system::o_leftshift';
-operator shl(a: QWord; b: Integer): QWord; external name '::u_system::o_leftshift';
-operator shr(a: Byte; b: Integer): Cardinal; external name '::u_system::o_rightshift';
-operator shr(a: ShortInt; b: Integer): Integer; external name '::u_system::o_rightshift';
-operator shr(a: Word; b: Integer): Cardinal; external name '::u_system::o_rightshift';
-operator shr(a: SmallInt; b: Integer): Integer; external name '::u_system::o_rightshift';
-operator shr(a: Cardinal; b: Integer): Cardinal; external name '::u_system::o_rightshift';
-operator shr(a: Integer; b: Integer): Integer; external name '::u_system::o_rightshift';
-operator shr(a: Int64; b: Integer): Int64; external name '::u_system::o_rightshift';
-operator shr(a: QWord; b: Integer): QWord; external name '::u_system::o_rightshift';
+// A shift count has one domain independent of the value/result carrier.
+// QWord contains every count for which these fixed-width shifts have a
+// defined result; larger counts remain outside the language contract.
+operator shl(a: Byte; b: QWord): Cardinal; external name '::u_system::o_leftshift';
+operator shl(a: ShortInt; b: QWord): Integer; external name '::u_system::o_leftshift';
+operator shl(a: Word; b: QWord): Cardinal; external name '::u_system::o_leftshift';
+operator shl(a: SmallInt; b: QWord): Integer; external name '::u_system::o_leftshift';
+operator shl(a: Cardinal; b: QWord): Cardinal; external name '::u_system::o_leftshift';
+operator shl(a: Integer; b: QWord): Integer; external name '::u_system::o_leftshift';
+operator shl(a: Int64; b: QWord): Int64; external name '::u_system::o_leftshift';
+operator shl(a: QWord; b: QWord): QWord; external name '::u_system::o_leftshift';
+operator shr(a: Byte; b: QWord): Cardinal; external name '::u_system::o_rightshift';
+operator shr(a: ShortInt; b: QWord): Integer; external name '::u_system::o_rightshift';
+operator shr(a: Word; b: QWord): Cardinal; external name '::u_system::o_rightshift';
+operator shr(a: SmallInt; b: QWord): Integer; external name '::u_system::o_rightshift';
+operator shr(a: Cardinal; b: QWord): Cardinal; external name '::u_system::o_rightshift';
+operator shr(a: Integer; b: QWord): Integer; external name '::u_system::o_rightshift';
+operator shr(a: Int64; b: QWord): Int64; external name '::u_system::o_rightshift';
+operator shr(a: QWord; b: QWord): QWord; external name '::u_system::o_rightshift';
 operator in(const item; const values): Boolean; external name '::u_system::o_in';
 
 function ord(const x): Cardinal; external name '::u_system::p_ord'; // generic intrinsic

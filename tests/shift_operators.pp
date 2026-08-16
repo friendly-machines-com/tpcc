@@ -26,8 +26,8 @@ var
   L: LongInt;
   I64: Int64;
   Q: QWord;
-  Count, NegativeCount, Count31, Count32, Count33, Count63, Count64,
-    Count65: Integer;
+  Count: Integer;
+  QCount, Count31, Count63: QWord;
 
 function ResultKind(Value: Integer): Integer; overload;
 begin
@@ -86,15 +86,16 @@ begin
   I64 := 1;
   Q := 1;
   Count := 1;
+  QCount := 1;
 
   { This is ordinary overload resolution, independent of shifts. TNibble is a
     distinct nominal type represented directly by its declared ShortInt base;
     passing it to Byte requires one assignment edge. }
   if SubrangeKind(N) <> 2 then Halt(39);
 
-  { A variable count prevents FPC-style constant folding from shrinking the
-    result to the folded literal's natural carrier. These checks exercise the
-    ordinary runtime operator families. }
+  { A typed variable count prevents constant folding from replacing these
+    ordinary runtime operator calls. Integer exercises assignment into the
+    common QWord count domain. }
   if ResultKind(N shl Count) <> 1 then Halt(1);
   if ResultKind(B shl Count) <> 2 then Halt(2);
   if ResultKind(SI shl Count) <> 1 then Halt(3);
@@ -115,44 +116,45 @@ begin
   if ResultKind(I64 shr Count) <> 3 then Halt(17);
   if ResultKind(Q shr Count) <> 4 then Halt(18);
 
+  { An exact QWord count must leave selection to the independently typed
+    value operand and therefore preserve every result carrier above. }
+  if ResultKind(N shl QCount) <> 1 then Halt(43);
+  if ResultKind(B shl QCount) <> 2 then Halt(44);
+  if ResultKind(SI shl QCount) <> 1 then Halt(45);
+  if ResultKind(W shl QCount) <> 2 then Halt(46);
+  if ResultKind(SM shl QCount) <> 1 then Halt(47);
+  if ResultKind(C shl QCount) <> 2 then Halt(48);
+  if ResultKind(L shl QCount) <> 1 then Halt(49);
+  if ResultKind(I64 shl QCount) <> 3 then Halt(50);
+  if ResultKind(Q shl QCount) <> 4 then Halt(51);
+
+  if ResultKind(N shr QCount) <> 1 then Halt(52);
+  if ResultKind(B shr QCount) <> 2 then Halt(53);
+  if ResultKind(SI shr QCount) <> 1 then Halt(54);
+  if ResultKind(W shr QCount) <> 2 then Halt(55);
+  if ResultKind(SM shr QCount) <> 1 then Halt(56);
+  if ResultKind(C shr QCount) <> 2 then Halt(57);
+  if ResultKind(L shr QCount) <> 1 then Halt(58);
+  if ResultKind(I64 shr QCount) <> 3 then Halt(59);
+  if ResultKind(Q shr QCount) <> 4 then Halt(60);
+
   if SizeOf(N shl Count) <> 4 then Halt(19);
   if SizeOf(L shl Count) <> 4 then Halt(20);
   if SizeOf(I64 shl Count) <> 8 then Halt(21);
   if SizeOf(Q shl Count) <> 8 then Halt(22);
 
-  NegativeCount := -1;
   Count31 := 31;
-  Count32 := 32;
-  Count33 := 33;
   Count63 := 63;
-  Count64 := 64;
-  Count65 := 65;
 
   L := 1;
-  if (L shl NegativeCount) <> Low(LongInt) then Halt(23);
   if (L shl Count31) <> Low(LongInt) then Halt(24);
-  if (L shl Count32) <> 1 then Halt(25);
-  if (L shl Count33) <> 2 then Halt(26);
-
-  C := 1;
-  if (C shl Count32) <> 1 then Halt(27);
-  if (C shl Count33) <> 2 then Halt(28);
 
   I64 := 1;
-  if (I64 shl NegativeCount) <> Low(Int64) then Halt(29);
   if (I64 shl Count63) <> Low(Int64) then Halt(30);
-  if (I64 shl Count64) <> 1 then Halt(31);
-  if (I64 shl Count65) <> 2 then Halt(32);
-
-  Q := 1;
-  if (Q shl Count64) <> 1 then Halt(33);
-  if (Q shl Count65) <> 2 then Halt(34);
 
   L := -1;
   if (L shr Count) <> High(LongInt) then Halt(35);
-  if (L shr Count32) <> -1 then Halt(36);
 
   I64 := -1;
-  if (I64 shr Count) <> High(Int64) then Halt(37);
-  if (I64 shr Count64) <> -1 then Halt(38)
+  if (I64 shr Count) <> High(Int64) then Halt(37)
 end.

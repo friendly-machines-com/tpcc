@@ -6526,9 +6526,9 @@ inline Result m_leftshift(
 	constexpr unsigned width =
 	    std::numeric_limits<UResult>::digits;
 	using UCount = std::make_unsigned_t<Count>;
-	// Wrap at the promoted result width. Conversion
-	// through UCount also gives negative Integer counts their two's-complement
-	// low bits, so -1 becomes 31 for a 32-bit result and 63 for a 64-bit one.
+	// Pascal specifies results only for counts below the promoted result
+	// width. Masking outside that domain merely keeps the C++ implementation
+	// from executing an undefined host shift; it is not a Pascal guarantee.
 	UCount amount =
 	    static_cast<UCount>(count) &
 	    static_cast<UCount>(width - 1);
@@ -6565,11 +6565,11 @@ inline Result m_rightshift(
 	inline INTEGER_RESULT o_modulus(T a, T b) { return m_modulus(m_arithmetic_operand<INTEGER_RESULT>(a), m_arithmetic_operand<INTEGER_RESULT>(b)); }
 
 // Shift promotion differs from the other integer operations for unsigned
-// Byte and Word, and every family takes an Integer count. Keep that contract
-// separate instead of overloading INTEGER_RESULT with two meanings.
+// Byte and Word. The count domain is independently and uniformly QWord, so
+// keep that contract separate from INTEGER_RESULT.
 #define TPCC_DEFINE_SHIFT_OPERATIONS(T, SHIFT_RESULT) \
-	inline SHIFT_RESULT o_leftshift(T a, t_integer b) { return m_leftshift(m_arithmetic_operand<SHIFT_RESULT>(a), b); } \
-	inline SHIFT_RESULT o_rightshift(T a, t_integer b) { return m_rightshift(m_arithmetic_operand<SHIFT_RESULT>(a), b); }
+	inline SHIFT_RESULT o_leftshift(T a, t_qword b) { return m_leftshift(m_arithmetic_operand<SHIFT_RESULT>(a), b); } \
+	inline SHIFT_RESULT o_rightshift(T a, t_qword b) { return m_rightshift(m_arithmetic_operand<SHIFT_RESULT>(a), b); }
 
 #define TPCC_DEFINE_INTEGRAL_OPERATIONS(T, INTEGER_RESULT) \
 	TPCC_DEFINE_INTEGER_ARITHMETIC_OPERATIONS(T, INTEGER_RESULT, t_double) \
