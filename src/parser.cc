@@ -3515,6 +3515,28 @@ static Frame* body_frame_of(Type* ty) {
 	return nullptr;
 }
 
+// Type declarations in the currently open block may still store an
+// IncompleteType edge even though its declaration has since been published.
+// Projection needs the published shape now in order to inspect a pointer,
+// array, or aggregate, but it must not rewrite the stored edge: the block
+// resolver remains the one operation which normalizes graph identity.
+// Strong `type Base` definitions likewise retain nominal identity while their
+// base supplies the structure on which a type projection operates.
+static Type* type_projection_shape(Type* ty) {
+	std::unordered_set<Type*> seen;
+	while (ty && seen.insert(ty).second) {
+		if (auto incomplete = dynamic_cast<IncompleteType*>(ty);
+		    incomplete && incomplete->resolved) {
+			ty = incomplete->resolved;
+		} else if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
+			ty = distinct->base_type;
+		} else {
+			break;
+		}
+	}
+	return ty;
+}
+
 static Frame* body_frame_of(Node* value) {
 	if (auto unit = dynamic_cast<UnitRef*>(value)) {
 		return unit->unit ? unit->unit->frame : nullptr;
@@ -3551,7 +3573,15 @@ Node* Parser::parse_member_selection(Node* base, LeadingTokenDirectives* leading
 }
 
 Type* Parser::parse_qualified_type_member(std::string lhs_name) {
-	auto binding = maybe_resolve_type_or_value(lhs_name);
+	std::optional<Binding> binding;
+	if (Type* named_type = maybe_resolve_type(lhs_name)) {
+		// Required-type lookup deliberately skips a nearer value declaration,
+		// and it peels any already-published type-block placeholder.
+		binding = Binding{named_type};
+	} else {
+		// A unit qualifier is a value binding whose body frame exports types.
+		binding = maybe_resolve_type_or_value(lhs_name);
+	}
 	if (!binding) {
 		raise_type_parse_error("unresolved member qualifier: " + lhs_name);
 	}
@@ -3560,11 +3590,11 @@ Type* Parser::parse_qualified_type_member(std::string lhs_name) {
 	if (auto value = std::get_if<Node*>(&*binding)) {
 		base = *value;
 	} else {
-		Type* qt = std::get<Type*>(*binding);
+		Type* qt = type_projection_shape(std::get<Type*>(*binding));
 		rejected_qualifier_type = qt;
 		if (auto ct = dynamic_cast<ClassType*>(qt)) {
 			base = new ClassRefValue(ct);
-		} else if (dynamic_cast<RecordType*>(qt) || dynamic_cast<PackedRecordType*>(qt)) {
+		} else if (body_frame_of(qt)) {
 			base = new TypeMemberQualifier(qt);
 		}
 	}
@@ -3597,12 +3627,85 @@ Type* Parser::parse_qualified_type_member(std::string lhs_name) {
 		if (!maybe_parse_period()) {
 			break;
 		}
-		members = body_frame_of(result);
+		members = body_frame_of(type_projection_shape(result));
 		if (!members) {
 			raise_type_kind_mismatch("member qualifier '" + member + "'", "class, record, or unit", result);
 		}
 	}
 	return result;
+}
+
+Type* Parser::parse_type_member_projection(Type* type) {
+	Type* member_owner = type_projection_shape(type);
+	Frame* members = body_frame_of(member_owner);
+	if (!members) {
+		raise_type_kind_mismatch("type member projection", "class, record, object, or interface", type);
+	}
+	std::string member_name = parse_identifier();
+	auto member = members->lookup_type_or_value(member_name);
+	if (!member) {
+		raise_type_error("type has no member '" + member_name + "'", type);
+	}
+	if (auto member_type = std::get_if<Type*>(&*member)) {
+		return *member_type;
+	}
+	Node* member_value = std::get<Node*>(*member);
+	if (!member_value || !member_value->ty) {
+		raise_type_error("member '" + member_name + "' has no type", type);
+	}
+	return member_value->ty;
+}
+
+Type* Parser::parse_type_projection_tail(Type* type) {
+	while (true) {
+		if (maybe_parse_circumflex()) {
+			Type* projected = type_projection_shape(type);
+			auto pointer = dynamic_cast<PointerType*>(projected);
+			if (!pointer) {
+				raise_type_kind_mismatch("postfix type dereference", "pointer", type);
+			}
+			if (pointer->is_untyped()) {
+				raise_type_error("postfix type dereference requires a typed pointer", type);
+			}
+			type = pointer->item_type;
+		} else if (maybe_parse_opening_bracket()) {
+			Type* projected = type_projection_shape(type);
+			Type* element = projected ? projected->array_element_type() : nullptr;
+			Type* index_type = projected ? projected->sequence_index_type() : nullptr;
+			if (!index_type) {
+				if (auto fixed = dynamic_cast<FixedArrayType*>(projected)) {
+					// Fixed-array ranges are finalized with the rest of an
+					// open type block. Their declared bounds already provide
+					// the ordinal family needed to check this projection.
+					index_type = subrange_range_type(
+					    type_projection_shape(fixed->bounds));
+				}
+			}
+			if (!element || !index_type) {
+				raise_type_kind_mismatch("indexed type projection", "array", type);
+			}
+
+			Node* index = cast_for_destination(parse_expression(), index_type);
+			parse_closing_bracket();
+			ConstEvalContext ctx;
+			ConstEvalResult folded = index->const_eval(ctx);
+			if (folded.kind == ConstEvalResult::Kind::NotConstant) {
+				raise_value_error("type projection index must be constant", index);
+			}
+			if (folded.kind == ConstEvalResult::Kind::Error) {
+				raise_value_error(folded.message, index);
+			}
+			if (!folded_ordinal_value(folded.node)) {
+				raise_type_kind_mismatch("type projection index", "ordinal constant", folded.node ? folded.node->ty : nullptr);
+			}
+			type = element;
+		} else if (maybe_parse_period()) {
+			type = parse_type_member_projection(type);
+		} else {
+			break;
+		}
+	}
+	return type;
 }
 
 Node* Parser::maybe_bind_member(Node* receiver, const std::string& name) {
@@ -6114,14 +6217,18 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 				return parse_subrange_type(parse_value_from_identifier(id, identifier_directives, &leading_directives), parse_subrange_bound_expression());
 			}
 			if (maybe_parse_period()) {
-				return parse_qualified_type_member(id);
+				return parse_type_projection_tail(parse_qualified_type_member(id));
+			}
+			if ((input_token == "^" || input_token == "[") &&
+			    maybe_resolve_type(id)) {
+				return parse_type_projection_tail(resolve_type(id, allow_forward));
 			}
 			if (token_continues_subrange_bound_after_primary(input_token)) {
 				Node* lower_bound = parse_subrange_bound_expression_after_identifier(id, identifier_directives);
 				parse_period_period();
 				return parse_subrange_type(lower_bound, parse_subrange_bound_expression());
 			}
-			return resolve_type(id, allow_forward);
+			return parse_type_projection_tail(resolve_type(id, allow_forward));
 		}
 
 		Node* lower_bound = parse_subrange_bound_expression();

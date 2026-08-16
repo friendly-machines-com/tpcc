@@ -505,11 +505,18 @@ class Parser {
 	Node* parse_designator_tail(Node* result, LeadingTokenDirectives& leading_directives);
 	Node* parse_member_selection(Node* base, LeadingTokenDirectives* leading_directives);
 	/** Parse `LHS.RHS` in a type context. Resolves LHS through the same
-	 *  kind-dispatch as the value-context member path (UnitRef via self-bind,
-	 *  ClassType/RecordType wrapped), then looks RHS up as a TYPE in the
-	 *  resolved body frame. Raises if LHS resolves to a kind that has no
-	 *  type members, or if the named type is not present. */
+	 *  kind-dispatch as the value-context member path, then returns either a
+	 *  nested type or the declared type of a value member. Raises if LHS has
+	 *  no member environment or RHS is absent. */
 	Type* parse_qualified_type_member(std::string lhs_name);
+	/** Apply ordinary postfix type projections. Unlike a value designator,
+	 *  these operations inspect declarations and produce another Type*:
+	 *  `P^` is the pointed-to type, `A[constant]` is an array's element type,
+	 *  and `R.Field` is the declared member type. The syntax is available
+	 *  everywhere a type expression is accepted; SizeOf has no private copy
+	 *  of this grammar. */
+	Type* parse_type_projection_tail(Type* type);
+	Type* parse_type_member_projection(Type* type);
 	/** Resolve NAME in RECEIVER's ordinary structural member environment and
 	 * bind the result to RECEIVER. This is the non-token-consuming half of
 	 * parse_member_selection, used by compiler-defined protocols which must
