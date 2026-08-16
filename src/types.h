@@ -508,9 +508,11 @@ struct EnumType : public Type {
 	// makes uniqueness an EnumType invariant rather than a parser convention.
 	const Member* add_member(Member member);
 	const Member* member_for_value(int64_t value) const;
+
 	const std::vector<Member>& members() const {
 		return member_list;
 	}
+
 	const Member* min_member() const;
 	const Member* max_member() const;
 	EnumType(SourceLocation source_location, std::string cxx_name, std::string a, std::string b, unsigned carrier_bits = 32, bool carrier_signed = true);

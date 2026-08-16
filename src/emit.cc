@@ -939,51 +939,40 @@ void Emitter::emit_for_in_cleanup_control_epilogue(unsigned try_depth, RoutineTy
 }
 
 void Emitter::emit_formatted_value(const FormattedValue& formatted) {
-	EnumType* enumeration =
-	    enum_root_type(formatted.value->ty);
-	const bool named_enumeration =
-	    enumeration && enumeration != boolean_type();
+	EnumType* enumeration = enum_root_type(formatted.value->ty);
+	const bool named_enumeration = enumeration && enumeration != boolean_type();
 
-	fprintf(active,
-	        "::u_system::tpcc_make_formatted_value(");
+	fprintf(active, "::u_system::tpcc_make_formatted_value(");
 	if (named_enumeration) {
 		// C++20 has no enum reflection, and local Pascal enum types cannot
 		// own namespace metadata. Emit the finite ordinal/name equation at
 		// the use site. The switch evaluates the Pascal value once, and the
 		// parser's unique-ordinal invariant makes every case unambiguous.
 		fprintf(active, "([&]() -> std::string {\n");
-		fprintf(active,
-		        "\tconst int64_t tpcc_enum_ordinal = "
-		        "static_cast<int64_t>("
-		        "::u_system::tpcc_ordinal_storage<");
+		fprintf(active, "\tconst int64_t tpcc_enum_ordinal = "
+		                "static_cast<int64_t>("
+		                "::u_system::tpcc_ordinal_storage<");
 		emit_type_ref(formatted.value->ty);
 		fprintf(active, ">::get(static_cast<");
 		emit_type_ref(formatted.value->ty);
 		fprintf(active, ">(");
 		emit_expression(formatted.value);
 		fprintf(active, ")));\n");
-		fprintf(active,
-		        "\tstd::string tpcc_enum_text;\n"
-		        "\tswitch (tpcc_enum_ordinal) {\n");
-		for (const EnumType::Member& member :
-		     enumeration->members()) {
-			fprintf(active,
-			        "\tcase %lld: tpcc_enum_text = \"",
-			        static_cast<long long>(member.value));
+		fprintf(active, "\tstd::string tpcc_enum_text;\n"
+		                "\tswitch (tpcc_enum_ordinal) {\n");
+		for (const EnumType::Member& member : enumeration->members()) {
+			fprintf(active, "\tcase %lld: tpcc_enum_text = \"", static_cast<long long>(member.value));
 			// Encode the spelling as bytes instead of assuming that every
 			// future Pascal identifier syntax is also C++-literal-safe.
 			for (unsigned char ch : member.display_name) {
-				fprintf(active, "\\%03o",
-				        static_cast<unsigned>(ch));
+				fprintf(active, "\\%03o", static_cast<unsigned>(ch));
 			}
 			fprintf(active, "\"; break;\n");
 		}
-		fprintf(active,
-		        "\tdefault: ::u_system::p_runerror(107);\n"
-		        "\t}\n");
-		fprintf(active,
-		        "\treturn tpcc_enum_text;\n"
-		        "}())");
+		fprintf(active, "\tdefault: ::u_system::p_runerror(107);\n"
+		                "\t}\n");
+		fprintf(active, "\treturn tpcc_enum_text;\n"
+		                "}())");
 	} else {
 		fprintf(active, "static_cast<");
 		emit_type_ref(formatted.value->ty);
@@ -994,14 +983,12 @@ void Emitter::emit_formatted_value(const FormattedValue& formatted) {
 	// Width and precision describe the formatted field, independently of
 	// which Pascal value family produced its unpadded text.
 	if (formatted.width) {
-		fprintf(active,
-		        ", static_cast<::u_system::t_sizeint>(");
+		fprintf(active, ", static_cast<::u_system::t_sizeint>(");
 		emit_expression(formatted.width);
 		fprintf(active, ")");
 	}
 	if (formatted.precision) {
-		fprintf(active,
-		        ", static_cast<::u_system::t_sizeint>(");
+		fprintf(active, ", static_cast<::u_system::t_sizeint>(");
 		emit_expression(formatted.precision);
 		fprintf(active, ")");
 	}
@@ -2728,10 +2715,7 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, ")");
 		} else {
 			Type* ordinal_type = c->ty;
-			const bool wrapped_ordinal =
-			    ordinal_type == char_type() ||
-			    ordinal_type == widechar_type() ||
-			    dynamic_cast<EnumType*>(ordinal_type);
+			const bool wrapped_ordinal = ordinal_type == char_type() || ordinal_type == widechar_type() || dynamic_cast<EnumType*>(ordinal_type);
 			if (wrapped_ordinal) {
 				fprintf(active, "static_cast<");
 				emit_type_ref(c->ty);
@@ -3290,10 +3274,7 @@ void Emitter::emit_expression(Node* expr) {
 				break;
 			}
 			OrdinalBounds bounds;
-			return type == char_type() ||
-			       type == widechar_type() ||
-			       dynamic_cast<EnumType*>(type) ||
-			       integer_bounds(type, &bounds);
+			return type == char_type() || type == widechar_type() || dynamic_cast<EnumType*>(type) || integer_bounds(type, &bounds);
 		};
 		auto source_real_origin = dynamic_cast<Real*>(ca->a);
 		const bool real_conversion = ca->a && ((source_real_origin && source_real_origin->is_origin()) || real_type(ca->a->ty)) && real_type(ca->ty);
@@ -3307,17 +3288,8 @@ void Emitter::emit_expression(Node* expr) {
 		const bool target_pointer_integer = ca->ty == ptrint_type() || ca->ty == ptruint_type();
 		auto source_pointer = dynamic_cast<PointerType*>(ca->a ? ca->a->ty : nullptr);
 		auto source_address = dynamic_cast<AddrOf*>(ca->a);
-		auto source_slot =
-		    source_address
-		        ? dynamic_cast<StorageSlot*>(source_address->a)
-		        : nullptr;
-		const bool omitted_formal_byte_pointer =
-		    source_slot &&
-		    (source_slot->kind == StorageSlot::Kind::OmittedOutFormal ||
-		     source_slot->kind == StorageSlot::Kind::OmittedConstFormal) &&
-		    source_slot->ty == unknown_type() && target_pointer &&
-		    (target_pointer->item_type == byte_type() ||
-		     target_pointer->item_type == char_type());
+		auto source_slot = source_address ? dynamic_cast<StorageSlot*>(source_address->a) : nullptr;
+		const bool omitted_formal_byte_pointer = source_slot && (source_slot->kind == StorageSlot::Kind::OmittedOutFormal || source_slot->kind == StorageSlot::Kind::OmittedConstFormal) && source_slot->ty == unknown_type() && target_pointer && (target_pointer->item_type == byte_type() || target_pointer->item_type == char_type());
 		const bool source_object_reference = ca->a && (dynamic_cast<ClassType*>(ca->a->ty) || dynamic_cast<InterfaceType*>(ca->a->ty));
 		const bool target_object_reference = dynamic_cast<ClassType*>(ca->ty) || dynamic_cast<InterfaceType*>(ca->ty);
 		OrdinalBounds source_integer_bounds;
@@ -3334,11 +3306,7 @@ void Emitter::emit_expression(Node* expr) {
 		auto target_classref = dynamic_cast<ClassRefType*>(ca->ty);
 		auto target_packed = dynamic_cast<PackedRecordType*>(ca->ty);
 		auto source_packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr);
-		auto target_byte_array =
-		    predefined_byte_array_storage_view(
-		        ca->ty, ca->a ? ca->a->ty : nullptr)
-		        ? dynamic_cast<FixedArrayType*>(ca->ty)
-		        : nullptr;
+		auto target_byte_array = predefined_byte_array_storage_view(ca->ty, ca->a ? ca->a->ty : nullptr) ? dynamic_cast<FixedArrayType*>(ca->ty) : nullptr;
 
 		if (dynamic_cast<RangeCheckedCast*>(ca)) {
 			if (real_conversion) {

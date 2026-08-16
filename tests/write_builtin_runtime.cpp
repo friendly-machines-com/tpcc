@@ -48,8 +48,7 @@ int main() {
 	if (result != 0) {
 		return 2;
 	}
-	std::string expected_output =
-	    "A12 Z!\n\nTRUE\n  12\n  pointer\n\n";
+	std::string expected_output = "A12 Z!\n\nTRUE\n  12\n  pointer\n\n";
 	expected_output.append("ab\0cd", 5);
 	expected_output.append("\nexplicit stdout");
 	if (read_output(standard_output) != expected_output) {

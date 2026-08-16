@@ -38,22 +38,19 @@ static Type* integer_literal_natural_type(const Integer* literal);
 static Integer* untyped_integer_constant(Node* expression);
 static bool is_ordinal_intrinsic_argument(Type* ty);
 static bool rank_less(const MatchRank& a, Type* a_formal, const MatchRank& b, Type* b_formal, const std::function<bool(Type*, Type*)>& direct_assignment_edge);
+
 static StorageSlot* addressed_omitted_formal(Node* value) {
 	auto address = dynamic_cast<AddrOf*>(value);
 	auto slot = address ? dynamic_cast<StorageSlot*>(address->a) : nullptr;
 	if (!slot || slot->ty != unknown_type()) {
 		return nullptr;
 	}
-	return slot->kind == StorageSlot::Kind::OmittedOutFormal ||
-	               slot->kind == StorageSlot::Kind::OmittedConstFormal
-	           ? slot
-	           : nullptr;
+	return slot->kind == StorageSlot::Kind::OmittedOutFormal || slot->kind == StorageSlot::Kind::OmittedConstFormal ? slot : nullptr;
 }
+
 static bool is_omitted_formal_byte_pointer_target(Type* type) {
 	auto pointer = dynamic_cast<PointerType*>(type);
-	return pointer &&
-	       (pointer->item_type == byte_type() ||
-	        pointer->item_type == char_type());
+	return pointer && (pointer->item_type == byte_type() || pointer->item_type == char_type());
 }
 enum class BracketIntegerPreference {
 	Array,
@@ -1189,10 +1186,7 @@ std::string Parser::consume() {
 		if (input_char == '$') {
 			sst << (char)input_char;
 			consume_lowlevel();
-			while ((input_char >= '0' && input_char <= '9') ||
-			       (input_char >= 'a' && input_char <= 'f') ||
-			       (input_char >= 'A' && input_char <= 'F') ||
-			       input_char == '_') {
+			while ((input_char >= '0' && input_char <= '9') || (input_char >= 'a' && input_char <= 'f') || (input_char >= 'A' && input_char <= 'F') || input_char == '_') {
 				sst << (char)tolower(input_char);
 				consume_lowlevel();
 			}
@@ -1343,8 +1337,7 @@ std::string Parser::consume() {
 	}
 	auto text = sst.str();
 	input_token = text;
-	input_token_spelling =
-	    spelling.str().empty() ? text : spelling.str();
+	input_token_spelling = spelling.str().empty() ? text : spelling.str();
 	// Drop any token produced while an outer `{$ifdef}`/`{$if}` frame is
 	// inactive. Directives are already handled in-line and never reach
 	// here, so they still update the ifdef stack correctly.
@@ -1660,14 +1653,12 @@ void Parser::maybe_parse_statement() {
 		}
 	} else if (peek_keyword("if")) {
 		parse_keyword("if");
-		auto condition = maybe_auto_call(
-		    parse_expression(),
-		    directive_state.leading_token_directives());
+		auto condition = maybe_auto_call(parse_expression(), directive_state.leading_token_directives());
 		parse_keyword("then");
 		if (emitter) {
 			emitter->emit_if_prologue(condition);
 		}
-			parse_statement();
+		parse_statement();
 		if (maybe_parse_keyword("else")) {
 			if (emitter) {
 				emitter->emit_if_else();
@@ -1679,9 +1670,7 @@ void Parser::maybe_parse_statement() {
 		}
 	} else if (peek_keyword("case")) {
 		parse_keyword("case");
-		Node* selector = maybe_auto_call(
-		    parse_expression(),
-		    directive_state.leading_token_directives());
+		Node* selector = maybe_auto_call(parse_expression(), directive_state.leading_token_directives());
 		parse_keyword("of");
 
 		// Every emitted case owns a C++ block, so a fixed tpcc-owned
@@ -1758,9 +1747,7 @@ void Parser::maybe_parse_statement() {
 		}
 	} else if (peek_keyword("while")) {
 		parse_keyword("while");
-		auto condition = maybe_auto_call(
-		    parse_expression(),
-		    directive_state.leading_token_directives());
+		auto condition = maybe_auto_call(parse_expression(), directive_state.leading_token_directives());
 		parse_keyword("do");
 		if (emitter) {
 			emitter->emit_while_prologue(condition);
@@ -1825,9 +1812,7 @@ void Parser::maybe_parse_statement() {
 			if (!visible_value && maybe_resolve_type(input_token)) {
 				ordinal_designator = parse_type_expression(false);
 			} else {
-				collection = maybe_auto_call(
-				    parse_expression(),
-				    directive_state.leading_token_directives());
+				collection = maybe_auto_call(parse_expression(), directive_state.leading_token_directives());
 			}
 			parse_keyword("do");
 
@@ -1950,9 +1935,7 @@ void Parser::maybe_parse_statement() {
 		loop_try_targets.pop_back();
 		--loop_depth;
 		parse_keyword("until");
-		auto condition = maybe_auto_call(
-		    parse_expression(),
-		    directive_state.leading_token_directives());
+		auto condition = maybe_auto_call(parse_expression(), directive_state.leading_token_directives());
 		if (emitter) {
 			emitter->emit_repeat_epilogue(condition);
 		}
@@ -2463,14 +2446,11 @@ static StrValueFamily str_value_family(Type* ty) {
 		return StrValueFamily::ExistingReal;
 	} else if (enum_root_type(ty)) {
 		return StrValueFamily::Enumeration;
-	} else if (ty == char_type() ||
-	           dynamic_cast<ShortStringType*>(ty) ||
-	           ty == ansistring_type()) {
+	} else if (ty == char_type() || dynamic_cast<ShortStringType*>(ty) || ty == ansistring_type()) {
 		// Str is a projection to text, so an existing counted textual value
 		// retains every character, including embedded zero bytes.
 		return StrValueFamily::Textual;
-	} else if (auto pointer = dynamic_cast<PointerType*>(ty);
-	           pointer && pointer->item_type == char_type()) {
+	} else if (auto pointer = dynamic_cast<PointerType*>(ty); pointer && pointer->item_type == char_type()) {
 		// PChar is the one textual view without a stored length. Its first
 		// zero byte supplies the projection boundary; nil denotes empty text.
 		return StrValueFamily::Textual;
@@ -2811,13 +2791,11 @@ Node* Parser::parse_value(LeadingTokenDirectives* leading_directives) {
 			if (input_token.front() == '\'') {
 				s += extract_string_literal(input_token);
 			} else {
-				const bool hexadecimal =
-				    input_token.size() >= 2 && input_token[1] == '$';
+				const bool hexadecimal = input_token.size() >= 2 && input_token[1] == '$';
 				const char* first = input_token.data() + (hexadecimal ? 2 : 1);
 				const char* last = input_token.data() + input_token.size();
 				uint64_t value = 0;
-				auto [end, error] =
-				    std::from_chars(first, last, value, hexadecimal ? 16 : 10);
+				auto [end, error] = std::from_chars(first, last, value, hexadecimal ? 16 : 10);
 				if (first == last || error != std::errc() || end != last || value > 255) {
 					raise_parse_error("malformed character-code literal: " + input_token);
 				}
@@ -2986,14 +2964,12 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			}
 			return result;
 		} else if (syntax_kind == BuiltinSyntaxKind::Write || syntax_kind == BuiltinSyntaxKind::WriteLn) {
-			const SourceLocation call_location =
-			    current_location();
+			const SourceLocation call_location = current_location();
 			std::vector<FormattedValue> items;
 			if (maybe_parse_opening_paren()) {
 				if (input_token != ")") {
 					do {
-						items.push_back(
-						    parse_formatted_value());
+						items.push_back(parse_formatted_value());
 					} while (maybe_parse_comma());
 				}
 				parse_closing_paren();
@@ -3013,18 +2989,10 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 				}
 				items.erase(items.begin());
 			}
-			Unit* system_unit =
-			    unit_registry
-			        ? unit_registry->lookup("system")
-			        : nullptr;
-			Node* system_str =
-			    system_unit && system_unit->frame
-			        ? system_unit->frame->lookup_value("str")
-			        : nullptr;
+			Unit* system_unit = unit_registry ? unit_registry->lookup("system") : nullptr;
+			Node* system_str = system_unit && system_unit->frame ? system_unit->frame->lookup_value("str") : nullptr;
 			if (!system_str) {
-				emit_parse_error_at(
-				    call_location,
-				    "Write/WriteLn requires System.Str");
+				emit_parse_error_at(call_location, "Write/WriteLn requires System.Str");
 			}
 			for (FormattedValue& item : items) {
 				// Resolve exactly the call which Write performs at runtime:
@@ -3034,38 +3002,18 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 				// overload's source conversion. The temporary is semantic
 				// matching storage only; tpcc_write_one owns the actual
 				// runtime AnsiString.
-				StorageSlot projection_destination{
-				    "", ansistring_type()};
-				std::vector<Node*> projection_arguments{
-				    item.value,
-				    &projection_destination};
-				FinalizedCall projection =
-				    finalize_call(
-				        system_str,
-				        projection_arguments,
-				        "System.Str projection for Write/WriteLn",
-				        call_location);
-				const BuiltinDesc* selected_projection =
-				    builtin_desc_for_node(
-				        projection.callee);
-				if (!selected_projection ||
-				    selected_projection->generic_kind !=
-				        BuiltinGenericKind::StrOutput) {
-					emit_parse_error_at(
-					    call_location,
-					    "Write/WriteLn selected a System.Str overload "
-					    "without predefined formatting semantics");
+				StorageSlot projection_destination{"", ansistring_type()};
+				std::vector<Node*> projection_arguments{item.value, &projection_destination};
+				FinalizedCall projection = finalize_call(system_str, projection_arguments, "System.Str projection for Write/WriteLn", call_location);
+				const BuiltinDesc* selected_projection = builtin_desc_for_node(projection.callee);
+				if (!selected_projection || selected_projection->generic_kind != BuiltinGenericKind::StrOutput) {
+					emit_parse_error_at(call_location, "Write/WriteLn selected a System.Str overload "
+					                                   "without predefined formatting semantics");
 				}
 				item.value = projection_arguments[0];
-				const StrValueFamily family =
-				    str_value_family(
-				        item.value ? item.value->ty : nullptr);
-				if (item.precision &&
-				    family != StrValueFamily::ExistingReal) {
-					raise_type_kind_mismatch(
-					    "a second Write/WriteLn colon qualifier",
-					    "predefined real",
-					    item.value ? item.value->ty : nullptr);
+				const StrValueFamily family = str_value_family(item.value ? item.value->ty : nullptr);
+				if (item.precision && family != StrValueFamily::ExistingReal) {
+					raise_type_kind_mismatch("a second Write/WriteLn colon qualifier", "predefined real", item.value ? item.value->ty : nullptr);
 				}
 			}
 			const BuiltinDesc* implementation = builtin_implementation_at_call_site(builtin_desc_for_node(value), identifier_directives);
@@ -3259,8 +3207,7 @@ Node* Parser::parse_inherited() {
 		std::vector<Callable*> exact;
 		auto consider = [&](Callable* candidate) {
 			auto candidate_type = candidate ? dynamic_cast<RoutineType*>(candidate->ty) : nullptr;
-			if (candidate_type &&
-			    current_routine->ty->same_parameter_types_as(candidate_type)) {
+			if (candidate_type && current_routine->ty->same_parameter_types_as(candidate_type)) {
 				exact.push_back(candidate);
 			}
 		};
@@ -3272,12 +3219,10 @@ Node* Parser::parse_inherited() {
 			}
 		}
 		if (exact.empty()) {
-			raise_parse_error("inherited: no ancestor declaration of '" + name +
-			                  "' has the current method's signature");
+			raise_parse_error("inherited: no ancestor declaration of '" + name + "' has the current method's signature");
 		}
 		if (exact.size() != 1) {
-			raise_parse_error("inherited: more than one ancestor declaration of '" +
-			                  name + "' has the current method's signature");
+			raise_parse_error("inherited: more than one ancestor declaration of '" + name + "' has the current method's signature");
 		}
 		hit = exact.front();
 
@@ -3287,8 +3232,7 @@ Node* Parser::parse_inherited() {
 		for (const Parameter& formal : current_routine->ty->formals) {
 			Node* actual = current_routine->body_frame->lookup_value(formal.pas_name);
 			if (!actual) {
-				raise_parse_error("inherited: current parameter '" +
-				                  formal.pas_name + "' has no storage");
+				raise_parse_error("inherited: current parameter '" + formal.pas_name + "' has no storage");
 			}
 			args.push_back(actual);
 		}
@@ -3576,8 +3520,7 @@ static Frame* body_frame_of(Type* ty) {
 static Type* type_projection_shape(Type* ty) {
 	std::unordered_set<Type*> seen;
 	while (ty && seen.insert(ty).second) {
-		if (auto incomplete = dynamic_cast<IncompleteType*>(ty);
-		    incomplete && incomplete->resolved) {
+		if (auto incomplete = dynamic_cast<IncompleteType*>(ty); incomplete && incomplete->resolved) {
 			ty = incomplete->resolved;
 		} else if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
 			ty = distinct->base_type;
@@ -3728,8 +3671,7 @@ Type* Parser::parse_type_projection_tail(Type* type) {
 					// Fixed-array ranges are finalized with the rest of an
 					// open type block. Their declared bounds already provide
 					// the ordinal family needed to check this projection.
-					index_type = subrange_range_type(
-					    type_projection_shape(fixed->bounds));
+					index_type = subrange_range_type(type_projection_shape(fixed->bounds));
 				}
 			}
 			if (!element || !index_type) {
@@ -4000,11 +3942,7 @@ static bool is_typed_pointer_index(PropertyAccess* access, Builtin* builtin) {
 
 static Cast* byte_array_storage_view_cast(Node* node) {
 	auto cast = dynamic_cast<Cast*>(node);
-	return cast && cast->a &&
-	               predefined_byte_array_storage_view(
-	                   cast->ty, cast->a->ty)
-	           ? cast
-	           : nullptr;
+	return cast && cast->a && predefined_byte_array_storage_view(cast->ty, cast->a->ty) ? cast : nullptr;
 }
 
 bool Parser::is_assignable(Node* n) {
@@ -4031,11 +3969,8 @@ bool Parser::is_assignable(Node* n) {
 			// A Byte-array cast is a view of the scalar's object
 			// representation. Its indexed byte is writable exactly when the
 			// viewed scalar is a stable writable place.
-			if (auto view =
-			        byte_array_storage_view_cast(
-			            property->receiver)) {
-				return is_referenceable(view->a) &&
-				       !contains_packed_projection(view->a);
+			if (auto view = byte_array_storage_view_cast(property->receiver)) {
+				return is_referenceable(view->a) && !contains_packed_projection(view->a);
 			}
 			// Reference-backed indexing can write only through a stable base.
 			// Packed projections are admitted here solely so the subsequent
@@ -4056,10 +3991,8 @@ bool Parser::is_assignable(Node* n) {
 		}
 		return dynamic_cast<StorageSlot*>(ma->b) != nullptr;
 	} else if (auto cast = dynamic_cast<Cast*>(n)) {
-		if (predefined_byte_array_storage_view(
-		        cast->ty, cast->a ? cast->a->ty : nullptr)) {
-			return is_referenceable(cast->a) &&
-			       !contains_packed_projection(cast->a);
+		if (predefined_byte_array_storage_view(cast->ty, cast->a ? cast->a->ty : nullptr)) {
+			return is_referenceable(cast->a) && !contains_packed_projection(cast->a);
 		}
 		// FPC treats an explicit ordinal cast as a view of its operand's
 		// storage when both ordinal carriers have the same size. Restrict this
@@ -4090,12 +4023,8 @@ bool Parser::property_read_is_place(PropertyAccess* access) {
 	if (dynamic_cast<StorageSlot*>(accessor)) {
 		return access->receiver->ty && access->receiver->ty->is_reference_type() ? true : is_referenceable(access->receiver);
 	} else if (auto builtin = dynamic_cast<Builtin*>(accessor)) {
-		if (auto view =
-		        byte_array_storage_view_cast(
-		            access->receiver)) {
-			return is_builtin_index_accessor(builtin) &&
-			       is_referenceable(view->a) &&
-			       !contains_packed_projection(view->a);
+		if (auto view = byte_array_storage_view_cast(access->receiver)) {
+			return is_builtin_index_accessor(builtin) && is_referenceable(view->a) && !contains_packed_projection(view->a);
 		}
 		return is_builtin_index_accessor(builtin) && (is_typed_pointer_index(access, builtin) || is_referenceable(access->receiver));
 	}
@@ -4149,29 +4078,19 @@ bool Parser::is_static_storage_place(Node* n) {
 		if (dynamic_cast<UnitRef*>(member->a)) {
 			return is_static_storage_place(member->b);
 		}
-		if (member->a && member->a->ty &&
-		    member->a->ty->is_reference_type()) {
+		if (member->a && member->a->ty && member->a->ty->is_reference_type()) {
 			return false;
 		}
 		return is_static_storage_place(member->a);
 	}
 	if (auto index = dynamic_cast<Index*>(n)) {
 		ConstEvalContext ctx;
-		ConstEvalResult folded = index->b
-		                             ? index->b->const_eval(ctx)
-		                             : ConstEvalResult::not_constant();
-		return folded.kind == ConstEvalResult::Kind::Success &&
-		       is_static_storage_place(index->a);
+		ConstEvalResult folded = index->b ? index->b->const_eval(ctx) : ConstEvalResult::not_constant();
+		return folded.kind == ConstEvalResult::Kind::Success && is_static_storage_place(index->a);
 	}
 	if (auto access = dynamic_cast<PropertyAccess*>(n)) {
-		auto builtin = access->property
-		                   ? dynamic_cast<Builtin*>(
-		                         access->property->read_accessor)
-		                   : nullptr;
-		if (!is_builtin_index_accessor(builtin) ||
-		    !access->receiver ||
-		    access->receiver->ty->is_reference_type() ||
-		    !is_static_storage_place(access->receiver)) {
+		auto builtin = access->property ? dynamic_cast<Builtin*>(access->property->read_accessor) : nullptr;
+		if (!is_builtin_index_accessor(builtin) || !access->receiver || access->receiver->ty->is_reference_type() || !is_static_storage_place(access->receiver)) {
 			return false;
 		}
 		// An indexed address is static only when every displacement is a
@@ -4179,9 +4098,7 @@ bool Parser::is_static_storage_place(Node* n) {
 		// expression which contains them.
 		ConstEvalContext ctx;
 		for (Node* index : access->indexes) {
-			ConstEvalResult folded =
-			    index ? index->const_eval(ctx)
-			          : ConstEvalResult::not_constant();
+			ConstEvalResult folded = index ? index->const_eval(ctx) : ConstEvalResult::not_constant();
 			if (folded.kind != ConstEvalResult::Kind::Success) {
 				return false;
 			}
@@ -4207,9 +4124,7 @@ bool Parser::is_symbolic_static_initializer(Node* n) {
 		// into another, but this is not a general link-time expression
 		// language. In particular, pointer-to-integer casts and arithmetic
 		// remain outside static initialization.
-		return (dynamic_cast<PointerType*>(target) ||
-		        dynamic_cast<RoutineType*>(target)) &&
-		       is_symbolic_static_initializer(cast->a);
+		return (dynamic_cast<PointerType*>(target) || dynamic_cast<RoutineType*>(target)) && is_symbolic_static_initializer(cast->a);
 	}
 	return false;
 }
@@ -4444,22 +4359,14 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives 
 	// "common" type first changes which overload is exact and makes operator
 	// calls obey a different language from ordinary calls.
 	std::vector<Node*> args{a, b};
-	const bool integer_operands =
-	    a && b && is_integer_semantic_type(a->ty) &&
-	    is_integer_semantic_type(b->ty);
+	const bool integer_operands = a && b && is_integer_semantic_type(a->ty) && is_integer_semantic_type(b->ty);
 	OverloadResolutionPolicy policy = OverloadResolutionPolicy::Ordinary;
 	if (id == "+" || id == "-") {
-		policy = integer_operands
-		             ? OverloadResolutionPolicy::CommonIntegerBinary
-		             : mutation_step
-		                   ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep
-		                   : OverloadResolutionPolicy::CommonBinaryPointerLeft;
+		policy = integer_operands ? OverloadResolutionPolicy::CommonIntegerBinary : mutation_step ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep : OverloadResolutionPolicy::CommonBinaryPointerLeft;
 	} else if (id == "div" || id == "mod" || id == "and" || id == "or" || id == "xor") {
 		policy = OverloadResolutionPolicy::CommonIntegerBinary;
 	} else if (id == "*") {
-		policy = integer_operands
-		             ? OverloadResolutionPolicy::CommonIntegerBinary
-		             : OverloadResolutionPolicy::CommonBinary;
+		policy = integer_operands ? OverloadResolutionPolicy::CommonIntegerBinary : OverloadResolutionPolicy::CommonBinary;
 	} else if (id == "**" && integer_operands) {
 		// Integer power deliberately has heterogeneous (Base, Integer)
 		// declarations, so it restricts the domain family without requiring
@@ -4488,10 +4395,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirective
 	RoutineType* a_routine = a ? dynamic_cast<RoutineType*>(a->ty) : nullptr;
 	RoutineType* b_routine = b ? dynamic_cast<RoutineType*>(b->ty) : nullptr;
 
-	auto explicit_code = [](Node* value) {
-		return dynamic_cast<RoutineRef*>(value) ||
-		       dynamic_cast<RoutineCode*>(value);
-	};
+	auto explicit_code = [](Node* value) { return dynamic_cast<RoutineRef*>(value) || dynamic_cast<RoutineCode*>(value); };
 	const bool a_nil = dynamic_cast<NilLiteral*>(a);
 	const bool b_nil = dynamic_cast<NilLiteral*>(b);
 
@@ -4535,11 +4439,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirective
 	// exactly as for a named call; the selected formal types are applied only
 	// after overload resolution.
 	std::vector<Node*> args{a, b};
-	const OverloadResolutionPolicy policy =
-	    a && b && is_integer_semantic_type(a->ty) &&
-	            is_integer_semantic_type(b->ty)
-	        ? OverloadResolutionPolicy::CommonIntegerBinary
-	        : OverloadResolutionPolicy::CommonBinary;
+	const OverloadResolutionPolicy policy = a && b && is_integer_semantic_type(a->ty) && is_integer_semantic_type(b->ty) ? OverloadResolutionPolicy::CommonIntegerBinary : OverloadResolutionPolicy::CommonBinary;
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), nullptr, policy);
 	Node* call = make_call(fc, std::move(args), directives);
 	/*	if (call->ty->return_type != boolean_type()) {
@@ -4608,9 +4508,7 @@ Node* Parser::parse_power_tail(Node* result, LeadingTokenDirectives leading_dire
 	// assignment/formal consumes it, while an ordinary value context calls
 	// it. Property validation remains eager even when its value is routine
 	// typed.
-	if (node_is_bare_callable(result) ||
-	    dynamic_cast<PropertyAccess*>(result) ||
-	    !(result && dynamic_cast<RoutineType*>(result->ty))) {
+	if (node_is_bare_callable(result) || dynamic_cast<PropertyAccess*>(result) || !(result && dynamic_cast<RoutineType*>(result->ty))) {
 		result = maybe_auto_call(result, leading_directives);
 	}
 	while (true) {
@@ -4829,9 +4727,7 @@ Node* Parser::parse_expression() {
 
 FormattedValue Parser::parse_formatted_value() {
 	FormattedValue result{
-	    .value = maybe_auto_call(
-	        parse_expression(),
-	        directive_state.leading_token_directives()),
+	    .value = maybe_auto_call(parse_expression(), directive_state.leading_token_directives()),
 	    .width = nullptr,
 	    .precision = nullptr,
 	};
@@ -5754,59 +5650,36 @@ Type* Parser::parse_enum_type() {
 			}
 
 			auto ordinal = folded_ordinal_value(folded.node);
-			auto domain =
-			    ordinal
-			        ? ordinal_type_domain(ordinal->exact_type)
-			        : std::nullopt;
+			auto domain = ordinal ? ordinal_type_domain(ordinal->exact_type) : std::nullopt;
 			if (!ordinal || !domain) {
 				raise_type_kind_mismatch("explicit enum value", "integer, character, or member of the same enum", folded.node ? folded.node->ty : nullptr);
 			}
-			if (domain->family == OrdinalFamily::Enumeration &&
-			    domain->nominal_root != et) {
-				raise_type_mismatch(
-				    "explicit enum member value",
-				    et, ordinal->exact_type);
+			if (domain->family == OrdinalFamily::Enumeration && domain->nominal_root != et) {
+				raise_type_mismatch("explicit enum member value", et, ordinal->exact_type);
 			}
-			const uint64_t maximum =
-			    ordinal->value.negative
-			        ? uint64_t{
-			              static_cast<uint64_t>(
-			                  std::numeric_limits<int32_t>::max()) +
-			              1}
-			        : static_cast<uint64_t>(
-			              std::numeric_limits<int32_t>::max());
+			const uint64_t maximum = ordinal->value.negative ? uint64_t{static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) + 1} : static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
 			if (ordinal->value.magnitude > maximum) {
-				raise_value_error(
-				    "explicit enum value is outside signed 32-bit "
-				    "range",
-				    ordinal->representation);
+				raise_value_error("explicit enum value is outside signed 32-bit "
+				                  "range",
+				                  ordinal->representation);
 			}
-			value = ordinal->value.negative
-			            ? -static_cast<int64_t>(
-			                  ordinal->value.magnitude)
-			            : static_cast<int64_t>(
-			                  ordinal->value.magnitude);
+			value = ordinal->value.negative ? -static_cast<int64_t>(ordinal->value.magnitude) : static_cast<int64_t>(ordinal->value.magnitude);
 		} else if (next_value > std::numeric_limits<int32_t>::max()) {
 			raise_type_error("implicit enum value is outside signed 32-bit "
 			                 "range",
 			                 et);
 		}
 
-		if (const EnumType::Member* existing =
-		        et->add_member({
-		            .pas_name = pas,
-		            .display_name = display_name,
-		            .cxx_name = cxx,
-		            .value = value,
-		            .explicit_value = explicit_value,
-		        })) {
+		if (const EnumType::Member* existing = et->add_member({
+		        .pas_name = pas,
+		        .display_name = display_name,
+		        .cxx_name = cxx,
+		        .value = value,
+		        .explicit_value = explicit_value,
+		    })) {
 			std::ostringstream message;
-			message << "duplicate enum ordinal " << value
-			        << ": member '" << display_name
-			        << "' conflicts with earlier member '"
-			        << existing->display_name << "'";
-			emit_parse_error_at(
-			    member_location, message.str());
+			message << "duplicate enum ordinal " << value << ": member '" << display_name << "' conflicts with earlier member '" << existing->display_name << "'";
+			emit_parse_error_at(member_location, message.str());
 		}
 		// Register the member as a value in the enclosing scope so bare uses
 		// (`c := Red`) resolve. Pascal's default is unscoped enum members:
@@ -5932,46 +5805,25 @@ static std::optional<FoldedSubrangeBound> classify_subrange_bound(Node* node, st
 	switch (domain->family) {
 	case OrdinalFamily::Integer:
 		return FoldedSubrangeBound{
-		    FoldedSubrangeBound::Kind::Integer,
-		    ordinal->representation,
-		    subrange_range_type(ordinal->exact_type),
-		    ordinal->value.negative,
-		    ordinal->value.magnitude,
-		    ordinal->value,
+		    FoldedSubrangeBound::Kind::Integer, ordinal->representation, subrange_range_type(ordinal->exact_type), ordinal->value.negative, ordinal->value.magnitude, ordinal->value,
 		};
 	case OrdinalFamily::Character: {
 		OrdinalBounds bounds;
-		if (!domain->nominal_root ||
-		    !intrinsic_ordinal_bounds(domain->nominal_root, &bounds) ||
-		    !ordinal_bounds_contains(
-		        bounds,
-		        ordinal->value.negative,
-		        ordinal->value.magnitude)) {
+		if (!domain->nominal_root || !intrinsic_ordinal_bounds(domain->nominal_root, &bounds) || !ordinal_bounds_contains(bounds, ordinal->value.negative, ordinal->value.magnitude)) {
 			*error = "character subrange bound is outside its character type";
 			return {};
 		}
 		Node* as_char = ordinal->representation;
 		if (dynamic_cast<String*>(as_char)) {
-			as_char = new Integer(
-			    ordinal->value.magnitude, domain->nominal_root);
+			as_char = new Integer(ordinal->value.magnitude, domain->nominal_root);
 		}
 		return FoldedSubrangeBound{
-		    FoldedSubrangeBound::Kind::Character,
-		    as_char,
-		    domain->nominal_root,
-		    ordinal->value.negative,
-		    ordinal->value.magnitude,
-		    ordinal->value,
+		    FoldedSubrangeBound::Kind::Character, as_char, domain->nominal_root, ordinal->value.negative, ordinal->value.magnitude, ordinal->value,
 		};
 	}
 	case OrdinalFamily::Enumeration:
 		return FoldedSubrangeBound{
-		    FoldedSubrangeBound::Kind::Enum,
-		    ordinal->representation,
-		    domain->nominal_root,
-		    ordinal->value.negative,
-		    ordinal->value.magnitude,
-		    ordinal->value,
+		    FoldedSubrangeBound::Kind::Enum, ordinal->representation, domain->nominal_root, ordinal->value.negative, ordinal->value.magnitude, ordinal->value,
 		};
 	}
 	*error = "subrange bound has an unsupported ordinal type";
@@ -6215,9 +6067,7 @@ Type* Parser::parse_subrange_type(Node* lower_bound, Node* upper_bound) {
 	}
 	case FoldedSubrangeBound::Kind::Character:
 		if (lower->ty != upper->ty) {
-			return raise_type_mismatch(
-			    "subrange constructor with bounds from the same character type",
-			    lower->ty, upper->ty);
+			return raise_type_mismatch("subrange constructor with bounds from the same character type", lower->ty, upper->ty);
 		}
 		if (compare_ordinal_values(upper->ordinal_value, lower->ordinal_value) < 0) {
 			raise_values_error("subrange upper bound is lower than lower bound", {{"lower bound", lower->node}, {"upper bound", upper->node}});
@@ -6272,34 +6122,21 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		if (folded.kind == ConstEvalResult::Kind::Error) {
 			raise_value_error(folded.message, capacity_expression);
 		}
-			auto capacity = folded_ordinal_value(folded.node);
-			auto capacity_domain =
-			    capacity
-			        ? ordinal_type_domain(
-			              capacity->exact_type)
-			        : std::nullopt;
-			if (!capacity_domain ||
-			    capacity_domain->family !=
-			        OrdinalFamily::Integer) {
-				raise_value_error(
-				    "shortstring capacity must have an integer "
-				    "type",
-				    folded.node ? folded.node
-				                : capacity_expression);
-			}
-			if (capacity->value.negative ||
-			    capacity->value.magnitude == 0 ||
-			    capacity->value.magnitude > 255) {
-				raise_value_error("shortstring capacity must be in 1..255", folded.node ? folded.node : capacity_expression);
-			}
+		auto capacity = folded_ordinal_value(folded.node);
+		auto capacity_domain = capacity ? ordinal_type_domain(capacity->exact_type) : std::nullopt;
+		if (!capacity_domain || capacity_domain->family != OrdinalFamily::Integer) {
+			raise_value_error("shortstring capacity must have an integer "
+			                  "type",
+			                  folded.node ? folded.node : capacity_expression);
+		}
+		if (capacity->value.negative || capacity->value.magnitude == 0 || capacity->value.magnitude > 255) {
+			raise_value_error("shortstring capacity must be in 1..255", folded.node ? folded.node : capacity_expression);
+		}
 		// Bracketed string syntax is a type constructor. Do not reuse the
 		// builtin capacity cache: identical constructor operands still
 		// create distinct Pascal definitions, with compatibility handled
 		// separately from identity.
-			return new ShortStringType(
-			    current_location(),
-			    static_cast<uint8_t>(
-			        capacity->value.magnitude));
+		return new ShortStringType(current_location(), static_cast<uint8_t>(capacity->value.magnitude));
 	} else if (peek_keyword("set")) {
 		parse_keyword("set");
 		parse_keyword("of");
@@ -6363,8 +6200,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 			if (maybe_parse_period()) {
 				return parse_type_projection_tail(parse_qualified_type_member(id));
 			}
-			if ((input_token == "^" || input_token == "[") &&
-			    maybe_resolve_type(id)) {
+			if ((input_token == "^" || input_token == "[") && maybe_resolve_type(id)) {
 				return parse_type_projection_tail(resolve_type(id, allow_forward));
 			}
 			if (token_continues_subrange_bound_after_primary(input_token)) {
@@ -6382,9 +6218,7 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 }
 
 void Parser::parse_statement() {
-	if (input_token == ";" || peek_keyword("end") || peek_keyword("else") ||
-	    peek_keyword("until") || peek_keyword("except") ||
-	    peek_keyword("finally")) {
+	if (input_token == ";" || peek_keyword("end") || peek_keyword("else") || peek_keyword("until") || peek_keyword("except") || peek_keyword("finally")) {
 		// This routine is called where the Pascal grammar requires exactly one
 		// statement. A delimiter in that position denotes an empty statement;
 		// leave it untouched for its owning construct.
@@ -6494,8 +6328,7 @@ static bool ordinal_constant_matches_range_type(Type* base_type, const FoldedSub
 	base_type = subrange_range_type(base_type);
 	auto domain = ordinal_type_domain(base_type);
 	if (domain && domain->family == OrdinalFamily::Character) {
-		return value.kind == FoldedSubrangeBound::Kind::Character &&
-		       value.ty == domain->nominal_root;
+		return value.kind == FoldedSubrangeBound::Kind::Character && value.ty == domain->nominal_root;
 	}
 	if (dynamic_cast<EnumType*>(base_type)) {
 		return value.kind == FoldedSubrangeBound::Kind::Enum && value.ty == base_type;
@@ -6531,32 +6364,23 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 			std::string value;
 			if (auto string = dynamic_cast<String*>(folded.node)) {
 				value = string->value;
-			} else if (auto character = dynamic_cast<Integer*>(folded.node);
-			           character && character->ty == char_type() &&
-			               !character->negative && character->value <= 255) {
+			} else if (auto character = dynamic_cast<Integer*>(folded.node); character && character->ty == char_type() && !character->negative && character->value <= 255) {
 				// Constant operations such as an explicit Char cast represent
 				// their ordinal result as Integer-with-Char-type rather than as
 				// a String node.
-				value.push_back(static_cast<char>(
-				    static_cast<unsigned char>(character->value)));
+				value.push_back(static_cast<char>(static_cast<unsigned char>(character->value)));
 			} else {
-				raise_value_error(
-				    "character-array initializer must fold to a character or string",
-				    folded.node ? folded.node : expression);
+				raise_value_error("character-array initializer must fold to a character or string", folded.node ? folded.node : expression);
 			}
 
 			if (value.size() > arr->range.length) {
-				raise_value_error(
-				    "string length is larger than character-array length",
-				    folded.node ? folded.node : expression);
+				raise_value_error("string length is larger than character-array length", folded.node ? folded.node : expression);
 			}
 
 			std::vector<Node*> elements;
 			elements.reserve(static_cast<std::size_t>(arr->range.length));
 			for (unsigned char character : value) {
-				elements.push_back(new String(
-				    std::string(1, static_cast<char>(character)),
-				    char_type()));
+				elements.push_back(new String(std::string(1, static_cast<char>(character)), char_type()));
 			}
 			while (elements.size() < arr->range.length) {
 				elements.push_back(new String(std::string(1, '\0'), char_type()));
@@ -6700,16 +6524,12 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		expr = cast(expr, ty);
 	}
 
-	const bool has_address_syntax =
-	    dynamic_cast<AddrOf*>(expr) ||
-	    dynamic_cast<RoutineRef*>(expr) ||
-	    dynamic_cast<RoutineCode*>(expr);
+	const bool has_address_syntax = dynamic_cast<AddrOf*>(expr) || dynamic_cast<RoutineRef*>(expr) || dynamic_cast<RoutineCode*>(expr);
 	const bool symbolic_static = is_symbolic_static_initializer(expr);
 	if (has_address_syntax && !symbolic_static) {
-		raise_value_error(
-		    "typed address initializer requires static storage or a "
-		    "receiverless routine",
-		    expr);
+		raise_value_error("typed address initializer requires static storage or a "
+		                  "receiverless routine",
+		                  expr);
 	}
 
 	ConstEvalContext ctx;
@@ -6754,10 +6574,9 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		// normal emission; neither constant evaluation nor this node records
 		// a backend relocation, section, or object-file symbol.
 		if (!is_symbolic_static_initializer(converted)) {
-			raise_value_error(
-			    "typed static address initializer requires a "
-			    "compile-time pointer conversion",
-			    converted);
+			raise_value_error("typed static address initializer requires a "
+			                  "compile-time pointer conversion",
+			                  converted);
 		}
 		return converted;
 	}
@@ -7788,18 +7607,14 @@ StorageSlot* Parser::resolve_absolute_target(const std::string& target_name, Typ
 		raise_parse_error("'absolute' target '" + target_name + "' is not a variable");
 	}
 	const auto& formals = current_routine->ty->formals;
-	auto found = std::find_if(formals.begin(), formals.end(),
-	                          [&](const Parameter& p) { return p.pas_name == target_name; });
+	auto found = std::find_if(formals.begin(), formals.end(), [&](const Parameter& p) { return p.pas_name == target_name; });
 	if (found == formals.end()) {
 		raise_parse_error("'absolute' target '" + target_name + "' is not a parameter of the enclosing routine");
 	}
 	if (found->mode != ParamMode::Value) {
 		raise_parse_error("'absolute' target '" + target_name + "' must be a by-value parameter");
 	}
-	auto is_pointer_family = [](Type* t) {
-		return dynamic_cast<PointerType*>(t) ||
-		       dynamic_cast<ClassType*>(t);
-	};
+	auto is_pointer_family = [](Type* t) { return dynamic_cast<PointerType*>(t) || dynamic_cast<ClassType*>(t); };
 	Type* target_type = found->ty;
 	if (!is_pointer_family(target_type) || !is_pointer_family(declared_type)) {
 		raise_parse_error("'absolute' is limited to pointer-or-class types on both sides");
@@ -8615,9 +8430,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 			if (target->ty->kind != CLASS_CONSTRUCTOR && target->ty->kind != CLASS_DESTRUCTOR) {
 				Node* pascal_self = receiver_slot;
 				Type* pascal_self_ty = receiver_ty;
-				if (dynamic_cast<RecordType*>(m->owner_class) ||
-				    dynamic_cast<PackedRecordType*>(m->owner_class) ||
-				    dynamic_cast<ObjectType*>(m->owner_class)) {
+				if (dynamic_cast<RecordType*>(m->owner_class) || dynamic_cast<PackedRecordType*>(m->owner_class) || dynamic_cast<ObjectType*>(m->owner_class)) {
 					auto value_self = new Dereference(receiver_slot);
 					value_self->ty = m->owner_class;
 					pascal_self = value_self;
@@ -8649,8 +8462,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 				slot_kind = StorageSlot::Kind::OmittedConstFormal;
 			}
 		}
-		if (!body_frame->register_variable(
-		        p.pas_name, new StorageSlot(p.cxx_name, p.ty, slot_kind), p.ty)) {
+		if (!body_frame->register_variable(p.pas_name, new StorageSlot(p.cxx_name, p.ty, slot_kind), p.ty)) {
 			raise_parse_error("duplicate parameter identifier: " + p.pas_name);
 		}
 	}
@@ -8990,9 +8802,7 @@ static bool generic_ordinal_operation_accepts(BuiltinGenericKind kind, Type* ope
 		}
 		operand = subrange_range_type(operand);
 		auto domain = ordinal_type_domain(operand);
-		return dynamic_cast<EnumType*>(operand) != nullptr ||
-		       (domain &&
-		        domain->family == OrdinalFamily::Character);
+		return dynamic_cast<EnumType*>(operand) != nullptr || (domain && domain->family == OrdinalFamily::Character);
 	}
 	return false;
 }
@@ -9136,10 +8946,8 @@ static Integer* typed_integer_constant(Node* expression) {
 	if (folded.kind != ConstEvalResult::Kind::Success) {
 		return nullptr;
 	}
-		auto integer = dynamic_cast<Integer*>(folded.node);
-		return integer && is_integer_semantic_type(integer->ty)
-		           ? integer
-		           : nullptr;
+	auto integer = dynamic_cast<Integer*>(folded.node);
+	return integer && is_integer_semantic_type(integer->ty) ? integer : nullptr;
 }
 
 static std::optional<uint64_t> integer_literal_target_preference(Type* target) {
@@ -9449,22 +9257,13 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, actual};
 	}
 
-	if (allow_routine_autocall &&
-	    dynamic_cast<RoutineType*>(source) &&
-	    !dynamic_cast<RoutineType*>(target) &&
-	    formal.mode != ParamMode::Var &&
-	    formal.mode != ParamMode::Out) {
-		if (Node* called = try_auto_call_routine_value(
-		        actual,
-		        directive_state.leading_token_directives())) {
+	if (allow_routine_autocall && dynamic_cast<RoutineType*>(source) && !dynamic_cast<RoutineType*>(target) && formal.mode != ParamMode::Var && formal.mode != ParamMode::Out) {
+		if (Node* called = try_auto_call_routine_value(actual, directive_state.leading_token_directives())) {
 			// Autocall is a contextual interpretation of the same source
 			// expression, not an implicit conversion edge and therefore adds
 			// no ranking tier. Disable it on re-entry so a function returning
 			// another routine value is called exactly once at this occurrence.
-			return match_argument(
-			    formal, called, builtin, parameter_index,
-			    allow_declared_conversion, failure,
-			    conversion_failure, false);
+			return match_argument(formal, called, builtin, parameter_index, allow_declared_conversion, failure, conversion_failure, false);
 		}
 		return std::nullopt;
 	}
@@ -9738,15 +9537,13 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		return ArgumentMatch{{MatchRank::Tier::Equal, 0}, value};
 	}
 
-	if (is_omitted_formal_byte_pointer_target(target) &&
-	    addressed_omitted_formal(actual)) {
+	if (is_omitted_formal_byte_pointer_target(target) && addressed_omitted_formal(actual)) {
 		// The source Type alone is merely ^unknown and does not retain whether
 		// its address denotes a storage-view descriptor or caller storage.
 		// Therefore this relation must inspect the expression provenance rather
 		// than become a broad PointerType edge. Keeping it in the ordinary
 		// matcher gives assignments and by-value/const calls the same rule.
-		return ArgumentMatch{{MatchRank::Tier::Convert, 20},
-		                     new Cast(actual, target)};
+		return ArgumentMatch{{MatchRank::Tier::Convert, 20}, new Cast(actual, target)};
 	}
 
 	if (auto reference = dynamic_cast<RoutineRef*>(actual)) {
@@ -9899,16 +9696,12 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 
 	const Integer* typed_constant = nullptr;
 	bool value_preserving_typed_integer_conversion = false;
-	if (assignment &&
-	    assignment->kind == AssignmentConversionClass::Narrowing &&
-	    is_integer_semantic_type(assignment_source) &&
-	    is_integer_semantic_type(target)) {
+	if (assignment && assignment->kind == AssignmentConversionClass::Narrowing && is_integer_semantic_type(assignment_source) && is_integer_semantic_type(target)) {
 		// Do not ask constant evaluation about unrelated or already-widening
 		// matches. Its value proof exists solely to refine this otherwise
 		// narrowing integer edge.
 		typed_constant = typed_integer_constant(actual);
-		value_preserving_typed_integer_conversion =
-		    typed_constant && integer_type_contains_literal(target, typed_constant);
+		value_preserving_typed_integer_conversion = typed_constant && integer_type_contains_literal(target, typed_constant);
 	}
 
 	if (allow_declared_conversion) {
@@ -9920,16 +9713,9 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			// independently of whether constant evaluation proved that this
 			// particular value survives it.
 			if (assignment) {
-				declared->rank.tier =
-				    assignment->kind == AssignmentConversionClass::Equal
-				        ? MatchRank::Tier::Equal
-				    : assignment->kind == AssignmentConversionClass::Narrowing
-				        ? MatchRank::Tier::ConvertNarrowing
-				        : MatchRank::Tier::Convert;
+				declared->rank.tier = assignment->kind == AssignmentConversionClass::Equal ? MatchRank::Tier::Equal : assignment->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing : MatchRank::Tier::Convert;
 				declared->rank.distance = assignment->distance;
-				declared->rank.information_losing =
-				    assignment->kind == AssignmentConversionClass::Narrowing &&
-				    !value_preserving_typed_integer_conversion;
+				declared->rank.information_losing = assignment->kind == AssignmentConversionClass::Narrowing && !value_preserving_typed_integer_conversion;
 			}
 			return declared;
 		}
@@ -9947,9 +9733,7 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		                                                               : MatchRank::Tier::Convert,
 		    assignment->distance,
 		};
-		rank.information_losing =
-		    assignment->kind == AssignmentConversionClass::Narrowing &&
-		    !value_preserving_typed_integer_conversion;
+		rank.information_losing = assignment->kind == AssignmentConversionClass::Narrowing && !value_preserving_typed_integer_conversion;
 		auto source_signed = integer_carrier_is_signed(assignment_source);
 		auto target_signed = integer_carrier_is_signed(target);
 		rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;
@@ -10044,9 +9828,7 @@ std::optional<CallableMatch> Parser::match_callable_arguments(Callable* callable
 		// while expression syntax requires an explicitly matching declaration.
 		Type* first = overload_rank_type(args[0]->ty);
 		auto domain = ordinal_type_domain(first);
-		if (dynamic_cast<EnumType*>(first) ||
-		    (domain &&
-		     domain->family == OrdinalFamily::Character)) {
+		if (dynamic_cast<EnumType*>(first) || (domain && domain->family == OrdinalFamily::Character)) {
 			return std::nullopt;
 		}
 	}
@@ -10384,17 +10166,10 @@ std::optional<ArgumentMatch> Parser::match_declared_conversion(Node* actual, Typ
 		if (match.rank.tier == MatchRank::Tier::Exact) {
 			return true;
 		}
-		if (match.rank.tier == MatchRank::Tier::Equal &&
-		    actual && actual->ty && formal.ty) {
-			auto formal_from_source =
-			    formal.ty->value_conversion_from(actual->ty);
-			auto source_from_formal =
-			    actual->ty->value_conversion_from(formal.ty);
-			if (formal_from_source && source_from_formal &&
-			    formal_from_source->kind ==
-			        ValueConversionClass::Direct &&
-			    source_from_formal->kind ==
-			        ValueConversionClass::Direct) {
+		if (match.rank.tier == MatchRank::Tier::Equal && actual && actual->ty && formal.ty) {
+			auto formal_from_source = formal.ty->value_conversion_from(actual->ty);
+			auto source_from_formal = actual->ty->value_conversion_from(formal.ty);
+			if (formal_from_source && source_from_formal && formal_from_source->kind == ValueConversionClass::Direct && source_from_formal->kind == ValueConversionClass::Direct) {
 				// Mutual Direct assignment is the zero-cost equivalence
 				// relation inside the conversion lattice. Nominally
 				// different representatives (notably `T = type Base`,
@@ -10587,8 +10362,7 @@ static bool candidate_admitted_in_phase(Callable* callable, const CallableMatch&
 	Type* second = overload_rank_type(match.formal_types[1]);
 	const bool homogeneous = first && first == second;
 	if (policy == OverloadResolutionPolicy::IntegerBinary) {
-		return is_integer_semantic_type(first) &&
-		       is_integer_semantic_type(second);
+		return is_integer_semantic_type(first) && is_integer_semantic_type(second);
 	}
 	if (policy == OverloadResolutionPolicy::CommonIntegerBinary) {
 		return homogeneous && is_integer_semantic_type(first);
@@ -10613,10 +10387,7 @@ static Type* homogeneous_common_formal(const CallableMatch& match) {
  * Fully-typed candidates are phase-filtered. Catch-all coordinates remain
  * ordinary per-argument ranks and join the best typed cohort rather than
  * creating a candidate-wide Generic phase. */
-static std::vector<size_t> overload_resolution_cohort(
-    const std::vector<std::pair<Callable*, CallableMatch>>& viable,
-    OverloadResolutionPolicy policy,
-    const std::function<bool(Type*, Type*)>& direct_assignment_edge) {
+static std::vector<size_t> overload_resolution_cohort(const std::vector<std::pair<Callable*, CallableMatch>>& viable, OverloadResolutionPolicy policy, const std::function<bool(Type*, Type*)>& direct_assignment_edge) {
 	std::vector<size_t> exact;
 	std::vector<size_t> generic;
 	std::optional<MatchRank::Tier> best_typed_phase;
@@ -10669,9 +10440,7 @@ static std::vector<size_t> overload_resolution_cohort(
 				} else {
 					best_lossy_real_domain = std::max(best_lossy_real_domain, real_semantic_rank(common));
 					if (policy == OverloadResolutionPolicy::CommonIntegerBinary) {
-						best_lossy_integer_domain =
-						    std::max(best_lossy_integer_domain,
-						             integer_domain_rank(common));
+						best_lossy_integer_domain = std::max(best_lossy_integer_domain, integer_domain_rank(common));
 					}
 				}
 			}
@@ -10688,11 +10457,7 @@ static std::vector<size_t> overload_resolution_cohort(
 					if (!have_lossless_common_domain && best_lossy_real_domain >= 0 && loses_information && real_semantic_rank(common) != best_lossy_real_domain) {
 						continue;
 					}
-					if (!have_lossless_common_domain &&
-					    best_lossy_integer_domain >= 0 &&
-					    loses_information &&
-					    integer_domain_rank(common) !=
-					        best_lossy_integer_domain) {
+					if (!have_lossless_common_domain && best_lossy_integer_domain >= 0 && loses_information && integer_domain_rank(common) != best_lossy_integer_domain) {
 						// The predefined integer carrier ranks form the
 						// language's extensible fallback order when no
 						// carrier contains both complete operand domains.
@@ -10707,10 +10472,7 @@ static std::vector<size_t> overload_resolution_cohort(
 								continue;
 							}
 							const CallableMatch& other_match = viable[j].second;
-							if (callable_match_has_generic(other_match) ||
-							    callable_match_phase(other_match) != *best_typed_phase ||
-							    !candidate_admitted_in_phase(viable[j].first, other_match, *best_typed_phase, policy) ||
-							    std::ranges::any_of(other_match.ranks, [](const MatchRank& rank) { return rank.information_losing; })) {
+							if (callable_match_has_generic(other_match) || callable_match_phase(other_match) != *best_typed_phase || !candidate_admitted_in_phase(viable[j].first, other_match, *best_typed_phase, policy) || std::ranges::any_of(other_match.ranks, [](const MatchRank& rank) { return rank.information_losing; })) {
 								continue;
 							}
 							Type* other_common = homogeneous_common_formal(other_match);
@@ -11056,13 +10818,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 		bool admitted = false;
 		if (match && (!expected_return_type || static_cast<RoutineType*>(c->ty)->return_type == expected_return_type)) {
 			std::vector<std::pair<Callable*, CallableMatch>> probe{{c, *match}};
-			admitted = !overload_resolution_cohort(
-			                probe,
-			                resolution_policy,
-			                [this](Type* source, Type* destination) {
-				                return has_direct_assignment_edge(source, destination);
-			                })
-			                .empty();
+			admitted = !overload_resolution_cohort(probe, resolution_policy, [this](Type* source, Type* destination) { return has_direct_assignment_edge(source, destination); }).empty();
 		}
 		if (!match || !admitted || (expected_return_type && static_cast<RoutineType*>(c->ty)->return_type != expected_return_type)) {
 			std::vector<Callable*> candidates{c};
@@ -11094,12 +10850,7 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 			std::vector<Callable*> none;
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args, expected_return_type, candidates, viable, none, false);
 		}
-		const std::vector<size_t> cohort = overload_resolution_cohort(
-		    viable,
-		    resolution_policy,
-		    [this](Type* source, Type* destination) {
-			    return has_direct_assignment_edge(source, destination);
-		    });
+		const std::vector<size_t> cohort = overload_resolution_cohort(viable, resolution_policy, [this](Type* source, Type* destination) { return has_direct_assignment_edge(source, destination); });
 		if (cohort.empty()) {
 			std::vector<Callable*> none;
 			raise_overload_resolution_error(error_location, name_for_error, receiver, args, expected_return_type, candidates, viable, none, false);

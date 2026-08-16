@@ -45,8 +45,7 @@ int main() {
 	if (p_functionresult != 61 || p_mutationresult != 8) {
 		return 2;
 	}
-	if (p_autocallvalueargument != 42 ||
-	    p_autocallroutineargument != 42) {
+	if (p_autocallvalueargument != 42 || p_autocallroutineargument != 42) {
 		return 11;
 	}
 	if (p_resultvalue != 126) {
@@ -55,9 +54,7 @@ int main() {
 	if (p_methodfunctionresult != 130) {
 		return 4;
 	}
-	if (p_plaincodeequal != ::u_system::p_true ||
-	    p_methodcodeequal != ::u_system::p_true ||
-	    p_autocallequal != ::u_system::p_true) {
+	if (p_plaincodeequal != ::u_system::p_true || p_methodcodeequal != ::u_system::p_true || p_autocallequal != ::u_system::p_true) {
 		return 5;
 	}
 	if (p_plainnil != ::u_system::p_true || p_plainnilequal != ::u_system::p_true || p_methodnil != ::u_system::p_true || p_methodnilequal != ::u_system::p_true) {

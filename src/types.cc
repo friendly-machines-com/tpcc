@@ -20,9 +20,7 @@ OrdinalValue ordinal_value(bool negative, uint64_t magnitude) {
 
 OrdinalValue ordinal_value(int64_t value) {
 	if (value < 0) {
-		return ordinal_value(
-		    true,
-		    static_cast<uint64_t>(-(value + 1)) + 1);
+		return ordinal_value(true, static_cast<uint64_t>(-(value + 1)) + 1);
 	}
 	return ordinal_value(false, static_cast<uint64_t>(value));
 }
@@ -128,9 +126,7 @@ EnumType::EnumType(SourceLocation source_location, std::string p_cxx_name, std::
 }
 
 const EnumType::Member* EnumType::add_member(Member member) {
-	auto [position, inserted] =
-	    member_index_by_value.emplace(
-		member.value, member_list.size());
+	auto [position, inserted] = member_index_by_value.emplace(member.value, member_list.size());
 	if (!inserted) {
 		return &member_list[position->second];
 	}
@@ -138,12 +134,9 @@ const EnumType::Member* EnumType::add_member(Member member) {
 	return nullptr;
 }
 
-const EnumType::Member* EnumType::member_for_value(
-    int64_t value) const {
+const EnumType::Member* EnumType::member_for_value(int64_t value) const {
 	auto position = member_index_by_value.find(value);
-	return position == member_index_by_value.end()
-	           ? nullptr
-	           : &member_list[position->second];
+	return position == member_index_by_value.end() ? nullptr : &member_list[position->second];
 }
 
 const EnumType::Member* EnumType::min_member() const {
@@ -162,13 +155,11 @@ const EnumType::Member* EnumType::max_member() const {
 
 EnumType* enum_root_type(Type* type) {
 	for (;;) {
-		if (auto distinct =
-		        dynamic_cast<DistinctType*>(type)) {
+		if (auto distinct = dynamic_cast<DistinctType*>(type)) {
 			type = distinct->base_type;
 			continue;
 		}
-		if (auto subrange =
-		        dynamic_cast<SubrangeType*>(type)) {
+		if (auto subrange = dynamic_cast<SubrangeType*>(type)) {
 			type = subrange->base_type;
 			continue;
 		}
@@ -195,12 +186,10 @@ std::optional<OrdinalTypeDomain> ordinal_type_domain(Type* type) {
 		return OrdinalTypeDomain{OrdinalFamily::Integer, nullptr};
 	}
 	if (type == char_type() || type == widechar_type()) {
-		return OrdinalTypeDomain{
-		    OrdinalFamily::Character, type};
+		return OrdinalTypeDomain{OrdinalFamily::Character, type};
 	}
 	if (dynamic_cast<EnumType*>(type)) {
-		return OrdinalTypeDomain{
-		    OrdinalFamily::Enumeration, type};
+		return OrdinalTypeDomain{OrdinalFamily::Enumeration, type};
 	}
 	auto intrinsic = dynamic_cast<IntrinsicType*>(type);
 	if (intrinsic && intrinsic->rank && intrinsic->ordinal_bounds) {
@@ -887,12 +876,7 @@ static bool predefined_scalar_byte_copyable(const Type* type) {
 			return false;
 		}
 	}
-	return dynamic_cast<const EnumType*>(type) ||
-	       dynamic_cast<const PointerType*>(type) ||
-	       dynamic_cast<const ClassType*>(type) ||
-	       dynamic_cast<const InterfaceType*>(type) ||
-	       dynamic_cast<const ClassRefType*>(type) ||
-	       dynamic_cast<const RoutineType*>(type);
+	return dynamic_cast<const EnumType*>(type) || dynamic_cast<const PointerType*>(type) || dynamic_cast<const ClassType*>(type) || dynamic_cast<const InterfaceType*>(type) || dynamic_cast<const ClassRefType*>(type) || dynamic_cast<const RoutineType*>(type);
 }
 
 static bool predefined_overlay_variant_byte_copyable(const VariantPart* variant, std::set<const Type*>& visiting) {
@@ -996,16 +980,12 @@ static bool predefined_overlay_compatible(const Type* target, const Type* source
 
 bool predefined_byte_array_storage_view(const Type* target, const Type* source) {
 	auto array = dynamic_cast<const FixedArrayType*>(target);
-	if (!array || array->item_type != byte_type() ||
-	    !predefined_scalar_byte_copyable(source)) {
+	if (!array || array->item_type != byte_type() || !predefined_scalar_byte_copyable(source)) {
 		return false;
 	}
-	auto target_layout =
-	    type_layout(false, const_cast<Type*>(target));
-	auto source_layout =
-	    type_layout(false, const_cast<Type*>(source));
-	return target_layout && source_layout &&
-	       target_layout->size == source_layout->size;
+	auto target_layout = type_layout(false, const_cast<Type*>(target));
+	auto source_layout = type_layout(false, const_cast<Type*>(source));
+	return target_layout && source_layout && target_layout->size == source_layout->size;
 }
 
 bool Type::predefined_explicit_conversion_from(const Type* source) const {
@@ -1086,10 +1066,8 @@ static bool integer_like_bounds(const Type* ty, OrdinalBounds* out) {
 		return true;
 	}
 	if (auto s = dynamic_cast<const SubrangeType*>(ty)) {
-		auto domain =
-		    ordinal_type_domain(s->base_type);
-		if (!domain ||
-		    domain->family != OrdinalFamily::Integer) {
+		auto domain = ordinal_type_domain(s->base_type);
+		if (!domain || domain->family != OrdinalFamily::Integer) {
 			return false;
 		}
 		ConstEvalContext ctx;
@@ -1104,10 +1082,8 @@ static bool integer_like_bounds(const Type* ty, OrdinalBounds* out) {
 			return false;
 		}
 		out->signed_type = lo->value.negative;
-		out->min_magnitude =
-		    lo->value.negative ? lo->value.magnitude : 0;
-		out->max_positive =
-		    hi->value.negative ? 0 : hi->value.magnitude;
+		out->min_magnitude = lo->value.negative ? lo->value.magnitude : 0;
+		out->max_positive = hi->value.negative ? 0 : hi->value.magnitude;
 		return true;
 	}
 	return false;
@@ -1625,8 +1601,7 @@ static std::optional<OrdinalValue> fold_ordinal_value(Node* node) {
 		return std::nullopt;
 	}
 	auto ordinal = folded_ordinal_value(folded.node);
-	return ordinal ? std::optional<OrdinalValue>{ordinal->value}
-	               : std::nullopt;
+	return ordinal ? std::optional<OrdinalValue>{ordinal->value} : std::nullopt;
 }
 
 namespace {
@@ -1652,43 +1627,23 @@ static std::optional<OrdinalDomain> ordinal_domain(const Type* type) {
 		if (!domain) {
 			return std::nullopt;
 		}
-		return OrdinalDomain{
-		    domain->family,
-		    domain->nominal_root,
-		    *lower, *upper};
+		return OrdinalDomain{domain->family, domain->nominal_root, *lower, *upper};
 	} else if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type); intrinsic && intrinsic->rank && intrinsic->ordinal_bounds) {
 		const OrdinalBounds& bounds = *intrinsic->ordinal_bounds;
-		return OrdinalDomain{
-		    OrdinalFamily::Integer,
-		    nullptr,
-		    ordinal_value(
-		        bounds.signed_type,
-		        bounds.signed_type
-		            ? bounds.min_magnitude
-		            : 0),
-		    ordinal_value(false, bounds.max_positive)};
+		return OrdinalDomain{OrdinalFamily::Integer, nullptr, ordinal_value(bounds.signed_type, bounds.signed_type ? bounds.min_magnitude : 0), ordinal_value(false, bounds.max_positive)};
 	} else if (type == char_type() || type == widechar_type()) {
 		OrdinalBounds bounds;
-		if (!intrinsic_ordinal_bounds(
-		        const_cast<Type*>(type), &bounds)) {
+		if (!intrinsic_ordinal_bounds(const_cast<Type*>(type), &bounds)) {
 			return std::nullopt;
 		}
-		return OrdinalDomain{
-		    OrdinalFamily::Character,
-		    type,
-		    ordinal_value(false, 0),
-		    ordinal_value(false, bounds.max_positive)};
+		return OrdinalDomain{OrdinalFamily::Character, type, ordinal_value(false, 0), ordinal_value(false, bounds.max_positive)};
 	} else if (auto enumeration = dynamic_cast<const EnumType*>(type)) {
 		const auto* lower = enumeration->min_member();
 		const auto* upper = enumeration->max_member();
 		if (!lower || !upper) {
 			return std::nullopt;
 		}
-		return OrdinalDomain{
-		    OrdinalFamily::Enumeration,
-		    type,
-		    ordinal_value(lower->value),
-		    ordinal_value(upper->value)};
+		return OrdinalDomain{OrdinalFamily::Enumeration, type, ordinal_value(lower->value), ordinal_value(upper->value)};
 	}
 	return std::nullopt;
 }
@@ -1699,16 +1654,10 @@ static bool ordinal_domain_is_subset(const Type* source, const Type* target) {
 	if (!source_domain || !target_domain || source_domain->family != target_domain->family) {
 		return false;
 	}
-	if (source_domain->family != OrdinalFamily::Integer &&
-	    source_domain->nominal_root != target_domain->nominal_root) {
+	if (source_domain->family != OrdinalFamily::Integer && source_domain->nominal_root != target_domain->nominal_root) {
 		return false;
 	}
-	return compare_ordinal_values(
-	           target_domain->lower,
-	           source_domain->lower) <= 0 &&
-	       compare_ordinal_values(
-	           target_domain->upper,
-	           source_domain->upper) >= 0;
+	return compare_ordinal_values(target_domain->lower, source_domain->lower) <= 0 && compare_ordinal_values(target_domain->upper, source_domain->upper) >= 0;
 }
 
 static bool ordinal_domains_are_compatible(const Type* a, const Type* b) {
@@ -1717,8 +1666,7 @@ static bool ordinal_domains_are_compatible(const Type* a, const Type* b) {
 	if (!a_domain || !b_domain || a_domain->family != b_domain->family) {
 		return false;
 	}
-	return a_domain->family == OrdinalFamily::Integer ||
-	       a_domain->nominal_root == b_domain->nominal_root;
+	return a_domain->family == OrdinalFamily::Integer || a_domain->nominal_root == b_domain->nominal_root;
 }
 } // namespace
 
@@ -1827,8 +1775,7 @@ bool RoutineType::same_parameter_types_as(const RoutineType* other) const {
 }
 
 bool RoutineType::same_parameter_and_result_types_as(const RoutineType* other) const {
-	return other && return_type == other->return_type &&
-	       same_parameter_types_as(other);
+	return other && return_type == other->return_type && same_parameter_types_as(other);
 }
 
 bool RoutineType::same_signature_as(const RoutineType* other) const {

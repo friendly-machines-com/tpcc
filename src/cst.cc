@@ -754,20 +754,13 @@ ConstEvalResult Cast::const_eval(ConstEvalContext& ctx) const {
 		return ConstEvalResult::success(new SetLiteral(set->items, ty));
 	}
 	if (auto ordinal = folded_ordinal_value(r.node)) {
-		ConstEvalResult converted =
-		    const_explicit_ordinal_cast(
-		        ordinal->value.magnitude,
-		        ordinal->value.negative, ty);
+		ConstEvalResult converted = const_explicit_ordinal_cast(ordinal->value.magnitude, ordinal->value.negative, ty);
 		if (converted.kind != ConstEvalResult::Kind::Error) {
 			return converted;
 		}
-			if (auto i = dynamic_cast<Integer*>(r.node);
-			    i &&
-			    ordinal_type_domain(i->ty) &&
-			    ordinal_type_domain(i->ty)->family ==
-			        OrdinalFamily::Integer) {
-				return const_convert_integer(i->value, i->negative, i->ty, ty);
-			}
+		if (auto i = dynamic_cast<Integer*>(r.node); i && ordinal_type_domain(i->ty) && ordinal_type_domain(i->ty)->family == OrdinalFamily::Integer) {
+			return const_convert_integer(i->value, i->negative, i->ty, ty);
+		}
 	}
 	if (auto real = dynamic_cast<Real*>(r.node)) {
 		if (real->is_origin() && is_real_semantic_type(ty)) {
@@ -835,17 +828,10 @@ ConstEvalResult RangeCheckedCast::const_eval(ConstEvalContext& ctx) const {
 		if (!lower_ordinal || !upper_ordinal) {
 			return ConstEvalResult::error("range-checked conversion has non-ordinal bounds");
 		}
-		if (compare_ordinal_values(
-		        ordinal->value,
-		        lower_ordinal->value) < 0 ||
-		    compare_ordinal_values(
-		        ordinal->value,
-		        upper_ordinal->value) > 0) {
+		if (compare_ordinal_values(ordinal->value, lower_ordinal->value) < 0 || compare_ordinal_values(ordinal->value, upper_ordinal->value) > 0) {
 			return ConstEvalResult::error("integer constant out of range for target type");
 		}
-		return const_explicit_ordinal_cast(
-		    ordinal->value.magnitude,
-		    ordinal->value.negative, ty);
+		return const_explicit_ordinal_cast(ordinal->value.magnitude, ordinal->value.negative, ty);
 	}
 }
 
@@ -859,9 +845,7 @@ ConstEvalResult ExplicitCast::const_eval(ConstEvalContext& ctx) const {
 		return value;
 	}
 	if (auto ordinal = folded_ordinal_value(value.node)) {
-		return const_explicit_ordinal_cast(
-		    ordinal->value.magnitude,
-		    ordinal->value.negative, ty);
+		return const_explicit_ordinal_cast(ordinal->value.magnitude, ordinal->value.negative, ty);
 	}
 	return Cast::const_eval(ctx);
 }
