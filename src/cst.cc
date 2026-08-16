@@ -184,6 +184,7 @@ SizeOf::SizeOf(Type* operand_type) : operand_type(operand_type) {
 StorageSlot::StorageSlot(std::string cxx_name, Type* ty, Kind kind, Type* owner_type) : kind(kind), owner_type(owner_type) {
 	this->cxx_name = cxx_name;
 	this->ty = ty;
+	has_static_storage_duration = kind == Kind::StaticMember;
 }
 
 EnumMemberRef::EnumMemberRef(std::string cxx_name, int64_t value, Type* ty) {
@@ -1282,21 +1283,6 @@ const char* AddrOf::diagnostic_kind() const {
 
 const char* RoutineRef::diagnostic_kind() const {
 	return "routine_ref";
-}
-
-ConstEvalResult RoutineRef::const_eval(ConstEvalContext&) const {
-	// This node is the semantic application of Pascal `@` to a routine.
-	// Resolution supplies the selected declaration and complete routine
-	// carrier. A receiver would make the value depend on runtime object
-	// state, but a receiverless routine address is a static initializer even
-	// when the declaration's body is supplied later.
-	if (!resolved || receiver) {
-		return ConstEvalResult::not_constant();
-	}
-	auto result = new RoutineRef(nullptr, candidates);
-	result->resolved = resolved;
-	result->ty = ty;
-	return ConstEvalResult::success(result);
 }
 
 void RoutineRef::collect_diagnostic_edges(ErrorLetContext* ctx) const {

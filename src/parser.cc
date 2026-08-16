@@ -4076,6 +4076,93 @@ bool Parser::is_referenceable(Node* n) {
 	return false;
 }
 
+bool Parser::is_static_storage_place(Node* n) {
+	if (!n) {
+		return false;
+	}
+	if (auto slot = dynamic_cast<StorageSlot*>(n)) {
+		return slot->has_static_storage_duration;
+	}
+	if (auto member = dynamic_cast<MemberAccess*>(n)) {
+		auto slot = dynamic_cast<StorageSlot*>(member->b);
+		if (!slot) {
+			return false;
+		}
+		// A static member has its own storage and its qualifier is not
+		// evaluated. An instance field instead inherits the lifetime of its
+		// containing place. A pointer/class/interface receiver would require
+		// reading a runtime pointer value, so it is not a static projection.
+		if (slot->has_static_storage_duration) {
+			return true;
+		}
+		if (dynamic_cast<UnitRef*>(member->a)) {
+			return is_static_storage_place(member->b);
+		}
+		if (member->a && member->a->ty &&
+		    member->a->ty->is_reference_type()) {
+			return false;
+		}
+		return is_static_storage_place(member->a);
+	}
+	if (auto index = dynamic_cast<Index*>(n)) {
+		ConstEvalContext ctx;
+		ConstEvalResult folded = index->b
+		                             ? index->b->const_eval(ctx)
+		                             : ConstEvalResult::not_constant();
+		return folded.kind == ConstEvalResult::Kind::Success &&
+		       is_static_storage_place(index->a);
+	}
+	if (auto access = dynamic_cast<PropertyAccess*>(n)) {
+		auto builtin = access->property
+		                   ? dynamic_cast<Builtin*>(
+		                         access->property->read_accessor)
+		                   : nullptr;
+		if (!is_builtin_index_accessor(builtin) ||
+		    !access->receiver ||
+		    access->receiver->ty->is_reference_type() ||
+		    !is_static_storage_place(access->receiver)) {
+			return false;
+		}
+		// An indexed address is static only when every displacement is a
+		// constant. Evaluate those ordinal displacements, not the address
+		// expression which contains them.
+		ConstEvalContext ctx;
+		for (Node* index : access->indexes) {
+			ConstEvalResult folded =
+			    index ? index->const_eval(ctx)
+			          : ConstEvalResult::not_constant();
+			if (folded.kind != ConstEvalResult::Kind::Success) {
+				return false;
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+bool Parser::is_symbolic_static_initializer(Node* n) {
+	if (auto address = dynamic_cast<AddrOf*>(n)) {
+		return is_static_storage_place(address->a);
+	}
+	if (auto reference = dynamic_cast<RoutineRef*>(n)) {
+		return reference->resolved && !reference->receiver;
+	}
+	if (auto code = dynamic_cast<RoutineCode*>(n)) {
+		return is_symbolic_static_initializer(code->a);
+	}
+	if (auto cast = dynamic_cast<Cast*>(n)) {
+		Type* target = distinct_storage_type(cast->ty);
+		// Destination contextualization may change one pointer/routine carrier
+		// into another, but this is not a general link-time expression
+		// language. In particular, pointer-to-integer casts and arithmetic
+		// remain outside static initialization.
+		return (dynamic_cast<PointerType*>(target) ||
+		        dynamic_cast<RoutineType*>(target)) &&
+		       is_symbolic_static_initializer(cast->a);
+	}
+	return false;
+}
+
 bool Parser::contains_packed_projection(Node* n) {
 	if (!n) {
 		return false;
@@ -6550,18 +6637,33 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 	} else if (dynamic_cast<RoutineRef*>(expr)) {
 		// `@Routine` is contextual: the destination selects an overload and
 		// fixes plain-routine versus method representation. Perform that
-		// operator resolution before asking whether the resulting address is
-		// a constant.
+		// operator resolution before classifying the static initializer.
 		expr = cast(expr, ty);
 	}
-	ConstEvalContext ctx;
-	ConstEvalResult folded = expr->const_eval(ctx);
-	if (folded.kind == ConstEvalResult::Kind::NotConstant) {
-		raise_value_error("constant expression expected", expr);
-	} else if (folded.kind == ConstEvalResult::Kind::Error) {
-		raise_value_error(folded.message, expr);
+
+	const bool has_address_syntax =
+	    dynamic_cast<AddrOf*>(expr) ||
+	    dynamic_cast<RoutineRef*>(expr) ||
+	    dynamic_cast<RoutineCode*>(expr);
+	const bool symbolic_static = is_symbolic_static_initializer(expr);
+	if (has_address_syntax && !symbolic_static) {
+		raise_value_error(
+		    "typed address initializer requires static storage or a "
+		    "receiverless routine",
+		    expr);
 	}
-	Node* value = folded.node;
+
+	ConstEvalContext ctx;
+	Node* value = expr;
+	if (!symbolic_static) {
+		ConstEvalResult folded = expr->const_eval(ctx);
+		if (folded.kind == ConstEvalResult::Kind::NotConstant) {
+			raise_value_error("constant expression expected", expr);
+		} else if (folded.kind == ConstEvalResult::Kind::Error) {
+			raise_value_error(folded.message, expr);
+		}
+		value = folded.node;
+	}
 
 	if (auto s = dynamic_cast<SubrangeType*>(ty)) {
 		OrdinalRange range;
@@ -6587,6 +6689,19 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 	}
 
 	Node* converted = cast_for_destination(value, ty);
+	if (symbolic_static) {
+		// The frontend has proved a Pascal static-address initializer and
+		// assignment compatibility. Preserve that semantic expression for
+		// normal emission; neither constant evaluation nor this node records
+		// a backend relocation, section, or object-file symbol.
+		if (!is_symbolic_static_initializer(converted)) {
+			raise_value_error(
+			    "typed static address initializer requires a "
+			    "compile-time pointer conversion",
+			    converted);
+		}
+		return converted;
+	}
 	ConstEvalResult checked = converted->const_eval(ctx);
 	if (checked.kind == ConstEvalResult::Kind::Error) {
 		raise_value_error(checked.message, converted);
@@ -6653,6 +6768,11 @@ void Parser::parse_const_block(Type* aggregate_owner) {
 		}
 		if (maybe_parse_equal()) {
 			Node* initializer = parse_storage_initializer(ty);
+			// Pascal's colon-form constant is initialized storage. It has
+			// static duration even inside a routine, where the emitter spells
+			// it as a function-local static.
+			slot->has_static_storage_duration = true;
+			slot->initializer = initializer;
 			if (emitter) {
 				emitter->emit_initialized_storage_decl(slot->cxx_name, ty, initializer, current_routine != nullptr);
 			}
@@ -7688,6 +7808,7 @@ void Parser::parse_var_block() {
 			// External variables name existing C++ storage, so their Pascal
 			// declaration registers that name but emits no definition.
 			auto slot = new StorageSlot(external_cxx_name ? *external_cxx_name : cxx_value_name(name), ty);
+			slot->has_static_storage_duration = current_routine == nullptr;
 			if (!external_cxx_name) {
 				slot->owning_unit = declaration_unit(scope);
 			}

@@ -537,6 +537,13 @@ struct StorageSlot : public Node {
 	// initializers stay in the semantic graph until the enclosing type block
 	// is normalized and are emitted with that aggregate, never during parse.
 	Node* initializer = nullptr;
+	// True when Pascal assigns the slot static storage duration. This is
+	// independent of owning_unit: an external global has no owning Unit
+	// because its supplied C++ spelling already names its provider, while a
+	// routine-local typed constant still has persistent static storage.
+	// Static-address initializers consult this semantic lifetime, never a
+	// backend symbol/section/relocation property.
+	bool has_static_storage_duration = false;
 	// Non-null when this slot is declared `absolute <target>`: storage is a
 	// true alias of target's bytes, viewed through this slot's type. Limited
 	// to by-value pointer-or-class parameters of the enclosing routine, with
@@ -788,7 +795,6 @@ class RoutineRef : public Node {
 	Callable* resolved = nullptr;
 	RoutineRef(Node* receiver, Node* candidates);
 	const char* diagnostic_kind() const override;
-	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };

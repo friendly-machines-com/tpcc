@@ -604,6 +604,8 @@ class Parser {
 	PropertyAccess* apply_property(Node* receiver, Property* property, std::vector<Node*> indexes);
 	bool property_read_is_place(PropertyAccess* access);
 	bool is_referenceable(Node* n);
+	bool is_static_storage_place(Node* n);
+	bool is_symbolic_static_initializer(Node* n);
 	VariantPart* parse_record_variant(Type* owner, Frame* body);
 	/** Parse a method prototype inside a class/record/object body. It only
 	 *  collects the Method in BODY. The completed aggregate validates its
