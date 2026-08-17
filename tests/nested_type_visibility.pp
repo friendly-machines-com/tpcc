@@ -9,6 +9,7 @@ type
     public
       constructor Create;
       function Get: Integer;
+      procedure SetFrom(Value: TOuter);
     end;
   protected
     FValues: Integer;
@@ -25,6 +26,11 @@ end;
 function TOuter.TInner.Get: Integer;
 begin
   Result := FInner
+end;
+
+procedure TOuter.TInner.SetFrom(Value: TOuter);
+begin
+  FInner := Value.Sum
 end;
 
 constructor TOuter.Create;

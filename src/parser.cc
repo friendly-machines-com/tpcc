@@ -8624,10 +8624,22 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		first_name = parse_identifier();
 	}
 
-	// `procedure TFoo.Bar;`
+	// `procedure TFoo.Bar;` Further dotted components name nested owner
+	// types: `constructor TOuter.TInner.Create;`
 	if (maybe_parse_period()) {
-		std::string method_name = parse_identifier();
 		Type* owner_ty = resolve_type(first_name, false);
+		std::string method_name = parse_identifier();
+		while (maybe_parse_period()) {
+			Frame* owner_frame = get_type_body_frame(owner_ty);
+			if (!owner_frame) {
+				raise_type_kind_mismatch("'" + first_name + "'", "class, record, or object", owner_ty);
+			}
+			owner_ty = owner_frame->lookup_type(method_name);
+			if (!owner_ty) {
+				raise_type_parse_error("unresolved type identifier: " + method_name);
+			}
+			method_name = parse_identifier();
+		}
 		Frame* owner_frame = get_type_body_frame(owner_ty);
 		if (!owner_frame) {
 			raise_type_kind_mismatch("'" + first_name + "'", "class, record, or object", owner_ty);
