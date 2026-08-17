@@ -5,6 +5,8 @@
 #include <functional>
 #include "system.h"
 
+struct t_tpackedpair;
+struct t_tordinaryouter;
 
 struct t_tpackedpair {
 	using m_field_0_type = ::u_system::t_byte;
