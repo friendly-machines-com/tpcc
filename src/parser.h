@@ -604,6 +604,7 @@ class Parser {
 	Type* parse_interface_type();
 	Type* parse_enum_type();
 	Type* parse_type_expression(bool allow_forward);
+	Type* parse_type_expression_from_identifier(std::string id, const LeadingTokenDirectives& identifier_directives, bool allow_forward);
 	Type* parse_formal_type_expression();
 	Node* parse_expression();
 	/** Shared grammar used by Write/WriteLn and Str:

@@ -2680,10 +2680,25 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 		pointer_operand_type = destination_or_pointer ? destination_or_pointer->ty : nullptr;
 		pointer_type = dynamic_cast<PointerType*>(pointer_operand_type);
 	} else if (maybe_resolve_type(input_token)) {
-		Type* parsed_type = parse_type_expression(false);
-		pointer_operand_type = parsed_type;
-		pointer_type = dynamic_cast<PointerType*>(parsed_type);
-		functional_form = true;
+		// `New(PType)` is the functional form, but a type identifier followed
+		// directly by `(` can only open a value cast whose designator continues
+		// after the cast (e.g. `New(Cast(x).field)`): a pointer type expression
+		// never takes arguments after its name. Consume the identifier once and
+		// decide on the token now in input_token, the same consume-once
+		// disambiguation parse_type_expression applies to its own ambiguities.
+		const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
+		std::string id = parse_identifier();
+		if (input_token == "(") {
+			LeadingTokenDirectives leading_directives = identifier_directives;
+			destination_or_pointer = parse_designator_tail(parse_value_from_identifier(id, identifier_directives, &leading_directives), leading_directives);
+			pointer_operand_type = destination_or_pointer ? destination_or_pointer->ty : nullptr;
+			pointer_type = dynamic_cast<PointerType*>(pointer_operand_type);
+		} else {
+			Type* parsed_type = parse_type_expression_from_identifier(std::move(id), identifier_directives, false);
+			pointer_operand_type = parsed_type;
+			pointer_type = dynamic_cast<PointerType*>(parsed_type);
+			functional_form = true;
+		}
 	} else {
 		raise_parse_error("New first operand is neither a pointer "
 		                  "variable nor a pointer type");
@@ -6230,28 +6245,32 @@ Type* Parser::parse_type_expression(bool allow_forward) {
 		if (token_is_identifier(input_token)) {
 			const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
 			std::string id = parse_identifier();
-			if (maybe_parse_period_period()) {
-				LeadingTokenDirectives leading_directives = identifier_directives;
-				return parse_subrange_type(parse_value_from_identifier(id, identifier_directives, &leading_directives), parse_subrange_bound_expression());
-			}
-			if (maybe_parse_period()) {
-				return parse_type_projection_tail(parse_qualified_type_member(id));
-			}
-			if ((input_token == "^" || input_token == "[") && maybe_resolve_type(id)) {
-				return parse_type_projection_tail(resolve_type(id, allow_forward));
-			}
-			if (token_continues_subrange_bound_after_primary(input_token)) {
-				Node* lower_bound = parse_subrange_bound_expression_after_identifier(id, identifier_directives);
-				parse_period_period();
-				return parse_subrange_type(lower_bound, parse_subrange_bound_expression());
-			}
-			return parse_type_projection_tail(resolve_type(id, allow_forward));
+			return parse_type_expression_from_identifier(std::move(id), identifier_directives, allow_forward);
 		}
 
 		Node* lower_bound = parse_subrange_bound_expression();
 		parse_period_period();
 		return parse_subrange_type(lower_bound, parse_subrange_bound_expression());
 	}
+}
+
+Type* Parser::parse_type_expression_from_identifier(std::string id, const LeadingTokenDirectives& identifier_directives, bool allow_forward) {
+	if (maybe_parse_period_period()) {
+		LeadingTokenDirectives leading_directives = identifier_directives;
+		return parse_subrange_type(parse_value_from_identifier(id, identifier_directives, &leading_directives), parse_subrange_bound_expression());
+	}
+	if (maybe_parse_period()) {
+		return parse_type_projection_tail(parse_qualified_type_member(id));
+	}
+	if ((input_token == "^" || input_token == "[") && maybe_resolve_type(id)) {
+		return parse_type_projection_tail(resolve_type(id, allow_forward));
+	}
+	if (token_continues_subrange_bound_after_primary(input_token)) {
+		Node* lower_bound = parse_subrange_bound_expression_after_identifier(id, identifier_directives);
+		parse_period_period();
+		return parse_subrange_type(lower_bound, parse_subrange_bound_expression());
+	}
+	return parse_type_projection_tail(resolve_type(id, allow_forward));
 }
 
 void Parser::parse_statement() {
