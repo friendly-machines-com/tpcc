@@ -56,6 +56,15 @@ class Block : public Node {
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
 
+/** Poison value returned by non-fatal semantic diagnostics and by every
+ *  construct that continues after a reported error. Carries the shared error
+ *  type so downstream semantic checks can recognize it silently; emission
+ *  refuses it and the driver exits nonzero at the end. */
+class ErrorValue : public Node {
+      public:
+	ErrorValue();
+};
+
 /** Pascal's empty statement is a real statement, not merely an absent CST
  * node. Its backend representation must remain labelable in C++20. */
 class EmptyStatement : public Node {

@@ -15,6 +15,11 @@
 #include <vector>
 
 class Node;
+
+// Number of non-fatal semantic errors reported so far. The driver exits
+// nonzero when it is positive; poison values keep compilation going so one
+// run reports every semantic error.
+extern int tpcc_reported_error_count;
 class Mutation;
 class Symbol;
 class Type;
@@ -688,6 +693,10 @@ class Parser {
 		// A qualifier which Pascal evaluates even though the selected callable
 		// has no receiver ABI. make_call lowers it through EvaluateThen.
 		Node* qualifier_effect = nullptr;
+		// Set when overload resolution reported a non-fatal error and returned
+		// a poison result instead of selecting a callee. Callers must return
+		// their own poison value rather than read callee.
+		bool poisoned = false;
 	};
 
 	/** Given a resolved target (Callable, OverloadSet, MemberAccess-wrapping
@@ -775,14 +784,17 @@ class Parser {
 	Type* raise_type_kind_mismatch_at(SourceLocation location, std::string message, const char* expected_kind, Type* got);
 	Type* raise_type_error(std::string message, Type* relevant);
 	Type* raise_type_error_at(SourceLocation location, std::string message, Type* relevant);
-	[[noreturn]] void raise_value_error(std::string message, Node* relevant);
-	[[noreturn]] void raise_value_error_at(SourceLocation location, std::string message, Node* relevant);
-	[[noreturn]] void raise_values_error(std::string message, const std::vector<std::pair<std::string, Node*>>& relevant);
-	[[noreturn]] void raise_routine_reference_error(std::string message, RoutineRef* reference, Type* destination_type);
-	[[noreturn]] void raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
-	[[noreturn]] void raise_overload_resolution_error(SourceLocation error_location, std::string name, Node* receiver, const std::vector<Node*>& args, Type* expected_return_type, const std::vector<Callable*>& candidates, const std::vector<std::pair<Callable*, CallableMatch>>& viable, const std::vector<Callable*>& non_dominated, bool ambiguous, std::string failure_description = {});
-	[[noreturn]] void raise_cxx_carrier_collision(const std::string& name, Callable* incoming, const CallableRegistration& registration);
-	[[noreturn]] void raise_callable_registration_error(const std::string& name, Callable* incoming, const CallableRegistration& registration);
+	// The value-family diagnostics report and return an ErrorValue poison
+	// node so parsing continues; the run fails once at the end through
+	// tpcc_reported_error_count.
+	Node* raise_value_error(std::string message, Node* relevant);
+	Node* raise_value_error_at(SourceLocation location, std::string message, Node* relevant);
+	Node* raise_values_error(std::string message, const std::vector<std::pair<std::string, Node*>>& relevant);
+	Node* raise_routine_reference_error(std::string message, RoutineRef* reference, Type* destination_type);
+	Node* raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
+	Node* raise_overload_resolution_error(SourceLocation error_location, std::string name, Node* receiver, const std::vector<Node*>& args, Type* expected_return_type, const std::vector<Callable*>& candidates, const std::vector<std::pair<Callable*, CallableMatch>>& viable, const std::vector<Callable*>& non_dominated, bool ambiguous, std::string failure_description = {});
+	Node* raise_cxx_carrier_collision(const std::string& name, Callable* incoming, const CallableRegistration& registration);
+	Node* raise_callable_registration_error(const std::string& name, Callable* incoming, const CallableRegistration& registration);
 
       public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);

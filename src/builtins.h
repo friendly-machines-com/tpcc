@@ -291,6 +291,10 @@ Type* currency_type();
 Type* set_type();
 Type* fixedarray_type();
 Type* unknown_type();
+// The poison type returned by non-fatal semantic diagnostics. Distinct from
+// unknown_type(): "unknown" is the real language type of untyped pointers and
+// omitted formals; "error" only ever marks that an error was already reported.
+Type* error_type();
 RecordType* tmethod_type();
 StorageSlot* tmethod_code_field();
 StorageSlot* tmethod_data_field();

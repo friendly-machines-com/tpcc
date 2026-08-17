@@ -995,8 +995,20 @@ void Emitter::emit_formatted_value(const FormattedValue& formatted) {
 	fprintf(active, ")");
 }
 
+// A poison node or error-typed expression is the result of a semantic error
+// the parser already reported. The output file itself is the gate: emit #error
+// so the generated C++ cannot compile even if the driver's exit code is
+// ignored, and continue translating so one run still reports every error.
+static bool emission_poison(const Node* n) {
+	return n && (dynamic_cast<const ErrorValue*>(n) || n->ty == error_type());
+}
+
 void Emitter::emit_statement(Node* stmt) {
 	if (!active) {
+		return;
+	}
+	if (emission_poison(stmt)) {
+		fprintf(active, "#error \"tpcc: semantic error reported during translation\"\n");
 		return;
 	}
 	if (dynamic_cast<EmptyStatement*>(stmt)) {
@@ -2690,6 +2702,10 @@ static const char* cxx_unary_operator(UnaryOperation* op) {
 
 void Emitter::emit_expression(Node* expr) {
 	if (!active) {
+		return;
+	}
+	if (emission_poison(expr)) {
+		fprintf(active, "#error \"tpcc: semantic error reported during translation\"\n");
 		return;
 	}
 	if (dynamic_cast<BuiltinEnumeratorCurrent*>(expr)) {

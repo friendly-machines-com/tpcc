@@ -282,6 +282,10 @@ const char* Node::diagnostic_kind() const {
 	return "value";
 }
 
+ErrorValue::ErrorValue() {
+	ty = error_type();
+}
+
 void Node::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	ctx->add_type_edge(ty);
 }

@@ -105,5 +105,5 @@ int main(int argc, char* argv[]) {
 	p.start();
 	p.parse_program_or_unit();
 	emitter.close();
-	return 0;
+	return tpcc_reported_error_count ? 1 : 0;
 }

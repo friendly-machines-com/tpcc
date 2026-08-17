@@ -61,6 +61,7 @@ IntrinsicType k_file(SourceLocation::builtin(), "::u_system::t_file", {}, {}, Ty
 PointerType k_pointer(SourceLocation::builtin(), nullptr, "::u_system::t_pointer");
 IntrinsicType k_fixedarray(SourceLocation::builtin(), "::u_system::t_fixedarray", {});
 IntrinsicType k_unknown(SourceLocation::builtin(), "::u_system::tpcc_unknown_type", {});
+IntrinsicType k_error(SourceLocation::builtin(), "::u_system::tpcc_error_type", {});
 
 struct TMethodDefinition {
 	Frame children;
@@ -217,6 +218,10 @@ Type* fixedarray_type() {
 
 Type* unknown_type() {
 	return &k_unknown;
+}
+
+Type* error_type() {
+	return &k_error;
 }
 
 RecordType* tmethod_type() {
