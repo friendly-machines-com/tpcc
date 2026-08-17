@@ -7,6 +7,7 @@ type
   TChild = class(TBase)
     Extra: Integer;
   end;
+  TBaseClass = class of TBase;
   TByteSet = set of Byte;
   TWordSet = set of Word;
   TAddress = 0..High(PtrUInt);
@@ -17,6 +18,8 @@ var
   Child: TChild;
   RecoveredBase: TBase;
   RecoveredChild: TChild;
+  ClassRef: TBaseClass;
+  RecoveredClassRef: TBaseClass;
   Raw: Pointer;
   RawAgain: Pointer;
   Address: TAddress;
@@ -45,6 +48,15 @@ begin
   RecoveredBase := TBase(Raw);
   if RecoveredBase.Value <> 17 then
     Halt(2);
+
+  { A metaclass is also pointer-valued: opaque Pointer round-trips a class
+    reference through the same unchecked recovery as instances. }
+  ClassRef := TBase;
+  Raw := Pointer(ClassRef);
+  RecoveredClassRef := TBaseClass(Raw);
+  RawAgain := Pointer(RecoveredClassRef);
+  if RawAgain <> Raw then
+    Halt(6);
 
   { A nominal subrange has a wrapper carrier. Pointer lowering must expose
     its one ordinal value without adding another Pascal conversion edge. }

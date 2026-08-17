@@ -1576,7 +1576,11 @@ bool ClassRefType::predefined_explicit_conversion_from(const Type* source) const
 		return true;
 	}
 	auto source_ref = dynamic_cast<const ClassRefType*>(source);
-	return source_ref && target && source_ref->target && (target->is_subtype_of(source_ref->target) || source_ref->target->is_subtype_of(target));
+	if (source_ref && target && source_ref->target && (target->is_subtype_of(source_ref->target) || source_ref->target->is_subtype_of(target))) {
+		return true;
+	}
+	// The metaclass carrier is pointer-valued.
+	return dynamic_cast<const PointerType*>(source) != nullptr;
 }
 
 std::optional<ValueConversion> PointerType::value_conversion_from(const Type* source) const {
