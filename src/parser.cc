@@ -4068,6 +4068,11 @@ bool Parser::is_referenceable(Node* n) {
 			return true;
 		}
 		return is_referenceable(member->a);
+	} else if (auto cast = dynamic_cast<Cast*>(n)) {
+		// A class-to-class cast re-views one pointer-sized object handle and
+		// materializes no new value, so the view denotes storage exactly when
+		// its operand does.
+		return cast->a && dynamic_cast<ClassType*>(cast->a->ty) && dynamic_cast<ClassType*>(cast->ty) && is_referenceable(cast->a);
 	}
 	return false;
 }
