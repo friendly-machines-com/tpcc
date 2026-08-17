@@ -541,13 +541,13 @@ static std::string match_preference_reason(const MatchRank& preferred, Type* pre
 	sst << failure_description << " for '" << name << "'";
 
 	if (receiver) {
-		sst << "\n  receiver: " << ctx.value_ref(receiver) << " : " << ctx.type_ref(receiver->ty);
+		sst << "\n  receiver: " << ctx.value_ref(receiver) << ": " << ctx.type_ref(receiver->ty);
 	}
 	if (expected_return_type) {
 		sst << "\n  expected return type: " << ctx.type_ref(expected_return_type);
 	}
 	for (size_t i = 0; i < args.size(); ++i) {
-		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
+		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << ": " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
 
 	std::vector<Callable*> sorted_candidates = candidates;
@@ -566,7 +566,7 @@ static std::string match_preference_reason(const MatchRank& preferred, Type* pre
 
 		sst << "\n    ";
 		append_callable_source_prefix(sst, c, viable_match != nullptr, ambiguous_survivor);
-		sst << ctx.value_ref(c) << " : " << ctx.type_ref(c ? c->ty : nullptr);
+		sst << ctx.value_ref(c) << ": " << ctx.type_ref(c ? c->ty : nullptr);
 		if (viable_match) {
 			sst << " viable ranks ";
 			append_match_rank_vector(sst, viable_match->ranks);
@@ -633,10 +633,10 @@ static std::string match_preference_reason(const MatchRank& preferred, Type* pre
 	std::stringstream sst;
 	sst << "no matching overload for '" << name << "'";
 	if (receiver) {
-		sst << "\n  receiver: " << ctx.value_ref(receiver) << " : " << ctx.type_ref(receiver->ty);
+		sst << "\n  receiver: " << ctx.value_ref(receiver) << ": " << ctx.type_ref(receiver->ty);
 	}
 	for (size_t i = 0; i < args.size(); ++i) {
-		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << " : " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
+		sst << "\n  arg " << (i + 1) << ": " << ctx.value_ref(args[i]) << ": " << ctx.type_ref(args[i] ? args[i]->ty : nullptr);
 	}
 	emit_parse_error_at(current_location(), sst.str(), ctx);
 }
@@ -660,10 +660,10 @@ static std::string match_preference_reason(const MatchRank& preferred, Type* pre
 	sst << "overload '" << name << "' cannot be represented by the C++ backend";
 	sst << "\n  incoming declaration: ";
 	append_callable_source_prefix(sst, incoming, false);
-	sst << incoming_ref << " : " << incoming_type_ref;
+	sst << incoming_ref << ": " << incoming_type_ref;
 	sst << "\n  conflicting declaration: ";
 	append_callable_source_prefix(sst, conflicting, false);
-	sst << conflicting_ref << " : " << conflicting_type_ref;
+	sst << conflicting_ref << ": " << conflicting_type_ref;
 	sst << "\n  existing overload family: " << family_ref;
 	sst << "\n  emitted C++ name: '" << incoming->cxx_name << "'";
 
@@ -712,11 +712,11 @@ static std::string match_preference_reason(const MatchRank& preferred, Type* pre
 	sst << "callable declaration conflicts with existing declaration for '" << name << "'";
 	sst << "\n  incoming declaration: ";
 	append_callable_source_prefix(sst, incoming, false);
-	sst << ctx.value_ref(incoming) << " : " << ctx.type_ref(incoming->ty);
+	sst << ctx.value_ref(incoming) << ": " << ctx.type_ref(incoming->ty);
 	if (Callable* conflicting = registration.conflicting_callable) {
 		sst << "\n  conflicting declaration: ";
 		append_callable_source_prefix(sst, conflicting, false);
-		sst << ctx.value_ref(conflicting) << " : " << ctx.type_ref(conflicting->ty);
+		sst << ctx.value_ref(conflicting) << ": " << ctx.type_ref(conflicting->ty);
 		if (!same_callable_overload_category(incoming, conflicting)) {
 			sst << "\n  reason: the declarations have incompatible "
 			       "routine categories";
