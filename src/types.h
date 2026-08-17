@@ -612,6 +612,11 @@ std::optional<RecordLayout> packed_record_layout(PackedRecordType* record);
 // trivially copyable scalar's object representation. This is a directed
 // storage-view relation, not a general equal-layout value conversion.
 bool predefined_byte_array_storage_view(const Type* target, const Type* source);
+// A cast of a class variable of type S to class T, where S is a subtype of T,
+// re-views one pointer-sized object handle and materializes no new value, so
+// the view aliases the operand's storage. Narrowing or unrelated casts are
+// not a storage view.
+bool class_widening_storage_view(const Type* target, const Type* source);
 
 struct InterfaceType : public Type {
 	Frame* children;

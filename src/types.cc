@@ -990,6 +990,12 @@ bool predefined_byte_array_storage_view(const Type* target, const Type* source) 
 	return target_layout && source_layout && target_layout->size == source_layout->size;
 }
 
+bool class_widening_storage_view(const Type* target, const Type* source) {
+	auto target_class = dynamic_cast<const ClassType*>(target);
+	auto source_class = dynamic_cast<const ClassType*>(source);
+	return target_class && source_class && source_class->is_subtype_of(target_class);
+}
+
 bool Type::predefined_explicit_conversion_from(const Type* source) const {
 	// Explicit syntax includes every one-edge predefined implicit conversion.
 	// Calling this virtual destination's existing constructor relation does
