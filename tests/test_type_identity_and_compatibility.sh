@@ -7,7 +7,7 @@ set -eu
 tpcc_build_native "$tmp/type_conversion_algebra" \
 	-Isrc \
 	-Irtl \
-	tests/type_conversion_algebra.cc \
+	tests/type_conversion_algebra.cpp \
 	src/cst.o \
 	src/directive_expr.o \
 	src/frame.o \

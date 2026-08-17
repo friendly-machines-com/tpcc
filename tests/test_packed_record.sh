@@ -6,7 +6,7 @@ set -eu
 
 tpcc_translate -o"$tmp/23_packed_record.cc" tests/23_packed_record.pp
 
-diff -u tests/23_packed_record.cc "$tmp/23_packed_record.cc"
+diff -u tests/23_packed_record.expected "$tmp/23_packed_record.cc"
 
 tpcc_build "$tmp/23_packed_record" \
 	"$tmp/23_packed_record.cc" \

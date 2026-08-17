@@ -4,7 +4,7 @@ set -eu
 . "$(dirname -- "$0")/testlib.sh"
 
 tpcc_build_native "$tmp/operator_catalog" \
-	tests/operator_catalog.cc src/operators.cc
+	tests/operator_catalog.cpp src/operators.cc
 "$tmp/operator_catalog"
 
 if tpcc_translate \
