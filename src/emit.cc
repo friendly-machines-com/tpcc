@@ -2556,7 +2556,18 @@ void Emitter::emit_routine_reference(RoutineRef* reference) {
 void Emitter::emit_writable_expression(Node* expr) {
 	auto property = dynamic_cast<PropertyAccess*>(expr);
 	auto builtin = property ? dynamic_cast<Builtin*>(property->property->write_accessor) : nullptr;
-	if (!builtin) {
+	if (auto view = dynamic_cast<Cast*>(expr); view && view->a && dynamic_cast<ClassType*>(view->a->ty) && dynamic_cast<ClassType*>(view->ty)) {
+		// A class-to-class cast of a writable place aliases the operand's
+		// pointer storage under the target view (the same direct storage-alias
+		// model as Pascal `absolute`; backend contract: -fno-strict-aliasing).
+		// C++ reference binding is invariant, so no static_cast chain can name
+		// the operand's storage under the base-class view.
+		fprintf(active, "reinterpret_cast<");
+		emit_type_ref(view->ty);
+		fprintf(active, "&>(");
+		emit_writable_expression(view->a);
+		fprintf(active, ")");
+	} else if (!builtin) {
 		// A non-property expression is already an ordinary writable place.
 		// Field-backed properties likewise emit their underlying place through
 		// the normal expression path. Method-backed properties are not
