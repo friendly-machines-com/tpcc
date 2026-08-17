@@ -296,14 +296,34 @@ class Parser {
 	// A stack, rather than a boolean, preserves that ownership when an
 	// aggregate contains a nested `type` section of its own.
 	std::vector<Frame*> type_block_frames;
-	// Aggregate bodies parsed inside each active type block cannot finalize
+	// Aggregate bodies parsed inside an open type block cannot finalize
 	// overload, property-accessor, override, or C++-carrier semantics when
 	// their stored signatures may still contain IncompleteType edges. Record
-	// each ordinary aggregate declaration frame here; parse_type_block drains
-	// exactly its own innermost worklist after recursive normalization and
-	// before emission.
+	// each such declaration frame here; the type block that opened the
+	// context drains this list after recursive normalization and before
+	// emission.
 	// This is phase-local parser work, not source metadata on a Type or Frame.
-	std::vector<std::vector<Frame*>> type_block_deferred_aggregates;
+	std::vector<Frame*> type_block_deferred_aggregates;
+	// Declarations of the currently open type-block context. A type section
+	// nested in an aggregate body contributes to this list exactly like the
+	// aggregate body itself contributes to type_block_deferred_aggregates:
+	// the names it may mention include the enclosing block's declarations
+	// that have not been read yet, so it cannot finalize at its own close.
+	// The section that opened the context finalizes everything once.
+	struct PendingTypeDecl {
+		enum class Kind {
+			Definition,
+			ClassForward,
+		};
+		std::string name;
+		std::string cxx;
+		Frame* scope = nullptr;
+		IncompleteType* lhs_placeholder = nullptr;
+		Type* rhs = nullptr;
+		Kind kind = Kind::Definition;
+		bool alias = false;
+	};
+	std::vector<PendingTypeDecl> type_block_pending;
 	// LHS name whose type expression is currently being parsed. Class parsing
 	// uses this to distinguish the one root declaration `System.TObject =
 	// class ... end` from every other bare class, which implicitly inherits

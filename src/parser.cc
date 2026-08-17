@@ -5324,11 +5324,10 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 		// canonical when its body closes.
 		validate_aggregate_declaration_semantics(body);
 	} else {
-		assert(!type_block_deferred_aggregates.empty());
 		// Do not validate signatures merely because this aggregate's own body
 		// is complete. Earlier declarations in the surrounding type block can
 		// still hold placeholders for types published later in that block.
-		type_block_deferred_aggregates.back().push_back(body);
+		type_block_deferred_aggregates.push_back(body);
 	}
 	return body;
 }
@@ -7386,23 +7385,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	// overlays (`uses`, `with`, implicit Self) cannot redirect these bindings.
 	Frame* scope = current_declaration_frame();
 
-	struct PendingTypeDecl {
-		enum class Kind {
-			Definition,
-			ClassForward,
-		};
-		std::string name;
-		std::string cxx;
-		IncompleteType* lhs_placeholder;
-		Type* rhs;
-		Kind kind;
-		bool needs_cxx_forward = false;
-		bool alias = false;
-	};
-
-	std::vector<PendingTypeDecl> pending;
 	type_block_frames.push_back(scope);
-	type_block_deferred_aggregates.emplace_back();
 	do {
 		// A type section inside an aggregate body ends at a visibility
 		// directive. Those directives were not always reserved as keywords,
@@ -7427,10 +7410,8 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		}
 		IncompleteType* lhs_placeholder = nullptr;
 		ClassType* completing_forward = nullptr;
-		bool needs_cxx_forward = false;
 		if (existing) {
 			lhs_placeholder = dynamic_cast<IncompleteType*>(existing);
-			needs_cxx_forward = lhs_placeholder && !lhs_placeholder->resolved;
 			completing_forward = dynamic_cast<ClassType*>(existing);
 			if (completing_forward && !completing_forward->is_forward_declaration) {
 				completing_forward = nullptr;
@@ -7473,7 +7454,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 				lhs_placeholder->resolved = forward_class;
 			}
 			scope->rebind_type(name, forward_class);
-			pending.push_back(PendingTypeDecl{name, cxx_type_name(name), nullptr, forward_class, PendingTypeDecl::Kind::ClassForward, needs_cxx_forward});
+			type_block_pending.push_back(PendingTypeDecl{name, cxx_type_name(name), scope, nullptr, forward_class, PendingTypeDecl::Kind::ClassForward});
 		} else {
 			// Publish a completed declaration before parsing the next one.
 			// References already holding this placeholder remain valid and are
@@ -7483,13 +7464,23 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			if (lhs_placeholder) {
 				lhs_placeholder->resolved = rhs;
 			}
-			pending.push_back(PendingTypeDecl{name, cxx_type_name(name), lhs_placeholder, rhs, PendingTypeDecl::Kind::Definition, needs_cxx_forward});
+			type_block_pending.push_back(PendingTypeDecl{name, cxx_type_name(name), scope, lhs_placeholder, rhs, PendingTypeDecl::Kind::Definition});
 		}
 		parse_semicolon();
 	} while (true);
-	std::vector<Frame*> deferred_aggregates = std::move(type_block_deferred_aggregates.back());
-	type_block_deferred_aggregates.pop_back();
 	type_block_frames.pop_back();
+	if (!type_block_frames.empty()) {
+		// A type section nested in an aggregate body cannot finalize at its
+		// own close: the names it may legally mention include the enclosing
+		// block's declarations that have not been read yet. Its declarations
+		// are already in the shared list; the section that opened the
+		// context finalizes them, once, when it closes.
+		return;
+	}
+	std::vector<PendingTypeDecl> pending = std::move(type_block_pending);
+	type_block_pending.clear();
+	std::vector<Frame*> deferred_aggregates = std::move(type_block_deferred_aggregates);
+	type_block_deferred_aggregates.clear();
 
 	// PHASE INVARIANT:
 	//
@@ -7526,7 +7517,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	}
 	for (auto& decl : pending) {
 		if (decl.kind == PendingTypeDecl::Kind::Definition) {
-			scope->rebind_type(decl.name, decl.rhs);
+			decl.scope->rebind_type(decl.name, decl.rhs);
 		}
 	}
 
@@ -7576,7 +7567,7 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 			// declaration into the aliasing unit.
 			const bool has_named_definition = dynamic_cast<RecordType*>(rhs) || dynamic_cast<PackedRecordType*>(rhs) || dynamic_cast<ClassType*>(rhs) || dynamic_cast<ClassRefType*>(rhs) || dynamic_cast<InterfaceType*>(rhs) || dynamic_cast<ObjectType*>(rhs) || dynamic_cast<EnumType*>(rhs) || dynamic_cast<SubrangeType*>(rhs) || dynamic_cast<DistinctType*>(rhs);
 			if (has_named_definition && !rhs->owning_unit) {
-				rhs->owning_unit = declaration_unit(scope);
+				rhs->owning_unit = declaration_unit(decl.scope);
 			}
 			if (auto r = dynamic_cast<RecordType*>(rhs)) {
 				r->cxx_name = decl.cxx;
@@ -7607,8 +7598,12 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	// tags first; by-value recursion has already been rejected above, while
 	// legal pointer/class-reference recursion now has exactly the declaration
 	// boundary C++20 requires.
+	// Emit every aggregate tag first: C++ needs the name introduced before an
+	// earlier definition can mention a later aggregate, and a forward
+	// declaration is always correct for these pointer-referenced or complete
+	// types, so no reachability analysis is worth doing.
 	for (auto& decl : pending) {
-		if (decl.alias || !decl.needs_cxx_forward) {
+		if (decl.alias) {
 			continue;
 		}
 		if (decl.kind == PendingTypeDecl::Kind::ClassForward || dynamic_cast<RecordType*>(decl.rhs) || dynamic_cast<PackedRecordType*>(decl.rhs) || dynamic_cast<ClassType*>(decl.rhs) || dynamic_cast<InterfaceType*>(decl.rhs) || dynamic_cast<ObjectType*>(decl.rhs)) {
