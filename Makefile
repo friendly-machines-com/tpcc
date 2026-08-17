@@ -215,6 +215,9 @@ test-lo-hi-builtin: mp
 test-class-reference-constant: mp
 	sh tests/test_class_reference_constant.sh
 
+test-nested-type-visibility: mp
+	sh tests/test_nested_type_visibility.sh
+
 test-setstring-builtin: mp
 	sh tests/test_setstring_builtin.sh
 
@@ -443,6 +446,7 @@ test: test-predefined-explicit-conversions test-class-pointer-conversion test-cu
 test: test-currency-type
 test: test-lo-hi-builtin
 test: test-class-reference-constant
+test: test-nested-type-visibility
 test: test-function-result-designator
 test: test-file-error-state
 test: test-omitted-out-byte-pointer
@@ -476,3 +480,4 @@ test: test-packed-record test-ifopt test-directive-push-pop test-h-directive-str
 .PHONY: test-frame-intrinsics
 .PHONY: test-lo-hi-builtin
 .PHONY: test-class-reference-constant
+.PHONY: test-nested-type-visibility

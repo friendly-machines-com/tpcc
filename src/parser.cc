@@ -7404,6 +7404,12 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 	type_block_frames.push_back(scope);
 	type_block_deferred_aggregates.emplace_back();
 	do {
+		// A type section inside an aggregate body ends at a visibility
+		// directive. Those directives were not always reserved as keywords,
+		// only as contextual directives.
+		if (delphi_auto_end && (peek_directive("published") || peek_directive("public") || peek_directive("protected") || peek_directive("private") || peek_directive("strict"))) {
+			break;
+		}
 		auto name_optional = maybe_parse_identifier();
 		if (!name_optional) {
 			break;
