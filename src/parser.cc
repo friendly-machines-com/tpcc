@@ -2772,6 +2772,34 @@ Node* Parser::parse_bracket_literal() {
 	return new BracketLiteral(std::move(items), default_set_item_type, default_array_type);
 }
 
+std::optional<Binding> Parser::maybe_parse_named_type_or_expression() {
+	auto binding = maybe_resolve_type_or_value(input_token);
+	if (!binding) {
+		return std::nullopt;
+	}
+
+	if (std::holds_alternative<Node*>(*binding)) {
+		return Binding{std::in_place_type<Node*>, parse_expression()};
+	}
+
+	// A Pascal value expression may begin with a type name: `T(value)` is an
+	// explicit cast.  Consume the identifier once and inspect the following
+	// token so every type-or-value grammar makes this decision identically;
+	// blindly choosing "type" from lookup alone breaks constructs such as
+	// `New(T(x).field)` and `High(P(x)^.array_field)`.
+	const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
+	std::string id = parse_identifier();
+	if (input_token == "(") {
+		return Binding{
+		    std::in_place_type<Node*>,
+		    parse_expression_after_identifier(std::move(id), identifier_directives),
+		};
+	}
+
+	Type* type = parse_type_expression_from_identifier(std::move(id), identifier_directives, false);
+	return Binding{std::in_place_type<Type*>, type};
+}
+
 Node* Parser::parse_new_or_dispose(bool is_new) {
 	SourceLocation operation_location = current_location();
 	parse_opening_paren();
@@ -2781,32 +2809,22 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 	Type* pointer_operand_type = nullptr;
 	bool functional_form = false;
 
-	// The first operand selects one of Pascal's two forms. Ordinary value
-	// lookup wins over type lookup, so a nearer variable shadows a pointer
-	// type with the same spelling just as it does elsewhere in expression
-	// syntax. Only New has a functional type form; Dispose always consumes a
-	// pointer value.
-	Node* visible_value = maybe_resolve_value(input_token);
-	if (visible_value || !is_new) {
+	// The first operand selects one of Pascal's two forms. Ordinary lexical
+	// lookup selects the nearest declaration regardless of whether it is a
+	// type or value; the shared parser then recognizes a type name followed by
+	// `(` as the start of a value cast. Only New has a functional type form;
+	// Dispose always consumes a pointer value.
+	if (!is_new) {
 		destination_or_pointer = parse_designator();
 		pointer_operand_type = destination_or_pointer ? destination_or_pointer->ty : nullptr;
 		pointer_type = dynamic_cast<PointerType*>(pointer_operand_type);
-	} else if (maybe_resolve_type(input_token)) {
-		// `New(PType)` is the functional form, but a type identifier followed
-		// directly by `(` can only open a value cast whose designator continues
-		// after the cast (e.g. `New(Cast(x).field)`): a pointer type expression
-		// never takes arguments after its name. Consume the identifier once and
-		// decide on the token now in input_token, the same consume-once
-		// disambiguation parse_type_expression applies to its own ambiguities.
-		const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
-		std::string id = parse_identifier();
-		if (input_token == "(") {
-			LeadingTokenDirectives leading_directives = identifier_directives;
-			destination_or_pointer = parse_designator_tail(parse_value_from_identifier(id, identifier_directives, &leading_directives), leading_directives);
+	} else if (auto parsed = maybe_parse_named_type_or_expression()) {
+		if (auto value = std::get_if<Node*>(&*parsed)) {
+			destination_or_pointer = *value;
 			pointer_operand_type = destination_or_pointer ? destination_or_pointer->ty : nullptr;
 			pointer_type = dynamic_cast<PointerType*>(pointer_operand_type);
 		} else {
-			Type* parsed_type = parse_type_expression_from_identifier(std::move(id), identifier_directives, false);
+			Type* parsed_type = std::get<Type*>(*parsed);
 			pointer_operand_type = parsed_type;
 			pointer_type = dynamic_cast<PointerType*>(parsed_type);
 			functional_form = true;
@@ -3028,18 +3046,27 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 		if (auto kind = type_bound_kind_for_builtin(value); kind && input_token == "(") {
 			parse_opening_paren();
 			// Low/High accept either a type or a value. Their argument syntax
-			// is otherwise ambiguous, so use the same rule as New's
-			// type-or-value form: an ordinary visible value wins, and a named
-			// type is considered only when no value has that spelling.
+			// is otherwise ambiguous. Explicit type constructors are
+			// unambiguous; identifier-starting arguments use the same
+			// consume-once type-or-value grammar as New.
 			const bool explicit_type_start = peek_keyword("array") || peek_keyword("string") || peek_keyword("set") || peek_keyword("file") || peek_keyword("object") || peek_keyword("packed") || peek_keyword("record") || peek_keyword("class") || peek_keyword("interface") || peek_keyword("procedure") || peek_keyword("function") || peek_keyword("operator") || input_token == "^";
-			Node* visible_value = maybe_resolve_value(input_token);
-			Type* visible_type = visible_value ? nullptr : maybe_resolve_type(input_token);
-			if (explicit_type_start || visible_type) {
-				Type* target_ty = parse_type_expression(false);
+			Type* target_ty = nullptr;
+			Node* operand = nullptr;
+			if (explicit_type_start) {
+				target_ty = parse_type_expression(false);
+			} else if (auto parsed = maybe_parse_named_type_or_expression()) {
+				if (auto type = std::get_if<Type*>(&*parsed)) {
+					target_ty = *type;
+				} else {
+					operand = std::get<Node*>(*parsed);
+				}
+			} else {
+				operand = parse_expression();
+			}
+			if (target_ty) {
 				parse_closing_paren();
 				return new TypeBound(*kind, target_ty);
 			}
-			Node* operand = parse_expression();
 			parse_closing_paren();
 			Type* operand_type = operand ? operand->ty : nullptr;
 			if (operand_type && is_ordinal_intrinsic_argument(operand_type)) {

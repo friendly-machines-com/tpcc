@@ -8,6 +8,10 @@ type
   TWideSet = set of Integer;
   TSmall = 2..4;
   TChoice = (First, Second, Third);
+  TArrayHolder = record
+    Values: TIntArray;
+  end;
+  PArrayHolder = ^TArrayHolder;
 
 var
   A, B: TIntArray;
@@ -21,6 +25,8 @@ var
   Sum: Int64;
   Ch: Char;
   Choice: TChoice;
+  ArrayHolder: TArrayHolder;
+  ArrayHolderArgument: Pointer;
 
 procedure ReadConst(const X: array of Integer);
 begin
@@ -103,6 +109,10 @@ begin
   if Length([1, 2, 3]) <> 3 then Halt(40);
   if Low([1, 2, 3]) <> 0 then Halt(41);
   if High([1, 2, 3]) <> 2 then Halt(42);
+  SetLength(ArrayHolder.Values, 3);
+  ArrayHolderArgument := @ArrayHolder;
+  if Low(PArrayHolder(ArrayHolderArgument)^.Values) <> 0 then Halt(43);
+  if High(PArrayHolder(ArrayHolderArgument)^.Values) <> 2 then Halt(44);
   WideSet := [2, 300, -40000];
   if not (2 in WideSet) or
      not (300 in WideSet) or

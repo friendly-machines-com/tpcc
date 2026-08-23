@@ -508,6 +508,10 @@ class Parser {
 	void parse_operator(std::string s);
 	Node* parse_value(LeadingTokenDirectives* leading_directives);
 	Node* parse_value_from_identifier(std::string id, LeadingTokenDirectives identifier_directives, LeadingTokenDirectives* leading_directives);
+	/** Parse an identifier-starting argument in a grammar which accepts either
+	 *  a type or a value.  The returned Binding contains the parsed Type* or
+	 *  Node*, not merely the result of name lookup. */
+	std::optional<Binding> maybe_parse_named_type_or_expression();
 	Node* parse_new_or_dispose(bool is_new);
 	// Parse `inherited Name[(args)]` or anonymous `inherited;`. Returns an
 	// InheritedCall node. The enclosing routine must be a Method on a
