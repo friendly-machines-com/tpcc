@@ -42,7 +42,22 @@ var
   ShortStringRecord: TShortStringRecord;
   N: SizeInt;
 
+procedure CheckAnonymousPacked;
+var
+  Key: packed record
+    Def: TObject;
+    ElementCount: SizeInt;
+  end;
 begin
+  Key.Def := nil;
+  Key.ElementCount := 7;
+  if Key.Def <> nil then Halt(1);
+  if Key.ElementCount <> 7 then Halt(2);
+  if SizeOf(Key) <> SizeOf(Pointer) + SizeOf(SizeInt) then Halt(3)
+end;
+
+begin
+  CheckAnonymousPacked;
   N := SizeOf(Bytes);
   N := SizeOf(TIntegerBytes);
   N := SizeOf(Padded);

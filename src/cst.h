@@ -766,12 +766,16 @@ class BuiltinEnumeratorCurrent : public Node {
 };
 
 /** Pascal `SizeOf(T)` / `SizeOf(expression)`, normalized to the operand's
- * static type. Constant evaluation can query the compiler layout while the
- * original node remains available to emit C++ `sizeof(emitted-type)`. */
+ * static type.  Pascal and C++ both reject a direct anonymous record type
+ * argument (`SizeOf(record ... end)` / `sizeof(struct { ... })`), but both
+ * accept a value of that type.  Retain the exact value operand so the C++
+ * backend can emit `sizeof(value)` without inventing a name for its anonymous
+ * type; C++ `sizeof` does not evaluate the operand. */
 class SizeOf : public Node {
       public:
 	Type* operand_type;
-	explicit SizeOf(Type* operand_type);
+	Node* operand;
+	explicit SizeOf(Type* operand_type, Node* operand = nullptr);
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;

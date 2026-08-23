@@ -2218,15 +2218,16 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 	if (!active) {
 		return;
 	}
-	if (cxx_name.empty()) {
-		unhandled_type("anonymous packed records are not implemented", p);
-	}
 	auto layout = packed_record_layout(p);
 	if (!layout) {
 		unhandled_type("packed record layout is not known", p);
 	}
 
-	fprintf(active, "struct %s {\n", cxx_name.c_str());
+	fprintf(active, "struct");
+	if (!cxx_name.empty()) {
+		fprintf(active, " %s", cxx_name.c_str());
+	}
+	fprintf(active, " {\n");
 	for (size_t i = 0; i < layout->fields.size(); ++i) {
 		const auto& field = layout->fields[i];
 		fprintf(active, "\tusing m_field_%zu_type = ", i);
@@ -3307,7 +3308,17 @@ void Emitter::emit_expression(Node* expr) {
 		}
 	} else if (auto size = dynamic_cast<SizeOf*>(expr)) {
 		fprintf(active, "static_cast<::u_system::t_sizeint>(sizeof(");
-		emit_type_ref(size->operand_type);
+		auto anonymous_packed = dynamic_cast<PackedRecordType*>(size->operand_type);
+		if (anonymous_packed && anonymous_packed->cxx_name.empty() && size->operand) {
+			// C++ permits an unnamed class in an object declaration, but
+			// forbids defining that class inside sizeof(type-id). The Pascal
+			// value form is already unevaluated, so sizeof(the original
+			// object expression) names exactly the inline carrier without
+			// evaluating the Pascal operand.
+			emit_expression(size->operand);
+		} else {
+			emit_type_ref(size->operand_type);
+		}
 		fprintf(active, "))");
 	} else if (auto ca = dynamic_cast<Cast*>(expr)) {
 		auto real_type = [](Type* type) {
@@ -3673,9 +3684,14 @@ void Emitter::emit_type_ref(Type* ty) {
 		}
 	} else if (auto r = dynamic_cast<PackedRecordType*>(ty)) {
 		if (r->cxx_name.empty()) {
-			unhandled_type("anonymous packed record type reference", ty);
+			// An anonymous Pascal record is a complete inline type denoter.
+			// C++ has the same object-declaration form (`struct { ... } x`), so
+			// emit it directly instead of manufacturing a name absent from the
+			// Pascal program.
+			emit_packed_record_decl("", r);
+		} else {
+			fprintf(active, "%s", type_cxx_name(r, r->cxx_name).c_str());
 		}
-		fprintf(active, "%s", type_cxx_name(r, r->cxx_name).c_str());
 	} else if (auto c = dynamic_cast<ClassType*>(ty)) {
 		if (c->cxx_name.empty()) {
 			emit_aggregate_decl("", ty);

@@ -126,6 +126,10 @@ static bool token_is_identifier(const std::string& token) {
 	return (is_letter(token.front()) || token.front() == '_') && std::all_of(token.begin() + 1, token.end(), is_identifier_character);
 }
 
+static bool token_starts_explicit_type_expression(const std::string& token) {
+	return token == "array" || token == "bitpacked" || token == "string" || token == "set" || token == "file" || token == "object" || token == "packed" || token == "record" || token == "class" || token == "interface" || token == "procedure" || token == "function" || token == "operator" || token == "^";
+}
+
 static int based_integer_base(int marker) {
 	switch (marker) {
 	case '$':
@@ -3050,7 +3054,7 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			// is otherwise ambiguous. Explicit type constructors are
 			// unambiguous; identifier-starting arguments use the same
 			// consume-once type-or-value grammar as New.
-			const bool explicit_type_start = peek_keyword("array") || peek_keyword("string") || peek_keyword("set") || peek_keyword("file") || peek_keyword("object") || peek_keyword("packed") || peek_keyword("record") || peek_keyword("class") || peek_keyword("interface") || peek_keyword("procedure") || peek_keyword("function") || peek_keyword("operator") || input_token == "^";
+			const bool explicit_type_start = token_starts_explicit_type_expression(input_token);
 			Type* target_ty = nullptr;
 			Node* operand = nullptr;
 			if (explicit_type_start) {
@@ -3216,24 +3220,33 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 		} else if (syntax_kind_for_builtin(value) == BuiltinSyntaxKind::SizeOf && input_token == "(") {
 			parse_opening_paren();
 			Type* operand_type = nullptr;
-			if (Type* named_type = maybe_resolve_type(input_token); named_type && !maybe_resolve_value(input_token)) {
+			Node* operand = nullptr;
+			if (token_starts_explicit_type_expression(input_token)) {
 				operand_type = parse_type_expression(false);
+			} else if (auto parsed = maybe_parse_named_type_or_expression()) {
+				if (auto parsed_operand = std::get_if<Node*>(&*parsed)) {
+					operand = *parsed_operand;
+				} else {
+					operand_type = std::get<Type*>(*parsed);
+				}
 			} else {
-				Node* operand = parse_expression();
-				if (operand && operand->ty == &untyped_real_type()) {
+				operand = parse_expression();
+			}
+			if (operand) {
+				if (operand->ty == &untyped_real_type()) {
 					Type* natural = natural_real_origin_type(operand);
 					if (!natural) {
 						return raise_value_error("real SizeOf operand is outside every predefined real domain", operand);
 					}
 					operand = cast(operand, natural);
 				}
-				operand_type = operand ? operand->ty : nullptr;
+				operand_type = operand->ty;
 			}
 			parse_closing_paren();
 			if (!operand_type) {
 				return raise_value_error("SizeOf operand has no type", nullptr);
 			}
-			return new SizeOf(operand_type);
+			return new SizeOf(operand_type, operand);
 		} else {
 			return value;
 		}

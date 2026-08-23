@@ -172,7 +172,7 @@ BuiltinEnumeratorCurrent::BuiltinEnumeratorCurrent(Type* element_type) {
 	this->ty = element_type;
 }
 
-SizeOf::SizeOf(Type* operand_type) : operand_type(operand_type) {
+SizeOf::SizeOf(Type* operand_type, Node* operand) : operand_type(operand_type), operand(operand) {
 	this->ty = sizeint_type();
 }
 
@@ -1276,10 +1276,17 @@ ConstEvalResult SizeOf::const_eval(ConstEvalContext&) const {
 void SizeOf::collect_diagnostic_edges(ErrorLetContext* ctx) const {
 	Node::collect_diagnostic_edges(ctx);
 	ctx->add_type_edge(operand_type);
+	ctx->add_value_edge(operand);
 }
 
 void SizeOf::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned) const {
-	out << "sizeof(" << ctx->known_type_ref(operand_type) << ") : " << ctx->known_type_ref(ty);
+	out << "sizeof(";
+	if (operand) {
+		out << ctx->known_value_ref(operand);
+	} else {
+		out << ctx->known_type_ref(operand_type);
+	}
+	out << ") : " << ctx->known_type_ref(ty);
 }
 
 const char* Coerce::diagnostic_kind() const {
