@@ -2570,8 +2570,11 @@ Type* Parser::resolve_type(std::string name, bool allow_forward) {
 		}
 		return inc;
 	}
-	raise_type_error("unresolved type identifier: " + name, nullptr);
-	return nullptr;
+	// Type parsers inspect the result while recovering from a diagnostic.
+	// Preserve their non-null Type* contract with the shared error sentinel;
+	// returning nullptr here turns an ordinary unresolved name into a later
+	// crash, for example when a function result type is checked for file state.
+	return raise_type_error("unresolved type identifier: " + name, nullptr);
 }
 
 // Parent of a composite type with single-inheritance, or nullptr. ClassType
@@ -8795,6 +8798,13 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			// T, and only to its exact Pascal signature.
 			if (!m) {
 				raise_type_error("no matching method declaration '" + method_name + "' on '" + first_name + "'", sig);
+				// Continue through the body with an unregistered poison method.
+				// Attaching a mismatched body to any real declaration would
+				// corrupt its signature and has_body state, while leaving m
+				// null would turn the reported source error into a crash.
+				m = new Method(cxx_value_name(method_name), method_name, sig,
+				    false, owner_ty, Method::VirtualKind::None);
+				m->is_static = sig->kind == ROUTINE;
 			}
 			if (m->has_body) {
 				raise_type_error("duplicate implementation of '" + method_name + "'", m->ty);

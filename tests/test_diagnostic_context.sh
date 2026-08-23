@@ -142,4 +142,27 @@ do
 	fi
 done
 
+if tpcc_translate \
+	-o"$tmp/unresolved_function_result_type_rejected.cc" \
+	tests/unresolved_function_result_type_rejected.pp \
+	>"$tmp/result-type.stdout" 2>"$tmp/result-type.stderr"
+then
+	echo "accepted an unresolved function result type" >&2
+	exit 1
+fi
+if ! grep -Fq "unresolved type identifier: missingresulttype" \
+	"$tmp/result-type.stderr"
+then
+	echo "wrong diagnostic for an unresolved function result type" >&2
+	sed -n '1,180p' "$tmp/result-type.stderr" >&2
+	exit 1
+fi
+if ! grep -Fq "unresolved type identifier: missingmethodresulttype" \
+	"$tmp/result-type.stderr"
+then
+	echo "wrong diagnostic for an unresolved method result type" >&2
+	sed -n '1,180p' "$tmp/result-type.stderr" >&2
+	exit 1
+fi
+
 echo "diagnostic context tests passed"
