@@ -99,7 +99,8 @@ static std::unordered_set<std::string> keywords = {
     "operator",
     "or",  // operator
     "out", // FIXME directive ?
-    "overload",    "override",
+    //"overload", // yes, people DO use variables that are called "overload"
+    "override",
     "packed",      "procedure",
     "program",     "raise",
     "record",      "repeat",
