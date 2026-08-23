@@ -81,11 +81,13 @@ static std::unordered_set<std::string> keywords = {
     "dynamic", // FIXME
     "else",        "end",
     "except",      "file",
-    "final",       "finally",
+    "final",       "finalization",
+    "finally",
     "forward", // FIXME directive ?
     "for",         "function",
     "goto",        "if",
     "in", // operator
+    "initialization",
     "inline",      "implementation",
     "inherited",   "interface",
     "is", // operator
