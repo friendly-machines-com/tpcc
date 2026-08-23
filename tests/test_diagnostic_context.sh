@@ -165,4 +165,40 @@ then
 	exit 1
 fi
 
+if tpcc_translate \
+	-o"$tmp/recovery_poison_rejected.cc" \
+	tests/recovery_poison_rejected.pp \
+	>"$tmp/recovery.stdout" 2>"$tmp/recovery.stderr"
+then
+	echo "accepted malformed input intended to exercise poison recovery" >&2
+	exit 1
+fi
+
+# These independent diagnostics occur after earlier poisoned declarations and
+# expressions. Reaching all of them proves that recovery preserved parser
+# structure instead of returning null, indexing a missing formal, or
+# reinterpreting a malformed custom enumerator as native sequence iteration.
+for required in \
+	"postfix type dereference: expected pointer type" \
+	"shortstring capacity must be a constant integer" \
+	"subrange bounds must be constant expressions" \
+	"explicit enum value must be constant" \
+	"read accessor for property 'value' has the wrong number of parameters" \
+	"unresolved lvalue identifier: missingdestination" \
+	"break outside loop" \
+	"missing argument for parameter 'value'" \
+	"for-in collection: expected string, array, or set type" \
+	"GetEnumerator result must be a record, object, class, or interface" \
+	"with target: expected class, record, or object type" \
+	"New first operand: expected typed pointer type" \
+	"no implicit conversion to the required type"
+do
+	if ! grep -Fq "$required" "$tmp/recovery.stderr"
+	then
+		echo "poison recovery stopped before diagnostic: $required" >&2
+		sed -n '1,260p' "$tmp/recovery.stderr" >&2
+		exit 1
+	fi
+done
+
 echo "diagnostic context tests passed"

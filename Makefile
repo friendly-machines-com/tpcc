@@ -1,5 +1,7 @@
 
-CXXFLAGS = -g3 -std=c++20 -Wall
+# Recovery-producing parser diagnostics are [[nodiscard]] because dropping
+# their poison value can leave null or half-constructed semantic state alive.
+CXXFLAGS = -g3 -std=c++20 -Wall -Werror=unused-result
 
 all: mp
 

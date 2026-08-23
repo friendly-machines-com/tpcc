@@ -490,7 +490,7 @@ class Parser {
 	void parse_block();
 	void parse_semicolon();
 	void maybe_parse_statement();
-	Mutation* parse_mutation_statement(std::string spelling, SourceLocation call_location, LeadingTokenDirectives directives);
+	Node* parse_mutation_statement(std::string spelling, SourceLocation call_location, LeadingTokenDirectives directives);
 	std::optional<std::string> maybe_parse_identifier();
 	std::string parse_identifier();
 	Node* maybe_parse_numeral();
@@ -557,6 +557,9 @@ class Parser {
 		Node* current_assignment;
 		Node* cleanup;
 		bool nullable;
+		// Presence distinguishes a malformed declared GetEnumerator protocol
+		// from absence of that protocol; only absence permits native fallback.
+		bool poisoned;
 	};
 
 	/** Try the ordinary member-based for-in protocol. Null means the
@@ -587,7 +590,7 @@ class Parser {
 	bool is_supported_packed_assignment(Node* n);
 	/** Enforce the complete place boundary shared by `:=` and read/modify/write
 	 *  mutation before either construct builds its store. */
-	void validate_writable_destination(Node* target, SourceLocation error_location, std::string not_assignable_message);
+	bool validate_writable_destination(Node* target, SourceLocation error_location, std::string not_assignable_message);
 	Node* parse_expression_after_identifier(std::string id, LeadingTokenDirectives identifier_directives);
 	Node* parse_comparison();
 	Node* parse_comparison_tail(Node* result);
@@ -778,23 +781,37 @@ class Parser {
 	std::string enclosing_diagnostic_references(ErrorLetContext& ctx) const;
 	[[noreturn]] void raise_parse_error(std::string message);
 	[[noreturn]] Type* raise_type_parse_error(std::string message);
-	Type* raise_type_mismatch(std::string message, Type* expected, Type* got);
-	Type* raise_type_mismatch_at(SourceLocation location, std::string message, Type* expected, Type* got);
-	Type* raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
-	Type* raise_type_kind_mismatch_at(SourceLocation location, std::string message, const char* expected_kind, Type* got);
-	Type* raise_type_error(std::string message, Type* relevant);
-	Type* raise_type_error_at(SourceLocation location, std::string message, Type* relevant);
+	// A report_* call rejects an otherwise structurally complete declaration.
+	// A raise_* call additionally supplies the sentinel required by the
+	// enclosing expression/type computation; [[nodiscard]] prevents that
+	// recovery state from being accidentally discarded again.
+	void report_type_mismatch(std::string message, Type* expected, Type* got);
+	void report_type_mismatch_at(SourceLocation location, std::string message, Type* expected, Type* got);
+	void report_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
+	void report_type_kind_mismatch_at(SourceLocation location, std::string message, const char* expected_kind, Type* got);
+	void report_type_error(std::string message, Type* relevant);
+	void report_type_error_at(SourceLocation location, std::string message, Type* relevant);
+	[[nodiscard]] Type* raise_type_mismatch(std::string message, Type* expected, Type* got);
+	[[nodiscard]] Type* raise_type_mismatch_at(SourceLocation location, std::string message, Type* expected, Type* got);
+	[[nodiscard]] Type* raise_type_kind_mismatch(std::string message, const char* expected_kind, Type* got);
+	[[nodiscard]] Type* raise_type_kind_mismatch_at(SourceLocation location, std::string message, const char* expected_kind, Type* got);
+	[[nodiscard]] Type* raise_type_error(std::string message, Type* relevant);
+	[[nodiscard]] Type* raise_type_error_at(SourceLocation location, std::string message, Type* relevant);
 	// The value-family diagnostics report and return an ErrorValue poison
 	// node so parsing continues; the run fails once at the end through
 	// tpcc_reported_error_count.
-	Node* raise_value_error(std::string message, Node* relevant);
-	Node* raise_value_error_at(SourceLocation location, std::string message, Node* relevant);
-	Node* raise_values_error(std::string message, const std::vector<std::pair<std::string, Node*>>& relevant);
-	Node* raise_routine_reference_error(std::string message, RoutineRef* reference, Type* destination_type);
-	Node* raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
-	Node* raise_overload_resolution_error(SourceLocation error_location, std::string name, Node* receiver, const std::vector<Node*>& args, Type* expected_return_type, const std::vector<Callable*>& candidates, const std::vector<std::pair<Callable*, CallableMatch>>& viable, const std::vector<Callable*>& non_dominated, bool ambiguous, std::string failure_description = {});
-	Node* raise_cxx_carrier_collision(const std::string& name, Callable* incoming, const CallableRegistration& registration);
-	Node* raise_callable_registration_error(const std::string& name, Callable* incoming, const CallableRegistration& registration);
+	void report_value_error(std::string message, Node* relevant);
+	void report_value_error_at(SourceLocation location, std::string message, Node* relevant);
+	void report_values_error(std::string message, const std::vector<std::pair<std::string, Node*>>& relevant);
+	[[nodiscard]] Node* raise_value_error(std::string message, Node* relevant);
+	[[nodiscard]] Node* raise_value_error_at(SourceLocation location, std::string message, Node* relevant);
+	[[nodiscard]] Node* raise_values_error(std::string message, const std::vector<std::pair<std::string, Node*>>& relevant);
+	[[nodiscard]] Node* raise_routine_reference_error(std::string message, RoutineRef* reference, Type* destination_type);
+	[[nodiscard]] Node* raise_no_matching_overload(std::string name, Node* receiver, const std::vector<Node*>& args);
+	void report_overload_resolution_error(SourceLocation error_location, std::string name, Node* receiver, const std::vector<Node*>& args, Type* expected_return_type, const std::vector<Callable*>& candidates, const std::vector<std::pair<Callable*, CallableMatch>>& viable, const std::vector<Callable*>& non_dominated, bool ambiguous, std::string failure_description = {});
+	[[nodiscard]] Node* raise_overload_resolution_error(SourceLocation error_location, std::string name, Node* receiver, const std::vector<Node*>& args, Type* expected_return_type, const std::vector<Callable*>& candidates, const std::vector<std::pair<Callable*, CallableMatch>>& viable, const std::vector<Callable*>& non_dominated, bool ambiguous, std::string failure_description = {});
+	void report_cxx_carrier_collision(const std::string& name, Callable* incoming, const CallableRegistration& registration);
+	void report_callable_registration_error(const std::string& name, Callable* incoming, const CallableRegistration& registration);
 
       public:
 	Parser(UnitRegistry* unit_registry, Emitter* emitter, CompilerOptions* options);
