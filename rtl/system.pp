@@ -141,8 +141,8 @@ operator :=(a: Cardinal): Int64; external name '::u_system::o_implicit';
 operator :=(a: Cardinal): QWord; external name '::u_system::o_implicit';
 
 // These complete integer domains fit after Currency's factor-of-10000
-// scaling. Int64 and QWord remain compiler-classified narrowing conversions;
-// declaring them here as ordinary direct edges would falsely order overloads.
+// scaling, so := declares them as lossless assignment edges. Wider integers
+// use the narrowing Implicit/UncheckedImplicit pair below.
 operator :=(a: Byte): Currency; external name '::u_system::o_implicit';
 operator :=(a: ShortInt): Currency; external name '::u_system::o_implicit';
 operator :=(a: Word): Currency; external name '::u_system::o_implicit';
@@ -165,11 +165,15 @@ operator Implicit(a: Extended): Currency; external name '::u_system::o_implicit'
 operator UncheckedImplicit(a: Extended): Currency; external name '::u_system::o_unchecked_implicit';
 
 { Every Currency value lies within the real exponent ranges, but a binary
-  real cannot preserve Currency's complete decimal grid. These are therefore
-  implicit narrowing edges even though no runtime range check is necessary. }
-operator :=(a: Currency): Single; external name '::u_system::o_implicit';
-operator :=(a: Currency): Double; external name '::u_system::o_implicit';
-operator :=(a: Currency): Extended; external name '::u_system::o_implicit';
+  real cannot preserve Currency's complete decimal grid. Implicit and
+  UncheckedImplicit therefore declare narrowing in both $R modes even though
+  both implementations execute the same range-safe operation. }
+operator Implicit(a: Currency): Single; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: Currency): Single; external name '::u_system::o_implicit';
+operator Implicit(a: Currency): Double; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: Currency): Double; external name '::u_system::o_implicit';
+operator Implicit(a: Currency): Extended; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: Currency): Extended; external name '::u_system::o_implicit';
 
 operator Explicit(a: Int64): Currency; external name '::u_system::o_explicit';
 operator Explicit(a: QWord): Currency; external name '::u_system::o_explicit';

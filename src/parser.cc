@@ -4450,13 +4450,6 @@ static bool ordinary_real_binary_operands(Node* first, Node* second) {
 	return ordinary_numeric(first) && ordinary_numeric(second) && (ordinary_real_operand(first) || ordinary_real_operand(second));
 }
 
-static bool fixed_decimal_binary_operands(Node* first, Node* second) {
-	auto numeric = [](Node* value) {
-		return value && (value->ty == &untyped_integer_type() || value->ty == &untyped_real_type() || is_integer_semantic_type(value->ty) || is_real_semantic_type(value->ty) || is_fixed_decimal_semantic_type(value->ty));
-	};
-	return numeric(first) && numeric(second) && (is_fixed_decimal_semantic_type(first->ty) || is_fixed_decimal_semantic_type(second->ty));
-}
-
 Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives directives, bool mutation_step) {
 	// An operator is an ordinary value context, not a destination for a
 	// procedural value. Runtime routine operands therefore mean calls here.
@@ -4473,21 +4466,20 @@ Node* Parser::mk_arith(std::string id, Node* a, Node* b, LeadingTokenDirectives 
 	std::vector<Node*> args{a, b};
 	const bool integer_operands = a && b && is_integer_semantic_type(a->ty) && is_integer_semantic_type(b->ty);
 	const bool real_operands = ordinary_real_binary_operands(a, b);
-	const bool fixed_decimal_operands = fixed_decimal_binary_operands(a, b);
 	OverloadResolutionPolicy policy = OverloadResolutionPolicy::Ordinary;
 	if (id == "+" || id == "-") {
-		policy = fixed_decimal_operands ? OverloadResolutionPolicy::CommonNumericBinary : integer_operands ? OverloadResolutionPolicy::CommonIntegerBinary : real_operands ? OverloadResolutionPolicy::CommonRealBinary : mutation_step ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep : OverloadResolutionPolicy::CommonBinaryPointerLeft;
+		policy = integer_operands ? OverloadResolutionPolicy::CommonIntegerBinary : real_operands ? OverloadResolutionPolicy::CommonRealBinary : mutation_step ? OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep : OverloadResolutionPolicy::CommonBinaryPointerLeft;
 	} else if (id == "div" || id == "mod" || id == "and" || id == "or" || id == "xor") {
 		policy = OverloadResolutionPolicy::CommonIntegerBinary;
 	} else if (id == "*") {
-		policy = fixed_decimal_operands ? OverloadResolutionPolicy::CommonNumericBinary : integer_operands ? OverloadResolutionPolicy::CommonIntegerBinary : real_operands ? OverloadResolutionPolicy::CommonRealBinary : OverloadResolutionPolicy::CommonBinary;
+		policy = integer_operands ? OverloadResolutionPolicy::CommonIntegerBinary : real_operands ? OverloadResolutionPolicy::CommonRealBinary : OverloadResolutionPolicy::CommonBinary;
 	} else if (id == "**" && integer_operands) {
 		// Integer power deliberately has heterogeneous (Base, Integer)
 		// declarations, so it restricts the domain family without requiring
 		// homogeneous formals.
 		policy = OverloadResolutionPolicy::IntegerBinary;
 	} else if (id == "/") {
-		policy = fixed_decimal_operands ? OverloadResolutionPolicy::CommonNumericBinary : real_operands ? OverloadResolutionPolicy::CommonRealBinary : OverloadResolutionPolicy::CommonBinary;
+		policy = real_operands ? OverloadResolutionPolicy::CommonRealBinary : OverloadResolutionPolicy::CommonBinary;
 	} else if (id == "><") {
 		policy = OverloadResolutionPolicy::CommonBinary;
 	}
@@ -4561,7 +4553,7 @@ Node* Parser::mk_compare(std::string id, Node* a, Node* b, LeadingTokenDirective
 	// exactly as for a named call; the selected formal types are applied only
 	// after overload resolution.
 	std::vector<Node*> args{a, b};
-	const OverloadResolutionPolicy policy = fixed_decimal_binary_operands(a, b) ? OverloadResolutionPolicy::CommonNumericBinary : a && b && is_integer_semantic_type(a->ty) && is_integer_semantic_type(b->ty) ? OverloadResolutionPolicy::CommonIntegerBinary : ordinary_real_binary_operands(a, b) ? OverloadResolutionPolicy::CommonRealBinary : OverloadResolutionPolicy::CommonBinary;
+	const OverloadResolutionPolicy policy = a && b && is_integer_semantic_type(a->ty) && is_integer_semantic_type(b->ty) ? OverloadResolutionPolicy::CommonIntegerBinary : ordinary_real_binary_operands(a, b) ? OverloadResolutionPolicy::CommonRealBinary : OverloadResolutionPolicy::CommonBinary;
 	auto fc = finalize_call(fn, args, /*name for error*/ "", current_location(), nullptr, policy);
 	Node* call = make_call(fc, std::move(args), directives);
 	/*	if (call->ty->return_type != boolean_type()) {
@@ -9325,53 +9317,7 @@ static Type* infer_bracket_common_item_type(const std::vector<BracketLiteral::It
 	return unknown_type();
 }
 
-static bool integer_domain_fits_fixed_decimal(Type* source, Type* target) {
-	OrdinalBounds bounds;
-	auto factor = fixed_decimal_scale_factor(target);
-	if (!factor || !integer_bounds(source, &bounds)) {
-		return false;
-	}
-	const uint64_t positive_limit = static_cast<uint64_t>(INT64_MAX) / *factor;
-	const uint64_t negative_limit = (uint64_t{1} << 63) / *factor;
-	return bounds.max_positive <= positive_limit && (!bounds.signed_type || bounds.min_magnitude <= negative_limit);
-}
-
-static std::optional<AssignmentConversion> declared_numeric_conversion_classification(Type* source, Type* target) {
-	const FixedDecimalFormat* source_fixed = fixed_decimal_format(source);
-	const FixedDecimalFormat* target_fixed = fixed_decimal_format(target);
-	if (!source_fixed && !target_fixed) {
-		return std::nullopt;
-	}
-	if (source_fixed && target_fixed) {
-		// Equal identity was handled before conversion lookup. Distinct
-		// fixed-decimal value sets are not assumed to contain one another
-		// merely because their raw carriers happen to match.
-		return AssignmentConversion{AssignmentConversionClass::Narrowing, 0};
-	}
-	if (target_fixed && is_integer_semantic_type(source)) {
-		return AssignmentConversion{
-		    integer_domain_fits_fixed_decimal(source, target) ? AssignmentConversionClass::Widening : AssignmentConversionClass::Narrowing,
-		    0,
-		};
-	}
-	if ((target_fixed && is_real_semantic_type(source)) || (source_fixed && is_real_semantic_type(target))) {
-		// Binary floating and decimal fixed-point grids do not contain one
-		// another. This is information loss even in Currency-to-real's
-		// range-safe direction.
-		return AssignmentConversion{AssignmentConversionClass::Narrowing, 0};
-	}
-	return std::nullopt;
-}
-
 static bool conversion_requires_range_check(Type* source, Type* target) {
-	if (fixed_decimal_format(target)) {
-		if (real_semantic_rank(source) >= 0) {
-			return true;
-		}
-		if (is_integer_semantic_type(source)) {
-			return !integer_domain_fits_fixed_decimal(source, target);
-		}
-	}
 	const int source_real = real_range_rank(source);
 	const int target_real = real_range_rank(target);
 	if (source_real >= 0 && target_real >= 0) {
@@ -9918,19 +9864,6 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		MatchFailure local_failure = MatchFailure::Incompatible;
 		MatchFailure* declared_failure = failure ? failure : &local_failure;
 		if (auto declared = match_declared_conversion(actual, target, implicit_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure)) {
-			// A declaration implements the same source-to-result conversion edge
-			// classified by the predefined relation. Rank its type relation
-			// independently of whether constant evaluation proved that this
-			// particular value survives it.
-			std::optional<AssignmentConversion> classified = declared_numeric_conversion_classification(assignment_source, target);
-			if (!classified) {
-				classified = assignment;
-			}
-			if (classified) {
-				declared->rank.tier = classified->kind == AssignmentConversionClass::Equal ? MatchRank::Tier::Equal : classified->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing : MatchRank::Tier::Convert;
-				declared->rank.distance = classified->distance;
-				declared->rank.information_losing = classified->kind == AssignmentConversionClass::Narrowing && !value_preserving_typed_integer_conversion;
-			}
 			return declared;
 		}
 		// An ambiguous ordinary conversion is a failure at its own quality;
@@ -10334,13 +10267,6 @@ bool Parser::has_direct_assignment_edge(Type* source, Type* target) {
 			continue;
 		}
 		if (candidate->ty->formals[0].ty == source) {
-			// A declared edge establishes availability. Specificity may use
-			// its direction only when the complete source value set survives;
-			// otherwise reciprocal lossy fixed/binary-real declarations would
-			// manufacture a false subtype ordering.
-			if (auto classified = declared_numeric_conversion_classification(source, target)) {
-				return classified->kind != AssignmentConversionClass::Narrowing;
-			}
 			return true;
 		}
 	}
@@ -10574,10 +10500,9 @@ static bool candidate_admitted_in_phase(Callable* callable, const CallableMatch&
 	}
 	if (phase == MatchRank::Tier::Equal &&
 	    policy != OverloadResolutionPolicy::CommonIntegerBinary &&
-	    policy != OverloadResolutionPolicy::CommonRealBinary &&
-	    policy != OverloadResolutionPolicy::CommonNumericBinary) {
+	    policy != OverloadResolutionPolicy::CommonRealBinary) {
 		// General operator policies still admit genuinely heterogeneous
-		// equations such as (Box, Integer). Only the three policies whose
+		// equations such as (Box, Integer). Only the two policies whose
 		// operand-role equation explicitly requires one numeric domain may
 		// reject an Equal-phase candidate for having heterogeneous formals.
 		return true;
@@ -10601,14 +10526,11 @@ static bool candidate_admitted_in_phase(Callable* callable, const CallableMatch&
 	if (policy == OverloadResolutionPolicy::CommonRealBinary) {
 		return homogeneous && is_real_semantic_type(first);
 	}
-	if (policy == OverloadResolutionPolicy::CommonNumericBinary) {
-		return homogeneous && (is_integer_semantic_type(first) || is_real_semantic_type(first) || is_fixed_decimal_semantic_type(first));
-	}
 	return homogeneous || pointer_offset_formals(callable, policy);
 }
 
 static bool common_domain_policy(OverloadResolutionPolicy policy) {
-	return policy == OverloadResolutionPolicy::CommonBinary || policy == OverloadResolutionPolicy::CommonIntegerBinary || policy == OverloadResolutionPolicy::CommonRealBinary || policy == OverloadResolutionPolicy::CommonNumericBinary || policy == OverloadResolutionPolicy::CommonBinaryPointerLeft || policy == OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep;
+	return policy == OverloadResolutionPolicy::CommonBinary || policy == OverloadResolutionPolicy::CommonIntegerBinary || policy == OverloadResolutionPolicy::CommonRealBinary || policy == OverloadResolutionPolicy::CommonBinaryPointerLeft || policy == OverloadResolutionPolicy::CommonBinaryPointerLeftOrEnumStep;
 }
 
 static Type* homogeneous_common_formal(const CallableMatch& match) {
@@ -10675,10 +10597,10 @@ static std::vector<size_t> overload_resolution_cohort(const std::vector<std::pai
 				if (!loses_information) {
 					have_lossless_common_domain = true;
 				} else {
-					// CommonNumericBinary intentionally records no cross-family
-					// fallback. Fixed decimal and binary real are incomparable
-					// value sets, so preferring either lossy proposal would be
-					// a language rule not justified by declaration edges.
+					// The ordered fallback belongs only to a policy whose
+					// operand equation names that ordered domain. General
+					// common-domain matching retains incomparable lossy
+					// proposals instead of inventing a cross-family order.
 					if (policy == OverloadResolutionPolicy::CommonRealBinary) {
 						best_lossy_real_domain = std::max(best_lossy_real_domain, real_semantic_rank(common));
 					}
