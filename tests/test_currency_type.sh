@@ -4,16 +4,14 @@ set -eu
 . "$(dirname -- "$0")/testlib.sh"
 
 tpcc_translate -o"$tmp/currency_type.cc" tests/currency_type.pp
-# ncon.pas writes value_currency through WriteLn. TPCC's Write lowering must
-# retain the concrete Currency Str projection instead of selecting a real or
-# catch-all formatter.
-grep -Fq \
-	'tpcc_make_formatted_value(static_cast<::u_system::t_currency>(p_parsedexact))' \
-	"$tmp/currency_type.cc"
 tpcc_build "$tmp/currency_type" \
 	tests/currency_type_runtime.cpp \
 	"$tmp/system.cc"
-tpcc_run "$tmp/currency_type"
+output=$(tpcc_run "$tmp/currency_type")
+if [ "$output" != "value_currency = 123.4567" ]; then
+	echo "Currency WriteLn produced unexpected text: $output" >&2
+	exit 1
+fi
 
 tpcc_translate -o"$tmp/currency_range_modes.cc" \
 	tests/currency_range_modes.pp
@@ -22,13 +20,74 @@ tpcc_build "$tmp/currency_range_modes" \
 	"$tmp/system.cc"
 tpcc_run "$tmp/currency_range_modes"
 
-# The two calls resolve the same Currency formal. {$R} changes only the
-# selected conversion node: R- materializes low carrier bits, while R+ emits
-# the range failure at the call boundary.
-grep -Fq 'p_acceptcurrency(::u_system::m_currency_from_raw(' \
-	"$tmp/currency_range_modes.cc"
-grep -Fq 'p_acceptcurrency(::u_system::m_range_checked_currency_cast(' \
-	"$tmp/currency_range_modes.cc"
+tpcc_translate -dEXECUTE_CHECKED \
+	-o"$tmp/currency_range_modes_checked.cc" \
+	tests/currency_range_modes.pp
+tpcc_build "$tmp/currency_range_modes_checked" \
+	'-DTPCC_TEST_GENERATED_PROGRAM="currency_range_modes_checked.cc"' \
+	tests/currency_range_modes_runtime.cpp \
+	"$tmp/system.cc"
+if tpcc_run "$tmp/currency_range_modes_checked"; then
+	echo "checked out-of-range Currency origin did not fail" >&2
+	exit 1
+else
+	status=$?
+fi
+if [ "$status" -ne 201 ]; then
+	echo "checked out-of-range Currency origin returned $status rather than runtime error 201" >&2
+	exit 1
+fi
+
+tpcc_translate -dEXECUTE_CHECKED_TYPED \
+	-o"$tmp/currency_range_modes_checked_typed.cc" \
+	tests/currency_range_modes.pp
+tpcc_build "$tmp/currency_range_modes_checked_typed" \
+	'-DTPCC_TEST_GENERATED_PROGRAM="currency_range_modes_checked_typed.cc"' \
+	tests/currency_range_modes_runtime.cpp \
+	"$tmp/system.cc"
+if tpcc_run "$tmp/currency_range_modes_checked_typed"; then
+	echo "checked out-of-range typed Currency conversion did not fail" >&2
+	exit 1
+else
+	status=$?
+fi
+if [ "$status" -ne 201 ]; then
+	echo "checked out-of-range typed Currency conversion returned $status rather than runtime error 201" >&2
+	exit 1
+fi
+
+tpcc_translate -o"$tmp/currency_q_modes.cc" tests/currency_q_modes.pp
+tpcc_build "$tmp/currency_q_modes" \
+	tests/currency_q_modes_runtime.cpp \
+	"$tmp/system.cc"
+tpcc_run "$tmp/currency_q_modes"
+
+tpcc_translate -dEXECUTE_CHECKED \
+	-o"$tmp/currency_q_modes_checked.cc" \
+	tests/currency_q_modes.pp
+tpcc_build "$tmp/currency_q_modes_checked" \
+	'-DTPCC_TEST_GENERATED_PROGRAM="currency_q_modes_checked.cc"' \
+	tests/currency_q_modes_runtime.cpp \
+	"$tmp/system.cc"
+if tpcc_run "$tmp/currency_q_modes_checked"; then
+	echo "checked Currency arithmetic did not fail" >&2
+	exit 1
+else
+	status=$?
+fi
+if [ "$status" -ne 215 ]; then
+	echo "checked Currency arithmetic returned $status rather than runtime error 215" >&2
+	exit 1
+fi
+
+if tpcc_translate -o"$tmp/currency_checked_arithmetic_rejected.cc" \
+	tests/currency_checked_arithmetic_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted a folded overflowing checked Currency operation" >&2
+	exit 1
+fi
+grep -Fq "Currency constant overflow" "$tmp/stderr"
 
 if tpcc_translate -o"$tmp/currency_checked_constant_rejected.cc" \
 	tests/currency_checked_constant_rejected.pp \
@@ -37,7 +96,37 @@ then
 	echo "accepted an out-of-range R+ Currency constant" >&2
 	exit 1
 fi
-grep -Fq "integer constant out of range for Currency" "$tmp/stderr"
+grep -Fq "constant out of range for target type" "$tmp/stderr"
+
+if tpcc_translate -o"$tmp/currency_common_domain_ambiguous.cc" \
+	tests/currency_common_domain_ambiguous.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted incomparable Currency common domains" >&2
+	exit 1
+fi
+if [ "$(grep -c "ambiguous overload" "$tmp/stderr")" -ne 18 ]; then
+	echo "did not report every operand-order Currency ambiguity" >&2
+	cat "$tmp/stderr" >&2
+	exit 1
+fi
+
+if tpcc_translate -o"$tmp/currency_raw_field_rejected.cc" \
+	tests/currency_raw_field_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "exposed Currency's representation field to Pascal source" >&2
+	exit 1
+fi
+
+if tpcc_translate -o"$tmp/packed_currency_array_rejected.cc" \
+	tests/packed_currency_array_rejected.pp \
+	>"$tmp/stdout" 2>"$tmp/stderr"
+then
+	echo "accepted a Currency array inside a packed record" >&2
+	exit 1
+fi
+grep -Fq "alignment != 1" "$tmp/stderr"
 
 if tpcc_translate -o"$tmp/ordinal.cc" \
 	tests/currency_ordinal_rejected.pp \

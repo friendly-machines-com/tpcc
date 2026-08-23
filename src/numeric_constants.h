@@ -52,11 +52,10 @@ RealMaterialization materialize_decimal_origin(const DecimalOrigin& origin, Type
 std::optional<long double> round_typed_real(long double value, Type* target);
 bool typed_real_out_of_range(long double value, Type* target);
 
-/** Materialization of one exact decimal origin into Currency's signed
- * raw/10000 representation. This is separate from RealMaterialization because
- * passing through a binary floating container would lose precisely the
- * decimal information Currency exists to retain. */
-struct CurrencyMaterialization {
+/** Materialization into a signed fixed-decimal carrier. This is separate from
+ * RealMaterialization because passing an exact origin through a binary
+ * floating container would discard the decimal information being preserved. */
+struct FixedDecimalMaterialization {
 	RealMaterializationKind kind = RealMaterializationKind::InvalidTarget;
 	int64_t raw = 0;
 	// False only when no unchecked carrier result exists, such as conversion
@@ -65,11 +64,11 @@ struct CurrencyMaterialization {
 	bool unchecked_value_available = true;
 };
 
-CurrencyMaterialization materialize_currency_origin(const DecimalOrigin& origin);
-CurrencyMaterialization materialize_currency_integer(uint64_t magnitude, bool negative);
-CurrencyMaterialization materialize_currency_real(long double value);
-DecimalOrigin currency_decimal_origin(int64_t raw);
-bool is_currency_semantic_type(const Type* type);
+FixedDecimalMaterialization materialize_fixed_decimal_origin(const DecimalOrigin& origin, Type* target);
+FixedDecimalMaterialization materialize_fixed_decimal_integer(uint64_t magnitude, bool negative, Type* target);
+FixedDecimalMaterialization materialize_fixed_decimal_real(long double value, Type* target);
+DecimalOrigin fixed_decimal_origin(int64_t raw, const Type* type);
+bool is_fixed_decimal_semantic_type(const Type* type);
 
 enum class RealBinaryOperation {
 	Add,

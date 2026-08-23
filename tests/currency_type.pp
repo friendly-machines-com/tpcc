@@ -3,6 +3,8 @@ program CurrencyType;
 const
   RealOrigin = 0.1;
   RealOriginAlias = RealOrigin;
+  ExactRealOrigin = 2.5;
+  ExactRealOriginAlias = ExactRealOrigin;
   IntegerOrigin = 42;
   IntegerOriginAlias = IntegerOrigin;
   ExactTenth: Currency = 0.1;
@@ -13,6 +15,12 @@ const
 
 type
   PLocalInt64 = ^Int64;
+  TCurrencyBytes = array[0..7] of Byte;
+  TPackedCurrency = packed record
+    Prefix: Byte;
+    Value: Currency;
+    Suffix: Byte;
+  end;
 
 var
   C: Currency;
@@ -55,6 +63,22 @@ var
   ParsedOverflowCode: Integer;
   ParsedAnsiCode: Word;
   RoundTripCode: Integer;
+  MixedIntegerLeft: Currency;
+  MixedIntegerRight: Currency;
+  MixedCardinalLeft: Currency;
+  MixedCardinalRight: Currency;
+  ExactLiteralLeft: Currency;
+  ExactLiteralRight: Currency;
+  ExactAliasLeft: Currency;
+  ExactAliasRight: Currency;
+  ExactIntegerAliasLeft: Currency;
+  ExactIntegerAliasRight: Currency;
+  MixedIntegerLess: Boolean;
+  MixedIntegerGreater: Boolean;
+  IntegerQuotient: Double;
+  RawBytes: TCurrencyBytes;
+  PackedCurrency: TPackedCurrency;
+  PackedValueCorrect: Boolean;
 
 function Domain(Value: Single): Integer; overload;
 begin
@@ -102,6 +126,23 @@ begin
   FromIntegerAlias := IdentityCurrency(IntegerOriginAlias);
   FromReal := Double(3.125);
   FromCall := IdentityCurrency(RealOriginAlias);
+  MixedIntegerLeft := Currency(1.5) + Integer(2);
+  MixedIntegerRight := Integer(2) + Currency(1.5);
+  MixedCardinalLeft := Currency(1.5) + Cardinal(2);
+  MixedCardinalRight := Cardinal(2) + Currency(1.5);
+  ExactLiteralLeft := Currency(1.5) + 2.5;
+  ExactLiteralRight := 2.5 + Currency(1.5);
+  ExactAliasLeft := Currency(1.5) + ExactRealOriginAlias;
+  ExactAliasRight := ExactRealOriginAlias + Currency(1.5);
+  ExactIntegerAliasLeft := Currency(1.5) + IntegerOriginAlias;
+  ExactIntegerAliasRight := IntegerOriginAlias + Currency(1.5);
+  MixedIntegerLess := Currency(1.5) < Integer(2);
+  MixedIntegerGreater := Integer(2) > Currency(1.5);
+  IntegerQuotient := Currency(3.0) / Integer(2);
+  PackedCurrency.Prefix := 1;
+  PackedCurrency.Value := Currency(1.25);
+  PackedCurrency.Suffix := 2;
+  PackedValueCorrect := PackedCurrency.Value = Currency(1.25);
   AsDouble := C;
   AsInteger := Int64(C);
   Quotient := Currency(3.0) / Currency(2.0);
@@ -126,5 +167,7 @@ begin
 
   { FPC's PPU serialization deliberately views Currency storage as Int64.
     This is a representation overlay, not a numeric Currency-to-Int64 cast. }
-  Raw := PLocalInt64(@ExactTenth)^
+  RawBytes := TCurrencyBytes(ExactTenth);
+  Raw := PLocalInt64(@RawBytes)^;
+  ExerciseCurrencyWrite
 end.

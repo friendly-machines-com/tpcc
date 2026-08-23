@@ -142,6 +142,8 @@ enum class MatchFailure {
  * retaining heterogeneous declarations such as integer exponentiation;
  * CommonIntegerBinary additionally requires one common integer type;
  * CommonRealBinary does the same for ordinary binary-real types.
+ * CommonNumericBinary admits integer, binary-real, and fixed-decimal common
+ * domains but keeps incomparable lossy proposals ambiguous.
  * Pointer +/- offset is the agreed asymmetric exception. */
 enum class OverloadResolutionPolicy {
 	Ordinary,
@@ -149,6 +151,7 @@ enum class OverloadResolutionPolicy {
 	IntegerBinary,
 	CommonIntegerBinary,
 	CommonRealBinary,
+	CommonNumericBinary,
 	CommonBinaryPointerLeft,
 	CommonBinaryPointerLeftOrEnumStep,
 };

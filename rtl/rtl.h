@@ -654,6 +654,14 @@ template <typename Target, typename Source, typename Lower, typename Upper> inli
 	return m_ordinal_cast<Target>(source);
 }
 
+template <typename Target> inline Target m_range_error_value(t_integer error_code) {
+	// An exact untyped origin has no C++ carrier to pass to a checking helper.
+	// The frontend has nevertheless selected this destination and failure, so
+	// preserve the expression's result type while raising that known error.
+	m_runtime_error(error_code);
+	return {};
+}
+
 // C++ leaves an out-of-range floating-to-floating conversion undefined.
 // Pascal's unchecked real narrowing still needs a stable result, so finite
 // overflow is made explicit as signed infinity. Precision rounding and
@@ -713,6 +721,18 @@ inline t_currency m_range_checked_currency_cast(Source source) {
 	return m_currency_cast(source);
 }
 
+inline long double m_currency_round_nearest_even(long double value) {
+	const long double lower = ::floorl(value);
+	const long double fraction = value - lower;
+	if (fraction < 0.5L) {
+		return lower;
+	}
+	if (fraction > 0.5L) {
+		return lower + 1.0L;
+	}
+	return ::fmodl(lower, 2.0L) == 0.0L ? lower : lower + 1.0L;
+}
+
 inline t_currency m_currency_from_scaled_real(long double scaled, bool checked) {
 	constexpr long double limit = 0x1p63L;
 	if (!__builtin_isfinite(scaled)) {
@@ -734,13 +754,15 @@ inline t_currency m_currency_from_scaled_real(long double scaled, bool checked) 
 template <typename Source>
         requires std::is_floating_point_v<Source>
 inline t_currency m_currency_cast(Source source) {
-	return m_currency_from_scaled_real(::nearbyintl(static_cast<long double>(source) * 10000.0L), false);
+	// The Pascal equation specifies nearest-even conversion. Do not inherit a
+	// caller's mutable C floating environment through nearbyint.
+	return m_currency_from_scaled_real(m_currency_round_nearest_even(static_cast<long double>(source) * 10000.0L), false);
 }
 
 template <typename Source>
         requires std::is_floating_point_v<Source>
 inline t_currency m_range_checked_currency_cast(Source source) {
-	return m_currency_from_scaled_real(::nearbyintl(static_cast<long double>(source) * 10000.0L), true);
+	return m_currency_from_scaled_real(m_currency_round_nearest_even(static_cast<long double>(source) * 10000.0L), true);
 }
 
 template <typename Target>
@@ -758,13 +780,46 @@ inline Target m_currency_to_integer(t_currency source) {
 template <typename Source>
         requires std::is_integral_v<Source>
 inline t_currency o_implicit(Source source, m_conversion_target<t_currency>) {
+	return m_range_checked_currency_cast(source);
+}
+
+template <typename Source>
+        requires std::is_floating_point_v<Source>
+inline t_currency o_implicit(Source source, m_conversion_target<t_currency>) {
+	return m_range_checked_currency_cast(source);
+}
+
+template <typename Source>
+        requires(std::is_integral_v<Source> || std::is_floating_point_v<Source>)
+inline t_currency o_unchecked_implicit(Source source, m_conversion_target<t_currency>) {
 	return m_currency_cast(source);
+}
+
+template <typename Target>
+        requires std::is_floating_point_v<Target>
+inline Target o_implicit(t_currency source, m_conversion_target<Target>) {
+	return m_currency_to_real<Target>(source);
+}
+
+template <typename Source>
+        requires(std::is_integral_v<Source> || std::is_floating_point_v<Source>)
+inline t_currency o_explicit(Source source, m_conversion_target<t_currency>) {
+	return m_currency_cast(source);
+}
+
+template <typename Target>
+        requires std::is_integral_v<Target>
+inline Target o_explicit(t_currency source, m_conversion_target<Target>) {
+	return m_currency_to_integer<Target>(source);
 }
 
 inline t_boolean tpcc_bool_to_boolean(bool value) {
 	return value ? p_true : p_false;
 }
 
+// This header is installed for generated programs and cannot depend on the
+// compiler binary's implementation sources. Keep the same minimal two-word
+// operation here; compiler/RTL conformance tests guard the shared equation.
 struct m_currency_u128 {
 	uint64_t high;
 	uint64_t low;

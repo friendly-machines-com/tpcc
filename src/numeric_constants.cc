@@ -426,7 +426,7 @@ RealMaterialization materialize_decimal_origin(const DecimalOrigin& origin, Type
 }
 
 namespace {
-static uint64_t currency_raw_limit(bool negative) {
+static uint64_t fixed_decimal_raw_limit(bool negative) {
 	return negative ? uint64_t{1} << 63 : static_cast<uint64_t>(INT64_MAX);
 }
 
@@ -456,7 +456,7 @@ static int compare_decimal_remainder_with_half(std::string_view remainder) {
 	return 0;
 }
 
-static int64_t signed_currency_raw(uint64_t magnitude, bool negative) {
+static int64_t signed_fixed_decimal_raw(uint64_t magnitude, bool negative) {
 	if (!negative) {
 		return static_cast<int64_t>(magnitude);
 	}
@@ -466,28 +466,34 @@ static int64_t signed_currency_raw(uint64_t magnitude, bool negative) {
 	return -static_cast<int64_t>(magnitude);
 }
 
-static int64_t wrapped_currency_raw(uint64_t magnitude_modulo_2_64, bool negative) {
+static int64_t wrapped_fixed_decimal_raw(uint64_t magnitude_modulo_2_64, bool negative) {
 	const uint64_t bits = negative ? uint64_t{0} - magnitude_modulo_2_64 : magnitude_modulo_2_64;
 	return std::bit_cast<int64_t>(bits);
 }
 } // namespace
 
-CurrencyMaterialization materialize_currency_origin(const DecimalOrigin& origin) {
+FixedDecimalMaterialization materialize_fixed_decimal_origin(const DecimalOrigin& origin, Type* target) {
+	const FixedDecimalFormat* format = fixed_decimal_format(target);
+	if (!format || distinct_storage_type(format->raw_type) != int64_type()) {
+		return FixedDecimalMaterialization{RealMaterializationKind::InvalidTarget};
+	}
 	if (origin.is_zero()) {
-		// Currency has one zero representation, unlike IEEE binary reals.
-		return CurrencyMaterialization{RealMaterializationKind::Exact, 0};
+		// Signed fixed decimal has one zero representation, unlike IEEE binary
+		// real. Preserve that canonical form before exponent arithmetic.
+		return FixedDecimalMaterialization{RealMaterializationKind::Exact, 0};
 	}
 
-	const uint64_t limit = currency_raw_limit(origin.negative);
-	if (origin.exponent10 > INT64_MAX - 4) {
+	const uint64_t limit = fixed_decimal_raw_limit(origin.negative);
+	const int64_t scale = static_cast<int64_t>(format->decimal_scale);
+	if (origin.exponent10 > INT64_MAX - scale) {
 		// 10^64 and every greater decimal power are divisible by 2^64.
 		// The unchecked scaled result therefore has zero low bits.
-		return CurrencyMaterialization{RealMaterializationKind::OutOfRange, 0};
+		return FixedDecimalMaterialization{RealMaterializationKind::OutOfRange, 0};
 	}
-	if (origin.exponent10 < INT64_MIN + 4) {
-		return CurrencyMaterialization{RealMaterializationKind::Rounded, 0};
+	if (origin.exponent10 < INT64_MIN + scale) {
+		return FixedDecimalMaterialization{RealMaterializationKind::Rounded, 0};
 	}
-	const int64_t scaled_exponent = origin.exponent10 + 4;
+	const int64_t scaled_exponent = origin.exponent10 + scale;
 
 	if (scaled_exponent >= 0) {
 		uint64_t wrapped_magnitude = 0;
@@ -501,28 +507,28 @@ CurrencyMaterialization materialize_currency_origin(const DecimalOrigin& origin)
 				wrapped_magnitude *= 10;
 			}
 		}
-		const int64_t unchecked = wrapped_currency_raw(wrapped_magnitude, origin.negative);
+		const int64_t unchecked = wrapped_fixed_decimal_raw(wrapped_magnitude, origin.negative);
 
 		// A nonzero in-range Currency raw value has at most 19 decimal digits.
 		// Establish that bound before the checked accumulation so a huge source
 		// exponent never causes an exponent-sized loop.
 		if (scaled_exponent > 19 || origin.digits.size() > 19 - static_cast<size_t>(scaled_exponent)) {
-			return CurrencyMaterialization{RealMaterializationKind::OutOfRange, unchecked};
+			return FixedDecimalMaterialization{RealMaterializationKind::OutOfRange, unchecked};
 		}
 		uint64_t magnitude = 0;
 		for (char digit : origin.digits) {
 			if (!append_decimal_digit(&magnitude, static_cast<unsigned>(digit - '0'), limit)) {
-				return CurrencyMaterialization{RealMaterializationKind::OutOfRange, unchecked};
+				return FixedDecimalMaterialization{RealMaterializationKind::OutOfRange, unchecked};
 			}
 		}
 		for (int64_t i = 0; i < scaled_exponent; ++i) {
 			if (!append_decimal_digit(&magnitude, 0, limit)) {
-				return CurrencyMaterialization{RealMaterializationKind::OutOfRange, unchecked};
+				return FixedDecimalMaterialization{RealMaterializationKind::OutOfRange, unchecked};
 			}
 		}
-		return CurrencyMaterialization{
+		return FixedDecimalMaterialization{
 		    RealMaterializationKind::Exact,
-		    signed_currency_raw(magnitude, origin.negative),
+		    signed_fixed_decimal_raw(magnitude, origin.negative),
 		};
 	}
 
@@ -557,6 +563,9 @@ CurrencyMaterialization materialize_currency_origin(const DecimalOrigin& origin)
 		}
 		half_comparison = compare_decimal_remainder_with_half(remainder);
 	}
+	// Nearest-even is part of fixed-decimal materialization, not the host
+	// floating environment. Inspecting decimal digits keeps literals and
+	// untyped const aliases deterministic and substitution-equivalent.
 	if (half_comparison > 0 || (half_comparison == 0 && (wrapped_magnitude & 1) != 0)) {
 		++wrapped_magnitude;
 		if (in_range) {
@@ -568,53 +577,76 @@ CurrencyMaterialization materialize_currency_origin(const DecimalOrigin& origin)
 		}
 	}
 	if (!in_range) {
-		return CurrencyMaterialization{
+		return FixedDecimalMaterialization{
 		    RealMaterializationKind::OutOfRange,
-		    wrapped_currency_raw(wrapped_magnitude, origin.negative),
+		    wrapped_fixed_decimal_raw(wrapped_magnitude, origin.negative),
 		};
 	}
-	return CurrencyMaterialization{
+	return FixedDecimalMaterialization{
 	    remainder_nonzero ? RealMaterializationKind::Rounded : RealMaterializationKind::Exact,
-	    signed_currency_raw(magnitude, origin.negative),
+	    signed_fixed_decimal_raw(magnitude, origin.negative),
 	};
 }
 
-CurrencyMaterialization materialize_currency_integer(uint64_t magnitude, bool negative) {
+FixedDecimalMaterialization materialize_fixed_decimal_integer(uint64_t magnitude, bool negative, Type* target) {
 	DecimalOrigin origin;
 	origin.negative = negative;
 	origin.digits = std::to_string(magnitude);
 	origin.exponent10 = 0;
-	return materialize_currency_origin(origin);
+	return materialize_fixed_decimal_origin(origin, target);
 }
 
-CurrencyMaterialization materialize_currency_real(long double value) {
-	if (!__builtin_isfinite(value)) {
-		return CurrencyMaterialization{RealMaterializationKind::OutOfRange, 0, false};
+static long double round_fixed_decimal_nearest_even(long double value) {
+	const long double lower = ::floorl(value);
+	const long double fraction = value - lower;
+	if (fraction < 0.5L) {
+		return lower;
 	}
-	const long double scaled = ::nearbyintl(value * 10000.0L);
+	if (fraction > 0.5L) {
+		return lower + 1.0L;
+	}
+	return ::fmodl(lower, 2.0L) == 0.0L ? lower : lower + 1.0L;
+}
+
+FixedDecimalMaterialization materialize_fixed_decimal_real(long double value, Type* target) {
+	const FixedDecimalFormat* format = fixed_decimal_format(target);
+	if (!format || distinct_storage_type(format->raw_type) != int64_type()) {
+		return FixedDecimalMaterialization{RealMaterializationKind::InvalidTarget};
+	}
+	if (!__builtin_isfinite(value)) {
+		return FixedDecimalMaterialization{RealMaterializationKind::OutOfRange, 0, false};
+	}
+	long double factor = 1.0L;
+	for (unsigned i = 0; i < format->decimal_scale; ++i) {
+		factor *= 10.0L;
+	}
+	// Currency conversion is nearest-even regardless of the host process's
+	// current floating environment. `nearbyint` would make constant folding
+	// depend on that mutable host state.
+	const long double scaled = round_fixed_decimal_nearest_even(value * factor);
 	constexpr long double positive_limit = 0x1p63L;
 	if (scaled < -positive_limit || scaled >= positive_limit) {
 		if (!__builtin_isfinite(scaled)) {
 			// A finite source whose scaled value exceeds the compiler's
 			// lossless working container has no defined unchecked result.
-			return CurrencyMaterialization{RealMaterializationKind::OutOfRange, 0, false};
+			return FixedDecimalMaterialization{RealMaterializationKind::OutOfRange, 0, false};
 		}
 		long double remainder = ::fmodl(scaled, 0x1p64L);
 		if (remainder < 0) {
 			remainder += 0x1p64L;
 		}
-		return CurrencyMaterialization{
+		return FixedDecimalMaterialization{
 		    RealMaterializationKind::OutOfRange,
 		    std::bit_cast<int64_t>(static_cast<uint64_t>(remainder)),
 		};
 	}
-	return CurrencyMaterialization{
-	    scaled == value * 10000.0L ? RealMaterializationKind::Exact : RealMaterializationKind::Rounded,
+	return FixedDecimalMaterialization{
+	    scaled == value * factor ? RealMaterializationKind::Exact : RealMaterializationKind::Rounded,
 	    static_cast<int64_t>(scaled),
 	};
 }
 
-DecimalOrigin currency_decimal_origin(int64_t raw) {
+DecimalOrigin fixed_decimal_origin(int64_t raw, const Type* type) {
 	DecimalOrigin origin;
 	origin.negative = raw < 0;
 	uint64_t magnitude;
@@ -624,12 +656,13 @@ DecimalOrigin currency_decimal_origin(int64_t raw) {
 		magnitude = static_cast<uint64_t>(origin.negative ? -raw : raw);
 	}
 	origin.digits = std::to_string(magnitude);
-	origin.exponent10 = -4;
+	const FixedDecimalFormat* format = fixed_decimal_format(type);
+	origin.exponent10 = format ? -static_cast<int64_t>(format->decimal_scale) : 0;
 	return origin;
 }
 
-bool is_currency_semantic_type(const Type* type) {
-	return distinct_storage_type(type) == currency_type();
+bool is_fixed_decimal_semantic_type(const Type* type) {
+	return fixed_decimal_format(type) != nullptr;
 }
 
 std::optional<long double> round_typed_real(long double value, Type* target) {

@@ -150,6 +150,42 @@ operator :=(a: SmallInt): Currency; external name '::u_system::o_implicit';
 operator :=(a: Cardinal): Currency; external name '::u_system::o_implicit';
 operator :=(a: Integer): Currency; external name '::u_system::o_implicit';
 
+{ These domains are not ordered by value-set inclusion. Checked and unchecked
+  declarations expose the same conversion edge to overload resolution; $R
+  selects only which implementation executes after that resolution. }
+operator Implicit(a: Int64): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: Int64): Currency; external name '::u_system::o_unchecked_implicit';
+operator Implicit(a: QWord): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: QWord): Currency; external name '::u_system::o_unchecked_implicit';
+operator Implicit(a: Single): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: Single): Currency; external name '::u_system::o_unchecked_implicit';
+operator Implicit(a: Double): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: Double): Currency; external name '::u_system::o_unchecked_implicit';
+operator Implicit(a: Extended): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicit(a: Extended): Currency; external name '::u_system::o_unchecked_implicit';
+
+{ Every Currency value lies within the real exponent ranges, but a binary
+  real cannot preserve Currency's complete decimal grid. These are therefore
+  implicit narrowing edges even though no runtime range check is necessary. }
+operator :=(a: Currency): Single; external name '::u_system::o_implicit';
+operator :=(a: Currency): Double; external name '::u_system::o_implicit';
+operator :=(a: Currency): Extended; external name '::u_system::o_implicit';
+
+operator Explicit(a: Int64): Currency; external name '::u_system::o_explicit';
+operator Explicit(a: QWord): Currency; external name '::u_system::o_explicit';
+operator Explicit(a: Single): Currency; external name '::u_system::o_explicit';
+operator Explicit(a: Double): Currency; external name '::u_system::o_explicit';
+operator Explicit(a: Extended): Currency; external name '::u_system::o_explicit';
+
+operator Explicit(a: Currency): Byte; external name '::u_system::o_explicit';
+operator Explicit(a: Currency): ShortInt; external name '::u_system::o_explicit';
+operator Explicit(a: Currency): Word; external name '::u_system::o_explicit';
+operator Explicit(a: Currency): SmallInt; external name '::u_system::o_explicit';
+operator Explicit(a: Currency): Integer; external name '::u_system::o_explicit';
+operator Explicit(a: Currency): Cardinal; external name '::u_system::o_explicit';
+operator Explicit(a: Currency): Int64; external name '::u_system::o_explicit';
+operator Explicit(a: Currency): QWord; external name '::u_system::o_explicit';
+
 // The parser chooses one of these ordinary operator families before overload
 // resolution. Keeping both rows explicit also lets user-defined arithmetic
 // make the same checked/unchecked promise as System arithmetic.
@@ -553,6 +589,16 @@ procedure exclude(var values; const item); external name '::u_system::p_exclude'
 // covariance. The omitted source remains only for compiler-owned families
 // which Pascal cannot quantify over directly, such as integer subranges and
 // named enumerations.
+// Each complete small-integer domain has an exact declaration. Otherwise an
+// Integer actual would face incomparable lossless conversions to the Int64
+// and Currency projections; the library must state its intended textual
+// domains instead of asking ranking to prefer one numeric family.
+procedure str(const x: Byte; var s); overload; external name '::u_system::p_str';
+procedure str(const x: ShortInt; var s); overload; external name '::u_system::p_str';
+procedure str(const x: Word; var s); overload; external name '::u_system::p_str';
+procedure str(const x: SmallInt; var s); overload; external name '::u_system::p_str';
+procedure str(const x: Integer; var s); overload; external name '::u_system::p_str';
+procedure str(const x: Cardinal; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Int64; var s); overload; external name '::u_system::p_str';
 procedure str(const x: QWord; var s); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s); overload; external name '::u_system::p_str';
@@ -566,6 +612,12 @@ procedure str(const x; var s); overload; external name '::u_system::p_str';
 // ShortString-to-AnsiString assignment conversion. These select the unbounded
 // managed-string sink while the omitted forms above preserve each String[N]
 // destination's exact capacity.
+procedure str(const x: Byte; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: ShortInt; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: Word; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: SmallInt; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: Integer; var s: AnsiString); overload; external name '::u_system::p_str';
+procedure str(const x: Cardinal; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: Int64; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: QWord; var s: AnsiString); overload; external name '::u_system::p_str';
 procedure str(const x: Extended; var s: AnsiString); overload; external name '::u_system::p_str';

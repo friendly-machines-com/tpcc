@@ -2811,14 +2811,6 @@ void Emitter::emit_expression(Node* expr) {
 			}
 			fprintf(active, ")");
 		}
-	} else if (auto currency = dynamic_cast<CurrencyValue*>(expr)) {
-		fprintf(active, "::u_system::m_currency_from_raw(");
-		if (currency->raw == INT64_MIN) {
-			fprintf(active, "std::numeric_limits<::u_system::t_int64>::min()");
-		} else {
-			fprintf(active, "static_cast<::u_system::t_int64>(%lld)", static_cast<long long>(currency->raw));
-		}
-		fprintf(active, ")");
 	} else if (auto s = dynamic_cast<String*>(expr)) {
 		if (s->ty == char_type()) {
 			if (s->value.size() != 1) {
@@ -3360,8 +3352,6 @@ void Emitter::emit_expression(Node* expr) {
 			source_integer_type = range->base_type;
 		}
 		const bool source_integer = ca->a && (source_integer_type == &untyped_integer_type() || integer_bounds(source_integer_type, &source_integer_bounds));
-		const bool source_currency = ca->a && is_currency_semantic_type(ca->a->ty);
-		const bool target_currency = is_currency_semantic_type(ca->ty);
 		const bool pointer_conversion = (source_pointer && (target_pointer || target_pointer_integer || target_object_reference)) || (source_object_reference && (target_pointer || target_pointer_integer)) || (source_integer && target_pointer);
 		auto source_routine = dynamic_cast<RoutineType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_routine = dynamic_cast<RoutineType*>(ca->ty);
@@ -3371,52 +3361,20 @@ void Emitter::emit_expression(Node* expr) {
 		auto source_packed = dynamic_cast<PackedRecordType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_byte_array = predefined_byte_array_storage_view(ca->ty, ca->a ? ca->a->ty : nullptr) ? dynamic_cast<FixedArrayType*>(ca->ty) : nullptr;
 
-		if (target_currency && ca->a && (source_integer || real_type(ca->a->ty) || (source_real_origin && source_real_origin->is_origin()))) {
-			if (source_real_origin && source_real_origin->is_origin()) {
-				CurrencyMaterialization converted = materialize_currency_origin(*source_real_origin->origin);
-				if (!dynamic_cast<RangeCheckedCast*>(ca) || converted.kind != RealMaterializationKind::OutOfRange) {
-					// Candidate matching materializes every executable origin
-					// into CurrencyValue. Only the deferred failure of a
-					// checked out-of-range origin may retain origin syntax.
-					unhandled_node("unmaterialized Currency origin reached cast emission", ca);
-				}
-				fprintf(active, "([]() -> ::u_system::t_currency { "
-				                "::u_system::m_runtime_error(201); return {}; }())");
-			} else {
-				fprintf(active, dynamic_cast<RangeCheckedCast*>(ca) ? "::u_system::m_range_checked_currency_cast(" : "::u_system::m_currency_cast(");
-				emit_expression(ca->a);
-				fprintf(active, ")");
-			}
-		} else if (source_currency && real_type(ca->ty)) {
-			fprintf(active, "::u_system::m_currency_to_real<");
-			emit_type_ref(ca->ty);
-			fprintf(active, ">(");
-			emit_expression(ca->a);
-			fprintf(active, ")");
-		} else if (source_currency && ordinal_type(ca->ty)) {
-			fprintf(active, "::u_system::m_currency_to_integer<");
-			emit_type_ref(ca->ty);
-			fprintf(active, ">(");
-			emit_expression(ca->a);
-			fprintf(active, ")");
-		} else if (dynamic_cast<RangeCheckedCast*>(ca)) {
-			if (real_conversion) {
-				if (source_real_origin && source_real_origin->is_origin()) {
-					// Overload selection already established that this exact
-					// origin is outside the selected destination. It has no
-					// runtime source carrier to emit, so defer the known R+
-					// failure to expression evaluation rather than inventing
-					// an Extended source or leaking an untyped origin.
-					fprintf(active, "([]() -> ");
-					emit_type_ref(ca->ty);
-					fprintf(active, " { ::u_system::m_runtime_error(201); return {}; }())");
-				} else {
+		if (auto checked = dynamic_cast<RangeCheckedCast*>(ca)) {
+			if (checked->disposition == RangeCheckDisposition::AlwaysFail) {
+				// The exact origin has no C++ value to emit. The semantic node
+				// already records the selected failure, so emission needs only
+				// the requested result carrier and error number.
+				fprintf(active, "::u_system::m_range_error_value<");
+				emit_type_ref(ca->ty);
+				fprintf(active, ">(201)");
+			} else if (real_conversion) {
 					fprintf(active, "::u_system::m_range_checked_real_cast<");
 					emit_type_ref(ca->ty);
 					fprintf(active, ">(");
 					emit_expression(ca->a);
 					fprintf(active, ")");
-				}
 			} else {
 				TypeBound lower(TypeBoundKind::Low, ca->ty);
 				TypeBound upper(TypeBoundKind::High, ca->ty);

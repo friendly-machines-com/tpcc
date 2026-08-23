@@ -104,6 +104,26 @@ const Type* distinct_storage_type(const Type* type) {
 	return type;
 }
 
+const FixedDecimalFormat* fixed_decimal_format(const Type* type) {
+	type = distinct_storage_type(type);
+	return type && type->fixed_decimal_format ? &*type->fixed_decimal_format : nullptr;
+}
+
+std::optional<uint64_t> fixed_decimal_scale_factor(const Type* type) {
+	const FixedDecimalFormat* format = fixed_decimal_format(type);
+	if (!format || distinct_storage_type(format->raw_type) != int64_type()) {
+		return std::nullopt;
+	}
+	uint64_t factor = 1;
+	for (unsigned i = 0; i < format->decimal_scale; ++i) {
+		if (factor > UINT64_MAX / 10) {
+			return std::nullopt;
+		}
+		factor *= 10;
+	}
+	return factor;
+}
+
 EnumType::EnumType(SourceLocation source_location) : Type(std::move(source_location)), cxx_name("") {
 }
 
@@ -744,6 +764,14 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 	if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
 		// FPC's `type Base` changes Pascal identity, not storage layout.
 		return type_layout_impl(packed_container, distinct->base_type, visiting);
+	} else if (const FixedDecimalFormat* format = fixed_decimal_format(ty)) {
+		// A fixed-decimal carrier may be record-shaped for nominal Pascal and
+		// C++ identity while still having one scalar storage equation. Packed
+		// fields use that scalar layout because generated accessors copy
+		// through aligned temporaries; a FixedArrayType retains the returned
+		// alignment and is therefore rejected below when its elements cannot
+		// be placed byte-aligned.
+		return type_layout_impl(false, format->raw_type, visiting);
 	} else if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty)) {
 		return intrinsic->layout;
 	} else if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
@@ -851,6 +879,12 @@ static bool predefined_scalar_byte_copyable(const Type* type) {
 	if (auto range = dynamic_cast<const SubrangeType*>(type)) {
 		return predefined_scalar_byte_copyable(range->base_type);
 	}
+	if (fixed_decimal_format(type)) {
+		// The fixed-decimal metadata guarantees a single unmanaged scalar
+		// carrier. Equal-sized array-of-Byte casts are representation views,
+		// not numeric conversions through that carrier.
+		return true;
+	}
 	if (auto intrinsic = dynamic_cast<const IntrinsicType*>(type)) {
 		if (!intrinsic->carrier) {
 			return false;
@@ -867,7 +901,6 @@ static bool predefined_scalar_byte_copyable(const Type* type) {
 		case IntrinsicCarrier::Float:
 		case IntrinsicCarrier::Double:
 		case IntrinsicCarrier::LongDouble:
-		case IntrinsicCarrier::Currency:
 		case IntrinsicCarrier::Character:
 		case IntrinsicCarrier::WideCharacter:
 			return true;
@@ -923,7 +956,6 @@ static bool predefined_overlay_byte_copyable(const Type* type, std::set<const Ty
 		case IntrinsicCarrier::Float:
 		case IntrinsicCarrier::Double:
 		case IntrinsicCarrier::LongDouble:
-		case IntrinsicCarrier::Currency:
 		case IntrinsicCarrier::Character:
 		case IntrinsicCarrier::WideCharacter:
 			return true;
@@ -1248,8 +1280,6 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 	int integer_cost = integer_conversion_cost(source, target);
 	int source_real = real_semantic_rank(source);
 	int target_real = real_semantic_rank(target);
-	const bool source_currency = is_currency_semantic_type(source);
-	const bool target_currency = is_currency_semantic_type(target);
 	if (source_const != source && source == target) {
 		// Exact identity was already tested by the matcher. A distinct
 		// identity over this same carrier is the FPC strong-type direct case,
@@ -1271,11 +1301,6 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 		// The expression matcher owns exact decimal materialization and its
 		// candidate-local quality. At type level this merely records that an
 		// origin may acquire any visible concrete real destination.
-		return direct_conversion();
-	} else if ((source == &untyped_real_type() || source == &untyped_integer_type()) && target_currency) {
-		// Expression matching owns exact decimal scaling and range checking.
-		// At type level this only records that a fixed Currency context can
-		// consume either numeric-origin category.
 		return direct_conversion();
 	} else if (source_range && source_range->base_type == target) {
 		// Char is a distinct nominal ordinal family, not an unsigned integer
@@ -1301,21 +1326,6 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 		return implicit_conversion(distance);
 	} else if (integer_widening_rank(source) >= 0 && target_real >= 0) {
 		return implicit_conversion(500 + static_cast<unsigned>(target_real));
-	} else if (source_currency && target_real >= 0) {
-		// Every Currency value lies within the binary-real exponent range.
-		// Precision can still be lost; match_argument records that separately
-		// for common-domain selection.
-		return implicit_conversion(600 + static_cast<unsigned>(target_real));
-	} else if (target_currency && integer_widening_rank(source) >= 0) {
-		OrdinalBounds bounds;
-		if (!integer_bounds(source, &bounds)) {
-			return std::nullopt;
-		}
-		const uint64_t positive_limit = static_cast<uint64_t>(INT64_MAX) / 10000;
-		const uint64_t negative_limit = (uint64_t{1} << 63) / 10000;
-		if (bounds.max_positive <= positive_limit && (!bounds.signed_type || bounds.min_magnitude <= negative_limit)) {
-			return implicit_conversion(600 + static_cast<unsigned>(integer_widening_rank(source)));
-		}
 	}
 	return std::nullopt;
 }
@@ -1333,10 +1343,6 @@ std::optional<ValueConversion> IntrinsicType::destination_conversion_from(const 
 		// range or precision. make_implicit_cast owns the optional range
 		// check after this relation has admitted the store.
 		return implicit_conversion(static_cast<unsigned>(std::abs(target_real - source_real)));
-	} else if (is_currency_semantic_type(this) && (integer_widening_rank(source) >= 0 || real_semantic_rank(source) >= 0)) {
-		// Int64/QWord and every binary-real domain contain values outside
-		// Currency. Assignment remains legal but is a narrowing boundary.
-		return implicit_conversion(600);
 	}
 	return std::nullopt;
 }
@@ -1353,10 +1359,6 @@ bool IntrinsicType::predefined_explicit_conversion_from(const Type* source) cons
 		// Type(value) explicitly selects the destination representation, so
 		// both real-family directions are one predefined cast even though
 		// only widening is an implicit overload edge.
-		return true;
-	} else if (is_currency_semantic_type(this) && (integer_widening_rank(source) >= 0 || real_semantic_rank(source) >= 0)) {
-		return true;
-	} else if (is_currency_semantic_type(source) && (integer_widening_rank(this) >= 0 || real_semantic_rank(this) >= 0)) {
 		return true;
 	}
 	// Only the address-sized integer types are direct pointer destinations.

@@ -27,7 +27,7 @@ int main() {
 	if (p_asdouble != 1.25 || p_asinteger != 1 || p_quotient != 1.5) {
 		return 6;
 	}
-	if (p_currencyless != ::u_system::p_true || p_currencysize != 8 || p_raw != 1000) {
+	if (p_currencyless != ::u_system::p_true || p_currencysize != 8 || p_raw != 1000 || p_packedvaluecorrect != ::u_system::p_true) {
 		return 7;
 	}
 	if (p_literaldomain != 3 || p_literalaliasdomain != 3 || p_typedcurrencydomain != 4) {
@@ -44,6 +44,15 @@ int main() {
 	}
 	if (p_formattedrounded.m_string() != "26.00" || p_formattedhalf.m_string() != "1.00" || p_formattedmaximum.m_string() != "922337203685477.5807" || p_roundtriptext.m_string() != "922337203685477.5807" || p_roundtripcode != 0 || ::u_system::m_currency_raw(p_roundtripvalue) != INT64_MAX) {
 		return 12;
+	}
+	if (::u_system::m_currency_raw(p_mixedintegerleft) != 35000 || ::u_system::m_currency_raw(p_mixedintegerright) != 35000 || ::u_system::m_currency_raw(p_mixedcardinalleft) != 35000 || ::u_system::m_currency_raw(p_mixedcardinalright) != 35000) {
+		return 13;
+	}
+	if (::u_system::m_currency_raw(p_exactliteralleft) != 40000 || ::u_system::m_currency_raw(p_exactliteralright) != 40000 || p_mixedintegerless != ::u_system::p_true || p_mixedintegergreater != ::u_system::p_true || p_integerquotient != 1.5) {
+		return 14;
+	}
+	if (::u_system::m_currency_raw(p_exactaliasleft) != 40000 || ::u_system::m_currency_raw(p_exactaliasright) != 40000 || ::u_system::m_currency_raw(p_exactintegeraliasleft) != 435000 || ::u_system::m_currency_raw(p_exactintegeraliasright) != 435000) {
+		return 15;
 	}
 	return 0;
 }

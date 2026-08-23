@@ -204,7 +204,6 @@ enum class IntrinsicCarrier {
 	Float,
 	Double,
 	LongDouble,
-	Currency,
 	Character,
 	WideCharacter,
 	AnsiString,
@@ -244,6 +243,8 @@ class Builtin : public Node {
 	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
 };
+
+class RecordLiteral;
 
 // The single, program-wide root frame. Holds intrinsic types (Integer,
 // Boolean, ...) and compiler-provided declarations which Pascal source cannot
@@ -288,6 +289,9 @@ Type* single_type();
 Type* double_type();
 Type* extended_type();
 Type* currency_type();
+StorageSlot* currency_raw_field();
+RecordLiteral* make_currency_constant(int64_t raw);
+std::optional<int64_t> currency_constant_raw(const Node* value);
 Type* set_type();
 Type* fixedarray_type();
 Type* unknown_type();

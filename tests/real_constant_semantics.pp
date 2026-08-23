@@ -66,6 +66,26 @@ begin
     Result := 3
 end;
 
+function ArithmeticDomain(Value: Single): Integer; overload;
+begin
+  ArithmeticDomain := 1
+end;
+
+function ArithmeticDomain(Value: Double): Integer; overload;
+begin
+  ArithmeticDomain := 2
+end;
+
+function ArithmeticDomain(Value: Extended): Integer; overload;
+begin
+  ArithmeticDomain := 3
+end;
+
+function ArithmeticDomain(Value: Currency): Integer; overload;
+begin
+  ArithmeticDomain := 4
+end;
+
 { These bodies are not executed. They verify that R+ and R- retain the same
   selected Single overload even when the origin exceeds every real domain;
   only the constructed conversion/check differs. }
@@ -82,23 +102,28 @@ begin
 end;
 
 begin
+{$ifdef EXECUTE_UNCHECKED_HUGE}
+  CompileUncheckedHugeOrigin
+{$elseif defined(EXECUTE_CHECKED_HUGE)}
+  CompileCheckedHugeOrigin
+{$else}
   ExactRank := Domain(ExactOrigin);
   ExactAliasRank := Domain(ExactAlias);
   RoundedRank := Domain(RoundedOrigin);
   RoundedAliasRank := Domain(RoundedAlias);
   RoundedIntegerRank := Domain(16777217);
   WideIntegerRank := Domain(MaximumIntegerOrigin);
-  WideIntegerMixedRank := Domain(MaximumIntegerOrigin + 0.5);
-  FoldedRank := Domain(Z);
+  WideIntegerMixedRank := ArithmeticDomain(MaximumIntegerOrigin + 0.5);
+  FoldedRank := ArithmeticDomain(Z);
 
   SingleValue := 2.0;
-  ExactMixedRank := Domain(SingleValue + 0.5);
-  RoundedMixedRank := Domain(SingleValue + 0.1);
+  ExactMixedRank := ArithmeticDomain(SingleValue + 0.5);
+  RoundedMixedRank := ArithmeticDomain(SingleValue + 0.1);
 
   Milliseconds := 500;
-  AddRank := Domain(Milliseconds + 1000.0);
-  MultiplyRank := Domain(Milliseconds * 1000.0);
-  DivideRank := Domain(Milliseconds / 1000.0);
+  AddRank := ArithmeticDomain(Milliseconds + 1000.0);
+  MultiplyRank := ArithmeticDomain(Milliseconds * 1000.0);
+  DivideRank := ArithmeticDomain(Milliseconds / 1000.0);
   MixedLess := Milliseconds < 1000.0;
 
   FoldedZ := Z;
@@ -116,4 +141,5 @@ begin
   TinySingle := Single(1e-1000);
   TinyDouble := Double(1e-1000);
   TinyExtended := Extended(1e-5000)
+{$endif}
 end.

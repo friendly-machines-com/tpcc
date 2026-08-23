@@ -464,9 +464,15 @@ class Cast : public UnaryOperation {
  * active. Conversion viability is still decided by the ordinary Type
  * conversion rules; this node only preserves the destination-boundary check
  * until C++ emission. */
+enum class RangeCheckDisposition {
+	CheckRuntimeValue,
+	AlwaysFail,
+};
+
 class RangeCheckedCast : public Cast {
       public:
-	RangeCheckedCast(Node* value, Type* target);
+	RangeCheckDisposition disposition;
+	RangeCheckedCast(Node* value, Type* target, RangeCheckDisposition disposition = RangeCheckDisposition::CheckRuntimeValue);
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 };
@@ -623,18 +629,6 @@ class Real : public Node {
 		return origin.has_value();
 	}
 
-	const char* diagnostic_kind() const override;
-	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
-	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
-};
-
-/** One already-materialized Currency value. `raw` is the canonical signed
- * scaled integer; it is not an ordinal Pascal value and must never be folded
- * through Integer merely because the runtime carrier contains an Int64. */
-class CurrencyValue : public Node {
-      public:
-	int64_t raw;
-	explicit CurrencyValue(int64_t raw);
 	const char* diagnostic_kind() const override;
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;

@@ -1,7 +1,9 @@
 #include <bit>
 #include <cstdint>
 
+#ifndef TPCC_TEST_GENERATED_PROGRAM
 #define TPCC_TEST_GENERATED_PROGRAM "currency_range_modes.cc"
+#endif
 #include "generated_program_runtime.h"
 
 int main() {

@@ -1,13 +1,18 @@
 #include <cmath>
 #include <limits>
 
+#ifndef TPCC_TEST_GENERATED_PROGRAM
 #define TPCC_TEST_GENERATED_PROGRAM "real_constant_semantics.cc"
+#endif
 #include "generated_program_runtime.h"
 
 int main() {
 	if (tpcc_run_generated_program() != 0) {
 		return 1;
 	}
+#ifdef TPCC_EXPECT_HUGE
+	return p_exactrank == 1 ? 0 : 16;
+#endif
 	if (p_exactrank != 1 || p_exactaliasrank != p_exactrank) {
 		return 2;
 	}

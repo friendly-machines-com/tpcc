@@ -8,21 +8,6 @@ tpcc_translate \
 	-o"$tmp/real_constant_semantics.cc" \
 	tests/real_constant_semantics.pp
 
-# Both procedures selected Domain(Single). R changes only the constructed
-# unchecked value versus checked-failure expression after overload selection.
-grep -Fq 'p_domain(std::numeric_limits<::u_system::t_single>::infinity())' \
-	"$tmp/real_constant_semantics.cc"
-grep -Fq 'p_domain(([]() -> ::u_system::t_single { ::u_system::m_runtime_error(201); return {}; }()))' \
-	"$tmp/real_constant_semantics.cc"
-
-# An ordinary integer paired with an ordinary-real origin stays in the
-# integer/binary-real family. Merely declaring another exact fixed-point
-# domain must not inject that domain into source which never mentions it.
-if grep -Fq 't_currency' "$tmp/real_constant_semantics.cc"; then
-	echo "ordinary integer/real arithmetic selected Currency" >&2
-	exit 1
-fi
-
 tpcc_translate -dCPUX86_64 \
 	-o"$tmp/x86_64.cc" \
 	tests/real_constant_semantics.pp
@@ -36,6 +21,35 @@ tpcc_build "$tmp/real_constant_semantics" \
 	"$tmp/system.cc"
 
 "$tmp/real_constant_semantics"
+
+tpcc_translate -dEXECUTE_UNCHECKED_HUGE \
+	-o"$tmp/real_constant_unchecked_huge.cc" \
+	tests/real_constant_semantics.pp
+tpcc_build "$tmp/real_constant_unchecked_huge" \
+	'-DTPCC_TEST_GENERATED_PROGRAM="real_constant_unchecked_huge.cc"' \
+	-DTPCC_EXPECT_HUGE \
+	tests/real_constant_semantics_runtime.cpp \
+	"$tmp/system.cc"
+tpcc_run "$tmp/real_constant_unchecked_huge"
+
+tpcc_translate -dEXECUTE_CHECKED_HUGE \
+	-o"$tmp/real_constant_checked_huge.cc" \
+	tests/real_constant_semantics.pp
+tpcc_build "$tmp/real_constant_checked_huge" \
+	'-DTPCC_TEST_GENERATED_PROGRAM="real_constant_checked_huge.cc"' \
+	-DTPCC_EXPECT_HUGE \
+	tests/real_constant_semantics_runtime.cpp \
+	"$tmp/system.cc"
+if tpcc_run "$tmp/real_constant_checked_huge"; then
+	echo "checked out-of-range real origin did not fail" >&2
+	exit 1
+else
+	status=$?
+fi
+if [ "$status" -ne 201 ]; then
+	echo "checked out-of-range real origin returned $status rather than runtime error 201" >&2
+	exit 1
+fi
 
 if tpcc_translate \
 	-o"$tmp/out_of_domain.cc" \

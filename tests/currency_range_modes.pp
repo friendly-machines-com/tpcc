@@ -32,7 +32,15 @@ begin
 end;
 
 begin
+{$ifdef EXECUTE_CHECKED}
+  CompileCheckedOrigin
+{$elseif defined(EXECUTE_CHECKED_TYPED)}
+  RuntimeInput := TypedHugeInteger;
+  {$R+}
+  RuntimeWrapped := RuntimeInput
+{$else}
   {$R-}
   RuntimeInput := TypedHugeInteger;
   RuntimeWrapped := RuntimeInput
+{$endif}
 end.

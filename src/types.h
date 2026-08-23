@@ -14,10 +14,21 @@ class Property;
 class Method;
 class ErrorLetContext;
 class Unit;
+class Type;
 
 struct TypeLayout {
 	uint64_t size;
 	uint64_t alignment;
+};
+
+/** Storage description for a decimal fixed-point Pascal domain.
+ *
+ * This describes representation and exact-origin materialization only. It
+ * deliberately does not imply assignment or operator availability: those
+ * language edges still have to be declared in Pascal. */
+struct FixedDecimalFormat {
+	Type* raw_type;
+	unsigned decimal_scale;
 };
 
 enum class ValueConversionClass {
@@ -78,6 +89,7 @@ struct SourceLocation {
 class Type {
       public:
 	SourceLocation source_location;
+	std::optional<FixedDecimalFormat> fixed_decimal_format;
 	// The one FPC-style default indexed property declared by this type.
 	// Descendant lookup walks the static type hierarchy when this is null.
 	// Built-in indexable types receive a compiler-synthesized property lazily.
@@ -255,6 +267,8 @@ struct DistinctType : public Type {
  * This is representation inspection, not a conversion search. */
 Type* distinct_storage_type(Type* type);
 const Type* distinct_storage_type(const Type* type);
+const FixedDecimalFormat* fixed_decimal_format(const Type* type);
+std::optional<uint64_t> fixed_decimal_scale_factor(const Type* type);
 
 /** One exact value in a Pascal ordinal domain. Signed magnitude keeps every
  * predefined 64-bit integer endpoint representable without using a wider host
