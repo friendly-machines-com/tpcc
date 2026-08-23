@@ -465,6 +465,10 @@ struct AggregateField {
 	std::string pas_name;
 	StorageSlot* slot;
 	Type* ty;
+	// Point at the field identifier, not the token after its type expression.
+	// Layout errors must identify the declaration which introduced the field,
+	// including when several identifiers share one type expression.
+	SourceLocation source_location = SourceLocation::internal();
 };
 
 struct VariantPart;
@@ -616,12 +620,27 @@ struct RecordLayout {
 	std::vector<AggregateFieldLayout> fields;
 };
 
+/** Source context for a rejected packed-record array field.
+ *
+ * Type layout is shared by constant evaluation and emission and therefore
+ * cannot itself report through Parser state. Return the owning declaration
+ * context so the requesting phase can issue a normal located diagnostic
+ * instead of aborting from inside the recursive layout walker. */
+struct PackedRecordLayoutError {
+	PackedRecordType* record = nullptr;
+	std::string field_name;
+	SourceLocation field_location = SourceLocation::internal();
+	FixedArrayType* array = nullptr;
+	Type* element_type = nullptr;
+	uint64_t required_alignment = 0;
+};
+
 // Compiler-side target layout used by SizeOf constant evaluation and by the
 // independent assertions emitted for ordinary C++ records.
 // PACKED_CONTAINER is whether the use of the type is inside a packed container.
 std::optional<TypeLayout> type_layout(bool packed_container, Type* ty);
 std::optional<RecordLayout> record_layout(RecordType* record);
-std::optional<RecordLayout> packed_record_layout(PackedRecordType* record);
+std::optional<RecordLayout> packed_record_layout(PackedRecordType* record, PackedRecordLayoutError* error = nullptr);
 // Pascal permits an equal-sized fixed array of exactly Byte to view a
 // trivially copyable scalar's object representation. This is a directed
 // storage-view relation, not a general equal-layout value conversion.

@@ -5505,6 +5505,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 			// layout reconstruction and emitted C++ field order use the same
 			// authoritative sequence.
 			while (!at_visibility_section()) {
+				const SourceLocation field_location = current_location();
 				auto first_name = maybe_parse_identifier();
 				if (!first_name) {
 					break;
@@ -5531,11 +5532,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 					}
 					if (registered) {
 						if (auto packed = dynamic_cast<PackedRecordType*>(owner_class)) {
-							packed->fields.push_back({member_name, slot, ty});
+							packed->fields.push_back({member_name, slot, ty, field_location});
 						} else if (auto record = dynamic_cast<RecordType*>(owner_class)) {
-							record->fields.push_back({member_name, slot, ty});
+							record->fields.push_back({member_name, slot, ty, field_location});
 						} else if (auto object = dynamic_cast<ObjectType*>(owner_class)) {
-							object->fields.push_back({member_name, slot, ty});
+							object->fields.push_back({member_name, slot, ty, field_location});
 						}
 					}
 				}
@@ -5593,6 +5594,7 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				report_type_error("class var unsupported", owner_class);
 			}
 			// parse_var_block inlined
+			const SourceLocation field_location = current_location();
 			std::vector<std::string> member_names;
 			do {
 				auto member_name = parse_identifier();
@@ -5611,11 +5613,11 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 				}
 				if (registered) {
 					if (auto packed = dynamic_cast<PackedRecordType*>(owner_class)) {
-						packed->fields.push_back({member_name, slot, ty});
+						packed->fields.push_back({member_name, slot, ty, field_location});
 					} else if (auto record = dynamic_cast<RecordType*>(owner_class)) {
-						record->fields.push_back({member_name, slot, ty});
+						record->fields.push_back({member_name, slot, ty, field_location});
 					} else if (auto object = dynamic_cast<ObjectType*>(owner_class)) {
-						object->fields.push_back({member_name, slot, ty});
+						object->fields.push_back({member_name, slot, ty, field_location});
 					}
 				}
 			}
@@ -5692,6 +5694,7 @@ VariantPart* Parser::parse_record_variant(Type* owner, Frame* body) {
 					arm.variant = parse_record_variant(owner, body);
 					break;
 				}
+				const SourceLocation field_location = current_location();
 				std::vector<std::string> names{parse_identifier()};
 				while (maybe_parse_comma()) {
 					names.push_back(parse_identifier());
@@ -5711,7 +5714,7 @@ VariantPart* Parser::parse_record_variant(Type* owner, Frame* body) {
 						report_value_error("duplicate member identifier: " + fname, slot);
 					}
 					if (registered) {
-						arm.fields.push_back({fname, slot, fty});
+						arm.fields.push_back({fname, slot, fty, field_location});
 					}
 				}
 				if (!maybe_parse_semicolon()) {

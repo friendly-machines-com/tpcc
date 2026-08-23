@@ -45,7 +45,9 @@ then
 	echo "accepted an array of naturally aligned WideChar inside a packed record" >&2
 	exit 1
 fi
-if ! grep -Fq "item with alignment != 1 is not allowed inside a packed record" \
+if ! grep -Fq "tests/widechar_packed_array_rejected.pp(7): error: packed record type 'tpacket' field 'values'" \
+	"$tmp/stderr" ||
+	! grep -Fq "requires alignment 2; arrays stored directly inside packed records require element alignment 1" \
 	"$tmp/stderr"
 then
 	echo "wrong packed WideChar array diagnostic" >&2

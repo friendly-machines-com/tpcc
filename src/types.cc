@@ -533,7 +533,13 @@ bool align_up_u64(uint64_t value, uint64_t alignment, uint64_t* result) {
 	return remainder == 0 ? (*result = value, true) : checked_add_u64(value, alignment - remainder, result);
 }
 
-std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std::set<Type*>& visiting);
+struct PackedFieldContext {
+	PackedRecordType* record;
+	const AggregateField* field;
+	PackedRecordLayoutError* error;
+};
+
+std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std::set<Type*>& visiting, const PackedFieldContext* packed_field = nullptr);
 
 struct SequentialLayout {
 	uint64_t offset = 0;
@@ -679,8 +685,9 @@ struct PackedSequentialLayout {
 	std::vector<AggregateFieldLayout> fields;
 };
 
-bool append_packed_field(PackedSequentialLayout& layout, StorageSlot* slot, Type* ty, std::set<Type*>& visiting) {
-	auto field_layout = type_layout_impl(true, ty, visiting); // FIXME what
+bool append_packed_field(PackedSequentialLayout& layout, PackedRecordType* record, const AggregateField& field, std::set<Type*>& visiting, PackedRecordLayoutError* error) {
+	const PackedFieldContext context{record, &field, error};
+	auto field_layout = type_layout_impl(true, field.ty, visiting, &context);
 	if (!field_layout) {
 		return false;
 	}
@@ -688,17 +695,25 @@ bool append_packed_field(PackedSequentialLayout& layout, StorageSlot* slot, Type
 	if (!checked_add_u64(layout.offset, field_layout->size, &end)) {
 		return false;
 	}
-	layout.fields.push_back(AggregateFieldLayout{slot, ty, layout.offset, field_layout->size});
+	layout.fields.push_back(AggregateFieldLayout{field.slot, field.ty, layout.offset, field_layout->size});
 	layout.offset = end;
 	return true;
 }
 
-bool append_packed_variant(PackedSequentialLayout& layout, VariantPart* variant, std::set<Type*>& visiting) {
+bool append_packed_variant(PackedSequentialLayout& layout, PackedRecordType* record, VariantPart* variant, std::set<Type*>& visiting, PackedRecordLayoutError* error) {
 	if (!variant) {
 		return true;
 	}
-	if (variant->has_selector && !append_packed_field(layout, variant->selector_slot, variant->selector_type, visiting)) {
-		return false;
+	if (variant->has_selector) {
+		AggregateField selector{
+		    variant->selector_name,
+		    variant->selector_slot,
+		    variant->selector_type,
+		    variant->selector_type ? variant->selector_type->source_location : record->source_location,
+		};
+		if (!append_packed_field(layout, record, selector, visiting, error)) {
+			return false;
+		}
 	}
 	if (variant->arms.empty()) {
 		return true;
@@ -710,11 +725,11 @@ bool append_packed_variant(PackedSequentialLayout& layout, VariantPart* variant,
 	for (const auto& arm : variant->arms) {
 		PackedSequentialLayout arm_layout;
 		for (const auto& field : arm.fields) {
-			if (!append_packed_field(arm_layout, field.slot, field.ty, visiting)) {
+			if (!append_packed_field(arm_layout, record, field, visiting, error)) {
 				return false;
 			}
 		}
-		if (!append_packed_variant(arm_layout, arm.variant, visiting)) {
+		if (!append_packed_variant(arm_layout, record, arm.variant, visiting, error)) {
 			return false;
 		}
 		union_size = std::max(union_size, arm_layout.offset);
@@ -734,18 +749,18 @@ bool append_packed_variant(PackedSequentialLayout& layout, VariantPart* variant,
 	return true;
 }
 
-std::optional<RecordLayout> packed_record_layout_impl(PackedRecordType* record, std::set<Type*>& visiting) {
+std::optional<RecordLayout> packed_record_layout_impl(PackedRecordType* record, std::set<Type*>& visiting, PackedRecordLayoutError* error) {
 	if (!visiting.insert(record).second) {
 		return std::nullopt;
 	}
 	PackedSequentialLayout layout;
 	for (const auto& field : record->fields) {
-		if (!append_packed_field(layout, field.slot, field.ty, visiting)) {
+		if (!append_packed_field(layout, record, field, visiting, error)) {
 			visiting.erase(record);
 			return std::nullopt;
 		}
 	}
-	if (!append_packed_variant(layout, record->variant, visiting)) {
+	if (!append_packed_variant(layout, record, record->variant, visiting, error)) {
 		visiting.erase(record);
 		return std::nullopt;
 	}
@@ -756,7 +771,7 @@ std::optional<RecordLayout> packed_record_layout_impl(PackedRecordType* record, 
 	};
 }
 
-std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std::set<Type*>& visiting) {
+std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std::set<Type*>& visiting, const PackedFieldContext* packed_field) {
 	while (auto incomplete = dynamic_cast<IncompleteType*>(ty)) {
 		if (!incomplete->resolved) {
 			return std::nullopt;
@@ -765,7 +780,7 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 	}
 	if (auto distinct = dynamic_cast<DistinctType*>(ty)) {
 		// FPC's `type Base` changes Pascal identity, not storage layout.
-		return type_layout_impl(packed_container, distinct->base_type, visiting);
+		return type_layout_impl(packed_container, distinct->base_type, visiting, packed_field);
 	} else if (const FixedDecimalFormat* format = fixed_decimal_format(ty)) {
 		// A fixed-decimal carrier may be record-shaped for nominal Pascal and
 		// C++ identity while still having one scalar storage equation. Packed
@@ -773,22 +788,29 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 		// through aligned temporaries; a FixedArrayType retains the returned
 		// alignment and is therefore rejected below when its elements cannot
 		// be placed byte-aligned.
-		return type_layout_impl(false, format->raw_type, visiting);
+		return type_layout_impl(false, format->raw_type, visiting, packed_field);
 	} else if (auto intrinsic = dynamic_cast<IntrinsicType*>(ty)) {
 		return intrinsic->layout;
 	} else if (auto shortstring = dynamic_cast<ShortStringType*>(ty)) {
 		return TypeLayout{static_cast<uint64_t>(shortstring->capacity) + 1, 1};
 	} else if (auto packed = dynamic_cast<PackedRecordType*>(ty)) {
-		auto layout = packed_record_layout_impl(packed, visiting);
+		auto layout = packed_record_layout_impl(packed, visiting, packed_field ? packed_field->error : nullptr);
 		return layout ? std::optional<TypeLayout>{layout->type} : std::nullopt;
 	} else if (auto array = dynamic_cast<FixedArrayType*>(ty)) {
-		auto item = type_layout_impl(packed_container, array->item_type, visiting);
+		auto item = type_layout_impl(packed_container, array->item_type, visiting, packed_field);
 		if (!item) {
 			return std::nullopt;
 		}
 		if (packed_container && item->alignment != 1) {
-			fprintf(stderr, "error: item with alignment != 1 is not allowed inside a packed record.\n");
-			abort();
+			if (packed_field && packed_field->error && !packed_field->error->record) {
+				packed_field->error->record = packed_field->record;
+				packed_field->error->field_name = packed_field->field->pas_name;
+				packed_field->error->field_location = packed_field->field->source_location;
+				packed_field->error->array = array;
+				packed_field->error->element_type = array->item_type;
+				packed_field->error->required_alignment = item->alignment;
+			}
+			return std::nullopt;
 		}
 		uint64_t size;
 		if (!checked_multiply_u64(item->size, array->range.length, &size)) {
@@ -800,7 +822,7 @@ std::optional<TypeLayout> type_layout_impl(bool packed_container, Type* ty, std:
 		// generated static assertions enforcing identical size and alignment.
 		// Packed-record layout can therefore keep using the Pascal storage
 		// layout without duplicating a C++ ABI calculator here.
-		return type_layout_impl(packed_container, subrange->base_type, visiting);
+		return type_layout_impl(packed_container, subrange->base_type, visiting, packed_field);
 	} else if (auto enumeration = dynamic_cast<EnumType*>(ty)) {
 		uint64_t bytes = enumeration->carrier_bits / 8;
 		return enumeration->carrier_bits != 0 && enumeration->carrier_bits % 8 == 0 ? std::optional<TypeLayout>{TypeLayout{bytes, bytes}} : std::nullopt;
@@ -857,9 +879,9 @@ std::optional<RecordLayout> record_layout(RecordType* record) {
 	return record_layout_impl(record, visiting);
 }
 
-std::optional<RecordLayout> packed_record_layout(PackedRecordType* record) {
+std::optional<RecordLayout> packed_record_layout(PackedRecordType* record, PackedRecordLayoutError* error) {
 	std::set<Type*> visiting;
-	return packed_record_layout_impl(record, visiting);
+	return packed_record_layout_impl(record, visiting, error);
 }
 
 namespace {

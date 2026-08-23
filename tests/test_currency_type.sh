@@ -126,7 +126,15 @@ then
 	echo "accepted a Currency array inside a packed record" >&2
 	exit 1
 fi
-grep -Fq "alignment != 1" "$tmp/stderr"
+if ! grep -Fq "tests/packed_currency_array_rejected.pp(5): error: packed record type 'tinvalidpackedcurrencyarray' field 'values'" \
+	"$tmp/stderr" ||
+	! grep -Fq "requires alignment 8; arrays stored directly inside packed records require element alignment 1" \
+	"$tmp/stderr"
+then
+	echo "wrong packed Currency array diagnostic" >&2
+	sed -n '1,40p' "$tmp/stderr" >&2
+	exit 1
+fi
 
 if tpcc_translate -o"$tmp/ordinal.cc" \
 	tests/currency_ordinal_rejected.pp \

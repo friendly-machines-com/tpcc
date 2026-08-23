@@ -2218,8 +2218,27 @@ void Emitter::emit_packed_record_decl(std::string cxx_name, PackedRecordType* p)
 	if (!active) {
 		return;
 	}
-	auto layout = packed_record_layout(p);
+	PackedRecordLayoutError layout_error;
+	auto layout = packed_record_layout(p, &layout_error);
 	if (!layout) {
+		if (layout_error.record && layout_error.element_type) {
+			ErrorLetContext ctx(layout_error.record->children, 4);
+			std::string record_name = layout_error.record->cxx_name;
+			if (record_name.empty() && !cxx_name.empty()) {
+				record_name = cxx_name;
+			}
+			if (record_name.starts_with("t_")) {
+				record_name.erase(0, 2);
+			}
+			std::ostringstream message;
+			message << (record_name.empty() ? "anonymous packed record" : "packed record type '" + record_name + "'")
+			        << " field '" << layout_error.field_name << "' contains an array whose element type "
+			        << ctx.type_ref(layout_error.element_type) << " requires alignment "
+			        << layout_error.required_alignment
+			        << "; arrays stored directly inside packed records require element alignment 1"
+			        << ctx.notes();
+			emit_diagnostic_at(layout_error.field_location, "error", message.str());
+		}
 		unhandled_type("packed record layout is not known", p);
 	}
 
