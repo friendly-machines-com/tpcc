@@ -22,6 +22,12 @@ constexpr OperatorSpec k_operator_catalog[] = {
     {"uncheckedimplicit", ":implicit", 1, I::ImplicitConversion, S::Unchecked, "&op_Implicit", "o_unchecked_implicit", false, P::TpccExtension, true},
     {":=", ":implicit", 1, I::ImplicitConversion, S::Checked, "&op_CheckedImplicit", "o_implicit", false, P::LegacyFpc, true},
     {":=", ":implicit", 1, I::ImplicitConversion, S::Unchecked, "&op_Implicit", "o_implicit", false, P::LegacyFpc, true},
+    // Delphi's Implicit spelling provides no way to state that a conversion
+    // loses range or precision. These TPCC declarations make that property
+    // available to System and user types alike, while {$R} selects only the
+    // checked or unchecked implementation of the one narrowing edge.
+    {"implicitnarrowing", ":implicitnarrowing", 1, I::ImplicitConversion, S::Checked, "&op_CheckedImplicitNarrowing", "o_implicit", false, P::TpccExtension, true},
+    {"uncheckedimplicitnarrowing", ":implicitnarrowing", 1, I::ImplicitConversion, S::Unchecked, "&op_ImplicitNarrowing", "o_unchecked_implicit", false, P::TpccExtension, true},
     {"explicit", ":explicit", 1, I::ExplicitConversion, S::Always, "&op_Explicit", "o_explicit", false, P::Delphi, true},
 
     // Unary expression operators.
@@ -181,6 +187,12 @@ std::optional<std::string_view> legacy_operator_cxx_name(std::string_view declar
 
 std::string_view implicit_operator_identifier(bool range_checks) {
 	auto result = operator_invocation_identifier(OperatorInvocation::ImplicitConversion, ":implicit", 1, range_checks, false);
+	assert(result);
+	return *result;
+}
+
+std::string_view implicit_narrowing_operator_identifier(bool range_checks) {
+	auto result = operator_invocation_identifier(OperatorInvocation::ImplicitConversion, ":implicitnarrowing", 1, range_checks, false);
 	assert(result);
 	return *result;
 }

@@ -244,7 +244,12 @@ Callable::Callable(std::string cxx_name, std::string pas_name, RoutineType* ty, 
 }
 
 bool Callable::is_conversion_operator() const {
-	return pas_name == ":explicit" || pas_name == ":implicit" || pas_name == ":uncheckedimplicit" || pas_name == ":=";
+	return pas_name == ":explicit" ||
+	       pas_name == ":implicit" ||
+	       pas_name == ":uncheckedimplicit" ||
+	       pas_name == ":implicitnarrowing" ||
+	       pas_name == ":uncheckedimplicitnarrowing" ||
+	       pas_name == ":=";
 }
 
 Procedure::Procedure(std::string cxx_name, std::string pas_name, RoutineType* ty, bool has_overload_directive) : Callable(std::move(cxx_name), std::move(pas_name), ty, has_overload_directive) {

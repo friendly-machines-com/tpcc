@@ -221,7 +221,6 @@ class IntrinsicType : public Type {
 	IntrinsicType(SourceLocation source_location, std::string cxx_name, std::optional<int> rank, std::optional<OrdinalBounds> ordinal_bounds = {}, std::optional<TypeLayout> layout = {}, std::optional<IntrinsicCarrier> carrier = {});
 	const char* diagnostic_kind() const override;
 	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
-	std::optional<ValueConversion> destination_conversion_from(const Type* source) const override;
 	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
 	bool same_cxx_carrier_definition_as(const Type* other) const override;

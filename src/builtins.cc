@@ -388,13 +388,21 @@ static ConstEvalResult fold_numeric_conversion(Type* result_ty, const std::vecto
 			}
 			return ConstEvalResult::success(make_currency_constant(converted.raw));
 		}
-		return fold_integer_result(value->value, value->negative, result_ty);
+		return checked
+		           ? fold_integer_result(value->value, value->negative, result_ty)
+		           : const_explicit_ordinal_cast(value->value, value->negative, result_ty);
 	} else if (const auto* value = dynamic_cast<const Real*>(args[0]); value && !value->is_origin() && is_fixed_decimal_semantic_type(result_ty)) {
 		FixedDecimalMaterialization converted = materialize_fixed_decimal_real(value->value, result_ty);
 		if (converted.kind == RealMaterializationKind::OutOfRange && (checked || !converted.unchecked_value_available)) {
 			return ConstEvalResult::error("real constant out of range for fixed-decimal target");
 		}
 		return ConstEvalResult::success(make_currency_constant(converted.raw));
+	} else if (const auto* value = dynamic_cast<const Real*>(args[0]); value && !value->is_origin() && is_real_semantic_type(result_ty)) {
+		if (checked && typed_real_out_of_range(value->value, result_ty)) {
+			return ConstEvalResult::error("real constant out of range for target type");
+		}
+		auto converted = round_typed_real(value->value, result_ty);
+		return converted ? ConstEvalResult::success(new Real(*converted, result_ty)) : ConstEvalResult::not_constant();
 	} else if (std::optional<int64_t> raw = currency_constant_raw(args[0])) {
 		if (is_real_semantic_type(result_ty)) {
 			RealMaterialization converted = materialize_decimal_origin(fixed_decimal_origin(*raw, args[0]->ty), result_ty);

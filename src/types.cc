@@ -43,8 +43,10 @@ std::optional<ValueConversion> Type::value_conversion_from(const Type*) const {
 }
 
 std::optional<ValueConversion> Type::destination_conversion_from(const Type* source) const {
-	// Most types have no extra narrowing representation operation. Their
-	// complete predefined assignment relation is the ordinary relation.
+	// Concrete narrowing edges belong to Pascal operator declarations. This
+	// fallback exists only for parameterized type constructors whose complete
+	// destination cannot be named by one declaration (String[N] and
+	// subranges); most types therefore expose only their ordinary relation.
 	return value_conversion_from(source);
 }
 
@@ -1326,23 +1328,6 @@ std::optional<ValueConversion> IntrinsicType::value_conversion_from(const Type* 
 		return implicit_conversion(distance);
 	} else if (integer_widening_rank(source) >= 0 && target_real >= 0) {
 		return implicit_conversion(500 + static_cast<unsigned>(target_real));
-	}
-	return std::nullopt;
-}
-
-std::optional<ValueConversion> IntrinsicType::destination_conversion_from(const Type* source) const {
-	if (auto ordinary = value_conversion_from(source)) {
-		return ordinary;
-	} else if (const int integer_cost = integer_conversion_cost(source, this); integer_cost >= 0) {
-		// A selected ordinal destination may truncate or reinterpret sign.
-		// This is the Pascal assignment boundary checked by {$R+} and the
-		// Narrowing tier used by value-argument matching.
-		return implicit_conversion(static_cast<unsigned>(integer_cost));
-	} else if (const int source_real = real_semantic_rank(source), target_real = real_semantic_rank(this); source_real >= 0 && target_real >= 0) {
-		// Real assignment likewise permits the selected destination to lose
-		// range or precision. make_implicit_cast owns the optional range
-		// check after this relation has admitted the store.
-		return implicit_conversion(static_cast<unsigned>(std::abs(target_real - source_real)));
 	}
 	return std::nullopt;
 }

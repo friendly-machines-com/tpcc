@@ -8,11 +8,6 @@ tpcc_translate \
 	-o"$tmp/implicit_real_narrowing.cc" \
 	tests/implicit_real_narrowing.pp
 
-grep -Fq '::u_system::m_real_cast' \
-	"$tmp/implicit_real_narrowing.cc"
-grep -Fq '::u_system::m_range_checked_real_cast' \
-	"$tmp/implicit_real_narrowing.cc"
-
 tpcc_build "$tmp/implicit_real_narrowing" \
 	"$tmp/implicit_real_narrowing.cc" \
 	"$tmp/sysutils.cc" \

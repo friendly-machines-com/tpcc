@@ -140,9 +140,108 @@ operator :=(a: Integer): Int64; external name '::u_system::o_implicit';
 operator :=(a: Cardinal): Int64; external name '::u_system::o_implicit';
 operator :=(a: Cardinal): QWord; external name '::u_system::o_implicit';
 
+{ These are the remaining direct predefined integer assignments. They remain
+  implicit for Pascal compatibility, but their complete source domains do not
+  fit their destinations. Declaring the quality here lets assignment, routine
+  calls, and operator actuals share the ordinary matcher without teaching the
+  compiler a private table of predefined integer narrowing pairs. }
+operator ImplicitNarrowing(a: ShortInt): Byte; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: ShortInt): Byte; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Word): Byte; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Word): Byte; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: SmallInt): Byte; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: SmallInt): Byte; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Cardinal): Byte; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Cardinal): Byte; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Integer): Byte; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Integer): Byte; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: QWord): Byte; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): Byte; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): Byte; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): Byte; external name '::u_system::o_unchecked_implicit';
+
+operator ImplicitNarrowing(a: Byte): ShortInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Byte): ShortInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Word): ShortInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Word): ShortInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: SmallInt): ShortInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: SmallInt): ShortInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Cardinal): ShortInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Cardinal): ShortInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Integer): ShortInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Integer): ShortInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: QWord): ShortInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): ShortInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): ShortInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): ShortInt; external name '::u_system::o_unchecked_implicit';
+
+operator ImplicitNarrowing(a: ShortInt): Word; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: ShortInt): Word; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: SmallInt): Word; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: SmallInt): Word; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Cardinal): Word; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Cardinal): Word; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Integer): Word; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Integer): Word; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: QWord): Word; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): Word; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): Word; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): Word; external name '::u_system::o_unchecked_implicit';
+
+operator ImplicitNarrowing(a: Word): SmallInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Word): SmallInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Cardinal): SmallInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Cardinal): SmallInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Integer): SmallInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Integer): SmallInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: QWord): SmallInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): SmallInt; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): SmallInt; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): SmallInt; external name '::u_system::o_unchecked_implicit';
+
+operator ImplicitNarrowing(a: ShortInt): Cardinal; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: ShortInt): Cardinal; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: SmallInt): Cardinal; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: SmallInt): Cardinal; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Integer): Cardinal; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Integer): Cardinal; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: QWord): Cardinal; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): Cardinal; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): Cardinal; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): Cardinal; external name '::u_system::o_unchecked_implicit';
+
+operator ImplicitNarrowing(a: Cardinal): Integer; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Cardinal): Integer; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: QWord): Integer; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): Integer; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): Integer; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): Integer; external name '::u_system::o_unchecked_implicit';
+
+operator ImplicitNarrowing(a: ShortInt): QWord; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: ShortInt): QWord; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: SmallInt): QWord; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: SmallInt): QWord; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Integer): QWord; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Integer): QWord; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): QWord; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): QWord; external name '::u_system::o_unchecked_implicit';
+
+operator ImplicitNarrowing(a: QWord): Int64; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): Int64; external name '::u_system::o_unchecked_implicit';
+
+{ Real narrowing has the same declaration-level quality as integer narrowing.
+  Precision loss is inherent; $R distinguishes only finite exponent overflow
+  from the defined unchecked infinity result. }
+operator ImplicitNarrowing(a: Double): Single; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Double): Single; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Extended): Single; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Extended): Single; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Extended): Double; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Extended): Double; external name '::u_system::o_unchecked_implicit';
+
 // These complete integer domains fit after Currency's factor-of-10000
 // scaling, so := declares them as lossless assignment edges. Wider integers
-// use the narrowing Implicit/UncheckedImplicit pair below.
+// use the narrowing declaration pair below.
 operator :=(a: Byte): Currency; external name '::u_system::o_implicit';
 operator :=(a: ShortInt): Currency; external name '::u_system::o_implicit';
 operator :=(a: Word): Currency; external name '::u_system::o_implicit';
@@ -153,27 +252,27 @@ operator :=(a: Integer): Currency; external name '::u_system::o_implicit';
 { These domains are not ordered by value-set inclusion. Checked and unchecked
   declarations expose the same conversion edge to overload resolution; $R
   selects only which implementation executes after that resolution. }
-operator Implicit(a: Int64): Currency; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: Int64): Currency; external name '::u_system::o_unchecked_implicit';
-operator Implicit(a: QWord): Currency; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: QWord): Currency; external name '::u_system::o_unchecked_implicit';
-operator Implicit(a: Single): Currency; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: Single): Currency; external name '::u_system::o_unchecked_implicit';
-operator Implicit(a: Double): Currency; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: Double): Currency; external name '::u_system::o_unchecked_implicit';
-operator Implicit(a: Extended): Currency; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: Extended): Currency; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Int64): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Int64): Currency; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: QWord): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: QWord): Currency; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Single): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Single): Currency; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Double): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Double): Currency; external name '::u_system::o_unchecked_implicit';
+operator ImplicitNarrowing(a: Extended): Currency; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Extended): Currency; external name '::u_system::o_unchecked_implicit';
 
 { Every Currency value lies within the real exponent ranges, but a binary
-  real cannot preserve Currency's complete decimal grid. Implicit and
-  UncheckedImplicit therefore declare narrowing in both $R modes even though
-  both implementations execute the same range-safe operation. }
-operator Implicit(a: Currency): Single; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: Currency): Single; external name '::u_system::o_implicit';
-operator Implicit(a: Currency): Double; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: Currency): Double; external name '::u_system::o_implicit';
-operator Implicit(a: Currency): Extended; external name '::u_system::o_implicit';
-operator UncheckedImplicit(a: Currency): Extended; external name '::u_system::o_implicit';
+  real cannot preserve Currency's complete decimal grid. Both implementations
+  execute the same range-safe operation, but the declared rank remains
+  narrowing because information loss and runtime range failure are separate. }
+operator ImplicitNarrowing(a: Currency): Single; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Currency): Single; external name '::u_system::o_implicit';
+operator ImplicitNarrowing(a: Currency): Double; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Currency): Double; external name '::u_system::o_implicit';
+operator ImplicitNarrowing(a: Currency): Extended; external name '::u_system::o_implicit';
+operator UncheckedImplicitNarrowing(a: Currency): Extended; external name '::u_system::o_implicit';
 
 operator Explicit(a: Int64): Currency; external name '::u_system::o_explicit';
 operator Explicit(a: QWord): Currency; external name '::u_system::o_explicit';

@@ -11,10 +11,6 @@ grep -Fq '::u_system::m_unchecked_index' \
 	"$tmp/index_range_checking.cc"
 grep -Fq '::u_system::p_index' \
 	"$tmp/index_range_checking.cc"
-grep -Fq '::u_system::m_ordinal_cast' \
-	"$tmp/index_range_checking.cc"
-grep -Fq '::u_system::m_range_checked_ordinal_cast' \
-	"$tmp/index_range_checking.cc"
 
 tpcc_build "$tmp/index_range_checking" \
 	"$tmp/index_range_checking.cc" \

@@ -448,7 +448,7 @@ class Parser {
 	Node* mk_assign(Node* a, Node* b);
 	std::optional<ArgumentMatch> match_argument(const Parameter& formal, Node* actual, const BuiltinDesc* builtin, size_t parameter_index, bool allow_declared_conversion = true, MatchFailure* failure = nullptr, DeclaredConversionFailure* conversion_failure = nullptr, bool allow_routine_autocall = true);
 	std::optional<CallableMatch> match_callable_arguments(Callable* callable, const std::vector<Node*>& args, bool allow_declared_conversion = true, OverloadResolutionPolicy resolution_policy = OverloadResolutionPolicy::Ordinary);
-	std::optional<ArgumentMatch> match_declared_conversion(Node* actual, Type* target, std::string_view operator_identifier, MatchFailure* failure, DeclaredConversionFailure* conversion_failure);
+	std::optional<ArgumentMatch> match_declared_conversion(Node* actual, Type* target, std::string_view operator_identifier, MatchFailure* failure, DeclaredConversionFailure* conversion_failure, MatchRank::Tier conversion_tier = MatchRank::Tier::Convert);
 	bool has_direct_assignment_edge(Type* source, Type* target);
 	Node* match_explicit_conversion(Node* actual, Type* target, bool implicit_fallback);
 	Node* make_implicit_cast(Node* value, Type* target);

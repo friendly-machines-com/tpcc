@@ -74,6 +74,11 @@ std::optional<std::string_view> legacy_operator_cxx_name(std::string_view declar
 
 std::string_view implicit_operator_identifier(bool range_checks);
 
+/** Canonical narrowing-conversion declaration selected by an implicit
+ * assignment/call context. Checkedness chooses an implementation family only;
+ * both families describe the same information-losing conversion quality. */
+std::string_view implicit_narrowing_operator_identifier(bool range_checks);
+
 /** Canonical declaration identifier selected by explicit typecast syntax.
  * Unlike implicit conversion, this identity is independent of {$R}. */
 std::string_view explicit_operator_identifier();

@@ -80,16 +80,6 @@ namespace u_system {
 // operation.
 template <typename Destination> struct m_conversion_target {};
 
-// Pascal declarations decide which direct integer assignment edges exist.
-// This backend helper merely evaluates the already-selected edge; keeping it
-// generic avoids duplicating the same natural C++ conversion for every
-// source/destination declaration in system.pp.
-template <typename Source, typename Destination>
-        requires(std::is_integral_v<Source> && std::is_integral_v<Destination>)
-inline Destination o_implicit(Source source, m_conversion_target<Destination>) {
-	return static_cast<Destination>(source);
-}
-
 // `Fail` is constructor control flow, not a Pascal exception. Pascal except
 // handlers catch only tpcc_pascal_exception, so this marker passes through
 // them to an allocation or direct-initializer boundary.
@@ -626,7 +616,13 @@ template <typename T> constexpr auto m_ordinal_sign_magnitude(T value) {
 	const storage raw = traits::get(value);
 	const bool negative = std::is_signed_v<storage> && raw < 0;
 	const unsigned_storage bits = static_cast<unsigned_storage>(raw);
-	const uint64_t magnitude = negative ? static_cast<uint64_t>(unsigned_storage{0} - bits) : static_cast<uint64_t>(bits);
+	// Narrow unsigned operands undergo C++ integer promotion before
+	// subtraction. Convert the result back to the original unsigned storage
+	// first so negating (for example) an int16 minimum wraps at 16 bits rather
+	// than sign-extending a promoted negative int into uint64_t.
+	const unsigned_storage magnitude_bits =
+	    negative ? static_cast<unsigned_storage>(unsigned_storage{0} - bits) : bits;
+	const uint64_t magnitude = static_cast<uint64_t>(magnitude_bits);
 	return std::pair<bool, uint64_t>{negative, magnitude};
 }
 
@@ -697,6 +693,37 @@ inline Target m_range_checked_real_cast(Source source) {
 		}
 	}
 	return m_real_cast<Target>(source);
+}
+
+// System declarations decide which concrete source/destination pairs are
+// widening and which are narrowing. These helpers only execute the already
+// selected declaration; keeping the operation generic avoids duplicating its
+// representation mechanics for every explicit row in system.pp.
+template <typename Source, typename Destination>
+        requires(std::is_integral_v<Source> && std::is_integral_v<Destination>)
+inline Destination o_implicit(Source source, m_conversion_target<Destination>) {
+	return m_range_checked_ordinal_cast<Destination>(
+	    source,
+	    std::numeric_limits<Destination>::lowest(),
+	    std::numeric_limits<Destination>::max());
+}
+
+template <typename Source, typename Destination>
+        requires(std::is_integral_v<Source> && std::is_integral_v<Destination>)
+inline Destination o_unchecked_implicit(Source source, m_conversion_target<Destination>) {
+	return m_ordinal_cast<Destination>(source);
+}
+
+template <typename Source, typename Destination>
+        requires(std::is_floating_point_v<Source> && std::is_floating_point_v<Destination>)
+inline Destination o_implicit(Source source, m_conversion_target<Destination>) {
+	return m_range_checked_real_cast<Destination>(source);
+}
+
+template <typename Source, typename Destination>
+        requires(std::is_floating_point_v<Source> && std::is_floating_point_v<Destination>)
+inline Destination o_unchecked_implicit(Source source, m_conversion_target<Destination>) {
+	return m_real_cast<Destination>(source);
 }
 
 template <typename Source>

@@ -8,6 +8,11 @@ int main() {
 	assert(explicit_conversion ==
 	       "&op_Explicit");
 
+	assert(implicit_narrowing_operator_identifier(true) ==
+	       "&op_CheckedImplicitNarrowing");
+	assert(implicit_narrowing_operator_identifier(false) ==
+	       "&op_ImplicitNarrowing");
+
 	auto bitwise_xor = operator_invocation_identifier(
 	    OperatorInvocation::BinaryToken,
 	    "xor", 2, false, false);

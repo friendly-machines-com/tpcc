@@ -8663,10 +8663,9 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 		parse_keyword("operator");
 		// Assumption: there are no method operators. Keep the source spelling
 		// for the catalog, but give conversion Callables reserved internal
-		// names. An ordinary function named Explicit, Implicit, or
-		// UncheckedImplicit is not a conversion and therefore must not receive
-		// the destination-tag ABI or result-type overload rules merely because
-		// its source name resembles an operator declaration.
+		// names. An ordinary function whose name resembles any conversion
+		// declaration is not an operator and therefore must not receive the
+		// destination-tag ABI or result-type overload rules.
 		operator_declaration_name = input_token;
 		// Known-but-unsupported lifecycle operators are resultless. Reject
 		// them at their declaration identity, before the currently supported
@@ -8690,6 +8689,10 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			first_name = ":implicit";
 		} else if (operator_declaration_name == "uncheckedimplicit") {
 			first_name = ":uncheckedimplicit";
+		} else if (operator_declaration_name == "implicitnarrowing") {
+			first_name = ":implicitnarrowing";
+		} else if (operator_declaration_name == "uncheckedimplicitnarrowing") {
+			first_name = ":uncheckedimplicitnarrowing";
 		} else if (operator_declaration_name == "explicit") {
 			first_name = ":explicit";
 		} else {
@@ -9529,7 +9532,11 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			// operator's source formal passes allow_declared_conversion=false and
 			// therefore cannot form an A -> B -> C chain.
 			if (allow_declared_conversion) {
-				return match_declared_conversion(actual, target, implicit_operator_identifier(directive_state.switch_enabled('r')), failure, conversion_failure);
+				auto ordinary = match_declared_conversion(actual, target, implicit_operator_identifier(directive_state.switch_enabled('r')), failure, conversion_failure);
+				if (ordinary || (failure && *failure == MatchFailure::AmbiguousConversion)) {
+					return ordinary;
+				}
+				return match_declared_conversion(actual, target, implicit_narrowing_operator_identifier(directive_state.switch_enabled('r')), failure, conversion_failure, MatchRank::Tier::ConvertNarrowing);
 			}
 			return std::nullopt;
 		}
@@ -9561,7 +9568,12 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			if (auto m = contextual_subrange_constant_match(item_formal, in_node)) {
 				return m;
 			}
-			return match_argument(item_formal, in_node, nullptr, 0, false, failure);
+			// A direct bracket construction applies the same assignment
+			// relation to each element as an ordinary destination. When this
+			// bracket is itself being tested as a conversion operator's source
+			// formal, the caller passes false and still prevents an A->B->C
+			// conversion chain.
+			return match_argument(item_formal, in_node, nullptr, 0, allow_declared_conversion, failure);
 		};
 		for (const BracketLiteral::Item& item : literal->items) {
 			if (!target_set && item.upper) {
@@ -9873,7 +9885,10 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 		}
 	}
 
-	if (assignment) {
+	auto assignment_match = [&]() -> std::optional<ArgumentMatch> {
+		if (!assignment) {
+			return std::nullopt;
+		}
 		MatchRank rank{
 		    assignment->kind == AssignmentConversionClass::Equal       ? MatchRank::Tier::Equal
 		    : assignment->kind == AssignmentConversionClass::Narrowing ? MatchRank::Tier::ConvertNarrowing
@@ -9898,8 +9913,32 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			return ArgumentMatch{rank, new Cast(actual, target)};
 		}
 		return ArgumentMatch{rank, make_implicit_cast(actual, target)};
+	};
+
+	// A lossless predefined edge beats every declared narrowing edge. This is
+	// the same phase order used for a routine's other actual parameters; the
+	// conversion declaration does not get a result-directed shortcut.
+	if (assignment && assignment->kind != AssignmentConversionClass::Narrowing) {
+		return assignment_match();
 	}
-	return std::nullopt;
+
+	if (allow_declared_conversion) {
+		MatchFailure local_failure = MatchFailure::Incompatible;
+		MatchFailure* declared_failure = failure ? failure : &local_failure;
+		if (auto declared = match_declared_conversion(actual, target, implicit_narrowing_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure, MatchRank::Tier::ConvertNarrowing)) {
+			return declared;
+		}
+		// Both checkedness variants describe one rank. An ambiguity inside the
+		// selected {$R} family is therefore final, exactly as for Implicit.
+		if (*declared_failure == MatchFailure::AmbiguousConversion) {
+			return std::nullopt;
+		}
+	}
+
+	// Constructed destinations which source declarations cannot quantify
+	// (currently String[N] and subranges) reach this final compiler-owned
+	// narrowing beachhead.
+	return assignment_match();
 }
 
 std::optional<CallableMatch> Parser::match_callable_arguments(Callable* callable, const std::vector<Node*>& args, bool allow_declared_conversion, OverloadResolutionPolicy resolution_policy) {
@@ -10273,7 +10312,7 @@ bool Parser::has_direct_assignment_edge(Type* source, Type* target) {
 	return false;
 }
 
-std::optional<ArgumentMatch> Parser::match_declared_conversion(Node* actual, Type* target, std::string_view operator_identifier, MatchFailure* failure, DeclaredConversionFailure* conversion_failure) {
+std::optional<ArgumentMatch> Parser::match_declared_conversion(Node* actual, Type* target, std::string_view operator_identifier, MatchFailure* failure, DeclaredConversionFailure* conversion_failure, MatchRank::Tier conversion_tier) {
 	// The source construct chooses one canonical conversion identity before
 	// ordinary frame lookup: implicit contexts pass their {$R}-selected
 	// family, while explicit syntax invokes this same function once per
@@ -10391,11 +10430,13 @@ std::optional<ArgumentMatch> Parser::match_declared_conversion(Node* actual, Typ
 		return std::nullopt;
 	}
 
-	// The selected declaration supplies one ordinary implicit-conversion edge.
-	// Its origin does not create another overload rank.
+	// The declaration supplies one edge. Its family states the edge's
+	// conversion quality; System, user, and external implementations receive
+	// exactly the same rank.
 	auto call = new ProcCall(nullptr, best_candidate, std::vector<Node*>{best_source->value});
 	call->ty = target;
-	MatchRank rank{MatchRank::Tier::Convert, best_source->rank.distance};
+	MatchRank rank{conversion_tier, best_source->rank.distance};
+	rank.information_losing = conversion_tier == MatchRank::Tier::ConvertNarrowing;
 	auto source_signed = integer_carrier_is_signed(actual ? actual->ty : nullptr);
 	auto target_signed = integer_carrier_is_signed(target);
 	rank.integer_sign_mismatch = source_signed && target_signed && *source_signed != *target_signed;
@@ -10406,30 +10447,35 @@ Node* Parser::match_explicit_conversion(Node* actual, Type* target, bool implici
 	struct Family {
 		std::string_view diagnostic_name;
 		std::string_view identifier;
+		MatchRank::Tier tier;
 	};
 
 	const std::array<Family, 1> explicit_families{{
-	    {"explicit", explicit_operator_identifier()},
+	    {"explicit", explicit_operator_identifier(), MatchRank::Tier::Convert},
 	}};
-	const std::array<Family, 2> implicit_families{{
-	    {"implicit", implicit_operator_identifier(true)},
-	    {"uncheckedimplicit", implicit_operator_identifier(false)},
+	const std::array<Family, 4> implicit_families{{
+	    {"implicit", implicit_operator_identifier(true), MatchRank::Tier::Convert},
+	    {"uncheckedimplicit", implicit_operator_identifier(false), MatchRank::Tier::Convert},
+	    // An explicit cast may invoke an implicitly eligible narrowing edge.
+	    // Prefer its unchecked implementation because explicit Pascal
+	    // conversion syntax already requests the representation operation.
+	    {"uncheckedimplicitnarrowing", implicit_narrowing_operator_identifier(false), MatchRank::Tier::ConvertNarrowing},
+	    {"implicitnarrowing", implicit_narrowing_operator_identifier(true), MatchRank::Tier::ConvertNarrowing},
 	}};
 
 	// Explicit is searched before the predefined Target(value) boundary.
-	// Implicit and UncheckedImplicit are searched afterward, as fallback
-	// contracts. Keeping those phases separate prevents a System widening
-	// declaration from intercepting a direct predefined cast while still
-	// allowing a declared Explicit operation to override it. Within the
-	// fallback phase checked Implicit precedes UncheckedImplicit; the cast
-	// itself never consults {$R}. Every family enters
+	// Implicit families are searched afterward as fallback contracts. Keeping
+	// those phases separate prevents a System widening declaration from
+	// intercepting a direct predefined cast while still allowing a declared
+	// Explicit operation to override it. The cast itself never consults {$R};
+	// the order above selects a deterministic implementation. Every family enters
 	// match_declared_conversion(), whose source match forbids A -> B -> T
 	// chaining.
 	auto search = [&](const auto& families) -> Node* {
 		for (const Family& family : families) {
 			MatchFailure failure = MatchFailure::Incompatible;
 			DeclaredConversionFailure conversion_failure;
-			auto match = match_declared_conversion(actual, target, family.identifier, &failure, &conversion_failure);
+			auto match = match_declared_conversion(actual, target, family.identifier, &failure, &conversion_failure, family.tier);
 			if (match) {
 				return match->value;
 			}
