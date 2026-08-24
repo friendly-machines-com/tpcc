@@ -3367,6 +3367,7 @@ void Emitter::emit_expression(Node* expr) {
 		auto source_shortstring = dynamic_cast<ShortStringType*>(ca->a ? ca->a->ty : nullptr);
 		auto target_shortstring = dynamic_cast<ShortStringType*>(ca->ty);
 		const bool source_ansistring = ca->a && ca->a->ty == ansistring_type();
+		const bool source_pchar = ca->a && is_pchar_type(ca->a->ty);
 		auto target_pointer = dynamic_cast<PointerType*>(ca->ty);
 		const bool target_pointer_integer = ca->ty == ptrint_type() || ca->ty == ptruint_type();
 		auto source_pointer = dynamic_cast<PointerType*>(ca->a ? ca->a->ty : nullptr);
@@ -3399,6 +3400,10 @@ void Emitter::emit_expression(Node* expr) {
 				fprintf(active, "::u_system::m_range_error_value<");
 				emit_type_ref(ca->ty);
 				fprintf(active, ">(201)");
+			} else if (target_shortstring && source_pchar) {
+				fprintf(active, "::u_system::m_range_checked_shortstring_from_pchar<%u>(", static_cast<unsigned>(target_shortstring->capacity));
+				emit_expression(ca->a);
+				fprintf(active, ")");
 			} else if (real_conversion) {
 					fprintf(active, "::u_system::m_range_checked_real_cast<");
 					emit_type_ref(ca->ty);
@@ -3448,6 +3453,10 @@ void Emitter::emit_expression(Node* expr) {
 			fprintf(active, "::u_system::o_implicit(");
 			emit_expression(ca->a);
 			fprintf(active, ", ::u_system::m_conversion_target<::u_system::t_ansistring>{})");
+		} else if (target_shortstring && source_pchar) {
+			fprintf(active, "::u_system::tpcc_shortstring_from_pchar<%u>(", static_cast<unsigned>(target_shortstring->capacity));
+			emit_expression(ca->a);
+			fprintf(active, ")");
 		} else if (target_shortstring && (source_shortstring || source_ansistring)) {
 			fprintf(active, "::u_system::tpcc_shortstring_cast<%u>(", static_cast<unsigned>(target_shortstring->capacity));
 			emit_expression(ca->a);

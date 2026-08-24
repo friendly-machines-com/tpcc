@@ -65,16 +65,36 @@ tpcc_build "$tmp/pchar_ansistring" \
 	"$tmp/system.cc"
 tpcc_run "$tmp/pchar_ansistring"
 
-# PChar has no bounded payload length, so the ShortString narrowing conversion
-# remains unavailable until its truncation/range-check contract is specified.
-if tpcc_translate \
+tpcc_translate \
 	-o"$tmp/pchar_shortstring.cc" \
-	tests/pchar_shortstring_implicit_rejected.pp \
-	>"$tmp/pchar_shortstring.out" \
-	2>"$tmp/pchar_shortstring.err"
-then
-	echo "accepted implicit PChar-to-ShortString conversion" >&2
-	exit 1
-fi
+	tests/pchar_shortstring_conversion.pp
+tpcc_build "$tmp/pchar_shortstring" \
+	"$tmp/pchar_shortstring.cc" \
+	"$tmp/system.cc"
+tpcc_run "$tmp/pchar_shortstring"
+
+for mode in assignment call
+do
+	define=
+	if [ "$mode" = call ]; then
+		define=-dCHECK_CALL
+	fi
+	tpcc_translate $define \
+		-o"$tmp/pchar_shortstring_checked_$mode.cc" \
+		tests/pchar_shortstring_checked_overflow.pp
+	tpcc_build "$tmp/pchar_shortstring_checked_$mode" \
+		"$tmp/pchar_shortstring_checked_$mode.cc" \
+		"$tmp/system.cc"
+	if tpcc_run "$tmp/pchar_shortstring_checked_$mode"; then
+		echo "checked PChar-to-ShortString $mode did not fail" >&2
+		exit 1
+	else
+		status=$?
+	fi
+	if [ "$status" -ne 201 ]; then
+		echo "checked PChar-to-ShortString $mode returned $status rather than runtime error 201" >&2
+		exit 1
+	fi
+done
 
 echo "ShortString type tests passed"

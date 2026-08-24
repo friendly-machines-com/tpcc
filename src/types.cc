@@ -286,6 +286,11 @@ TypedFileType::TypedFileType(SourceLocation source_location, Type* item_type) : 
 PointerType::PointerType(SourceLocation source_location, Type* item_type, std::string cxx_name) : Type(std::move(source_location)), item_type(item_type), cxx_name(std::move(cxx_name)) {
 }
 
+bool is_pchar_type(const Type* type) {
+	auto pointer = dynamic_cast<const PointerType*>(type);
+	return pointer && pointer->item_type == char_type();
+}
+
 RecordType::RecordType(SourceLocation source_location, Frame* children) : Type(std::move(source_location)) {
 	this->children = children;
 }
@@ -1400,6 +1405,13 @@ std::optional<ValueConversion> ShortStringType::destination_conversion_from(cons
 		// remains legal and is classified as Narrowing; the runtime copies at
 		// most this destination's declared capacity.
 		return implicit_conversion(256 - capacity);
+	} else if (is_pchar_type(source)) {
+		// A NUL-terminated PChar likewise has no static capacity bound. {$R}
+		// affects only whether the selected narrowing copy checks for an
+		// overlong payload. This compiler-owned relation is necessary because
+		// Pascal cannot quantify one conversion declaration over every
+		// constructed String[N] destination.
+		return implicit_conversion(256 - capacity);
 	} else if (auto string = dynamic_cast<const ShortStringType*>(source)) {
 		// A known ShortString destination truncates excess payload according
 		// to its declared capacity. The complete assignment query exposes this
@@ -1410,11 +1422,11 @@ std::optional<ValueConversion> ShortStringType::destination_conversion_from(cons
 }
 
 bool ShortStringType::predefined_explicit_conversion_from(const Type* source) const {
-	// An explicit ShortString(AnsiString) construction copies the managed
-	// string payload into this destination's fixed inline capacity. It may
-	// truncate, so it must not become an implicit value-conversion edge used
-	// by overload resolution.
-	return Type::predefined_explicit_conversion_from(source) || source == ansistring_type();
+	// Explicit String[N](value) requests an independent bounded copy. Both an
+	// AnsiString payload and a NUL-terminated PChar may be longer than N; a
+	// ShortString may likewise have a larger declared capacity. This direct
+	// operation truncates and never consults {$R}.
+	return Type::predefined_explicit_conversion_from(source) || dynamic_cast<const ShortStringType*>(source) || source == ansistring_type() || is_pchar_type(source);
 }
 
 std::optional<ValueConversion> FixedSetType::value_conversion_from(const Type* source) const {

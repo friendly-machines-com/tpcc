@@ -40,7 +40,7 @@ begin
   if CapturedValue <> 'hello' then
     Halt(2);
 
-  { PChar has only the direct AnsiString destination at present. }
+  { The direct AnsiString conversion beats narrowing to ShortString. }
   SelectString(PointerValue);
   if Selected <> 2 then
     Halt(3);

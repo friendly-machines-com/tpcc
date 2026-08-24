@@ -507,6 +507,7 @@ class Parser {
 	void parse_directive(std::string s);
 	void parse_operator(std::string s);
 	Node* parse_value(LeadingTokenDirectives* leading_directives);
+	Node* parse_explicit_conversion_to(Type* target_ty);
 	Node* parse_value_from_identifier(std::string id, LeadingTokenDirectives identifier_directives, LeadingTokenDirectives* leading_directives);
 	/** Parse an identifier-starting argument in a grammar which accepts either
 	 *  a type or a value.  The returned Binding contains the parsed Type* or

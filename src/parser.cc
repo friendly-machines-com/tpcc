@@ -2939,6 +2939,17 @@ Node* Parser::parse_value(LeadingTokenDirectives* leading_directives) {
 	} else if (peek_keyword("nil")) {
 		consume();
 		return new NilLiteral();
+	} else if (peek_keyword("string")) {
+		// String is both a keyword-starting type constructor and an explicit
+		// conversion target. Parse the ordinary type grammar here so
+		// String[N](value) receives the same generative ShortString type as a
+		// declaration; requiring a named alias would create a needless second
+		// language for the same type constructor.
+		Type* target_ty = parse_type_expression(false);
+		if (input_token != "(") {
+			raise_parse_error("String in value context requires an explicit conversion argument");
+		}
+		return parse_explicit_conversion_to(target_ty);
 	} else if (!input_token.empty() && (input_token.front() == '\'' || input_token.front() == '#')) {
 		// FPC scans a consecutive run of quoted fragments and numeric character
 		// fragments as one literal:
@@ -2977,6 +2988,116 @@ Node* Parser::parse_value(LeadingTokenDirectives* leading_directives) {
 		const LeadingTokenDirectives identifier_directives = directive_state.leading_token_directives();
 		return parse_value_from_identifier(parse_identifier(), identifier_directives, leading_directives);
 	}
+}
+
+Node* Parser::parse_explicit_conversion_to(Type* target_ty) {
+	assert(target_ty);
+	parse_opening_paren();
+	Node* value = parse_expression();
+	parse_closing_paren();
+
+	// Pascal typecast syntax is `Type(expr)`, so the requested result type is
+	// available before conversion lookup. Conversion operators may overload
+	// by that result even though ordinary routines cannot. Try the ordered
+	// direct operator contracts before the predefined cast: otherwise a
+	// user-defined Explicit conversion could never replace the built-in
+	// boundary in the same way Implicit can.
+	if (Node* converted = match_explicit_conversion(value, target_ty, false)) {
+		return converted;
+	}
+	if (auto real = dynamic_cast<Real*>(value); real && real->is_origin() && is_real_semantic_type(target_ty)) {
+		RealMaterialization converted = materialize_decimal_origin(*real->origin, target_ty);
+		if (converted.kind != RealMaterializationKind::InvalidTarget) {
+			return new Real(converted.value, target_ty);
+		}
+	}
+	if (auto real = dynamic_cast<Real*>(value); real && real->is_origin() && is_fixed_decimal_semantic_type(target_ty)) {
+		// Explicit conversion is the unchecked destination operation.
+		// Materialize the exact origin here so no untyped numeric value can
+		// reach C++ emission.
+		FixedDecimalMaterialization converted = materialize_fixed_decimal_origin(*real->origin, target_ty);
+		return make_currency_constant(converted.raw);
+	}
+
+	// A declared Explicit operation overrides the predefined type boundary,
+	// but an Implicit declaration is only a fallback after direct
+	// `Target(value)` construction. Otherwise System's widening rows can
+	// intercept an already-valid cast through some equal-domain source formal
+	// (for example PtrUInt -> QWord).
+	//
+	// Preserve the existing predefined explicit casts, which include routine,
+	// pointer, ordinal, set, packed-overlay, and class-reference operations.
+	auto routine_reference = dynamic_cast<RoutineRef*>(value);
+	auto target_routine = dynamic_cast<RoutineType*>(target_ty);
+	if (target_ty == pointer_type() && routine_reference) {
+		return resolve_routine_code_reference(routine_reference);
+	} else if (dynamic_cast<NilLiteral*>(value) && target_ty->is_reference_type()) {
+		// Nil has no source Type to query below. Give it the exact requested
+		// reference type directly; this is the same predefined null
+		// construction used by argument matching, not a user-conversion edge.
+		value->ty = target_ty;
+		return value;
+	} else if (target_routine) {
+		if (routine_reference) {
+			return resolve_routine_reference(routine_reference, target_routine);
+		} else if (dynamic_cast<NilLiteral*>(value)) {
+			return cast(value, target_routine);
+		} else if (value->ty == tmethod_type()) {
+			if (target_routine->kind != METHOD) {
+				report_type_kind_mismatch("TMethod cast target", "of-object routine", target_routine);
+				return new ErrorValue();
+			}
+			return new ExplicitCast(value, target_routine);
+		} else if (auto source_routine = dynamic_cast<RoutineType*>(value->ty)) {
+			if (!target_routine->accepts_explicit_routine_cast_from(source_routine)) {
+				report_type_mismatch("explicit cast between "
+				                     "incompatible routine types",
+				                     target_routine, source_routine);
+				return new ErrorValue();
+			}
+			// Unlike assignment and contextual @Routine resolution, explicit
+			// syntax may retain the routine representation while retyping
+			// by-value data-pointer parameters. The RoutineType predicate owns
+			// that narrow semantic rule; emission performs the documented ABI
+			// reinterpretation.
+			return new ExplicitCast(value, target_routine);
+		} else {
+			report_type_mismatch("explicit routine-type cast", target_routine, value->ty);
+			return new ErrorValue();
+		}
+	} else if (target_ty == tmethod_type()) {
+		if (value->ty == target_ty) {
+			return new ExplicitCast(value, target_ty);
+		} else {
+			auto source_routine = dynamic_cast<RoutineType*>(value->ty);
+			if (!source_routine || source_routine->kind != METHOD) {
+				report_type_kind_mismatch("TMethod view source", "of-object routine", value->ty);
+				return new ErrorValue();
+			}
+			return new ExplicitCast(value, target_ty);
+		}
+	} else if (addressed_omitted_formal(value)) {
+		if (is_omitted_formal_byte_pointer_target(target_ty)) {
+			return new ExplicitCast(value, target_ty);
+		}
+		// The source type is only ^unknown; permitting an arbitrary target
+		// here would lose the size and alignment requirements of the caller's
+		// actual object. Byte and character views are the defined
+		// representation-level cases above.
+		report_type_mismatch("explicit conversion of an omitted-type formal address is unsupported", target_ty, value->ty);
+		return new ErrorValue();
+	} else if (target_ty->predefined_explicit_conversion_from(value->ty)) {
+		return new ExplicitCast(value, target_ty);
+	} else if (Node* converted = match_explicit_conversion(value, target_ty, true)) {
+		return converted;
+	}
+	// Report and keep an unchecked cast as the poison value: the error is
+	// already counted, downstream sees the error type, and the emission gate
+	// refuses the run.
+	report_type_mismatch("invalid explicit conversion", target_ty, value->ty);
+	auto poison = new Cast(value, target_ty);
+	poison->ty = error_type();
+	return poison;
 }
 
 Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives identifier_directives, LeadingTokenDirectives* leading_directives) {
@@ -3254,114 +3375,7 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 	if (input_token == "(") {
 		Type* target_ty = binding ? (std::get_if<Type*>(&*binding) ? std::get<Type*>(*binding) : nullptr) : nullptr;
 		if (target_ty) {
-			parse_opening_paren();
-			Node* value = parse_expression();
-			parse_closing_paren();
-
-			// Pascal typecast syntax is `Type(expr)`, so the requested result
-			// type is available before conversion lookup. Conversion operators
-			// may overload by that result even though ordinary routines cannot.
-			// Try the ordered direct operator contracts before the predefined
-			// cast: otherwise a user-defined Explicit conversion could never
-			// replace the built-in boundary in the same way Implicit can.
-			if (Node* converted = match_explicit_conversion(value, target_ty, false)) {
-				return converted;
-			}
-			if (auto real = dynamic_cast<Real*>(value); real && real->is_origin() && is_real_semantic_type(target_ty)) {
-				RealMaterialization converted = materialize_decimal_origin(*real->origin, target_ty);
-				if (converted.kind != RealMaterializationKind::InvalidTarget) {
-					return new Real(converted.value, target_ty);
-				}
-			}
-			if (auto real = dynamic_cast<Real*>(value); real && real->is_origin() && is_fixed_decimal_semantic_type(target_ty)) {
-				// Explicit conversion is the unchecked destination operation.
-				// Materialize the exact origin here so no untyped numeric value
-				// can reach C++ emission.
-				FixedDecimalMaterialization converted = materialize_fixed_decimal_origin(*real->origin, target_ty);
-				return make_currency_constant(converted.raw);
-			}
-
-			// A declared Explicit operation overrides the predefined type
-			// boundary, but an Implicit declaration is only a fallback after
-			// direct `Target(value)` construction. Otherwise System's
-			// widening rows can intercept an already-valid cast through some
-			// equal-domain source formal (for example PtrUInt -> QWord).
-			//
-			// Preserve the existing predefined explicit casts, which include
-			// routine, pointer, ordinal, set, packed-overlay, and
-			// class-reference operations.
-			auto routine_reference = dynamic_cast<RoutineRef*>(value);
-			auto target_routine = dynamic_cast<RoutineType*>(target_ty);
-			if (target_ty == pointer_type() && routine_reference) {
-				return resolve_routine_code_reference(routine_reference);
-			} else if (dynamic_cast<NilLiteral*>(value) && target_ty->is_reference_type()) {
-				// Nil has no source Type to query below. Give it the exact
-				// requested reference type directly; this is the same
-				// predefined null construction used by argument matching,
-				// not a user-conversion edge.
-				value->ty = target_ty;
-				return value;
-			} else if (target_routine) {
-				if (routine_reference) {
-					return resolve_routine_reference(routine_reference, target_routine);
-				} else if (dynamic_cast<NilLiteral*>(value)) {
-					return cast(value, target_routine);
-				} else if (value->ty == tmethod_type()) {
-					if (target_routine->kind != METHOD) {
-						report_type_kind_mismatch("TMethod cast target", "of-object routine", target_routine);
-						return new ErrorValue();
-					}
-					return new ExplicitCast(value, target_routine);
-				} else if (auto source_routine = dynamic_cast<RoutineType*>(value->ty)) {
-					if (!target_routine->accepts_explicit_routine_cast_from(source_routine)) {
-						report_type_mismatch("explicit cast between "
-						                     "incompatible routine types",
-						                     target_routine, source_routine);
-						return new ErrorValue();
-					}
-					// Unlike assignment and contextual @Routine resolution,
-					// explicit syntax may retain the routine representation
-					// while retyping by-value data-pointer parameters. The
-					// RoutineType predicate owns that narrow semantic rule;
-					// emission performs the documented ABI reinterpretation.
-					return new ExplicitCast(value, target_routine);
-				} else {
-					report_type_mismatch("explicit routine-type cast", target_routine, value->ty);
-					return new ErrorValue();
-				}
-			} else if (target_ty == tmethod_type()) {
-				if (value->ty == target_ty) {
-					return new ExplicitCast(value, target_ty);
-				} else {
-					auto source_routine = dynamic_cast<RoutineType*>(value->ty);
-					if (!source_routine || source_routine->kind != METHOD) {
-						report_type_kind_mismatch("TMethod view source", "of-object routine", value->ty);
-						return new ErrorValue();
-					}
-					return new ExplicitCast(value, target_ty);
-				}
-			} else if (addressed_omitted_formal(value)) {
-				if (is_omitted_formal_byte_pointer_target(target_ty)) {
-					return new ExplicitCast(value, target_ty);
-				}
-				// The source type is only ^unknown; permitting an arbitrary
-				// target here would lose the size and alignment requirements of
-				// the caller's actual object. Byte and character views are the
-				// defined representation-level cases above.
-				report_type_mismatch("explicit conversion of an omitted-type formal address is unsupported", target_ty, value->ty);
-				return new ErrorValue();
-			} else if (target_ty->predefined_explicit_conversion_from(value->ty)) {
-				return new ExplicitCast(value, target_ty);
-			} else if (Node* converted = match_explicit_conversion(value, target_ty, true)) {
-				return converted;
-			}
-			// Report and keep an unchecked cast as the poison value: the error
-			// is already counted, downstream sees the error type, and the
-			// emission gate refuses the run.
-			report_type_mismatch("invalid explicit conversion", target_ty, value->ty);
-			auto poison = new Cast(value, target_ty);
-			poison->ty = error_type();
-			return poison;
+			return parse_explicit_conversion_to(target_ty);
 		}
 	}
 	Type* visible_type = binding ? (std::get_if<Type*>(&*binding) ? std::get<Type*>(*binding) : nullptr) : nullptr;
@@ -9741,6 +9755,12 @@ static Type* infer_bracket_common_item_type(const std::vector<BracketLiteral::It
 }
 
 static bool conversion_requires_range_check(Type* source, Type* target) {
+	if (is_pchar_type(source) && dynamic_cast<ShortStringType*>(target)) {
+		// PChar has no static payload bound. This fact changes only the
+		// execution of an already-selected narrowing conversion under {$R+};
+		// destination_conversion_from owns viability and overload rank.
+		return true;
+	}
 	const int source_real = real_range_rank(source);
 	const int target_real = real_range_rank(target);
 	if (source_real >= 0 && target_real >= 0) {

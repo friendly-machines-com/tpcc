@@ -779,6 +779,12 @@ struct PointerType : public Type {
 	}
 };
 
+/** Whether TYPE is Pascal's direct `^Char` pointer domain. PChar is an alias
+ *  for this construction, so semantic consumers must inspect the pointee
+ *  rather than depend on that optional source spelling. Distinct pointer
+ *  types deliberately remain distinct and are not unwrapped here. */
+bool is_pchar_type(const Type* type);
+
 /** The type of a Pascal `unit X;` module. Renamed from UnitType to avoid
  *  colliding with the type-theoretic UnitType (one-inhabitant type) below. */
 struct ModuleType : public Type {

@@ -1083,6 +1083,47 @@ template <std::size_t DestinationCapacity, std::size_t SourceCapacity> constexpr
 	return result;
 }
 
+template <std::size_t DestinationCapacity> inline t_shortstring<DestinationCapacity> tpcc_shortstring_from_pchar(const t_char* source) {
+	t_shortstring<DestinationCapacity> result{};
+	if (!source) {
+		return result;
+	}
+	// An explicit String[N](PChar), or the same implicit conversion under
+	// {$R-}, is the unchecked bounded operation: copy through the first NUL
+	// and silently discard the suffix after N. Stopping once the destination
+	// is full avoids a pointless second scan; as with every PChar operation,
+	// SOURCE must denote readable bytes through either that bound or its
+	// earlier NUL terminator.
+	std::size_t copied = 0;
+	while (copied < DestinationCapacity && source[copied].value != 0) {
+		result.data[copied] = source[copied];
+		++copied;
+	}
+	result.length = t_char{static_cast<uint8_t>(copied)};
+	return result;
+}
+
+template <std::size_t DestinationCapacity> inline t_shortstring<DestinationCapacity> m_range_checked_shortstring_from_pchar(const t_char* source) {
+	t_shortstring<DestinationCapacity> result{};
+	if (!source) {
+		return result;
+	}
+	// The checked implicit conversion must distinguish an exact-capacity
+	// string from an overlong one, so it examines the following source byte.
+	// Checking belongs here, after overload selection; {$R} never changes
+	// conversion viability or rank.
+	std::size_t copied = 0;
+	while (source[copied].value != 0) {
+		if (copied == DestinationCapacity) {
+			m_runtime_error(201);
+		}
+		result.data[copied] = source[copied];
+		++copied;
+	}
+	result.length = t_char{static_cast<uint8_t>(copied)};
+	return result;
+}
+
 // File carriers contain only one opaque state pointer. The state owns all
 // C++ implementation objects and host resources; no FILE, std::string, or
 // stream object is embedded in Pascal storage.
