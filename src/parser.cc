@@ -9401,7 +9401,26 @@ void Parser::parse_procedure_or_function(bool is_class, bool is_function, bool i
 			}
 			parse_routine_body(method, owner_frame);
 		} else {
+			// An out-of-line method signature is written in the declaring
+			// class/object scope: nested types and inherited member names must
+			// resolve exactly as they did inside the class body. Push the owner
+			// body frame only for the signature; declaration ownership stays
+			// with the unit frame via current_declaration_frame().
+			bool pushed_signature_owner = false;
+			if (valid_owner) {
+				Node* signature_qualifier = nullptr;
+				if (auto ct = dynamic_cast<ClassType*>(owner_ty)) {
+					signature_qualifier = new ClassRefValue(ct);
+				} else {
+					signature_qualifier = new TypeMemberQualifier(owner_ty);
+				}
+				push_scope(owner_frame, signature_qualifier);
+				pushed_signature_owner = true;
+			}
 			RoutineType* sig = parse_routine_signature(is_class, is_function, false, is_constructor ? CONSTRUCTOR : is_destructor ? DESTRUCTOR : METHOD, owner_ty);
+			if (pushed_signature_owner) {
+				pop_scope();
+			}
 			parse_semicolon();
 			while (maybe_parse_keyword("inline")) {
 				// FIXME: use
