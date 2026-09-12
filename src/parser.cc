@@ -2215,8 +2215,56 @@ bool ScopeEntry::is_receiver_environment() const {
 	return qualifier && !dynamic_cast<UnitRef*>(qualifier);
 }
 
+bool ScopeEntry::is_foreign_unit_environment() const {
+	return qualifier && dynamic_cast<UnitRef*>(qualifier) != nullptr;
+}
+
+/** The unit-import view of one binding: implementation-private declarations
+ * are hidden, and an overload family is reduced to its interface members. The
+ * returned Binding's value is the original Type*, the original non-callable
+ * Node*, a single visible Callable*, or a reduced OverloadSet*. */
+static std::optional<Binding> imported_binding(const Binding& binding) {
+	if (std::holds_alternative<Type*>(binding.value)) {
+		return binding.visibility == Visibility::UnitInterface ? std::optional<Binding>{binding} : std::nullopt;
+	}
+	Node* node = std::get<Node*>(binding.value);
+	if (auto callable = dynamic_cast<Callable*>(node)) {
+		return callable->visibility == Visibility::UnitInterface ? std::optional<Binding>{binding} : std::nullopt;
+	}
+	if (auto overloads = dynamic_cast<OverloadSet*>(node)) {
+		std::vector<Callable*> visible;
+		for (Callable* member : overloads->members) {
+			if (member->visibility == Visibility::UnitInterface) {
+				visible.push_back(member);
+			}
+		}
+		if (visible.empty()) {
+			return std::nullopt;
+		}
+		if (visible.size() == overloads->members.size()) {
+			return binding;
+		}
+		Node* reduced = visible.size() == 1 ? static_cast<Node*>(visible.front())
+		                                    : static_cast<Node*>(new OverloadSet(std::move(visible)));
+		return Binding{binding.visibility, reduced};
+	}
+	return binding.visibility == Visibility::UnitInterface ? std::optional<Binding>{binding} : std::nullopt;
+}
+
 ScopeValueLookup ScopeEntry::lookup_value(const std::string& name) const {
-	Node* binding = frame->lookup_value(name);
+	Node* binding = nullptr;
+	if (is_foreign_unit_environment()) {
+		// A used unit exposes only its interface declarations. Unit frames have
+		// no structural parent, so the local binding is the complete lookup.
+		auto found = frame->lookup_type_or_value_local(name);
+		if (found && std::holds_alternative<Node*>(found->value)) {
+			if (auto visible = imported_binding(*found)) {
+				binding = std::get<Node*>(visible->value);
+			}
+		}
+	} else {
+		binding = frame->lookup_value(name);
+	}
 	// A receiver Frame has already consumed every overload that is visible
 	// through class/object inheritance. Its completed member binding shadows
 	// lower lexical and unit-global scopes exactly like any ordinary scoped
@@ -2270,7 +2318,7 @@ std::optional<Binding> Parser::maybe_resolve_type_or_value(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		if (auto unit = dynamic_cast<UnitRef*>(it->qualifier); unit && unit->unit && unit->unit->name == name) {
 			if (collected.empty()) {
-				return Binding{std::in_place_type<Node*>, unit};
+				return Binding{Visibility::Public, unit};
 			}
 			break;
 		}
@@ -2279,19 +2327,27 @@ std::optional<Binding> Parser::maybe_resolve_type_or_value(std::string name) {
 		if (!binding) {
 			continue;
 		}
-		if (auto type = std::get_if<Type*>(&*binding)) {
+		if (it->is_foreign_unit_environment()) {
+			// A used unit publishes only its interface declarations.
+			auto visible = imported_binding(*binding);
+			if (!visible) {
+				continue;
+			}
+			binding = *visible;
+		}
+		if (auto type = std::get_if<Type*>(&binding->value)) {
 			if (collected.empty()) {
-				return Binding{std::in_place_type<Type*>, *type};
+				return Binding{binding->visibility, *type};
 			}
 			break;
 		}
 
-		Node* hit = std::get<Node*>(*binding);
+		Node* hit = std::get<Node*>(binding->value);
 		const bool opens_parent = hit && !it->is_receiver_environment() && callable_binding_opens_parent(hit);
 		auto as_call = dynamic_cast<Callable*>(hit);
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
 		if (!opens_parent && collected.empty()) {
-			return Binding{std::in_place_type<Node*>, bind_lookup_result(it->qualifier, hit)};
+			return Binding{binding->visibility, bind_lookup_result(it->qualifier, hit)};
 		}
 		if (as_call) {
 			if (!collected.empty() && !same_callable_lookup_family(collected.front(), as_call)) {
@@ -2317,7 +2373,7 @@ std::optional<Binding> Parser::maybe_resolve_type_or_value(std::string name) {
 		return std::nullopt;
 	}
 	Node* result = collected.size() == 1 ? static_cast<Node*>(collected.front()) : static_cast<Node*>(new OverloadSet(std::move(collected)));
-	return Binding{std::in_place_type<Node*>, result};
+	return Binding{Visibility::Public, result};
 }
 
 /** Walk the scope stack top-down looking up a value-position name (variable,
@@ -2461,6 +2517,9 @@ Type* Parser::maybe_resolve_type(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 		Type* hit = it->frame->lookup_type(name);
 		if (!hit) {
+			continue;
+		}
+		if (it->is_foreign_unit_environment() && it->frame->binding_visibility(name) != Visibility::UnitInterface) {
 			continue;
 		}
 		std::unordered_set<IncompleteType*> seen;
@@ -2783,8 +2842,8 @@ std::optional<Binding> Parser::maybe_parse_named_type_or_expression() {
 		return std::nullopt;
 	}
 
-	if (std::holds_alternative<Node*>(*binding)) {
-		return Binding{std::in_place_type<Node*>, parse_expression()};
+	if (std::holds_alternative<Node*>(binding->value)) {
+		return Binding{Visibility::Public, parse_expression()};
 	}
 
 	// A Pascal value expression may begin with a type name: `T(value)` is an
@@ -2796,13 +2855,13 @@ std::optional<Binding> Parser::maybe_parse_named_type_or_expression() {
 	std::string id = parse_identifier();
 	if (input_token == "(") {
 		return Binding{
-		    std::in_place_type<Node*>,
+		    Visibility::Public,
 		    parse_expression_after_identifier(std::move(id), identifier_directives),
 		};
 	}
 
 	Type* type = parse_type_expression_from_identifier(std::move(id), identifier_directives, false);
-	return Binding{std::in_place_type<Type*>, type};
+	return Binding{Visibility::Public, type};
 }
 
 Node* Parser::parse_new_or_dispose(bool is_new) {
@@ -2824,12 +2883,12 @@ Node* Parser::parse_new_or_dispose(bool is_new) {
 		pointer_operand_type = destination_or_pointer ? destination_or_pointer->ty : nullptr;
 		pointer_type = dynamic_cast<PointerType*>(pointer_operand_type);
 	} else if (auto parsed = maybe_parse_named_type_or_expression()) {
-		if (auto value = std::get_if<Node*>(&*parsed)) {
+		if (auto value = std::get_if<Node*>(&parsed->value)) {
 			destination_or_pointer = *value;
 			pointer_operand_type = destination_or_pointer ? destination_or_pointer->ty : nullptr;
 			pointer_type = dynamic_cast<PointerType*>(pointer_operand_type);
 		} else {
-			Type* parsed_type = std::get<Type*>(*parsed);
+			Type* parsed_type = std::get<Type*>(parsed->value);
 			pointer_operand_type = parsed_type;
 			pointer_type = dynamic_cast<PointerType*>(parsed_type);
 			functional_form = true;
@@ -3112,10 +3171,10 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 		Type* rejected_qualifier_type = nullptr;
 		auto qualifier_binding = maybe_resolve_type_or_value(id);
 		if (qualifier_binding) {
-			if (auto value = std::get_if<Node*>(&*qualifier_binding)) {
+			if (auto value = std::get_if<Node*>(&qualifier_binding->value)) {
 				base = *value;
 			} else {
-				Type* qualifier_type = std::get<Type*>(*qualifier_binding);
+				Type* qualifier_type = std::get<Type*>(qualifier_binding->value);
 				rejected_qualifier_type = qualifier_type;
 				if (auto class_type = dynamic_cast<ClassType*>(qualifier_type)) {
 					base = new ClassRefValue(class_type);
@@ -3142,7 +3201,7 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 		// been resolved, declaration-owned builtin grammar must see the same
 		// Node as an unqualified lookup; returning here used to send
 		// System.Write/New/SizeOf/Low/Str through generic call parsing.
-		binding = Binding{std::in_place_type<Node*>, member};
+		binding = Binding{Visibility::Public, member};
 		if (auto callable = dynamic_cast<Callable*>(member); callable && !callable->pas_name.empty()) {
 			id = callable->pas_name;
 		} else if (auto overloads = dynamic_cast<OverloadSet*>(member); overloads && !overloads->members.empty() && !overloads->members.front()->pas_name.empty()) {
@@ -3151,8 +3210,8 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 	} else {
 		binding = maybe_resolve_type_or_value(id);
 	}
-	if (binding && std::holds_alternative<Node*>(*binding)) {
-		Node* value = std::get<Node*>(*binding);
+	if (binding && std::holds_alternative<Node*>(binding->value)) {
+		Node* value = std::get<Node*>(binding->value);
 		// Within a function body, a bare occurrence of that function's name
 		// denotes its hidden result variable.  Parentheses still mean a call,
 		// which is how recursive calls remain distinguishable.  resolve_lvalue
@@ -3181,10 +3240,10 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			if (explicit_type_start) {
 				target_ty = parse_type_expression(false);
 			} else if (auto parsed = maybe_parse_named_type_or_expression()) {
-				if (auto type = std::get_if<Type*>(&*parsed)) {
+				if (auto type = std::get_if<Type*>(&parsed->value)) {
 					target_ty = *type;
 				} else {
-					operand = std::get<Node*>(*parsed);
+					operand = std::get<Node*>(parsed->value);
 				}
 			} else {
 				operand = parse_expression();
@@ -3345,10 +3404,10 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 			if (token_starts_explicit_type_expression(input_token)) {
 				operand_type = parse_type_expression(false);
 			} else if (auto parsed = maybe_parse_named_type_or_expression()) {
-				if (auto parsed_operand = std::get_if<Node*>(&*parsed)) {
+				if (auto parsed_operand = std::get_if<Node*>(&parsed->value)) {
 					operand = *parsed_operand;
 				} else {
-					operand_type = std::get<Type*>(*parsed);
+					operand_type = std::get<Type*>(parsed->value);
 				}
 			} else {
 				operand = parse_expression();
@@ -3373,12 +3432,12 @@ Node* Parser::parse_value_from_identifier(std::string id, LeadingTokenDirectives
 		}
 	}
 	if (input_token == "(") {
-		Type* target_ty = binding ? (std::get_if<Type*>(&*binding) ? std::get<Type*>(*binding) : nullptr) : nullptr;
+		Type* target_ty = binding ? (std::get_if<Type*>(&binding->value) ? std::get<Type*>(binding->value) : nullptr) : nullptr;
 		if (target_ty) {
 			return parse_explicit_conversion_to(target_ty);
 		}
 	}
-	Type* visible_type = binding ? (std::get_if<Type*>(&*binding) ? std::get<Type*>(*binding) : nullptr) : nullptr;
+	Type* visible_type = binding ? (std::get_if<Type*>(&binding->value) ? std::get<Type*>(binding->value) : nullptr) : nullptr;
 	if (auto class_type = dynamic_cast<ClassType*>(visible_type)) {
 		// Pascal keeps type and value lookup distinct. In value context the
 		// class name denotes the exact class-reference value; it is not the
@@ -3818,7 +3877,7 @@ Type* Parser::parse_qualified_type_member(std::string lhs_name) {
 	if (Type* named_type = maybe_resolve_type(lhs_name)) {
 		// Required-type lookup deliberately skips a nearer value declaration,
 		// and it peels any already-published type-block placeholder.
-		binding = Binding{named_type};
+		binding = Binding{Visibility::Public, named_type};
 	} else {
 		// A unit qualifier is a value binding whose body frame exports types.
 		binding = maybe_resolve_type_or_value(lhs_name);
@@ -3830,10 +3889,10 @@ Type* Parser::parse_qualified_type_member(std::string lhs_name) {
 	}
 	Node* base = nullptr;
 	Type* rejected_qualifier_type = nullptr;
-	if (auto value = std::get_if<Node*>(&*binding)) {
+	if (auto value = std::get_if<Node*>(&binding->value)) {
 		base = *value;
 	} else {
-		Type* qt = type_projection_shape(std::get<Type*>(*binding));
+		Type* qt = type_projection_shape(std::get<Type*>(binding->value));
 		rejected_qualifier_type = qt;
 		if (auto ct = dynamic_cast<ClassType*>(qt)) {
 			base = new ClassRefValue(ct);
@@ -3856,9 +3915,21 @@ Type* Parser::parse_qualified_type_member(std::string lhs_name) {
 		return error_type();
 	}
 	Type* result = nullptr;
+	const bool unit_qualifier = dynamic_cast<UnitRef*>(base) != nullptr;
 	while (true) {
 		std::string member = parse_identifier();
 		auto member_binding = members->lookup_type_or_value(member);
+		if (unit_qualifier && member_binding) {
+			// A used unit publishes only its interface declarations. Qualifying
+			// through the unit reaches the unit frame directly, so apply the same
+			// boundary as the lexical scope walk.
+			auto visible = imported_binding(*member_binding);
+			if (!visible) {
+				member_binding = std::nullopt;
+			} else {
+				member_binding = *visible;
+			}
+		}
 		if (!member_binding) {
 			report_type_error("no type '" + member + "' visible after '" + lhs_name + "'", nullptr);
 			while (maybe_parse_period()) {
@@ -3866,10 +3937,10 @@ Type* Parser::parse_qualified_type_member(std::string lhs_name) {
 			}
 			return error_type();
 		}
-		if (auto t = std::get_if<Type*>(&*member_binding)) {
+		if (auto t = std::get_if<Type*>(&member_binding->value)) {
 			result = *t;
 		} else {
-			Node* node = std::get<Node*>(*member_binding);
+			Node* node = std::get<Node*>(member_binding->value);
 			result = node ? node->ty : nullptr;
 		}
 		if (!result) {
@@ -3908,10 +3979,10 @@ Type* Parser::parse_type_member_projection(Type* type) {
 		report_type_error("type has no member '" + member_name + "'", type);
 		return error_type();
 	}
-	if (auto member_type = std::get_if<Type*>(&*member)) {
+	if (auto member_type = std::get_if<Type*>(&member->value)) {
 		return *member_type;
 	}
-	Node* member_value = std::get<Node*>(*member);
+	Node* member_value = std::get<Node*>(member->value);
 	if (!member_value || !member_value->ty) {
 		report_type_error("member '" + member_name + "' has no type", type);
 		return error_type();
@@ -3992,7 +4063,20 @@ Node* Parser::maybe_bind_member(Node* receiver, const std::string& name) {
 	if (!members) {
 		return nullptr;
 	}
-	Node* member = members->lookup_value(name);
+	// `Unit.Member` reaches the unit frame directly rather than through the
+	// lexical scope stack, so the interface visibility boundary is applied here.
+	const bool unit_import = dynamic_cast<UnitRef*>(receiver) != nullptr;
+	Node* member = nullptr;
+	if (unit_import) {
+		auto found = members->lookup_type_or_value_local(name);
+		if (found && std::holds_alternative<Node*>(found->value)) {
+			if (auto visible = imported_binding(*found)) {
+				member = std::get<Node*>(visible->value);
+			}
+		}
+	} else {
+		member = members->lookup_value(name);
+	}
 	return member ? bind_lookup_result(receiver, member) : nullptr;
 }
 
@@ -6861,7 +6945,7 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 			const std::string name = parse_identifier();
 			StorageSlot* slot = nullptr;
 			if (auto binding = members ? members->lookup_type_or_value_local(name) : std::nullopt) {
-				if (auto value = std::get_if<Node*>(&*binding)) {
+				if (auto value = std::get_if<Node*>(&binding->value)) {
 					slot = dynamic_cast<StorageSlot*>(*value);
 				}
 			}
@@ -7817,9 +7901,9 @@ void Parser::parse_type_block(bool delphi_auto_end) {
 		Type* existing = nullptr;
 		bool declaration_valid = true;
 		if (existing_binding) {
-			auto existing_type = std::get_if<Type*>(&*existing_binding);
+			auto existing_type = std::get_if<Type*>(&existing_binding->value);
 			if (!existing_type) {
-				report_value_error("duplicate identifier: " + name, std::get<Node*>(*existing_binding));
+				report_value_error("duplicate identifier: " + name, std::get<Node*>(existing_binding->value));
 				declaration_valid = false;
 			} else {
 				existing = *existing_type;
@@ -11860,6 +11944,9 @@ Unit* Parser::parse_unit_interface_body() {
 	Unit* unit = unit_registry->register_new(name, unit_frame);
 	current_unit = unit;
 	unit->phase = UnitPhase::InterfaceInProgress;
+	// Declarations registered while the interface is parsed are the unit's
+	// published surface; the implementation section flips this flag.
+	unit_frame->new_declaration_visibility = Visibility::UnitInterface;
 	// Self-bind the unit name to its UnitRef so `Unit.X` resolves through
 	// the ordinary scope walk: from inside this unit (self-qualification)
 	// and from any unit that `uses` this one (cross-unit qualification,
@@ -11911,6 +11998,9 @@ void Parser::parse_unit_implementation_body(Unit* unit) {
 	}
 	parse_keyword("implementation");
 	unit->phase = UnitPhase::ImplementationInProgress;
+	// Implementation declarations are private to this unit; importers see only
+	// the interface-stamped bindings in `unit->frame`.
+	unit->frame->new_declaration_visibility = Visibility::UnitImplementation;
 	// Mark this unit active before completing dependencies. If one of their
 	// implementations uses this unit, its interface is already complete and
 	// the recursive completion request terminates here instead of treating a

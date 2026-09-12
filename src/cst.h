@@ -6,6 +6,21 @@
 #include <string>
 #include <vector>
 
+/** Where a declaration may be seen. Unit frames distinguish the two sections;
+ * aggregate frames will grow the Public/Protected/Private levels here. All
+ * non-unit frames default to Public and are never filtered today, because no
+ * foreign lookup path reaches them through a UnitRef. */
+enum class Visibility {
+	Public,
+	Published,
+	Protected,
+	Private,
+	StrictProtected,
+	StrictPrivate,
+	UnitInterface,
+	UnitImplementation,
+};
+
 class Type;
 class FixedArrayType;
 class Frame;
@@ -852,6 +867,12 @@ class Callable : public Node {
 	std::string pas_name;
 	RoutineType* ty;
 	bool has_overload_directive;
+	// Visibility of this declaration. For a unit's interface section this is
+	// Visibility::UnitInterface; implementation declarations are
+	// Visibility::UnitImplementation. Aggregate members currently keep Public.
+	// One overload family can mix members with different visibilities, so the
+	// import/access filter must inspect this per member.
+	Visibility visibility = Visibility::Public;
 	// Non-null when this source declaration names an RTL/compiler builtin.
 	// Semantic special forms dispatch through descriptor metadata, never by
 	// comparing the emitted C++ spelling.

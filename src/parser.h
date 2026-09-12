@@ -189,6 +189,10 @@ struct ScopeEntry {
 	 *  Unit qualifiers deliberately remain lexical overload environments:
 	 *  unlike a class receiver, they have no structural inheritance chain. */
 	bool is_receiver_environment() const;
+	/** True when this environment belongs to a used unit (qualifier is a
+	 *  UnitRef). Such an entry resolves through the unit's interface snapshot:
+	 *  implementation-section declarations are invisible through `uses`. */
+	bool is_foreign_unit_environment() const;
 	/** Resolve one complete binding in this environment. Frame lookup already
 	 *  includes structural parents; opens_parent says whether lexical lookup
 	 *  may continue to attach another overload family. */

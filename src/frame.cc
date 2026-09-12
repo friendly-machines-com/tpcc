@@ -16,6 +16,14 @@ Frame::Frame(Frame* parent) {
 	this->parent = parent;
 }
 
+Visibility Frame::binding_visibility(const std::string& name) const {
+	auto found = items.find(name);
+	if (found == items.end()) {
+		return Visibility::Public;
+	}
+	return found->second.visibility;
+}
+
 std::optional<Binding> Frame::lookup_type_or_value_local(std::string name) const {
 	auto found = items.find(name);
 	if (found == items.end()) {
@@ -31,19 +39,19 @@ std::optional<Binding> Frame::lookup_type_or_value(std::string name) const {
 		if (!found) {
 			continue;
 		}
-		if (auto type = std::get_if<Type*>(&*found)) {
+		if (auto type = std::get_if<Type*>(&found->value)) {
 			if (callables.empty()) {
-				return Binding{std::in_place_type<Type*>, *type};
+				return Binding{found->visibility, *type};
 			}
 			break;
 		}
 
-		Node* binding = std::get<Node*>(*found);
+		Node* binding = std::get<Node*>(found->value);
 		auto callable = dynamic_cast<Callable*>(binding);
 		auto overloads = dynamic_cast<OverloadSet*>(binding);
 		if (!callable && !overloads) {
 			if (callables.empty()) {
-				return Binding{std::in_place_type<Node*>, binding};
+				return Binding{found->visibility, binding};
 			}
 			break;
 		}
@@ -64,7 +72,7 @@ std::optional<Binding> Frame::lookup_type_or_value(std::string name) const {
 		return std::nullopt;
 	}
 	Node* result = callables.size() == 1 ? static_cast<Node*>(callables.front()) : static_cast<Node*>(new OverloadSet(std::move(callables)));
-	return Binding{std::in_place_type<Node*>, result};
+	return Binding{Visibility::Public, result};
 }
 
 Type* Frame::lookup_type(std::string name) const {
@@ -73,7 +81,7 @@ Type* Frame::lookup_type(std::string name) const {
 		if (!found) {
 			continue;
 		}
-		if (auto type = std::get_if<Type*>(&*found)) {
+		if (auto type = std::get_if<Type*>(&found->value)) {
 			assert(*type);
 			return *type;
 		}
@@ -103,7 +111,7 @@ Node* Frame::lookup_value(std::string name) const {
 		if (!found) {
 			continue;
 		}
-		auto value = std::get_if<Node*>(&*found);
+		auto value = std::get_if<Node*>(&found->value);
 		if (!value) {
 			continue;
 		}
@@ -149,14 +157,14 @@ Node* Frame::lookup_value(std::string name) const {
 void Frame::rebind_type(std::string name, Type* ty) {
 	auto found = items.find(name);
 	assert(found != items.end());
-	assert(std::holds_alternative<Type*>(found->second));
-	found->second = Binding{std::in_place_type<Type*>, ty};
+	assert(std::holds_alternative<Type*>(found->second.value));
+	found->second.value = std::variant<Type*, Node*>{std::in_place_type<Type*>, ty};
 }
 
 void Frame::rebind_value_type(std::string name, Type* ty) {
 	auto found = items.find(name);
 	assert(found != items.end());
-	auto value = std::get_if<Node*>(&found->second);
+	auto value = std::get_if<Node*>(&found->second.value);
 	assert(value && *value);
 	Node* node = *value;
 	if (auto callable = dynamic_cast<Callable*>(node)) {
@@ -179,7 +187,7 @@ bool Frame::register_type(std::string name, Type* ty) {
 		if (parent && parent->lookup_type(name)) {
 			fprintf(stderr, "warning: Type name '%s' shadows another type of the same name\n", name.c_str());
 		}
-		items.emplace(std::move(name), Binding{std::in_place_type<Type*>, ty});
+		items.emplace(std::move(name), Binding{new_declaration_visibility, ty});
 		return true;
 	}
 }
@@ -198,7 +206,7 @@ bool Frame::register_variable(std::string name, Node* v, Type* ty) {
 		if (!v->ty) {
 			v->ty = ty;
 		}
-		items.emplace(std::move(name), Binding{std::in_place_type<Node*>, v});
+		items.emplace(std::move(name), Binding{new_declaration_visibility, v});
 		return true;
 	}
 }
@@ -308,12 +316,13 @@ CallableRegistration::Kind validate_callable_pair(Callable* existing, Callable* 
 }
 
 CallableRegistration Frame::collect_callable(std::string name, Callable* c) {
+	c->visibility = new_declaration_visibility;
 	auto iter = items.find(name);
 	if (iter == items.end()) {
-		items.emplace(std::move(name), Binding{std::in_place_type<Node*>, c});
+		items.emplace(std::move(name), Binding{new_declaration_visibility, c});
 		return {CallableRegistration::Kind::Added};
 	}
-	auto existing_value = std::get_if<Node*>(&iter->second);
+	auto existing_value = std::get_if<Node*>(&iter->second.value);
 	if (!existing_value) {
 		return {CallableRegistration::Kind::Rejected};
 	}
@@ -325,7 +334,7 @@ CallableRegistration Frame::collect_callable(std::string name, Callable* c) {
 		// block does not yet provide. Post-normalization aggregate validation
 		// establishes the public OverloadSet invariant before emission.
 		auto set = new OverloadSet(std::vector<Callable*>{ec, c});
-		iter->second = Binding{std::in_place_type<Node*>, set};
+		iter->second = Binding{new_declaration_visibility, set};
 		return {CallableRegistration::Kind::Added};
 	} else if (auto os = dynamic_cast<OverloadSet*>(existing)) {
 		os->members.push_back(c);
@@ -340,7 +349,7 @@ CallableRegistration Frame::register_callable(std::string name, Callable* c) {
 		return collect_callable(std::move(name), c);
 	}
 
-	auto existing_value = std::get_if<Node*>(&iter->second);
+	auto existing_value = std::get_if<Node*>(&iter->second.value);
 	if (!existing_value) {
 		return {CallableRegistration::Kind::Rejected};
 	}
@@ -373,7 +382,7 @@ static Type* declaration_value_type(Node* value) {
 std::vector<std::pair<std::string, Type*>> Frame::type_declarations() const {
 	std::vector<std::pair<std::string, Type*>> result;
 	for (const auto& item : items) {
-		if (auto type = std::get_if<Type*>(&item.second)) {
+		if (auto type = std::get_if<Type*>(&item.second.value)) {
 			result.emplace_back(item.first, *type);
 		}
 	}
@@ -383,7 +392,7 @@ std::vector<std::pair<std::string, Type*>> Frame::type_declarations() const {
 std::vector<std::pair<std::string, FrameValueEntry>> Frame::value_declarations() const {
 	std::vector<std::pair<std::string, FrameValueEntry>> result;
 	for (const auto& item : items) {
-		if (auto value = std::get_if<Node*>(&item.second)) {
+		if (auto value = std::get_if<Node*>(&item.second.value)) {
 			result.emplace_back(item.first, FrameValueEntry{*value, declaration_value_type(*value)});
 		}
 	}

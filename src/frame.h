@@ -1,5 +1,6 @@
 #pragma once
 #include "types.h"
+#include "cst.h"
 #include <map>
 #include <optional>
 #include <string>
@@ -38,8 +39,19 @@ struct FrameValueEntry {
 
 /** One declaration bound to one spelling in one physical Frame. Type and
  * value objects deliberately remain unrelated C++ hierarchies; the variant
- * is the type-safe tag saying which kind of declaration the name denotes. */
-using Binding = std::variant<Type*, Node*>;
+ * is the type-safe tag saying which kind of declaration the name denotes.
+ * `visibility` is the declaration's export/view level, stamped at registration
+ * time from the section the parser is currently in. */
+struct Binding {
+	Visibility visibility = Visibility::Public;
+	std::variant<Type*, Node*> value;
+
+	Binding() = default;
+	Binding(Visibility visibility, Type* ty) : visibility(visibility), value(ty) {
+	}
+	Binding(Visibility visibility, Node* node) : visibility(visibility), value(node) {
+	}
+};
 using NamedBinding = std::pair<std::string, Binding>;
 
 /** A Frame is the storage for one declaration block (the result of `var x,y,z:
@@ -60,10 +72,18 @@ class Frame {
 
       public:
 	Frame* parent; // NOT invasive from Parser
+	// Visibility stamped into declarations registered while this frame is the
+	// active declaration frame. The parser sets this on a unit frame when it
+	// enters the interface or implementation section; aggregate and body frames
+	// keep the Public default.
+	Visibility new_declaration_visibility = Visibility::Public;
       public:
 	// TODO: kind of frame (unit, record, class, ...); maybe also bool auto_unwrap; for "uses" and "with" blocks
 
 	Frame(Frame* parent);
+	/** Visibility of the binding stored locally under NAME. Returns Public for
+	 *  an absent name. */
+	Visibility binding_visibility(const std::string& name) const;
 	/** Nearest binding of either kind through this structural Frame chain. */
 	std::optional<Binding> lookup_type_or_value(std::string name) const;
 	/** Local-only form used by Parser while walking lexical scope entries. */
@@ -109,7 +129,7 @@ class Frame {
 	 *  lookup_value(), which applies the structural parent chain. */
 	bool declares_value(const std::string& name) const {
 		auto found = items.find(name);
-		return found != items.end() && std::holds_alternative<Node*>(found->second);
+		return found != items.end() && std::holds_alternative<Node*>(found->second.value);
 	}
 
 	/** Read-only snapshots for existing emission/diagnostic walks. The sole
