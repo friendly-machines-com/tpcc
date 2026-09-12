@@ -408,6 +408,8 @@ class Property : public Node {
 	Node* read_accessor;
 	Node* write_accessor;
 	bool is_default;
+	// The aggregate type that declares this property; non-null for members.
+	Type* owner_type = nullptr;
 
 	Property(std::string pas_name, Type* property_type, std::vector<Type*> index_types, Node* read_accessor, Node* write_accessor, bool is_default);
 	const char* diagnostic_kind() const override;
@@ -869,14 +871,18 @@ class Callable : public Node {
 	bool has_overload_directive;
 	// Visibility of this declaration. For a unit's interface section this is
 	// Visibility::UnitInterface; implementation declarations are
-	// Visibility::UnitImplementation. Aggregate members currently keep Public.
-	// One overload family can mix members with different visibilities, so the
-	// import/access filter must inspect this per member.
+	// Visibility::UnitImplementation; class/object members carry their member
+	// section level. One overload family can mix members with different
+	// visibilities, so lookup filters must inspect this per member.
 	Visibility visibility = Visibility::Public;
 	// Non-null when this source declaration names an RTL/compiler builtin.
 	// Semantic special forms dispatch through descriptor metadata, never by
 	// comparing the emitted C++ spelling.
 	const BuiltinDesc* builtin_desc = nullptr;
+	// Lexically enclosing routine for a nested procedure/function. Null at the
+	// top level and for methods. Used to recover the enclosing class/object
+	// when a nested routine is parsed inside a method body.
+	Callable* enclosing_routine = nullptr;
 	bool is_external = false;
 	bool has_body = false;
 	Frame* body_frame;

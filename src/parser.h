@@ -175,6 +175,9 @@ struct ScopeValueLookup {
 	// True only when this completed binding is allowed to attach overloads
 	// from the next lexical/unit ScopeEntry.
 	bool opens_parent;
+	// Name-level Binding::visibility for non-callable values. Callables carry
+	// per-member visibility on the Callable itself.
+	Visibility visibility = Visibility::Public;
 };
 
 /** One environment in the active name-lookup path. `qualifier` optionally
@@ -757,7 +760,16 @@ class Parser {
 	/** Bind a lookup result to its selecting expression and enforce whether
 	 *  that expression denotes an instance/class receiver or only a static
 	 *  type-member environment. */
-	Node* bind_lookup_result(Node* qualifier, Node* binding);
+	Node* bind_lookup_result(Node* qualifier, Node* binding, Visibility name_visibility = Visibility::Public);
+	/** The aggregate type whose method body is currently being parsed, or null
+	 *  outside any method (standalone routines, unit initializers). */
+	Type* current_enclosing_type() const;
+	/** Whether a declaration of VIS declared in OWNER is visible from the
+	 *  current parser context (current unit and enclosing type). ACCESS_TYPE
+	 *  is the static type through which the member is selected (the receiver,
+	 *  cast target, or class reference target); plain `protected` honors the
+	 *  same-unit descendant-cast rule. */
+	bool member_visible(Type* owner, Visibility vis, Type* access_type = nullptr) const;
 	/** Enter/leave the frame which owns declarations currently being parsed. */
 	void push_declaration_frame(Frame* frame);
 	void pop_declaration_frame();

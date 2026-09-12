@@ -2253,6 +2253,7 @@ static std::optional<Binding> imported_binding(const Binding& binding) {
 
 ScopeValueLookup ScopeEntry::lookup_value(const std::string& name) const {
 	Node* binding = nullptr;
+	Visibility name_visibility = Visibility::Public;
 	if (is_foreign_unit_environment()) {
 		// A used unit exposes only its interface declarations. Unit frames have
 		// no structural parent, so the local binding is the complete lookup.
@@ -2260,20 +2261,124 @@ ScopeValueLookup ScopeEntry::lookup_value(const std::string& name) const {
 		if (found && std::holds_alternative<Node*>(found->value)) {
 			if (auto visible = imported_binding(*found)) {
 				binding = std::get<Node*>(visible->value);
+				name_visibility = visible->visibility;
 			}
 		}
 	} else {
 		binding = frame->lookup_value(name);
+		if (binding && !dynamic_cast<Callable*>(binding) && !dynamic_cast<OverloadSet*>(binding)) {
+			// Non-callables carry their declaration visibility on the Binding.
+			// lookup_value already walked the structural parent chain to find
+			// this member; repeat only the name-level read for its visibility.
+			if (auto found = frame->lookup_type_or_value(name)) {
+				name_visibility = found->visibility;
+			}
+		}
 	}
 	// A receiver Frame has already consumed every overload that is visible
 	// through class/object inheritance. Its completed member binding shadows
 	// lower lexical and unit-global scopes exactly like any ordinary scoped
 	// declaration. UnitRef is deliberately not a receiver here: used-unit
 	// globals share the global overload domain and may attach across entries.
-	return ScopeValueLookup{binding, binding && !is_receiver_environment() && callable_binding_opens_parent(binding)};
+	return ScopeValueLookup{binding, binding && !is_receiver_environment() && callable_binding_opens_parent(binding), name_visibility};
 }
 
-Node* Parser::bind_lookup_result(Node* qualifier, Node* binding) {
+static Type* member_owner_type(Node* binding) {
+	if (auto slot = dynamic_cast<StorageSlot*>(binding)) {
+		return slot->owner_type;
+	}
+	if (auto method = dynamic_cast<Method*>(binding)) {
+		return method->owner_class;
+	}
+	if (auto property = dynamic_cast<Property*>(binding)) {
+		return property->owner_type;
+	}
+	if (auto constant = dynamic_cast<ConstantDecl*>(binding)) {
+		return constant->owner_type;
+	}
+	return nullptr;
+}
+
+static bool same_or_descendant(Type* from, Type* ancestor) {
+	for (Type* current = from; current;) {
+		if (current == ancestor) {
+			return true;
+		}
+		if (auto ct = dynamic_cast<ClassType*>(current)) {
+			current = ct->super;
+		} else if (auto ot = dynamic_cast<ObjectType*>(current)) {
+			current = ot->super;
+		} else {
+			return false;
+		}
+	}
+	return false;
+}
+
+Type* Parser::current_enclosing_type() const {
+	for (Callable* routine = current_routine; routine; routine = routine->enclosing_routine) {
+		if (auto method = dynamic_cast<Method*>(routine)) {
+			return method->owner_class;
+		}
+	}
+	return nullptr;
+}
+
+bool Parser::member_visible(Type* owner, Visibility vis, Type* access_type) const {
+	// Types declared inside a program have no owning_unit; they belong to the
+	// one program compilation unit, which is the current unit while parsing it.
+	auto same_unit_as = [&](Type* owner) {
+		Unit* owner_unit = owner ? owner->owning_unit : nullptr;
+		if (owner_unit) {
+			return current_unit == owner_unit;
+		}
+		// Nested, local, and aggregate-member types carry no owning_unit; they
+		// are only reachable from the unit currently being parsed.
+		return true;
+	};
+	switch (vis) {
+		case Visibility::Public:
+		case Visibility::Published:
+		case Visibility::UnitInterface:
+			return true;
+		case Visibility::UnitImplementation:
+			return false;
+		case Visibility::Private:
+			return same_unit_as(owner);
+		case Visibility::Protected:
+			// FPC's plain protected is visible to same-unit code, to the class
+			// and descendants, and through a descendant-cast whose descendant
+			// type is declared in the accessing unit.
+			return same_unit_as(owner)
+			    || (access_type && same_or_descendant(access_type, owner) && same_unit_as(access_type));
+		case Visibility::StrictPrivate:
+			return current_enclosing_type() == owner;
+		case Visibility::StrictProtected:
+			return same_or_descendant(current_enclosing_type(), owner);
+	}
+	return true;
+}
+
+static Type* member_access_type(Node* qualifier) {
+	if (!qualifier) {
+		return nullptr;
+	}
+	if (auto class_ref = dynamic_cast<ClassRefValue*>(qualifier)) {
+		return class_ref->target;
+	}
+	if (auto type_qualifier = dynamic_cast<TypeMemberQualifier*>(qualifier)) {
+		return type_qualifier->target;
+	}
+	if (auto class_ref_type = dynamic_cast<ClassRefType*>(qualifier->ty)) {
+		return class_ref_type->target;
+	}
+	if (auto pointer = dynamic_cast<PointerType*>(qualifier->ty)) {
+		return pointer->item_type;
+	}
+	return qualifier->ty;
+}
+
+Node* Parser::bind_lookup_result(Node* qualifier, Node* binding, Visibility name_visibility) {
 	if (!qualifier || dynamic_cast<UnitRef*>(qualifier)) {
 		return binding;
 	}
@@ -2296,8 +2401,39 @@ Node* Parser::bind_lookup_result(Node* qualifier, Node* binding) {
 			}
 		}
 	}
+	Type* access_type = member_access_type(qualifier);
 	if (auto property = dynamic_cast<Property*>(binding)) {
+		if (!member_visible(property->owner_type, name_visibility, access_type)) {
+			report_type_error("property is not visible from this context", property->ty);
+			return new ErrorValue();
+		}
 		return new PropertyAccess(qualifier, property, {});
+	}
+	if (auto callable = dynamic_cast<Callable*>(binding)) {
+		if (!member_visible(member_owner_type(callable), callable->visibility, access_type)) {
+			report_type_error("member is not visible from this context", callable->ty);
+			return new ErrorValue();
+		}
+	}
+	if (auto overloads = dynamic_cast<OverloadSet*>(binding)) {
+		std::vector<Callable*> visible;
+		for (Callable* member : overloads->members) {
+			if (member_visible(member_owner_type(member), member->visibility, access_type)) {
+				visible.push_back(member);
+			}
+		}
+		if (visible.empty()) {
+			report_type_error("no visible overload of this member", binding->ty);
+			return new ErrorValue();
+		}
+		if (visible.size() == 1) {
+			binding = static_cast<Node*>(visible.front());
+		} else if (visible.size() != overloads->members.size()) {
+			binding = static_cast<Node*>(new OverloadSet(std::move(visible)));
+		}
+	} else if (!dynamic_cast<Callable*>(binding) && !member_visible(member_owner_type(binding), name_visibility, access_type)) {
+		report_type_error("member is not visible from this context", binding->ty);
+		return new ErrorValue();
 	}
 	auto access = new MemberAccess(qualifier, binding);
 	access->ty = binding->ty;
@@ -2347,7 +2483,7 @@ std::optional<Binding> Parser::maybe_resolve_type_or_value(std::string name) {
 		auto as_call = dynamic_cast<Callable*>(hit);
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
 		if (!opens_parent && collected.empty()) {
-			return Binding{binding->visibility, bind_lookup_result(it->qualifier, hit)};
+			return Binding{binding->visibility, bind_lookup_result(it->qualifier, hit, binding->visibility)};
 		}
 		if (as_call) {
 			if (!collected.empty() && !same_callable_lookup_family(collected.front(), as_call)) {
@@ -2398,10 +2534,10 @@ Node* Parser::maybe_resolve_value(std::string name) {
 		auto as_set = dynamic_cast<OverloadSet*>(hit);
 		if (collected.empty() && !as_call && !as_set) {
 			// First (and terminating) hit is a non-callable value.
-			return bind_lookup_result(it->qualifier, hit);
+			return bind_lookup_result(it->qualifier, hit, lookup.visibility);
 		}
 		if (!lookup.opens_parent && collected.empty()) {
-			return bind_lookup_result(it->qualifier, hit);
+			return bind_lookup_result(it->qualifier, hit, lookup.visibility);
 		}
 		if (as_call) {
 			if (!collected.empty() && !same_callable_lookup_family(collected.front(), as_call)) {
@@ -2492,11 +2628,12 @@ Node* Parser::active_function_result_lvalue_from_binding(Node* binding) const {
 /** value that can be assigned to */
 Node* Parser::resolve_lvalue(std::string name) {
 	for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-		if (Node* hit = it->lookup_value(name).binding) {
+		ScopeValueLookup lookup = it->lookup_value(name);
+		if (Node* hit = lookup.binding) {
 			if (Node* result = active_function_result_lvalue_from_binding(hit)) {
 				return result;
 			}
-			return bind_lookup_result(it->qualifier, hit);
+			return bind_lookup_result(it->qualifier, hit, lookup.visibility);
 		}
 	}
 	return raise_value_error("unresolved lvalue identifier: " + name, nullptr);
@@ -4067,17 +4204,24 @@ Node* Parser::maybe_bind_member(Node* receiver, const std::string& name) {
 	// lexical scope stack, so the interface visibility boundary is applied here.
 	const bool unit_import = dynamic_cast<UnitRef*>(receiver) != nullptr;
 	Node* member = nullptr;
+	Visibility name_visibility = Visibility::Public;
 	if (unit_import) {
 		auto found = members->lookup_type_or_value_local(name);
 		if (found && std::holds_alternative<Node*>(found->value)) {
 			if (auto visible = imported_binding(*found)) {
 				member = std::get<Node*>(visible->value);
+				name_visibility = visible->visibility;
 			}
 		}
 	} else {
 		member = members->lookup_value(name);
+		if (member && !dynamic_cast<Callable*>(member) && !dynamic_cast<OverloadSet*>(member)) {
+			if (auto found = members->lookup_type_or_value(name)) {
+				name_visibility = found->visibility;
+			}
+		}
 	}
-	return member ? bind_lookup_result(receiver, member) : nullptr;
+	return member ? bind_lookup_result(receiver, member, name_visibility) : nullptr;
 }
 
 static bool custom_enumerator_value_type(Type* ty) {
@@ -5406,6 +5550,7 @@ void Parser::parse_property_declaration(Frame* body, Type* owner_type) {
 	}
 
 	auto property = new Property(property_name, property_type, std::move(index_types), read_accessor, write_accessor, is_default);
+	property->owner_type = owner_type;
 	const bool registered = body->register_variable(property_name, property, property_type);
 	if (!registered) {
 		report_value_error("duplicate property '" + property_name + "'", property);
@@ -5547,33 +5692,42 @@ Frame* Parser::parse_aggregate_type_body(Type* owner_class) {
 	Frame* body = make_aggregate_body_frame(owner_class);
 	push_scope(body);
 	push_declaration_frame(body);
-	std::string visibility = "published";
+	body->new_declaration_visibility = Visibility::Public;
 	auto at_visibility_section = [&]() { return peek_directive("published") || peek_directive("public") || peek_directive("protected") || peek_directive("private") || peek_directive("strict"); };
+	auto enter_section = [&](Visibility next) {
+		const bool is_class = dynamic_cast<ClassType*>(owner_class) != nullptr;
+		const bool is_record = dynamic_cast<RecordType*>(owner_class) != nullptr || dynamic_cast<PackedRecordType*>(owner_class) != nullptr;
+		if (next == Visibility::Published && !is_class) {
+			report_type_kind_mismatch("published section", "class", owner_class);
+			return;
+		}
+		if ((next == Visibility::Protected || next == Visibility::StrictProtected) && is_record) {
+			report_type_kind_mismatch("protected section", "class or object", owner_class);
+			return;
+		}
+		body->new_declaration_visibility = next;
+	};
 	do {
 		if (peek_keyword("end")) {
 			break;
 		}
 		if (maybe_parse_directive("published")) {
-			visibility = "published";
+			enter_section(Visibility::Published);
 			continue;
 		} else if (maybe_parse_directive("public")) {
-			visibility = "public";
+			enter_section(Visibility::Public);
 			continue;
 		} else if (maybe_parse_directive("protected")) {
-			visibility = "protected";
+			enter_section(Visibility::Protected);
 			continue;
 		} else if (maybe_parse_directive("private")) {
-			visibility = "private";
+			enter_section(Visibility::Private);
 			continue;
 		} else if (maybe_parse_directive("strict")) {
-			// Member access is not enforced yet, but retain the exact current
-			// visibility just like the existing one-word directives do.
-			// Recognizing `strict` only at this aggregate-section boundary
-			// also leaves it usable as an identifier elsewhere.
 			if (maybe_parse_directive("private")) {
-				visibility = "strict private";
+				enter_section(Visibility::StrictPrivate);
 			} else if (maybe_parse_directive("protected")) {
-				visibility = "strict protected";
+				enter_section(Visibility::StrictProtected);
 			} else {
 				raise_parse_error("expected private or protected after strict");
 			}
@@ -8977,6 +9131,7 @@ void Parser::parse_routine_body(Callable* target, Frame* owner_frame) {
 	target->body_frame = body_frame;
 	Callable* saved_routine = current_routine;
 	bool nested_lambda = saved_routine && dynamic_cast<Procedure*>(target);
+	target->enclosing_routine = saved_routine;
 	current_routine = target;
 	push_statement_control_context();
 	StorageSlot* receiver_slot = nullptr;
