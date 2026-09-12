@@ -280,6 +280,10 @@ FixedSetType::FixedSetType(SourceLocation source_location, Type* item_type) : Ty
 	this->item_type = item_type;
 }
 
+Type* FixedSetType::sequence_index_type() const {
+	return item_type;
+}
+
 TypedFileType::TypedFileType(SourceLocation source_location, Type* item_type) : Type(std::move(source_location)), item_type(item_type) {
 }
 

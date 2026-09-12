@@ -161,7 +161,13 @@ ExplicitCast::ExplicitCast(Node* value, Type* target) : Cast(value, target) {
 
 TypeBound::TypeBound(TypeBoundKind kind, Type* operand_type) : kind(kind), operand_type(operand_type) {
 	auto array = dynamic_cast<FixedArrayType*>(operand_type);
-	this->ty = array ? array->bounds : operand_type;
+	if (auto set = dynamic_cast<FixedSetType*>(operand_type)) {
+		// Low/High of a set are bounds of the set's element type, not of the
+		// set carrier itself.
+		this->ty = set->item_type;
+	} else {
+		this->ty = array ? array->bounds : operand_type;
+	}
 }
 
 ValueBound::ValueBound(TypeBoundKind kind, Node* value, Type* result_type) : UnaryOperation(value), kind(kind) {

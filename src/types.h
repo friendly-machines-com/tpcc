@@ -428,6 +428,8 @@ struct FixedSetType : public Type {
 	Type* item_type;
 	FixedSetType(SourceLocation source_location, Type* item_type);
 	const char* diagnostic_kind() const override;
+	// Low/High of a set value operate on the set's element type.
+	Type* sequence_index_type() const override;
 	std::optional<ValueConversion> value_conversion_from(const Type* source) const override;
 	bool predefined_explicit_conversion_from(const Type* source) const override;
 	bool is_subtype_of(const Type* target) const override;
