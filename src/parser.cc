@@ -8295,11 +8295,7 @@ void Parser::maybe_parse_type_block(bool delphi_auto_end) {
 }
 
 StorageSlot* Parser::resolve_absolute_target(const std::string& target_name, Type* declared_type) {
-	if (!current_routine) {
-		report_value_error("'absolute' is only valid inside a procedure or function body", nullptr);
-		return nullptr;
-	}
-	Node* binding = current_declaration_frame()->lookup_value(target_name);
+	Node* binding = maybe_resolve_value(target_name);
 	if (!binding) {
 		report_value_error("'absolute' target '" + target_name + "' is not visible in this scope", nullptr);
 		return nullptr;
@@ -8309,18 +8305,28 @@ StorageSlot* Parser::resolve_absolute_target(const std::string& target_name, Typ
 		report_value_error("'absolute' target '" + target_name + "' is not a variable", binding);
 		return nullptr;
 	}
-	const auto& formals = current_routine->ty->formals;
-	auto found = std::find_if(formals.begin(), formals.end(), [&](const Parameter& p) { return p.pas_name == target_name; });
-	if (found == formals.end()) {
-		report_value_error("'absolute' target '" + target_name + "' is not a parameter of the enclosing routine", binding);
-		return nullptr;
+	// The alias re-views either a by-value parameter of the enclosing routine
+	// (the original storage-local case) or a static-storage variable (unit
+	// scope). Nothing wider is accepted: a reference alias to an arbitrary
+	// local that may not outlive the alias is deliberately unsupported.
+	bool by_value_parameter = false;
+	if (current_routine) {
+		const auto& formals = current_routine->ty->formals;
+		auto found = std::find_if(formals.begin(), formals.end(), [&](const Parameter& p) { return p.pas_name == target_name; });
+		if (found != formals.end()) {
+			if (found->mode != ParamMode::Value) {
+				report_value_error("'absolute' target '" + target_name + "' must be a by-value parameter", binding);
+				return nullptr;
+			}
+			by_value_parameter = true;
+		}
 	}
-	if (found->mode != ParamMode::Value) {
-		report_value_error("'absolute' target '" + target_name + "' must be a by-value parameter", binding);
+	if (!by_value_parameter && !target_slot->has_static_storage_duration) {
+		report_value_error("'absolute' target '" + target_name + "' must be a by-value parameter or a static-storage variable", binding);
 		return nullptr;
 	}
 	auto is_pointer_family = [](Type* t) { return dynamic_cast<PointerType*>(t) || dynamic_cast<ClassType*>(t); };
-	Type* target_type = found->ty;
+	Type* target_type = target_slot->ty;
 	if (!is_pointer_family(target_type) || !is_pointer_family(declared_type)) {
 		report_value_error("'absolute' is limited to pointer-or-class types on both sides", binding);
 		return nullptr;
@@ -8407,7 +8413,7 @@ void Parser::parse_var_block() {
 			}
 			if (emitter && registered && !external_cxx_name && (!absolute_requested || absolute_target_slot)) {
 				if (absolute_target_slot) {
-					emitter->emit_absolute_var_decl(slot->cxx_name, ty, absolute_target_slot->cxx_name);
+					emitter->emit_absolute_var_decl(slot->cxx_name, ty, absolute_target_slot);
 				} else {
 					emitter->emit_var_decl(slot->cxx_name, ty, initializer);
 				}

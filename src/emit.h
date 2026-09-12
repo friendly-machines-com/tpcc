@@ -106,7 +106,7 @@ class Emitter {
 	// name (ODR violation in C++).
 	void emit_type_alias(std::string cxx_name, Type* aliased_type);
 	void emit_var_decl(std::string cxx_name, Type* ty, Node* initializer = nullptr);
-	void emit_absolute_var_decl(std::string cxx_name, Type* ty, std::string target_cxx_name);
+	void emit_absolute_var_decl(std::string cxx_name, Type* ty, StorageSlot* target_slot);
 	void emit_initialized_storage_decl(std::string cxx_name, Type* ty, Node* initializer, bool routine_local);
 	void emit_main_prologue(const std::vector<UnitLifecycleNames>& unit_lifecycle_hooks, const std::vector<Method*>& program_class_destructors);
 	void emit_program_finalizer_registration();

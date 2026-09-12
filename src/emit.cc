@@ -504,7 +504,7 @@ void Emitter::emit_var_decl(std::string cxx_name, Type* ty, Node* initializer) {
 	fprintf(active, ";\n");
 }
 
-void Emitter::emit_absolute_var_decl(std::string cxx_name, Type* ty, std::string target_cxx_name) {
+void Emitter::emit_absolute_var_decl(std::string cxx_name, Type* ty, StorageSlot* target_slot) {
 	if (!active) {
 		return;
 	}
@@ -520,11 +520,19 @@ void Emitter::emit_absolute_var_decl(std::string cxx_name, Type* ty, std::string
 	// Pascal's `absolute` deliberately reinterprets storage across unrelated
 	// pointer/class types, so the emitted code requires compiling with
 	// -fno-strict-aliasing.
+	//
+	// The target name is emitted through node_cxx_name so a unit-scope alias
+	// can re-view a global owned by a different unit. The reference itself is
+	// still dynamically initialized at namespace scope; like every C++ global
+	// with a non-constant initializer, its initialization order relative to
+	// other translation units is unspecified. The Pascal declarations this
+	// supports are only dereferenced at runtime (after static initialization),
+	// matching their use in the FPC compiler sources.
 	fprintf(active, "[[maybe_unused]] ");
 	emit_type_ref(ty);
 	fprintf(active, "& %s = reinterpret_cast<", cxx_name.c_str());
 	emit_type_ref(ty);
-	fprintf(active, "&>(%s);\n", target_cxx_name.c_str());
+	fprintf(active, "&>(%s);\n", node_cxx_name(target_slot, target_slot->cxx_name).c_str());
 }
 
 void Emitter::emit_initialized_storage_decl(std::string cxx_name, Type* ty, Node* initializer, bool routine_local) {
