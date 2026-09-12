@@ -347,6 +347,10 @@ class Parser {
 	// `inherited` branch to walk the parent type's method table and to decide
 	// the destructor-auto-chain drop.
 	Callable* current_routine = nullptr;
+	// True while parsing the operand of `@`, so a class-reference-qualified
+	// instance method is permitted as the code-only operand `@TClass.Method`
+	// instead of being rejected as an instance access through a class reference.
+	bool in_address_of_operand = false;
 	// Number of enclosing statement loops. break/continue are invalid at zero.
 	unsigned loop_depth = 0;
 	// Protected Pascal try bodies currently being streamed. A nonlocal

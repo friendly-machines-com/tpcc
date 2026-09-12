@@ -3024,6 +3024,25 @@ void Emitter::emit_expression(Node* expr) {
 		} else {
 			unhandled_type("routine-code operand has unsupported routine category", routine);
 		}
+	} else if (auto method_code = dynamic_cast<MethodCodeRef*>(expr)) {
+		Method* method = method_code->method;
+		if (!method || !method->owner_class) {
+			unhandled_node("method code reference has no owning class", method_code);
+		}
+		// `@TClass.InstanceMethod` is the code word of the receiver-first
+		// adapter used for every bound method value. m_method_adapter<M>::invoke
+		// is a free function `Result(void*, Args...)`; its address is the same
+		// word m_bind_method would store in m_method::p_code, so packing it into
+		// TMethod.Code later produces a callable method pointer.
+		std::string owner = owner_cxx_reference_name(method->owner_class);
+		if (owner.empty()) {
+			unhandled_type("method code reference owner has no C++ name", method->owner_class);
+		}
+		fprintf(active, "::u_system::m_function_to_code_pointer(&::u_system::m_method_adapter<static_cast<");
+		emit_type_ref(method->ty->return_type);
+		fprintf(active, " (%s::*)", owner.c_str());
+		emit_formal_parameters(method->ty, false, nullptr);
+		fprintf(active, ">(&%s::%s)>::invoke)", owner.c_str(), callable_cxx_name(method).c_str());
 	} else if (auto c = dynamic_cast<Callable*>(expr)) {
 		fprintf(active, "%s", node_cxx_name(c, c->cxx_name).c_str());
 	} else if (auto property = dynamic_cast<PropertyAccess*>(expr)) {

@@ -1362,6 +1362,25 @@ ConstEvalResult RoutineCode::const_eval(ConstEvalContext& ctx) const {
 	return ConstEvalResult::success(result);
 }
 
+MethodCodeRef::MethodCodeRef(Method* method) : method(method) {
+}
+
+const char* MethodCodeRef::diagnostic_kind() const {
+	return "method_code_ref";
+}
+
+void MethodCodeRef::collect_diagnostic_edges(ErrorLetContext* ctx) const {
+	Node::collect_diagnostic_edges(ctx);
+	ctx->add_value_edge(method);
+}
+
+void MethodCodeRef::print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const {
+	out << "method_code_ref : " << ctx->known_type_ref(ty);
+	out << "\n";
+	ctx->indent(out, indent + 1);
+	out << "method: " << ctx->known_value_ref(method);
+}
+
 static bool diagnostic_pas_ident_char(char ch) {
 	unsigned char c = static_cast<unsigned char>(ch);
 	return std::isalnum(c) || ch == '_';

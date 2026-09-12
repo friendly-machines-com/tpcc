@@ -2395,7 +2395,7 @@ Node* Parser::bind_lookup_result(Node* qualifier, Node* binding, Visibility name
 		} else if (auto property = dynamic_cast<Property*>(binding)) {
 			report_type_error("instance property cannot be accessed through a " + std::string(type_qualifier ? "type" : "class reference"), property->ty);
 		} else if (auto method = dynamic_cast<Method*>(binding)) {
-			const bool allowed = method->is_static || (!type_qualifier && (method->ty->kind == CLASS_METHOD || method->ty->kind == CONSTRUCTOR));
+			const bool allowed = method->is_static || (!type_qualifier && (method->ty->kind == CLASS_METHOD || method->ty->kind == CONSTRUCTOR)) || (in_address_of_operand && class_reference);
 			if (!allowed) {
 				report_type_error("instance method cannot be accessed through a " + std::string(type_qualifier ? "type" : "class reference"), method->ty);
 			}
@@ -4654,6 +4654,9 @@ bool Parser::is_symbolic_static_initializer(Node* n) {
 	if (auto code = dynamic_cast<RoutineCode*>(n)) {
 		return is_symbolic_static_initializer(code->a);
 	}
+	if (auto method_code = dynamic_cast<MethodCodeRef*>(n)) {
+		return method_code->method != nullptr;
+	}
 	if (auto cast = dynamic_cast<Cast*>(n)) {
 		Type* target = distinct_storage_type(cast->ty);
 		// Destination contextualization may change one pointer/routine carrier
@@ -5098,7 +5101,22 @@ Node* Parser::parse_power() {
 		// implicit no-argument call. A routine address is contextual: its
 		// destination type selects both the overload and plain-vs-of-object
 		// representation.
+		bool saved_address_of_operand = in_address_of_operand;
+		in_address_of_operand = true;
 		auto x = parse_designator();
+		in_address_of_operand = saved_address_of_operand;
+		if (auto member = dynamic_cast<MemberAccess*>(x)) {
+			if (dynamic_cast<ClassRefValue*>(member->a) != nullptr) {
+				if (auto method = dynamic_cast<Method*>(member->b)) {
+					if (!method->is_static && method->ty->kind == METHOD) {
+						// `@TClass.InstanceMethod`: the code word, no receiver.
+						auto ref = new MethodCodeRef(method);
+						ref->ty = pointer_type();
+						return parse_power_tail(ref, operation_directives);
+					}
+				}
+			}
+		}
 		if (node_is_bare_callable(x)) {
 			Node* receiver = nullptr;
 			Node* candidates = x;
@@ -7195,7 +7213,7 @@ Node* Parser::parse_storage_initializer(Type* ty) {
 		expr = cast(expr, ty);
 	}
 
-	const bool has_address_syntax = dynamic_cast<AddrOf*>(expr) || dynamic_cast<RoutineRef*>(expr) || dynamic_cast<RoutineCode*>(expr);
+	const bool has_address_syntax = dynamic_cast<AddrOf*>(expr) || dynamic_cast<RoutineRef*>(expr) || dynamic_cast<RoutineCode*>(expr) || dynamic_cast<MethodCodeRef*>(expr);
 	const bool symbolic_static = is_symbolic_static_initializer(expr);
 	if (has_address_syntax && !symbolic_static) {
 		return raise_value_error("typed address initializer requires static storage or a "

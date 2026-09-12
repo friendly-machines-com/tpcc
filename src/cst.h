@@ -854,6 +854,20 @@ class RoutineCode : public UnaryOperation {
 	ConstEvalResult const_eval(ConstEvalContext& ctx) const override;
 };
 
+/** `@TClass.InstanceMethod`: the code word of an instance method, with no
+ * receiver. The receiver is supplied later when the word is packed into a
+ * TMethod and invoked through a `procedure of object` carrier. Unlike
+ * RoutineCode this is a compile-time constant (a link-time function address),
+ * not extraction from a runtime routine value. */
+class MethodCodeRef : public Node {
+      public:
+	Method* method;
+	explicit MethodCodeRef(Method* method);
+	const char* diagnostic_kind() const override;
+	void collect_diagnostic_edges(ErrorLetContext* ctx) const override;
+	void print_diagnostic_definition(ErrorLetContext* ctx, std::ostringstream& out, unsigned indent) const override;
+};
+
 /** Shared base of standalone procedures/functions and methods. Holds
  *  everything call resolution and emission needs regardless of which of the
  *  two the callable is. `return_type` is unit_type() for procedures (Pascal
