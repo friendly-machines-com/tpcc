@@ -2395,7 +2395,10 @@ Node* Parser::bind_lookup_result(Node* qualifier, Node* binding, Visibility name
 		} else if (auto property = dynamic_cast<Property*>(binding)) {
 			report_type_error("instance property cannot be accessed through a " + std::string(type_qualifier ? "type" : "class reference"), property->ty);
 		} else if (auto method = dynamic_cast<Method*>(binding)) {
-			const bool allowed = method->is_static || (!type_qualifier && (method->ty->kind == CLASS_METHOD || method->ty->kind == CONSTRUCTOR)) || (in_address_of_operand && class_reference);
+			// An instance method through a class reference is legal only as the
+			// code-only operand `@TClass.Method`; finalize_call rejects the
+			// actual call when it is invoked through the class reference.
+			const bool allowed = method->is_static || (!type_qualifier && (method->ty->kind == CLASS_METHOD || method->ty->kind == CONSTRUCTOR)) || (class_reference && method->ty->kind == METHOD);
 			if (!allowed) {
 				report_type_error("instance method cannot be accessed through a " + std::string(type_qualifier ? "type" : "class reference"), method->ty);
 			}
@@ -5101,10 +5104,7 @@ Node* Parser::parse_power() {
 		// implicit no-argument call. A routine address is contextual: its
 		// destination type selects both the overload and plain-vs-of-object
 		// representation.
-		bool saved_address_of_operand = in_address_of_operand;
-		in_address_of_operand = true;
 		auto x = parse_designator();
-		in_address_of_operand = saved_address_of_operand;
 		if (auto member = dynamic_cast<MemberAccess*>(x)) {
 			if (dynamic_cast<ClassRefValue*>(member->a) != nullptr) {
 				if (auto method = dynamic_cast<Method*>(member->b)) {
@@ -11718,6 +11718,15 @@ Parser::FinalizedCall Parser::finalize_call(Node* target, std::vector<Node*>& ar
 			target = ma->b;
 		}
 	}
+		// Calling an instance method through a class reference is not allowed;
+		// the only legal use of `TClass.InstanceMethod` is the code-only `@`
+		// reference, which never reaches finalize_call.
+		if (receiver && (dynamic_cast<ClassRefValue*>(receiver) != nullptr || dynamic_cast<TypeMemberQualifier*>(receiver) != nullptr)) {
+			if (auto method = dynamic_cast<Method*>(target); method && !method->is_static && method->ty->kind == METHOD) {
+				report_type_error("Only class methods, class properties and class variables can be referred with class references", method->ty);
+				return FinalizedCall{nullptr, nullptr, nullptr, true};
+			}
+		}
 	Callable* chosen = nullptr;
 	std::optional<CallableMatch> chosen_match;
 	RoutineType* value_rty = nullptr;
