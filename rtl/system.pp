@@ -898,6 +898,34 @@ function Odd(l: Int64): Boolean;
 function Odd(l: QWord): Boolean;
 function StrPas(p: PChar): shortstring;
 function StringOfChar(c: AnsiChar; l: SizeInt): AnsiString;
+function RolByte(Const AValue: Byte): Byte;
+function RolByte(Const AValue: Byte; const Dist: Byte): Byte;
+function RorByte(Const AValue: Byte): Byte;
+function RorByte(Const AValue: Byte; const Dist: Byte): Byte;
+function RolWord(Const AValue: Word): Word;
+function RolWord(Const AValue: Word; const Dist: Byte): Word;
+function RorWord(Const AValue: Word): Word;
+function RorWord(Const AValue: Word; const Dist: Byte): Word;
+function RolDWord(Const AValue: DWord): DWord;
+function RolDWord(Const AValue: DWord; const Dist: Byte): DWord;
+function RorDWord(Const AValue: DWord): DWord;
+function RorDWord(Const AValue: DWord; const Dist: Byte): DWord;
+function RolQWord(Const AValue: QWord): QWord;
+function RolQWord(Const AValue: QWord; const Dist: Byte): QWord;
+function RorQWord(Const AValue: QWord): QWord;
+function RorQWord(Const AValue: QWord; const Dist: Byte): QWord;
+function BsfByte(Const AValue: Byte): Byte;
+function BsrByte(Const AValue: Byte): Byte;
+function BsfWord(Const AValue: Word): Cardinal;
+function BsrWord(Const AValue: Word): Cardinal;
+function BsfDWord(Const AValue: DWord): Cardinal;
+function BsrDWord(Const AValue: DWord): Cardinal;
+function BsfQWord(Const AValue: QWord): Cardinal;
+function BsrQWord(Const AValue: QWord): Cardinal;
+function PopCnt(Const AValue: Byte): Byte;
+function PopCnt(Const AValue: Word): Word;
+function PopCnt(Const AValue: DWord): DWord;
+function PopCnt(Const AValue: QWord): QWord;
 
 implementation
 
@@ -947,6 +975,250 @@ begin
   SetLength(Result, l);
   for i := 1 to l do
     Result[i] := c
+end;
+
+function RolByte(Const AValue: Byte): Byte;
+begin
+  Result := Byte((AValue shl 1) or (AValue shr 7))
+end;
+
+function RolByte(Const AValue: Byte; const Dist: Byte): Byte;
+var
+  d: Byte;
+begin
+  d := Dist and 7;
+  Result := Byte((AValue shl d) or (AValue shr Byte((8 - d) and 7)))
+end;
+
+function RorByte(Const AValue: Byte): Byte;
+begin
+  Result := Byte((AValue shr 1) or (AValue shl 7))
+end;
+
+function RorByte(Const AValue: Byte; const Dist: Byte): Byte;
+var
+  d: Byte;
+begin
+  d := Dist and 7;
+  Result := Byte((AValue shr d) or (AValue shl Byte((8 - d) and 7)))
+end;
+
+function RolWord(Const AValue: Word): Word;
+begin
+  Result := Word((AValue shl 1) or (AValue shr 15))
+end;
+
+function RolWord(Const AValue: Word; const Dist: Byte): Word;
+var
+  d: Byte;
+begin
+  d := Dist and 15;
+  Result := Word((AValue shl d) or (AValue shr Byte((16 - d) and 15)))
+end;
+
+function RorWord(Const AValue: Word): Word;
+begin
+  Result := Word((AValue shr 1) or (AValue shl 15))
+end;
+
+function RorWord(Const AValue: Word; const Dist: Byte): Word;
+var
+  d: Byte;
+begin
+  d := Dist and 15;
+  Result := Word((AValue shr d) or (AValue shl Byte((16 - d) and 15)))
+end;
+
+function RolDWord(Const AValue: DWord): DWord;
+begin
+  Result := DWord((AValue shl 1) or (AValue shr 31))
+end;
+
+function RolDWord(Const AValue: DWord; const Dist: Byte): DWord;
+var
+  d: Byte;
+begin
+  d := Dist and 31;
+  Result := DWord((AValue shl d) or (AValue shr Byte((32 - d) and 31)))
+end;
+
+function RorDWord(Const AValue: DWord): DWord;
+begin
+  Result := DWord((AValue shr 1) or (AValue shl 31))
+end;
+
+function RorDWord(Const AValue: DWord; const Dist: Byte): DWord;
+var
+  d: Byte;
+begin
+  d := Dist and 31;
+  Result := DWord((AValue shr d) or (AValue shl Byte((32 - d) and 31)))
+end;
+
+function RolQWord(Const AValue: QWord): QWord;
+begin
+  Result := QWord((AValue shl 1) or (AValue shr 63))
+end;
+
+function RolQWord(Const AValue: QWord; const Dist: Byte): QWord;
+var
+  d: Byte;
+begin
+  d := Dist and 63;
+  Result := QWord((AValue shl d) or (AValue shr Byte((64 - d) and 63)))
+end;
+
+function RorQWord(Const AValue: QWord): QWord;
+begin
+  Result := QWord((AValue shr 1) or (AValue shl 63))
+end;
+
+function RorQWord(Const AValue: QWord; const Dist: Byte): QWord;
+var
+  d: Byte;
+begin
+  d := Dist and 63;
+  Result := QWord((AValue shr d) or (AValue shl Byte((64 - d) and 63)))
+end;
+
+function BsfByte(Const AValue: Byte): Byte;
+var
+  i: Byte;
+begin
+  Result := $ff;
+  for i := 0 to 7 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function BsrByte(Const AValue: Byte): Byte;
+var
+  i: Byte;
+begin
+  Result := $ff;
+  for i := 7 downto 0 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function BsfWord(Const AValue: Word): Cardinal;
+var
+  i: Cardinal;
+begin
+  Result := $ffffffff;
+  for i := 0 to 15 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function BsrWord(Const AValue: Word): Cardinal;
+var
+  i: Cardinal;
+begin
+  Result := $ffffffff;
+  for i := 15 downto 0 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function BsfDWord(Const AValue: DWord): Cardinal;
+var
+  i: Cardinal;
+begin
+  Result := $ffffffff;
+  for i := 0 to 31 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function BsrDWord(Const AValue: DWord): Cardinal;
+var
+  i: Cardinal;
+begin
+  Result := $ffffffff;
+  for i := 31 downto 0 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function BsfQWord(Const AValue: QWord): Cardinal;
+var
+  i: Cardinal;
+begin
+  Result := $ffffffff;
+  for i := 0 to 63 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function BsrQWord(Const AValue: QWord): Cardinal;
+var
+  i: Cardinal;
+begin
+  Result := $ffffffff;
+  for i := 63 downto 0 do
+    if ((AValue shr i) and 1) <> 0 then
+      begin
+        Result := i;
+        Break
+      end
+end;
+
+function PopCnt(Const AValue: Byte): Byte;
+var
+  i: Byte;
+begin
+  Result := 0;
+  for i := 0 to 7 do
+    Inc(Result, Byte((AValue shr i) and 1))
+end;
+
+function PopCnt(Const AValue: Word): Word;
+var
+  i: Cardinal;
+begin
+  Result := 0;
+  for i := 0 to 15 do
+    Inc(Result, Word((AValue shr i) and 1))
+end;
+
+function PopCnt(Const AValue: DWord): DWord;
+var
+  i: Cardinal;
+begin
+  Result := 0;
+  for i := 0 to 31 do
+    Inc(Result, DWord((AValue shr i) and 1))
+end;
+
+function PopCnt(Const AValue: QWord): QWord;
+var
+  i: Cardinal;
+begin
+  Result := 0;
+  for i := 0 to 63 do
+    Result := Result + QWord((AValue shr i) and 1)
 end;
 
 function tpcc_new_instance(meta: TClass): TObject;
