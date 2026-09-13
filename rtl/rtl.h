@@ -49,6 +49,7 @@
 #include <system_error>
 #include <type_traits>
 #include <unistd.h>
+#include <fcntl.h>
 #include <utility>
 #include <vector>
 
@@ -461,8 +462,9 @@ inline void run_exit_procedures() {
 }
 
 [[noreturn]] inline void p_halt(t_longint value) {
+	p_exitcode = value;
 	run_exit_procedures();
-	std::exit(static_cast<int>(value));
+	std::exit(static_cast<int>(p_exitcode));
 }
 
 [[noreturn]] inline void p_halt() {
@@ -6933,9 +6935,17 @@ inline t_word m_do_append(t_text& file) {
 		}
 	}
 	errno = 0;
-	file.state->handle = std::fopen(file.state->name.c_str(), "ab");
-	if (!file.state->handle) {
+	// Append must not create a missing file. O_APPEND also makes each write
+	// append atomically, without a separate existence check or seek race.
+	const int fd = ::open(file.state->name.c_str(), O_WRONLY | O_APPEND);
+	if (fd < 0) {
 		return m_file_error_from_errno(errno, 101);
+	}
+	file.state->handle = ::fdopen(fd, "ab");
+	if (!file.state->handle) {
+		const int error = errno;
+		::close(fd);
+		return m_file_error_from_errno(error, 101);
 	}
 	file.state->mode = text_file_mode::Output;
 	return 0;
@@ -6944,16 +6954,19 @@ inline void p_append(t_text& file) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(m_do_append(file));
 }
+inline void m_unchecked_append(t_text& file) {
+	if (m_inoutres != 0) {
+		return;
+	}
+	m_finish_unchecked_io(m_do_append(file));
+}
 
 inline t_word m_do_erase_file(t_file& file) {
 	if (!file.state) {
 		return 102;
 	}
 	if (file.state->handle) {
-		const t_word close_error = m_do_close_binary_handle(*file.state);
-		if (close_error != 0) {
-			return close_error;
-		}
+		return 102; // Erase requires a closed file; do not change its state.
 	}
 	errno = 0;
 	if (std::remove(file.state->name.c_str()) != 0) {
@@ -6965,16 +6978,19 @@ inline void p_erase_file(t_file& file) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(m_do_erase_file(file));
 }
+inline void m_unchecked_erase_file(t_file& file) {
+	if (m_inoutres != 0) {
+		return;
+	}
+	m_finish_unchecked_io(m_do_erase_file(file));
+}
 
 inline t_word m_do_erase_text(t_text& file) {
 	if (!file.state) {
 		return 102;
 	}
 	if (file.state->handle) {
-		const t_word close_error = m_do_close_text_handle(*file.state);
-		if (close_error != 0) {
-			return close_error;
-		}
+		return 102; // Erase requires a closed file; do not change its state.
 	}
 	errno = 0;
 	if (std::remove(file.state->name.c_str()) != 0) {
@@ -6986,14 +7002,29 @@ inline void p_erase_text(t_text& file) {
 	m_raise_pending_io_error();
 	m_finish_checked_io(m_do_erase_text(file));
 }
-
-inline void p_mkdir(const t_ansistring& s) {
-	errno = 0;
-	if (std::filesystem::create_directory(s.m_string())) {
-		m_finish_checked_io(0);
-	} else {
-		m_finish_checked_io(m_file_error_from_errno(errno, 5));
+inline void m_unchecked_erase_text(t_text& file) {
+	if (m_inoutres != 0) {
+		return;
 	}
+	m_finish_unchecked_io(m_do_erase_text(file));
+}
+
+inline t_word m_do_mkdir(const t_ansistring& s) {
+	errno = 0;
+	if (::mkdir(s.m_string().c_str(), 0777) != 0) {
+		return m_file_error_from_errno(errno, 5);
+	}
+	return 0;
+}
+inline void p_mkdir(const t_ansistring& s) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(m_do_mkdir(s));
+}
+inline void m_unchecked_mkdir(const t_ansistring& s) {
+	if (m_inoutres != 0) {
+		return;
+	}
+	m_finish_unchecked_io(m_do_mkdir(s));
 }
 
 } // namespace u_system
@@ -7049,6 +7080,7 @@ inline u_system::t_longint p_popen_file(u_system::t_file& f, const u_system::t_a
 		return -1;
 	}
 	f.state->handle = pipe;
+	f.state->record_size = 1;
 	f.state->readable = !writing;
 	f.state->writable = writing;
 	u_system::m_finish_checked_io(0);
@@ -7063,7 +7095,7 @@ inline u_system::t_longint p_pclose(u_system::t_text& f) {
 	f.state->handle = nullptr;
 	f.state->mode = u_system::text_file_mode::Closed;
 	u_system::m_finish_checked_io(0);
-	return result;
+	return result == -1 ? -1 : WEXITSTATUS(result);
 }
 
 inline u_system::t_longint p_pclose_file(u_system::t_file& f) {
@@ -7075,7 +7107,7 @@ inline u_system::t_longint p_pclose_file(u_system::t_file& f) {
 	f.state->readable = false;
 	f.state->writable = false;
 	u_system::m_finish_checked_io(0);
-	return result;
+	return result == -1 ? -1 : WEXITSTATUS(result);
 }
 
 } // namespace u_unix

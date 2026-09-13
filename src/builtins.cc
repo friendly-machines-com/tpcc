@@ -1568,6 +1568,30 @@ static const BuiltinDesc k_builtins[] = {
     },
     {"::u_system::m_unchecked_rmdir", nullptr},
     {
+        .cxx_name = "::u_system::p_append",
+        .call_site_switch = BuiltinCallSiteSwitch::Io,
+        .disabled_cxx_name = "::u_system::m_unchecked_append",
+    },
+    {"::u_system::m_unchecked_append", nullptr},
+    {
+        .cxx_name = "::u_system::p_erase_file",
+        .call_site_switch = BuiltinCallSiteSwitch::Io,
+        .disabled_cxx_name = "::u_system::m_unchecked_erase_file",
+    },
+    {"::u_system::m_unchecked_erase_file", nullptr},
+    {
+        .cxx_name = "::u_system::p_erase_text",
+        .call_site_switch = BuiltinCallSiteSwitch::Io,
+        .disabled_cxx_name = "::u_system::m_unchecked_erase_text",
+    },
+    {"::u_system::m_unchecked_erase_text", nullptr},
+    {
+        .cxx_name = "::u_system::p_mkdir",
+        .call_site_switch = BuiltinCallSiteSwitch::Io,
+        .disabled_cxx_name = "::u_system::m_unchecked_mkdir",
+    },
+    {"::u_system::m_unchecked_mkdir", nullptr},
+    {
         .cxx_name = "::u_system::p_rewrite",
         .call_site_switch = BuiltinCallSiteSwitch::Io,
         .disabled_cxx_name = "::u_system::m_unchecked_rewrite",

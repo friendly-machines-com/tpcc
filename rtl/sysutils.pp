@@ -108,12 +108,13 @@ var
 begin
   last := nil;
   if p <> nil then
-    while p^ <> #0 do
-      begin
-        if p^ = c then
-          last := p;
-        p := p + 1
-      end;
+    repeat
+      if p^ = c then
+        last := p;
+      if p^ = #0 then
+        Break;
+      Inc(p)
+    until False;
   Result := last
 end;
 
