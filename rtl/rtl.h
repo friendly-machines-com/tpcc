@@ -2265,6 +2265,8 @@ using ::u_system::p_false;
 using ::u_system::t_ansistring;
 using ::u_system::t_boolean;
 using ::u_system::t_double;
+using ::u_system::t_file;
+using ::u_system::t_text;
 using ::u_system::t_int64;
 using ::u_system::t_integer;
 using ::u_system::t_longint;
@@ -2474,6 +2476,51 @@ inline t_boolean p_deletefile(const t_ansistring& file_name) {
 		return p_false;
 	}
 	return tpcc_bool_to_boolean(::unlink(path.c_str()) == 0);
+}
+
+inline t_boolean p_renamefile(const t_ansistring& old_name, const t_ansistring& new_name) {
+	return tpcc_bool_to_boolean(::rename(old_name.m_string().c_str(), new_name.m_string().c_str()) == 0);
+}
+
+// FileGetDate returns the file's modification time in the same units as
+// System.FileAge on this target: Unix epoch seconds. FPC's Linux FileGetDate
+// does the same. -1 reports an invalid handle or a failed fstat.
+inline t_longint p_filegetdate(t_longint handle) {
+	if (handle < 0) {
+		return -1;
+	}
+	struct stat information{};
+	if (::fstat(static_cast<int>(handle), &information) != 0) {
+		return -1;
+	}
+	return static_cast<t_longint>(information.st_mtime);
+}
+
+// Both forms update only the modification time and leave the access time
+// untouched. FPC 3.2.2's Linux handle form is a stub that always fails; this
+// implements it so the date copy in the compiler actually preserves the time.
+inline t_longint p_filesetdate(t_longint handle, t_longint age) {
+	if (handle < 0) {
+		return -1;
+	}
+	struct timespec stamps[2]{};
+	stamps[0].tv_nsec = UTIME_OMIT;
+	stamps[1].tv_sec = age;
+	if (::futimens(static_cast<int>(handle), stamps) != 0) {
+		return -1;
+	}
+	return 0;
+}
+
+inline t_longint p_filesetdate_name(const t_ansistring& file_name, t_longint age) {
+	const std::string path = file_name.m_string();
+	struct timespec stamps[2]{};
+	stamps[0].tv_nsec = UTIME_OMIT;
+	stamps[1].tv_sec = age;
+	if (path.empty() || ::utimensat(AT_FDCWD, path.c_str(), stamps, 0) != 0) {
+		return -1;
+	}
+	return 0;
 }
 
 inline t_boolean p_fileexists(const t_ansistring& file_name, t_boolean follow_link) {
@@ -6909,6 +6956,25 @@ template <typename T> inline void p_freeandnil(T*& object) {
 	T* saved = object;
 	object = nullptr;
 	u_system::m_free_object(saved);
+}
+
+// GetFileHandle exposes the host descriptor backing an open Pascal File or
+// Text. FPC returns the raw FileRec/TextRec handle field, which is 0 while
+// unassigned and kept stale after Close; reporting -1 instead is deliberate so
+// an unset file is never confused with descriptor 0 (stdin). An open file
+// returns the same descriptor FPC does.
+inline t_longint p_getfilehandle_file(u_system::t_file& file) {
+	if (!file.state || !file.state->handle) {
+		return -1;
+	}
+	return static_cast<t_longint>(::fileno(file.state->handle));
+}
+
+inline t_longint p_getfilehandle_text(u_system::t_text& file) {
+	if (!file.state || !file.state->handle) {
+		return -1;
+	}
+	return static_cast<t_longint>(::fileno(file.state->handle));
 }
 
 } // namespace u_sysutils
