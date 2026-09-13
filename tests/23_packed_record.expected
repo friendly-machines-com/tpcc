@@ -157,7 +157,8 @@ int main(int argc, char* argv[]) {
 	p_n = 0ull;
 	p_n = ::u_system::o_unchecked_intdivide(static_cast<::u_system::t_integer>(1ull), p_n);
 	}
-		return 0;
+		::u_system::run_exit_procedures();
+		return ::u_system::p_exitcode;
 	} catch (::u_system::tpcc_pascal_exception<::u_system::t_tobject>& tpcc_exception) {
 		::u_system::tpcc_pascal_exception_scope<::u_system::t_tobject> tpcc_exception_scope(tpcc_exception);
 		auto tpcc_exceptproc = ::u_system::p_exceptproc;
