@@ -444,7 +444,23 @@ static_assert(sizeof(t_boolean) == 1);
 static_assert(sizeof(t_single) == 4);
 static_assert(sizeof(t_double) == 8);
 
+inline t_pointer p_exitproc{nullptr};
+inline t_pointer p_erroraddr{nullptr};
+inline t_integer p_exitcode{0};
+
+// FPC ExitProc is a chain of parameterless procedures invoked at program
+// termination (including Halt). Before each call the chain head is cleared,
+// so a handler that re-installs itself is called again (FPC semantics).
+inline void run_exit_procedures() {
+	while (p_exitproc != nullptr) {
+		t_pointer current = p_exitproc;
+		p_exitproc = nullptr;
+		m_code_pointer_to_function<void (*)()>(current)();
+	}
+}
+
 [[noreturn]] inline void p_halt(t_longint value) {
+	run_exit_procedures();
 	std::exit(static_cast<int>(value));
 }
 
@@ -6893,3 +6909,9 @@ inline void p_freeandnil(tpcc_storage_ref obj) {
 }
 
 } // namespace u_sysutils
+
+namespace u_system {
+
+inline t_text p_output{&m_stdout_text_state};
+
+} // namespace u_system

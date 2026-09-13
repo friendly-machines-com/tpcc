@@ -640,7 +640,8 @@ void Emitter::emit_main_epilogue(bool has_program_class_destructors) {
 	if (!active) {
 		return;
 	}
-	fprintf(active, "\t\treturn 0;\n");
+	fprintf(active, "\t\t::u_system::run_exit_procedures();\n");
+	fprintf(active, "\t\treturn ::u_system::p_exitcode;\n");
 	fprintf(active, "\t} catch (::u_system::tpcc_pascal_exception<"
 	                "::u_system::t_tobject>& tpcc_exception) {\n"
 	                "\t\t::u_system::tpcc_pascal_exception_scope<"
