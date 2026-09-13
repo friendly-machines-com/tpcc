@@ -463,7 +463,11 @@ test-hygiene:
 test-recent-rtl: mp
 	sh tests/test_recent_rtl.sh
 
-test: test-hygiene test-recent-rtl
+.PHONY: test-freeandnil
+test-freeandnil: mp
+	sh tests/test_freeandnil.sh
+
+test: test-hygiene test-recent-rtl test-freeandnil
 test: test-predefined-explicit-conversions test-class-pointer-conversion test-custom-in-operator test-emission-semantic-boundaries test-pointer-arithmetic test-set-arithmetic test-diagnostic-context test-frame-intrinsics test-binding-lookup test-global-overload-scope test-absolute-alias
 test: test-currency-type
 test: test-lo-hi-builtin
