@@ -6881,3 +6881,15 @@ inline t_boolean p_isinf_extended(t_extended d) {
 }
 
 } // namespace u_system
+
+namespace u_sysutils {
+
+inline void p_freeandnil(tpcc_storage_ref obj) {
+	t_tobject* tmp = nullptr;
+	std::memcpy(&tmp, obj.data, sizeof(tmp));
+	u_system::m_free_object(tmp);
+	tmp = nullptr;
+	std::memcpy(obj.data, &tmp, sizeof(tmp));
+}
+
+} // namespace u_sysutils

@@ -95,8 +95,83 @@ procedure FindClose(var F: TSearchRec); external name '::u_sysutils::p_findclose
 function Trim(const S: AnsiString): AnsiString;
 function TrimLeft(const S: AnsiString): AnsiString;
 function TrimRight(const S: AnsiString): AnsiString;
+function StrRScan(p: PChar; c: Char): PChar;
+function ExtractFileExt(const FileName: AnsiString): AnsiString;
+function SetDirSeparators(const FileName: AnsiString): AnsiString;
+function AnsiCompareFileName(const S1, S2: AnsiString): SizeInt;
+procedure FreeAndNil(var obj); external name '::u_sysutils::p_freeandnil';
 
 implementation
+
+function StrRScan(p: PChar; c: Char): PChar;
+var
+  last: PChar;
+begin
+  last := nil;
+  if p <> nil then
+    while p^ <> #0 do
+      begin
+        if p^ = c then
+          last := p;
+        p := p + 1
+      end;
+  Result := last
+end;
+
+function ExtractFileExt(const FileName: AnsiString): AnsiString;
+var
+  i: SizeInt;
+begin
+  Result := '';
+  for i := Length(FileName) downto 1 do
+    begin
+      if FileName[i] = '.' then
+        begin
+          Result := Copy(FileName, i, Length(FileName) - i + 1);
+          Exit
+        end
+      else if FileName[i] in ['\', '/'] then
+        Exit
+    end
+end;
+
+function SetDirSeparators(const FileName: AnsiString): AnsiString;
+var
+  i: SizeInt;
+begin
+  Result := FileName;
+  for i := 1 to Length(Result) do
+    if Result[i] = '\' then
+      Result[i] := '/'
+end;
+
+function AnsiCompareFileName(const S1, S2: AnsiString): SizeInt;
+var
+  i, n: SizeInt;
+begin
+  n := Length(S1);
+  if Length(S2) < n then
+    n := Length(S2);
+  for i := 1 to n do
+    begin
+      if S1[i] < S2[i] then
+        begin
+          Result := -1;
+          Exit
+        end
+      else if S1[i] > S2[i] then
+        begin
+          Result := 1;
+          Exit
+        end
+    end;
+  if Length(S1) < Length(S2) then
+    Result := -1
+  else if Length(S1) > Length(S2) then
+    Result := 1
+  else
+    Result := 0
+end;
 
 function IntToStr(Value: LongInt): AnsiString;
 begin
