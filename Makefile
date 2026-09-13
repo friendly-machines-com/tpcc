@@ -3,6 +3,9 @@
 # their poison value can leave null or half-constructed semantic state alive.
 CXXFLAGS = -g3 -std=c++20 -Wall -Werror=unused-result
 
+PREFIX = /usr
+INSTALL = install
+
 all: mp
 
 %.o: %.cc
@@ -515,3 +518,11 @@ test: test-packed-record test-new-designator test-multi-error-reporting test-ifo
 .PHONY: test-lo-hi-builtin
 .PHONY: test-class-reference-constant
 .PHONY: test-nested-type-visibility
+.PHONY: install
+
+install:
+	$(INSTALL) -m 755 -d $(DESTDIR)$(PREFIX)/bin
+	$(INSTALL) -m 755 -d mp $(DESTDIR)$(PREFIX)/bin/mp
+	$(INSTALL) -m 755 -d $(DESTDIR)$(PREFIX)/share/tpcc/rtl
+	$(INSTALL) -m 644 rtl/rtl.h $(DESTDIR)$(PREFIX)/share/tpcc/rtl/rtl.h
+	$(INSTALL) -m 644 rtl/*.pp $(DESTDIR)$(PREFIX)/share/tpcc/rtl/
