@@ -10574,6 +10574,16 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	}
 
 	Type* assignment_source = overload_rank_type(source);
+	// A strong `type X = base` is an overload identity, not an assignment
+	// identity. Its declared conversion operators are those of the base type
+	// (System declares `...: word`, not `...: tsuperregister`), so the declared
+	// searches below resolve against the base carrier and the successful value
+	// is re-wrapped in the distinct carrier.
+	Type* declared_target = target;
+	const bool target_is_distinct = dynamic_cast<DistinctType*>(target) != nullptr;
+	if (target_is_distinct) {
+		declared_target = distinct_storage_type(target);
+	}
 	std::optional<AssignmentConversion> assignment;
 	if (assignment_source == target && assignment_source != source) {
 		// A subrange actual is its base type for source ranking. Passing it to
@@ -10597,7 +10607,20 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	if (allow_declared_conversion) {
 		MatchFailure local_failure = MatchFailure::Incompatible;
 		MatchFailure* declared_failure = failure ? failure : &local_failure;
-		if (auto declared = match_declared_conversion(actual, target, implicit_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure)) {
+		auto try_implicit = [&](Type* conv_target) {
+			return match_declared_conversion(actual, conv_target, implicit_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure);
+		};
+		std::optional<ArgumentMatch> declared = try_implicit(target);
+		// Only when the exact distinct target has no declared conversion may the
+		// base carrier's operators apply; a user-declared `:= (Integer): TBox`
+		// must keep priority and its (non-constant) body semantics.
+		if (!declared && target_is_distinct && *declared_failure != MatchFailure::AmbiguousConversion) {
+			declared = try_implicit(declared_target);
+		}
+		if (declared) {
+			if (target_is_distinct) {
+				declared->value = new Cast(declared->value, target);
+			}
 			return declared;
 		}
 		// An ambiguous ordinary conversion is a failure at its own quality;
@@ -10647,7 +10670,17 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 	if (allow_declared_conversion) {
 		MatchFailure local_failure = MatchFailure::Incompatible;
 		MatchFailure* declared_failure = failure ? failure : &local_failure;
-		if (auto declared = match_declared_conversion(actual, target, implicit_narrowing_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure, MatchRank::Tier::ConvertNarrowing)) {
+		auto try_narrowing = [&](Type* conv_target) {
+			return match_declared_conversion(actual, conv_target, implicit_narrowing_operator_identifier(directive_state.switch_enabled('r')), declared_failure, conversion_failure, MatchRank::Tier::ConvertNarrowing);
+		};
+		std::optional<ArgumentMatch> declared = try_narrowing(target);
+		if (!declared && target_is_distinct && *declared_failure != MatchFailure::AmbiguousConversion) {
+			declared = try_narrowing(declared_target);
+		}
+		if (declared) {
+			if (target_is_distinct) {
+				declared->value = new Cast(declared->value, target);
+			}
 			return declared;
 		}
 		// Both checkedness variants describe one rank. An ambiguity inside the
