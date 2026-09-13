@@ -522,7 +522,7 @@ test: test-packed-record test-new-designator test-multi-error-reporting test-ifo
 
 install:
 	$(INSTALL) -m 755 -d $(DESTDIR)$(PREFIX)/bin
-	$(INSTALL) -m 755 -d mp $(DESTDIR)$(PREFIX)/bin/mp
+	$(INSTALL) -m 755 mp $(DESTDIR)$(PREFIX)/bin/mp
 	$(INSTALL) -m 755 -d $(DESTDIR)$(PREFIX)/share/tpcc/rtl
 	$(INSTALL) -m 644 rtl/rtl.h $(DESTDIR)$(PREFIX)/share/tpcc/rtl/rtl.h
 	$(INSTALL) -m 644 rtl/*.pp $(DESTDIR)$(PREFIX)/share/tpcc/rtl/

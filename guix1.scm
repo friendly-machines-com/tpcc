@@ -47,27 +47,12 @@
   (arguments
    (list
     #:make-flags
-    #~(list (string-append "CXX=g++ " #$%fenv-workaround))
-    ;; The suite is not run during the package build: on this toolchain it
-    ;; also needs rtl.h's global ::isinf/::isnan declared (this libstdc++'s
-    ;; <cmath> does not expose them) and tests/test_diagnostic_context.sh
-    ;; shells out to `rg'.  Run it by hand with the environment above once
-    ;; those are handled; the compiler itself builds cleanly.
-    #:tests? #f
+    #~(list (string-append "PREFIX=" #$output)
+            (string-append "CXX=g++ " #$%fenv-workaround))
+    #:tests? #f ; run separately
     #:phases
     #~(modify-phases %standard-phases
-        (delete 'configure) ; no configure script
-        (replace 'install
-          (lambda* (#:key outputs #:allow-other-keys)
-            (let* ((out (assoc-ref outputs "out"))
-                   (bin (string-append out "/bin"))
-                   (rtl (string-append out "/share/tpcc/rtl")))
-              (install-file "mp" bin)
-              ;; mp searches rtl/ for Pascal units and generated C++ includes
-              ;; rtl.h from it, so install the whole runtime next to the
-              ;; compiler.
-              (for-each (lambda (file) (install-file file rtl))
-                        (find-files "rtl" "."))))))))
+        (delete 'configure)))) ; no configure script
   (home-page "https://github.com/daym/tpcc")
   (synopsis "Small Pascal compiler that emits C++20")
   (description
