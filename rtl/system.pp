@@ -50,6 +50,7 @@ type
   PShortString = ^shortstring;
   PChar = ^Char;
   PAnsiChar = PChar;
+  PLongWord = ^LongWord;
   AnsiString = external name '::u_system::t_ansistring';
   // `class of X` is a real class-reference type in the compiler. Its C++
   // carrier is a pointer to the empty target-specific base implemented by
@@ -87,6 +88,7 @@ const
   DirectorySeparator: Char = '/';
   DriveSeparator = '';
   PathSeparator: Char = ':';
+  vtAnsiString = 11;
 
 var
   StdOut: Text external name '::u_system::p_stdout';
@@ -884,7 +886,68 @@ procedure UniqueString(var value: AnsiString); external name '::u_system::p_uniq
 
 operator Explicit(const Value: Extended): Comp;
 
+function UpCase(c: Char): Char;
+function UpCase(const s: shortstring): shortstring;
+function Odd(l: ShortInt): Boolean;
+function Odd(l: Byte): Boolean;
+function Odd(l: SmallInt): Boolean;
+function Odd(l: Word): Boolean;
+function Odd(l: LongInt): Boolean;
+function Odd(l: LongWord): Boolean;
+function Odd(l: Int64): Boolean;
+function Odd(l: QWord): Boolean;
+function StrPas(p: PChar): shortstring;
+function StringOfChar(c: AnsiChar; l: SizeInt): AnsiString;
+
 implementation
+
+function UpCase(c: Char): Char;
+begin
+  if c in ['a'..'z'] then
+    Result := Char(Ord(c) - 32)
+  else
+    Result := c
+end;
+
+function UpCase(const s: shortstring): shortstring;
+var
+  i: SizeInt;
+begin
+  Result := s;
+  for i := 1 to Length(s) do
+    Result[i] := UpCase(s[i])
+end;
+
+function Odd(l: ShortInt): Boolean; begin Result := (l and 1) <> 0 end;
+function Odd(l: Byte): Boolean; begin Result := (l and 1) <> 0 end;
+function Odd(l: SmallInt): Boolean; begin Result := (l and 1) <> 0 end;
+function Odd(l: Word): Boolean; begin Result := (l and 1) <> 0 end;
+function Odd(l: LongInt): Boolean; begin Result := (l and 1) <> 0 end;
+function Odd(l: LongWord): Boolean; begin Result := (l and 1) <> 0 end;
+function Odd(l: Int64): Boolean; begin Result := (l and 1) <> 0 end;
+function Odd(l: QWord): Boolean; begin Result := (l and 1) <> 0 end;
+
+function StrPas(p: PChar): shortstring;
+var
+  len, i: SizeInt;
+begin
+  len := 0;
+  if p <> nil then
+    while (len < 255) and (p[len] <> #0) do
+      Inc(len);
+  SetLength(Result, len);
+  for i := 0 to len - 1 do
+    Result[i + 1] := p[i]
+end;
+
+function StringOfChar(c: AnsiChar; l: SizeInt): AnsiString;
+var
+  i: SizeInt;
+begin
+  SetLength(Result, l);
+  for i := 1 to l do
+    Result[i] := c
+end;
 
 function tpcc_new_instance(meta: TClass): TObject;
   external name '::u_system::m_new_instance';
