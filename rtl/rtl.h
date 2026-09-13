@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <csignal>
 #include <cstring>
 #include <ctime>
 #include <dirent.h>
@@ -6863,50 +6864,42 @@ inline t_double p_pi() {
 	return 3.141592653589793238462643383279502884;
 }
 inline t_double p_sin(t_double d) {
-	return std::sin(d);
+	return ::sin(d);
 }
 inline t_double p_cos(t_double d) {
-	return std::cos(d);
+	return ::cos(d);
 }
 inline t_double p_arctan(t_double d) {
-	return std::atan(d);
+	return ::atan(d);
 }
 inline t_double p_int(t_double d) {
-	return std::trunc(d);
+	return ::trunc(d);
 }
 inline t_double p_frac(t_double d) {
-	return d - std::trunc(d);
+	return d - ::trunc(d);
 }
 inline t_boolean p_isnan_single(t_single d) {
-	return tpcc_bool_to_boolean(std::isnan(d));
+	return tpcc_bool_to_boolean(::isnan(d));
 }
 inline t_boolean p_isnan_double(t_double d) {
-	return tpcc_bool_to_boolean(std::isnan(d));
+	return tpcc_bool_to_boolean(::isnan(d));
 }
 inline t_boolean p_isnan_extended(t_extended d) {
-	return tpcc_bool_to_boolean(std::isnan(d));
+	return tpcc_bool_to_boolean(::isnan(d));
 }
 inline t_boolean p_isinf_single(t_single d) {
-	return tpcc_bool_to_boolean(std::isinf(d));
+	return tpcc_bool_to_boolean(::isinf(d));
 }
 inline t_boolean p_isinf_double(t_double d) {
-	return tpcc_bool_to_boolean(std::isinf(d));
+	return tpcc_bool_to_boolean(::isinf(d));
 }
 inline t_boolean p_isinf_extended(t_extended d) {
-	return tpcc_bool_to_boolean(std::isinf(d));
+	return tpcc_bool_to_boolean(::isinf(d));
 }
 
 } // namespace u_system
 
 namespace u_sysutils {
-
-inline void p_freeandnil(tpcc_storage_ref obj) {
-	t_tobject* tmp = nullptr;
-	std::memcpy(&tmp, obj.data, sizeof(tmp));
-	u_system::m_free_object(tmp);
-	tmp = nullptr;
-	std::memcpy(obj.data, &tmp, sizeof(tmp));
-}
 
 } // namespace u_sysutils
 
@@ -7004,3 +6997,85 @@ inline void p_mkdir(const t_ansistring& s) {
 }
 
 } // namespace u_system
+
+namespace u_baseunix {
+
+using t_signalhandler = void (*)(u_system::t_longint);
+
+inline u_system::t_longint p_fpchmod(const u_system::t_ansistring& path, u_system::t_longint mode) {
+	return ::chmod(path.m_string().c_str(), static_cast<mode_t>(mode));
+}
+
+inline t_signalhandler p_fpsignal(u_system::t_longint sig, t_signalhandler handler) {
+	using c_handler = void (*)(int);
+	auto result = ::signal(static_cast<int>(sig), reinterpret_cast<c_handler>(handler));
+	return reinterpret_cast<t_signalhandler>(result);
+}
+
+} // namespace u_baseunix
+
+namespace u_unix {
+
+inline u_system::t_longint p_popen(u_system::t_text& f, const u_system::t_ansistring& prog, u_system::t_char rw) {
+	if (!f.state) {
+		f.state = new u_system::text_file_state;
+	}
+	if (f.state->handle) {
+		u_system::m_do_close_text_handle(*f.state);
+	}
+	const bool writing = rw.value == 'W' || rw.value == 'w';
+	std::FILE* pipe = ::popen(prog.m_string().c_str(), writing ? "w" : "r");
+	if (!pipe) {
+		u_system::m_finish_checked_io(u_system::m_file_error_from_errno(errno, 101));
+		return -1;
+	}
+	f.state->handle = pipe;
+	f.state->mode = writing ? u_system::text_file_mode::Output : u_system::text_file_mode::Input;
+	u_system::m_finish_checked_io(0);
+	return 0;
+}
+
+inline u_system::t_longint p_popen_file(u_system::t_file& f, const u_system::t_ansistring& prog, u_system::t_char rw) {
+	if (!f.state) {
+		f.state = new u_system::binary_file_state;
+	}
+	if (f.state->handle) {
+		u_system::m_do_close_binary_handle(*f.state);
+	}
+	const bool writing = rw.value == 'W' || rw.value == 'w';
+	std::FILE* pipe = ::popen(prog.m_string().c_str(), writing ? "w" : "r");
+	if (!pipe) {
+		u_system::m_finish_checked_io(u_system::m_file_error_from_errno(errno, 101));
+		return -1;
+	}
+	f.state->handle = pipe;
+	f.state->readable = !writing;
+	f.state->writable = writing;
+	u_system::m_finish_checked_io(0);
+	return 0;
+}
+
+inline u_system::t_longint p_pclose(u_system::t_text& f) {
+	if (!f.state || !f.state->handle) {
+		return -1;
+	}
+	int result = ::pclose(f.state->handle);
+	f.state->handle = nullptr;
+	f.state->mode = u_system::text_file_mode::Closed;
+	u_system::m_finish_checked_io(0);
+	return result;
+}
+
+inline u_system::t_longint p_pclose_file(u_system::t_file& f) {
+	if (!f.state || !f.state->handle) {
+		return -1;
+	}
+	int result = ::pclose(f.state->handle);
+	f.state->handle = nullptr;
+	f.state->readable = false;
+	f.state->writable = false;
+	u_system::m_finish_checked_io(0);
+	return result;
+}
+
+} // namespace u_unix
