@@ -6915,3 +6915,92 @@ namespace u_system {
 inline t_text p_output{&m_stdout_text_state};
 
 } // namespace u_system
+
+namespace u_system {
+
+inline void p_assert(t_boolean ok) {
+	if (ok == t_boolean::p_false) {
+		std::abort();
+	}
+}
+inline void p_assert_msg(t_boolean ok, const t_ansistring&) {
+	if (ok == t_boolean::p_false) {
+		std::abort();
+	}
+}
+
+inline t_word m_do_append(t_text& file) {
+	if (!file.state || file.state->standard_stream) {
+		return 102;
+	}
+	if (file.state->handle) {
+		const t_word close_error = m_do_close_text_handle(*file.state);
+		if (close_error != 0) {
+			return close_error;
+		}
+	}
+	errno = 0;
+	file.state->handle = std::fopen(file.state->name.c_str(), "ab");
+	if (!file.state->handle) {
+		return m_file_error_from_errno(errno, 101);
+	}
+	file.state->mode = text_file_mode::Output;
+	return 0;
+}
+inline void p_append(t_text& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(m_do_append(file));
+}
+
+inline t_word m_do_erase_file(t_file& file) {
+	if (!file.state) {
+		return 102;
+	}
+	if (file.state->handle) {
+		const t_word close_error = m_do_close_binary_handle(*file.state);
+		if (close_error != 0) {
+			return close_error;
+		}
+	}
+	errno = 0;
+	if (std::remove(file.state->name.c_str()) != 0) {
+		return m_file_error_from_errno(errno, 5);
+	}
+	return 0;
+}
+inline void p_erase_file(t_file& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(m_do_erase_file(file));
+}
+
+inline t_word m_do_erase_text(t_text& file) {
+	if (!file.state) {
+		return 102;
+	}
+	if (file.state->handle) {
+		const t_word close_error = m_do_close_text_handle(*file.state);
+		if (close_error != 0) {
+			return close_error;
+		}
+	}
+	errno = 0;
+	if (std::remove(file.state->name.c_str()) != 0) {
+		return m_file_error_from_errno(errno, 5);
+	}
+	return 0;
+}
+inline void p_erase_text(t_text& file) {
+	m_raise_pending_io_error();
+	m_finish_checked_io(m_do_erase_text(file));
+}
+
+inline void p_mkdir(const t_ansistring& s) {
+	errno = 0;
+	if (std::filesystem::create_directory(s.m_string())) {
+		m_finish_checked_io(0);
+	} else {
+		m_finish_checked_io(m_file_error_from_errno(errno, 5));
+	}
+}
+
+} // namespace u_system

@@ -917,6 +917,12 @@ function IsNan(const d: Extended): Boolean; overload; external name '::u_system:
 function IsInfinite(const d: Single): Boolean; overload; external name '::u_system::p_isinf_single';
 function IsInfinite(const d: Double): Boolean; overload; external name '::u_system::p_isinf_double';
 function IsInfinite(const d: Extended): Boolean; overload; external name '::u_system::p_isinf_extended';
+procedure Assert(Expr: Boolean); overload; external name '::u_system::p_assert';
+procedure Assert(Expr: Boolean; const Msg: AnsiString); overload; external name '::u_system::p_assert_msg';
+procedure Append(var t: Text); external name '::u_system::p_append';
+procedure Erase(var f: File); overload; external name '::u_system::p_erase_file';
+procedure Erase(var t: Text); overload; external name '::u_system::p_erase_text';
+procedure MkDir(const s: AnsiString); external name '::u_system::p_mkdir';
 function RolByte(Const AValue: Byte): Byte;
 function RolByte(Const AValue: Byte; const Dist: Byte): Byte;
 function RorByte(Const AValue: Byte): Byte;
