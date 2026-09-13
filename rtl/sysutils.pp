@@ -99,6 +99,9 @@ function StrRScan(p: PChar; c: Char): PChar;
 function ExtractFileExt(const FileName: AnsiString): AnsiString;
 function SetDirSeparators(const FileName: AnsiString): AnsiString;
 function AnsiCompareFileName(const S1, S2: AnsiString): SizeInt;
+{ Unlike FPC's untyped var declaration, this builtin requires writable class
+  reference storage. Its metadata preserves the caller's concrete class type. }
+procedure FreeAndNil(var Obj: TObject); external name '::u_sysutils::p_freeandnil';
 
 implementation
 

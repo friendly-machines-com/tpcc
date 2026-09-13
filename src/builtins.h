@@ -81,6 +81,10 @@ enum class BuiltinGenericKind {
 	// pointer storage: their RTL templates may write a typed pointer variable
 	// without pretending that ordinary typed var/out parameters are covariant.
 	PointerStorage,
+	// FreeAndNil retains the concrete class-reference variable for its RTL
+	// template. Only writable class-reference storage is accepted; this does
+	// not make ordinary var TObject parameters covariant.
+	ClassReferenceStorage,
 	// Str's source and writable destination retain their exact actual types.
 	// The omitted System declaration is a last-resort candidate; the builtin
 	// handler validates the supported formatting families after selection.

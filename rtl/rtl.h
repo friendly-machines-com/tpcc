@@ -6903,6 +6903,14 @@ inline t_boolean p_isinf_extended(t_extended d) {
 
 namespace u_sysutils {
 
+// The compiler admits only writable class-reference variables and retains T.
+// Do not mark noexcept: Pascal callers may catch a destructor's exception.
+template <typename T> inline void p_freeandnil(T*& object) {
+	T* saved = object;
+	object = nullptr;
+	u_system::m_free_object(saved);
+}
+
 } // namespace u_sysutils
 
 namespace u_system {

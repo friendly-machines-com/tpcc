@@ -1560,6 +1560,10 @@ static const BuiltinDesc k_builtins[] = {
         .generic_kind = BuiltinGenericKind::PointerStorage,
     },
     {"::u_system::p_freemem", nullptr},
+    {
+        .cxx_name = "::u_sysutils::p_freeandnil",
+        .generic_kind = BuiltinGenericKind::ClassReferenceStorage,
+    },
     {"::u_system::p_getdir", nullptr},
     {
         .cxx_name = "::u_system::p_rmdir",

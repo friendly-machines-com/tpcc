@@ -10389,6 +10389,15 @@ std::optional<ArgumentMatch> Parser::match_argument(const Parameter& formal, Nod
 			}
 			return std::nullopt;
 		}
+		if (builtin && builtin->generic_kind == BuiltinGenericKind::ClassReferenceStorage) {
+			if (formal.mode != ParamMode::Var || !dynamic_cast<ClassType*>(source) ||
+			    !dynamic_cast<ClassType*>(target) || !source->is_subtype_of(target)) {
+				return std::nullopt;
+			}
+			// Keep the caller's actual class-reference storage; converting it to
+			// a temporary TObject reference would not clear the caller's slot.
+			return ArgumentMatch{{source == target ? MatchRank::Tier::Exact : MatchRank::Tier::Equal, 0}, actual};
+		}
 		if (source == target) {
 			return ArgumentMatch{{MatchRank::Tier::Exact, 0}, actual};
 		}

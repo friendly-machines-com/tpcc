@@ -1787,6 +1787,11 @@ void Emitter::emit_routine_signature(RoutineType* ty, std::string cxx_text, Posi
 		}
 		fprintf(active, "%s%s", owner_qualifier.c_str(), cxx_text.c_str());
 		emit_formal_parameters(ty, true, conversion_target);
+		if (cxx_destructor) {
+			// Pascal destructors may raise. C++'s implicit noexcept(true)
+			// would terminate instead of letting a Pascal caller catch it.
+			fprintf(active, " noexcept(false)");
+		}
 	}
 }
 
