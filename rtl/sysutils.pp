@@ -47,6 +47,8 @@ type
 
 const
   faReadOnly = $00000001;
+  ExtensionSeparator = '.';
+  fmShareDenyNone = $0040;
   faHidden = $00000002;
   faSysFile = $00000004;
   faVolumeId = $00000008;
