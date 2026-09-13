@@ -467,7 +467,11 @@ test-recent-rtl: mp
 test-freeandnil: mp
 	sh tests/test_freeandnil.sh
 
-test: test-hygiene test-recent-rtl test-freeandnil
+.PHONY: test-sysutils-fileops
+test-sysutils-fileops: mp
+	sh tests/test_sysutils_fileops.sh
+
+test: test-hygiene test-recent-rtl test-freeandnil test-sysutils-fileops
 test: test-predefined-explicit-conversions test-class-pointer-conversion test-custom-in-operator test-emission-semantic-boundaries test-pointer-arithmetic test-set-arithmetic test-diagnostic-context test-frame-intrinsics test-binding-lookup test-global-overload-scope test-absolute-alias
 test: test-currency-type
 test: test-lo-hi-builtin
