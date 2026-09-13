@@ -6840,3 +6840,44 @@ using t_tclass = m_iobject;
 // #define class_instance_new(X) (new X)
 
 } // namespace u_system
+
+namespace u_system {
+
+inline t_double p_pi() {
+	return 3.141592653589793238462643383279502884;
+}
+inline t_double p_sin(t_double d) {
+	return std::sin(d);
+}
+inline t_double p_cos(t_double d) {
+	return std::cos(d);
+}
+inline t_double p_arctan(t_double d) {
+	return std::atan(d);
+}
+inline t_double p_int(t_double d) {
+	return std::trunc(d);
+}
+inline t_double p_frac(t_double d) {
+	return d - std::trunc(d);
+}
+inline t_boolean p_isnan_single(t_single d) {
+	return tpcc_bool_to_boolean(std::isnan(d));
+}
+inline t_boolean p_isnan_double(t_double d) {
+	return tpcc_bool_to_boolean(std::isnan(d));
+}
+inline t_boolean p_isnan_extended(t_extended d) {
+	return tpcc_bool_to_boolean(std::isnan(d));
+}
+inline t_boolean p_isinf_single(t_single d) {
+	return tpcc_bool_to_boolean(std::isinf(d));
+}
+inline t_boolean p_isinf_double(t_double d) {
+	return tpcc_bool_to_boolean(std::isinf(d));
+}
+inline t_boolean p_isinf_extended(t_extended d) {
+	return tpcc_bool_to_boolean(std::isinf(d));
+}
+
+} // namespace u_system
