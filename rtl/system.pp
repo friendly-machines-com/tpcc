@@ -52,6 +52,8 @@ type
   PAnsiChar = PChar;
   PLongWord = ^LongWord;
   PCardinal = ^Cardinal;
+  TFPUException = (exInvalidOp, exDenormalized, exZeroDivide, exOverflow, exUnderflow, exPrecision);
+  TFPUExceptionMask = set of TFPUException;
   AnsiString = external name '::u_system::t_ansistring';
   // `class of X` is a real class-reference type in the compiler. Its C++
   // carrier is a pointer to the empty target-specific base implemented by
@@ -107,6 +109,10 @@ var
   // Reset(File) consults the low two access-mode bits. Higher sharing-mode
   // bits are retained for source compatibility and ignored by this runtime.
   FileMode: Byte external name '::u_system::p_filemode';
+  Output: Text external name '::u_system::p_output';
+  ExitProc: CodePointer external name '::u_system::p_exitproc';
+  ErrorAddr: CodePointer external name '::u_system::p_erroraddr';
+  ExitCode: LongInt external name '::u_system::p_exitcode';
   
 operator Positive(a: Cardinal): Cardinal; external name '::u_system::o_positive';
 operator Positive(a: Integer): Integer; external name '::u_system::o_positive';
