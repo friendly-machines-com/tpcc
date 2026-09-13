@@ -32,6 +32,7 @@
 #include <ctime>
 #include <dirent.h>
 #include <exception>
+#include <fenv.h>
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
@@ -7185,3 +7186,71 @@ inline u_system::t_longint p_pclose_file(u_system::t_file& f) {
 }
 
 } // namespace u_unix
+
+namespace u_math {
+
+using ::u_system::t_byte;
+
+// TFPUExceptionMask travels across the Pascal/C++ boundary as one six-bit
+// byte: bit 0 exInvalidOp .. bit 5 exPrecision. GNU fenv can trap only the
+// five standard exceptions, so exDenormalized stays software-tracked, matching
+// the x87/Linux default where the denormal trap is masked.
+inline t_byte& m_exception_mask_bits() {
+	static t_byte bits = 0;
+	static bool initialized = false;
+	if (!initialized) {
+		bits = 0x02; // exDenormalized masked at startup
+		const int enabled = fegetexcept();
+		const int masked = FE_ALL_EXCEPT & ~enabled;
+		if (masked & FE_INVALID) {
+			bits = static_cast<t_byte>(bits | 0x01);
+		}
+		if (masked & FE_DIVBYZERO) {
+			bits = static_cast<t_byte>(bits | 0x04);
+		}
+		if (masked & FE_OVERFLOW) {
+			bits = static_cast<t_byte>(bits | 0x08);
+		}
+		if (masked & FE_UNDERFLOW) {
+			bits = static_cast<t_byte>(bits | 0x10);
+		}
+		if (masked & FE_INEXACT) {
+			bits = static_cast<t_byte>(bits | 0x20);
+		}
+		initialized = true;
+	}
+	return bits;
+}
+
+inline t_byte p_getexceptionmask_bits() {
+	return m_exception_mask_bits();
+}
+
+inline t_byte p_setexceptionmask_bits(t_byte bits) {
+	t_byte& state = m_exception_mask_bits();
+	const t_byte previous = state;
+	state = static_cast<t_byte>(bits & 0x3f);
+	int enable = 0;
+	if (!(state & 0x01)) {
+		enable |= FE_INVALID;
+	}
+	if (!(state & 0x04)) {
+		enable |= FE_DIVBYZERO;
+	}
+	if (!(state & 0x08)) {
+		enable |= FE_OVERFLOW;
+	}
+	if (!(state & 0x10)) {
+		enable |= FE_UNDERFLOW;
+	}
+	if (!(state & 0x20)) {
+		enable |= FE_INEXACT;
+	}
+	fedisableexcept(FE_ALL_EXCEPT);
+	if (enable != 0) {
+		feenableexcept(enable);
+	}
+	return previous;
+}
+
+} // namespace u_math
